@@ -1,0 +1,17 @@
+{
+    "version": 2,
+    "configurePresets": [
+        {
+            "name": "Dev",
+            "displayName": "GCC 9.3.0 x86_64-linux-gnu",
+            "description": "Using compilers: C = /bin/x86_64-linux-gnu-gcc-9, CXX = /bin/x86_64-linux-gnu-g++-9",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+                "CMAKE_C_COMPILER": "/bin/x86_64-linux-gnu-gcc-9",
+                "CMAKE_CXX_COMPILER": "/bin/x86_64-linux-gnu-g++-9"
+            }
+        }
+    ]
+}

@@ -45,7 +45,26 @@ public:
 };
 
 
+class AstNode {
+public:
+    virtual void dump(std::ostream&) const = 0;
+};
+
+class LiteralNode: public AstNode {
+private:
+    Object _obj;
+
+public:
+    LiteralNode(Object obj) : _obj(obj) {}
+    virtual void dump(std::ostream& os) const;
+};
+
+std::unique_ptr<AstNode> parse(std::string& input);
+bool analyze_grammar();
+void debug_parse(std::string&);
+
 }
 
 
-std::ostream& operator<<(std::ostream& os, const Gold::Object& obj);
+std::ostream& operator<<(std::ostream&, const Gold::Object&);
+std::ostream& operator<<(std::ostream&, const Gold::AstNode&);

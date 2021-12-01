@@ -4,6 +4,7 @@ project(gold)
 set(CMAKE_CXX_STANDARD 17)
 add_compile_options(-Wall -Wextra -Wno-unused-parameter -pedantic)
 
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/submodules/pegtl)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/lib)
 
 target_include_directories(gold PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
