@@ -31,7 +31,7 @@ std::string Object::type_name() const {
 }
 
 
-Object Object::integer(int value) {
+Object Object::integer(intmax_t value) {
     return Object(std::make_shared<Integer>(value));
 }
 
@@ -66,7 +66,7 @@ Object Object::error(const std::string& message) {
 }
 
 
-int Object::unsafe_integer() const {
+intmax_t Object::unsafe_integer() const {
     return std::static_pointer_cast<const Integer>(_object)->value();
 }
 

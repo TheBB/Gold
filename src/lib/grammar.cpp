@@ -1,3 +1,4 @@
+#include <cinttypes>
 #include <iostream>
 
 #include <fmt/core.h>
@@ -36,7 +37,7 @@ namespace Grammar
 
     // Numbers
     struct sign: p::one<'-','+'> {};
-    struct integer: p::seq<p::range<'1','9'>, p::star<p::digit>> {};
+    struct integer: p::sor<p::one<'0'>, p::seq<p::range<'1','9'>, p::star<p::digit>>> {};
     struct fractional: p::seq<p::star<p::digit>> {};
     struct exponent: p::seq<p::one<'e','E'>, p::opt<sign>, integer> {};
     struct number: p::seq<p::opt<sign>, integer, p::opt<p::seq<p::one<'.'>, fractional>>, p::opt<exponent>> {};
@@ -84,16 +85,38 @@ namespace Grammar
 static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> node) {
     if (node->is_root()) {
         if (node->children.size() != 1)
-            return nullptr;
+            throw ParseException();
         return normalize(std::move(node->children[0]));
     }
 
     if (node->type == "Grammar::boolean") {
-        bool value = node->string_view() == "true";
-        return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(Object::boolean(value)));
+        Object obj = Object::boolean(node->string_view() == "true");
+        return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(obj));
+    }
+    else if (node->type == "Grammar::number") {
+        bool positive = true;
+        intmax_t integer = 0;
+
+        for (auto&& c : node->children) {
+            if (c->type == "Grammar::sign") {
+                positive = c->string_view() == "+";
+            }
+            else if (c->type == "Grammar::integer") {
+                for (auto ch : c->string_view()) {
+                    integer *= 10;
+                    integer += ch - '0';
+                }
+            }
+        }
+
+        if (!positive)
+            integer *= -1;
+
+        Object obj = Object::integer(integer);
+        return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(obj));
     }
 
-    return nullptr;
+    throw ParseException();
 }
 
 
@@ -102,7 +125,7 @@ bool Gold::analyze_grammar() {
 }
 
 
-void Gold::debug_parse(std::string& input) {
+void Gold::debug_parse(std::string input) {
     p::string_input in(input, "x");
     p::standard_trace<Grammar::grammar>(in);
 }
@@ -110,9 +133,14 @@ void Gold::debug_parse(std::string& input) {
 
 std::unique_ptr<AstNode> Gold::parse(std::string input)
 {
-    p::string_input nin(input, "x");
-    auto tree = p::parse_tree::parse<Grammar::grammar, Grammar::selector>(nin);
-    if (!tree)
-        return nullptr;
-    return normalize(std::move(tree));
+    p::string_input in(input, "x");
+    try {
+        auto tree = p::parse_tree::parse<Grammar::grammar, Grammar::selector>(in);
+        if (!tree)
+            throw ParseException();
+        return normalize(std::move(tree));
+    }
+    catch (const p::parse_error& e) {
+        throw ParseException();
+    }
 }

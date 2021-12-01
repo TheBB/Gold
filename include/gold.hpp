@@ -19,12 +19,8 @@ private:
 
 public:
     Object(std::shared_ptr<GObject> object) : _object(object) {}
-    // Object(Object&& other) : _object(std::move(other._object)) {}
-//     GameObject::GameObject(GameObject&& rhs)
-//     :transform(std::move(rhs.transform))
-// {}
 
-    static Object integer(int);
+    static Object integer(intmax_t);
     static Object string(const std::string&);
     static Object boolean(bool);
     static Object floating(double);
@@ -37,7 +33,7 @@ public:
     bool is_error() const { return type() == Type::error; }
 
     // Unsafe getters
-    int unsafe_integer() const;
+    intmax_t unsafe_integer() const;
     const std::string& unsafe_string() const;
     bool unsafe_boolean() const;
     double unsafe_floating() const;
@@ -48,6 +44,9 @@ public:
     Object operator+(Object other);
     Object operator-(Object other);
 };
+
+
+struct ParseException: public std::exception {};
 
 
 class AstNode {
@@ -66,9 +65,8 @@ public:
     virtual Object object() const { return _obj; }
 };
 
-std::unique_ptr<AstNode> parse(std::string input);
-bool analyze_grammar();
-void debug_parse(std::string&);
+std::unique_ptr<AstNode> parse(std::string);
+void debug_parse(std::string);
 
 }
 

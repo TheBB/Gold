@@ -9,5 +9,6 @@
 namespace Gold
 {
 
-}
+bool analyze_grammar();
 
+}

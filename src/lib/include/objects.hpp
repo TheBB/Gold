@@ -1,3 +1,5 @@
+#include <cinttypes>
+
 #include "gold.hpp"
 
 #pragma once
@@ -14,13 +16,13 @@ public:
 
 class Integer: public GObject {
 private:
-    int _value;
+    intmax_t _value;
 
 public:
-    Integer(int value) : _value(value) {}
+    Integer(intmax_t value) : _value(value) {}
 
     Type type() const { return Type::integer; }
-    int value() const { return _value; }
+    intmax_t value() const { return _value; }
 };
 
 
