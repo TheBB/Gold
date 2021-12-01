@@ -12,3 +12,10 @@ target_include_directories(gold INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/bin)
 target_link_libraries(gold-to-json gold)
+
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/tests)
+target_link_libraries(gold-test PRIVATE gold)
+target_include_directories(gold-test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/lib/include)
+
+enable_testing()
+add_test(NAME parsing COMMAND $<TARGET_FILE:gold-test> [parsing])

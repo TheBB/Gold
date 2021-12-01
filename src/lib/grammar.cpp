@@ -108,7 +108,7 @@ void Gold::debug_parse(std::string& input) {
 }
 
 
-std::unique_ptr<AstNode> Gold::parse(std::string& input)
+std::unique_ptr<AstNode> Gold::parse(std::string input)
 {
     p::string_input nin(input, "x");
     auto tree = p::parse_tree::parse<Grammar::grammar, Grammar::selector>(nin);

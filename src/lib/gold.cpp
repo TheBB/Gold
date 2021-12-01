@@ -67,37 +67,37 @@ Object Object::error(const std::string& message) {
 
 
 int Object::unsafe_integer() const {
-    return std::static_pointer_cast<Integer>(_object)->value();
+    return std::static_pointer_cast<const Integer>(_object)->value();
 }
 
 
 const std::string& Object::unsafe_string() const {
-    return std::static_pointer_cast<String>(_object)->string();
+    return std::static_pointer_cast<const String>(_object)->string();
 }
 
 
 bool Object::unsafe_boolean() const {
-    return std::static_pointer_cast<Boolean>(_object)->value();
+    return std::static_pointer_cast<const Boolean>(_object)->value();
 }
 
 
 double Object::unsafe_floating() const {
-    return std::static_pointer_cast<Floating>(_object)->value();
+    return std::static_pointer_cast<const Floating>(_object)->value();
 }
 
 
 const std::map<std::string, Object>& Object::unsafe_map() const {
-    return std::static_pointer_cast<Map>(_object)->map();
+    return std::static_pointer_cast<const Map>(_object)->map();
 }
 
 
 const std::vector<Object>& Object::unsafe_list() const {
-    return std::static_pointer_cast<List>(_object)->list();
+    return std::static_pointer_cast<const List>(_object)->list();
 }
 
 
 const std::string& Object::unsafe_error() const {
-    return std::static_pointer_cast<Error>(_object)->message();
+    return std::static_pointer_cast<const Error>(_object)->message();
 }
 
 

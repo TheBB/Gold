@@ -68,7 +68,7 @@ public:
     Map(std::map<std::string, Object> elements) : _elements(elements) {}
 
     Type type() const { return Type::map; }
-    const std::map<std::string, Object>& map() { return _elements; }
+    const std::map<std::string, Object>& map() const { return _elements; }
 };
 
 
@@ -80,7 +80,7 @@ public:
     List(std::vector<Object> elements) : _elements(elements) {}
 
     Type type() const { return Type::list; }
-    const std::vector<Object>& list() { return _elements; }
+    const std::vector<Object>& list() const { return _elements; }
 };
 
 

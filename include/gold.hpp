@@ -15,10 +15,15 @@ class GObject;
 
 class Object {
 private:
-    const std::shared_ptr<GObject> _object;
+    std::shared_ptr<const GObject> _object;
 
 public:
     Object(std::shared_ptr<GObject> object) : _object(object) {}
+    // Object(Object&& other) : _object(std::move(other._object)) {}
+//     GameObject::GameObject(GameObject&& rhs)
+//     :transform(std::move(rhs.transform))
+// {}
+
     static Object integer(int);
     static Object string(const std::string&);
     static Object boolean(bool);
@@ -48,6 +53,7 @@ public:
 class AstNode {
 public:
     virtual void dump(std::ostream&) const = 0;
+    virtual Object object() const = 0;
 };
 
 class LiteralNode: public AstNode {
@@ -57,9 +63,10 @@ private:
 public:
     LiteralNode(Object obj) : _obj(obj) {}
     virtual void dump(std::ostream& os) const;
+    virtual Object object() const { return _obj; }
 };
 
-std::unique_ptr<AstNode> parse(std::string& input);
+std::unique_ptr<AstNode> parse(std::string input);
 bool analyze_grammar();
 void debug_parse(std::string&);
 
