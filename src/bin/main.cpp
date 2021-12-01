@@ -7,7 +7,7 @@ using namespace Gold;
 
 
 int main(int argc, char **argv) {
-    debug_parse("0.1");
-    auto obj = parse("0.1")->object();
+    // debug_parse("0.1");
+    auto obj = parse("\"h\\\\i\"")->object();
     std::cout << obj << std::endl;
 }

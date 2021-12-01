@@ -43,9 +43,9 @@ namespace Grammar
     struct number: p::seq<p::opt<sign>, integer, p::opt<fractional>, p::opt<exponent>> {};
 
     // Strings
-    struct escaped_unicode: p::seq<p::one<'u'>, p::rep<4, p::xdigit>> {};
+    // struct escaped_unicode: p::seq<p::one<'u'>, p::rep<4, p::xdigit>> {};
     struct escaped_char: p::one<'\\', '"'> {};
-    struct escaped: p::sor<escaped_char, escaped_unicode> {};
+    struct escaped: p::sor<escaped_char> {};
     struct unescaped: p::utf8::range<0x20, 0x10ffff> {};
     struct character: p::if_then_else<p::one<'\\'>, escaped, unescaped> {};
     struct string: p::until<p::at<p::one<'"'>>, character> {};
@@ -123,7 +123,17 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
     }
 
     else if (node->type == "Grammar::string") {
-        Object obj = Object::string(node->string());
+        auto data = node->string_view();
+        std::stringstream builder;
+        for (auto it = data.begin(); it != data.end(); it++) {
+            if (*it == '\\') {
+                it++;
+                builder << *it;
+            }
+            else
+                builder << *it;
+        }
+        Object obj = Object::string(builder.str());
         return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(obj));
     }
 

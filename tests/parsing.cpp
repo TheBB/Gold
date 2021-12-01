@@ -116,4 +116,12 @@ TEST_CASE("Parse strings", "[parsing]") {
     obj = parse("\"dingbob\"")->object();
     REQUIRE(obj.type() == Gold::string);
     REQUIRE(obj.unsafe_string() == "dingbob");
+
+    obj = parse("\"ding\\\\bob\"")->object();
+    REQUIRE(obj.type() == Gold::string);
+    REQUIRE(obj.unsafe_string() == "ding\\bob");
+
+    obj = parse("\"ding\\\"bob\"")->object();
+    REQUIRE(obj.type() == Gold::string);
+    REQUIRE(obj.unsafe_string() == "ding\"bob");
 }
