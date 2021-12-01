@@ -31,6 +31,10 @@ TEST_CASE("Parse integers", "[parsing]") {
     REQUIRE(obj.type() == Gold::integer);
     REQUIRE(obj.unsafe_integer() == 1);
 
+    obj = parse("+1")->object();
+    REQUIRE(obj.type() == Gold::integer);
+    REQUIRE(obj.unsafe_integer() == 1);
+
     obj = parse("-1")->object();
     REQUIRE(obj.type() == Gold::integer);
     REQUIRE(obj.unsafe_integer() == -1);
@@ -42,4 +46,63 @@ TEST_CASE("Parse integers", "[parsing]") {
     obj = parse("-9223372036854775807")->object();
     REQUIRE(obj.type() == Gold::integer);
     REQUIRE(obj.unsafe_integer() == -9223372036854775807);
+}
+
+
+TEST_CASE("Parse floats", "[parsing]") {
+    auto obj = parse("0.0")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == 0.0);
+
+    obj = parse("0.")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == 0.0);
+
+    obj = parse("0e0")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == 0.0);
+
+    obj = parse("0e1")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == 0.0);
+
+    obj = parse("-1.")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == -1.0);
+
+    obj = parse("1e+1")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == 10.0);
+
+    obj = parse("1e1")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == 10.0);
+
+    obj = parse("1e-1")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == 0.1);
+
+    obj = parse("+1e+1")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == 10.0);
+
+    obj = parse("+1e1")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == 10.0);
+
+    obj = parse("+1e-1")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == 0.1);
+
+    obj = parse("-1e+1")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == -10.0);
+
+    obj = parse("-1e1")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == -10.0);
+
+    obj = parse("-1e-1")->object();
+    REQUIRE(obj.type() == Gold::floating);
+    REQUIRE(obj.unsafe_floating() == -0.1);
 }

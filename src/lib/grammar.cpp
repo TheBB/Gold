@@ -38,9 +38,9 @@ namespace Grammar
     // Numbers
     struct sign: p::one<'-','+'> {};
     struct integer: p::sor<p::one<'0'>, p::seq<p::range<'1','9'>, p::star<p::digit>>> {};
-    struct fractional: p::seq<p::star<p::digit>> {};
+    struct fractional: p::seq<p::one<'.'>, p::star<p::digit>> {};
     struct exponent: p::seq<p::one<'e','E'>, p::opt<sign>, integer> {};
-    struct number: p::seq<p::opt<sign>, integer, p::opt<p::seq<p::one<'.'>, fractional>>, p::opt<exponent>> {};
+    struct number: p::seq<p::opt<sign>, integer, p::opt<fractional>, p::opt<exponent>> {};
 
     // Strings
     struct escaped_unicode: p::seq<p::one<'u'>, p::rep<4, p::xdigit>> {};
@@ -106,6 +106,11 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
                     integer *= 10;
                     integer += ch - '0';
                 }
+            }
+            else if (c->type == "Grammar::fractional" || c->type == "Grammar::exponent") {
+                double value = std::stod(node->string());
+                Object obj = Object::floating(value);
+                return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(obj));
             }
         }
 
