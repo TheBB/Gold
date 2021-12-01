@@ -93,6 +93,7 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
         Object obj = Object::boolean(node->string_view() == "true");
         return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(obj));
     }
+
     else if (node->type == "Grammar::number") {
         bool positive = true;
         intmax_t integer = 0;
@@ -118,6 +119,11 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
             integer *= -1;
 
         Object obj = Object::integer(integer);
+        return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(obj));
+    }
+
+    else if (node->type == "Grammar::string") {
+        Object obj = Object::string(node->string());
         return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(obj));
     }
 

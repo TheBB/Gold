@@ -106,3 +106,14 @@ TEST_CASE("Parse floats", "[parsing]") {
     REQUIRE(obj.type() == Gold::floating);
     REQUIRE(obj.unsafe_floating() == -0.1);
 }
+
+
+TEST_CASE("Parse strings", "[parsing]") {
+    auto obj = parse("\"\"")->object();
+    REQUIRE(obj.type() == Gold::string);
+    REQUIRE(obj.unsafe_string() == "");
+
+    obj = parse("\"dingbob\"")->object();
+    REQUIRE(obj.type() == Gold::string);
+    REQUIRE(obj.unsafe_string() == "dingbob");
+}
