@@ -11,9 +11,6 @@ namespace Gold {
 
 enum Type { integer, string, boolean, floating, map, list, function, error };
 
-class GObject;
-
-
 class Object {
 public:
     using Integer = intmax_t;
@@ -83,31 +80,6 @@ public:
     Object operator-(Object other);
 };
 
-
-struct ParseException: public std::exception {};
-
-
-class AstNode {
-public:
-    virtual void dump(std::ostream&) const = 0;
-    virtual Object object() const = 0;
-};
-
-class LiteralNode: public AstNode {
-private:
-    Object _obj;
-
-public:
-    LiteralNode(Object obj) : _obj(obj) {}
-    virtual void dump(std::ostream& os) const;
-    virtual Object object() const { return _obj; }
-};
-
-std::unique_ptr<AstNode> parse(std::string);
-void debug_parse(std::string);
-
 }
 
-
 std::ostream& operator<<(std::ostream&, const Gold::Object&);
-std::ostream& operator<<(std::ostream&, const Gold::AstNode&);

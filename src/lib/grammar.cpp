@@ -22,8 +22,8 @@ std::ostream& operator<<(std::ostream& os, const AstNode& obj) {
 }
 
 
-void LiteralNode::dump(std::ostream& os) const {
-    os << _obj;
+void AstNode::dump(std::ostream& os) const {
+    os << std::get<Literal>(_data);
 }
 
 
@@ -91,7 +91,7 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
 
     if (node->type == "Grammar::boolean") {
         Object obj = Object::boolean(node->string_view() == "true");
-        return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(obj));
+        return std::unique_ptr<AstNode>(new AstNode(obj));
     }
 
     else if (node->type == "Grammar::number") {
@@ -111,7 +111,7 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
             else if (c->type == "Grammar::fractional" || c->type == "Grammar::exponent") {
                 double value = std::stod(node->string());
                 Object obj = Object::floating(value);
-                return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(obj));
+                return std::unique_ptr<AstNode>(new AstNode(obj));
             }
         }
 
@@ -119,7 +119,7 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
             integer *= -1;
 
         Object obj = Object::integer(integer);
-        return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(obj));
+        return std::unique_ptr<AstNode>(new AstNode(obj));
     }
 
     else if (node->type == "Grammar::string") {
@@ -134,7 +134,7 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
                 builder << *it;
         }
         Object obj = Object::string(builder.str());
-        return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(obj));
+        return std::unique_ptr<AstNode>(new AstNode(obj));
     }
 
     else if (node->type == "Grammar::list") {
@@ -142,6 +142,7 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
         for (auto&& c : node->children) {
             elements.push_back(normalize(std::move(c)));
         }
+        // return std::unique_ptr<AstNode>(new AstNode(elements));
     }
 
     throw ParseException();
