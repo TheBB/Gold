@@ -23,7 +23,23 @@ std::ostream& operator<<(std::ostream& os, const AstNode& obj) {
 
 
 void AstNode::dump(std::ostream& os) const {
-    os << std::get<Literal>(_data);
+    switch (type()) {
+    case Type::literal:
+        os << unsafe_object();
+        break;
+    case Type::list: {
+        os << "[";
+        bool first = true;
+        for (auto& obj : std::get<List>(_data)) {
+            if (!first)
+                os << ", ";
+            os << obj;
+            first = false;
+        }
+        os << "]";
+        break;
+    }
+    }
 }
 
 
@@ -49,7 +65,7 @@ namespace Grammar
     struct unescaped: p::utf8::range<0x20, 0x10ffff> {};
     struct character: p::if_then_else<p::one<'\\'>, escaped, unescaped> {};
     struct string: p::until<p::at<p::one<'"'>>, character> {};
-    struct quoted_string: p::seq<p::one<'"'>, string> {};
+    struct quoted_string: p::seq<p::one<'"'>, string, p::one<'"'>> {};
 
     // Booleans
     struct boolean: p::sor<p::string<'t','r','u','e'>, p::string<'f','a','l','s','e'>> {};
@@ -82,7 +98,7 @@ namespace Grammar
 }
 
 
-static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> node) {
+static AstNode normalize(std::unique_ptr<p::parse_tree::node> node) {
     if (node->is_root()) {
         if (node->children.size() != 1)
             throw ParseException();
@@ -91,7 +107,7 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
 
     if (node->type == "Grammar::boolean") {
         Object obj = Object::boolean(node->string_view() == "true");
-        return std::unique_ptr<AstNode>(new AstNode(obj));
+        return AstNode(obj);
     }
 
     else if (node->type == "Grammar::number") {
@@ -111,7 +127,7 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
             else if (c->type == "Grammar::fractional" || c->type == "Grammar::exponent") {
                 double value = std::stod(node->string());
                 Object obj = Object::floating(value);
-                return std::unique_ptr<AstNode>(new AstNode(obj));
+                return AstNode(obj);
             }
         }
 
@@ -119,7 +135,7 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
             integer *= -1;
 
         Object obj = Object::integer(integer);
-        return std::unique_ptr<AstNode>(new AstNode(obj));
+        return AstNode(obj);
     }
 
     else if (node->type == "Grammar::string") {
@@ -134,15 +150,15 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
                 builder << *it;
         }
         Object obj = Object::string(builder.str());
-        return std::unique_ptr<AstNode>(new AstNode(obj));
+        return AstNode(obj);
     }
 
     else if (node->type == "Grammar::list") {
-        std::vector<std::unique_ptr<AstNode>> elements;
+        std::vector<AstNode> elements;
         for (auto&& c : node->children) {
             elements.push_back(normalize(std::move(c)));
         }
-        // return std::unique_ptr<AstNode>(new AstNode(elements));
+        return AstNode(elements);
     }
 
     throw ParseException();
@@ -160,7 +176,7 @@ void Gold::debug_parse(std::string input) {
 }
 
 
-std::unique_ptr<AstNode> Gold::parse(std::string input)
+AstNode Gold::parse(std::string input)
 {
     p::string_input in(input, "x");
     try {

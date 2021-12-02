@@ -94,19 +94,19 @@ Object Object::operator-(Object other) {
 
 std::ostream& operator<<(std::ostream& os, const Object& obj) {
     switch (obj.type()) {
-    case Type::integer:
+    case Object::Type::integer:
         os << obj.unsafe_integer();
         break;
-    case Type::string:
+    case Object::Type::string:
         os << "\"" << obj.unsafe_string() << "\"";
         break;
-    case Type::boolean:
+    case Object::Type::boolean:
         os << (obj.unsafe_boolean() ? "true" : "false");
         break;
-    case Type::floating:
+    case Object::Type::floating:
         os << fmt::format("{}", obj.unsafe_floating());
         break;
-    case Type::map: {
+    case Object::Type::map: {
         os << "{";
         bool first = true;
         for (auto const& it : *obj.unsafe_map()) {
@@ -118,7 +118,7 @@ std::ostream& operator<<(std::ostream& os, const Object& obj) {
         os << "}";
         break;
     }
-    case Type::list: {
+    case Object::Type::list: {
         os << "[";
         bool first = true;
         for (auto obj : *obj.unsafe_list()) {

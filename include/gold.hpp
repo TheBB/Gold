@@ -9,10 +9,11 @@
 namespace Gold {
 
 
-enum Type { integer, string, boolean, floating, map, list, function, error };
 
 class Object {
 public:
+    enum class Type { integer, string, boolean, floating, map, list, function, error };
+
     using Integer = intmax_t;
     using String = std::string;
     using Boolean = bool;
