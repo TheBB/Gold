@@ -194,3 +194,35 @@ TEST_CASE("Nested lists", "[parsing]") {
     REQUIRE(obj[1].unsafe_list()[0].unsafe_object().type() == Object::Type::integer);
     REQUIRE(obj[1].unsafe_list()[0].unsafe_object().unsafe_integer() == 2);
 }
+
+
+TEST_CASE("Parse tree of atomics", "[parsing]") {
+    auto obj = parse("{}").unsafe_map();
+    REQUIRE(obj.size() == 0);
+
+    obj = parse("{a: 1}").unsafe_map();
+    REQUIRE(obj.size() == 1);
+    REQUIRE(obj[0].first == "a");
+    REQUIRE(obj[0].second.unsafe_object().unsafe_integer() == 1);
+
+    obj = parse("{che9: false}").unsafe_map();
+    REQUIRE(obj.size() == 1);
+    REQUIRE(obj[0].first == "che9");
+    REQUIRE(obj[0].second.unsafe_object().unsafe_boolean() == false);
+
+    obj = parse("{fable: \"fable\"}").unsafe_map();
+    REQUIRE(obj.size() == 1);
+    REQUIRE(obj[0].first == "fable");
+    REQUIRE(obj[0].second.unsafe_object().unsafe_string() == "fable");
+
+    obj = parse("{a: 1, b: true, c: 2.e1, d: \"hoho\"}").unsafe_map();
+    REQUIRE(obj.size() == 4);
+    REQUIRE(obj[0].first == "a");
+    REQUIRE(obj[0].second.unsafe_object().unsafe_integer() == 1);
+    REQUIRE(obj[1].first == "b");
+    REQUIRE(obj[1].second.unsafe_object().unsafe_boolean() == true);
+    REQUIRE(obj[2].first == "c");
+    REQUIRE(obj[2].second.unsafe_object().unsafe_floating() == 20.0);
+    REQUIRE(obj[3].first == "d");
+    REQUIRE(obj[3].second.unsafe_object().unsafe_string() == "hoho");
+}

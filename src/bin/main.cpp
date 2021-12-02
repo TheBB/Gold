@@ -8,7 +8,11 @@ using namespace Gold;
 
 
 int main(int argc, char **argv) {
-    debug_parse("[1, false, -2.3,]");
+    std::string code("{ a : 1, b:2,  }");
+    debug_parse(code);
+    debug_parse_tree(code);
+    auto node = parse(code);
+    std::cout << node << std::endl;
     // auto a = Object::list({ Object::integer(1), Object::integer(2) });
     // auto b = Object::list({ Object::integer(3), Object::integer(4) });
     // std::cout << a << std::endl;

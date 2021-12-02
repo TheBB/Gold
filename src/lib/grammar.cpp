@@ -28,15 +28,27 @@ void AstNode::dump(std::ostream& os) const {
         os << unsafe_object();
         break;
     case Type::list: {
-        os << "[";
+        os << "List(" << std::endl;
         bool first = true;
-        for (auto& obj : std::get<List>(_data)) {
+        for (auto& obj : unsafe_list()) {
             if (!first)
                 os << ", ";
             os << obj;
             first = false;
         }
-        os << "]";
+        os << ")";
+        break;
+    }
+    case Type::map: {
+        os << "Map(";
+        bool first = true;
+        for (auto& [key, value] : unsafe_map()) {
+            if (!first)
+                os << ", ";
+            os << "Entry(" << key << ", " << value << ")";
+            first = false;
+        }
+        os << ")";
         break;
     }
     }
@@ -78,8 +90,28 @@ namespace Grammar
     >> {};
     struct bracketed_list: p::seq<p::one<'['>, list, p::pad<p::one<']'>, whitespace>> {};
 
+    // Maps
+    struct map_identifier: p::plus<p::alnum> {};
+    struct map_entry: p::seq<
+        map_identifier,
+        p::pad<p::one<':'>, whitespace>,
+        atomic
+    > {};
+    struct map: p::opt<p::seq<
+        p::star<whitespace>,
+        p::list<map_entry, p::one<','>, whitespace>,
+        p::opt<p::pad<p::one<','>, whitespace>>
+    >> {};
+    struct bracketed_map: p::seq<p::one<'{'>, map, p::pad<p::one<'}'>, whitespace>> {};
+
     // Operator chain
-    struct atomic: p::sor<quoted_string, number, boolean, bracketed_list> {};
+    struct atomic: p::sor<
+        quoted_string,
+        number,
+        boolean,
+        bracketed_list,
+        bracketed_map
+    > {};
 
     struct grammar: p::seq<atomic> {};
 
@@ -93,7 +125,10 @@ namespace Grammar
             exponent,
             string,
             boolean,
-            list
+            list,
+            map_identifier,
+            map_entry,
+            map
         >>;
 }
 
@@ -154,11 +189,21 @@ static AstNode normalize(std::unique_ptr<p::parse_tree::node> node) {
     }
 
     else if (node->type == "Grammar::list") {
-        std::vector<AstNode> elements;
+        AstNode::List elements;
         for (auto&& c : node->children) {
             elements.push_back(normalize(std::move(c)));
         }
         return AstNode(elements);
+    }
+
+    else if (node->type == "Grammar::map") {
+        AstNode::Map entries;
+        for (auto&& c : node->children) {
+            auto key = c->children[0]->string();
+            auto value = normalize(std::move(c->children[1]));
+            entries.push_back(std::pair(key, value));
+        }
+        return AstNode(entries);
     }
 
     throw ParseException();
@@ -173,6 +218,13 @@ bool Gold::analyze_grammar() {
 void Gold::debug_parse(std::string input) {
     p::string_input in(input, "x");
     p::standard_trace<Grammar::grammar>(in);
+}
+
+
+void Gold::debug_parse_tree(std::string input) {
+    p::string_input in(input, "x");
+    auto tree = p::parse_tree::parse<Grammar::grammar, Grammar::selector>(in);
+    p::parse_tree::print_dot(std::cout, *tree);
 }
 
 
