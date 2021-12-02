@@ -152,3 +152,45 @@ TEST_CASE("Parse lists of atomics", "[parsing]") {
     REQUIRE(obj[3].unsafe_object().type() == Object::Type::string);
     REQUIRE(obj[3].unsafe_object().unsafe_string() == "fable");
 }
+
+
+TEST_CASE("Flexible list parsing", "[parsing]") {
+    auto obj = parse("[   ]").unsafe_list();
+    REQUIRE(obj.size() == 0);
+
+    obj = parse("[1,]").unsafe_list();
+    REQUIRE(obj.size() == 1);
+    REQUIRE(obj[0].unsafe_object().unsafe_integer() == 1);
+
+    obj = parse("[  1   ,  ]").unsafe_list();
+    REQUIRE(obj.size() == 1);
+    REQUIRE(obj[0].unsafe_object().unsafe_integer() == 1);
+
+    obj = parse("[1   ,2  ]").unsafe_list();
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].unsafe_object().unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_object().unsafe_integer() == 2);
+
+    obj = parse("[1   ,2  ,]").unsafe_list();
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].unsafe_object().unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_object().unsafe_integer() == 2);
+}
+
+
+TEST_CASE("Nested lists", "[parsing]") {
+    auto obj = parse("[[]]").unsafe_list();
+    REQUIRE(obj.size() == 1);
+    REQUIRE(obj[0].type() == AstNode::Type::list);
+    REQUIRE(obj[0].unsafe_list().size() == 0);
+
+    obj = parse("[1, [2]]").unsafe_list();
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].type() == AstNode::Type::literal);
+    REQUIRE(obj[0].unsafe_object().type() == Object::Type::integer);
+    REQUIRE(obj[0].unsafe_object().unsafe_integer() == 1);
+    REQUIRE(obj[1].type() == AstNode::Type::list);
+    REQUIRE(obj[1].unsafe_list().size() == 1);
+    REQUIRE(obj[1].unsafe_list()[0].unsafe_object().type() == Object::Type::integer);
+    REQUIRE(obj[1].unsafe_list()[0].unsafe_object().unsafe_integer() == 2);
+}
