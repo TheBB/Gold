@@ -137,6 +137,13 @@ static std::unique_ptr<AstNode> normalize(std::unique_ptr<p::parse_tree::node> n
         return std::unique_ptr<AstNode>((AstNode*) new LiteralNode(obj));
     }
 
+    else if (node->type == "Grammar::list") {
+        std::vector<std::unique_ptr<AstNode>> elements;
+        for (auto&& c : node->children) {
+            elements.push_back(normalize(std::move(c)));
+        }
+    }
+
     throw ParseException();
 }
 

@@ -1,5 +1,6 @@
 #include <map>
 #include <memory>
+#include <variant>
 #include <vector>
 
 #pragma once
@@ -14,33 +15,70 @@ class GObject;
 
 
 class Object {
+public:
+    using Integer = intmax_t;
+    using String = std::string;
+    using Boolean = bool;
+    using Floating = double;
+    using Error = std::pair<std::string, std::string>;
+
+    using MapT = std::map<std::string, Object>;
+    using Map = std::shared_ptr<MapT>;
+    using ListT = std::vector<Object>;
+    using List = std::shared_ptr<ListT>;
+
 private:
-    std::shared_ptr<const GObject> _object;
+    std::variant<Integer, String, Boolean, Floating, Map, List, Error> _data;
 
 public:
-    Object(std::shared_ptr<GObject> object) : _object(object) {}
+    // Raw constructors
+    Object(Integer value) : _data(value) {}
+    Object(const String& value) : _data(value) {}
+    Object(Boolean value) : _data(value) {}
+    Object(Floating value) : _data(value) {}
+    Object(const Map& value) : _data(value) {}
+    Object(const List& value) : _data(value) {}
+    Object(const String& type, const String& message) : _data(Error(type, message)) {}
 
-    static Object integer(intmax_t);
-    static Object string(const std::string&);
-    static Object boolean(bool);
-    static Object floating(double);
-    static Object map(std::map<std::string, Object>);
-    static Object list(std::vector<Object>);
-    static Object error(const std::string&);
+    // Explicit constructors
+    static Object integer(Integer value) { return Object(value); }
+    static Object string(const String& value) { return Object(value); }
+    static Object boolean(Boolean value) { return Object(value); }
+    static Object floating(Floating value) { return Object(value); }
+    static Object error(const String& type, const String& message) { return Object(type, message); }
 
-    Type type() const;
+    static Object map(Map value) { return Object(value); }
+    static Object map(MapT value) { return Object(std::make_shared<MapT>(value)); }
+    static Object map(MapT& value) { return Object(std::make_shared<MapT>(value)); }
+
+    static Object list(List value) { return Object(value); }
+    static Object list(ListT value) { return Object(std::make_shared<ListT>(value)); }
+    static Object list(ListT& value) { return Object(std::make_shared<ListT>(value)); }
+
+    // Type inspection
+    Type type() const {
+        if (std::holds_alternative<Integer>(_data)) return Type::integer;
+        if (std::holds_alternative<String>(_data)) return Type::string;
+        if (std::holds_alternative<Boolean>(_data)) return Type::boolean;
+        if (std::holds_alternative<Floating>(_data)) return Type::floating;
+        if (std::holds_alternative<Map>(_data)) return Type::map;
+        if (std::holds_alternative<List>(_data)) return Type::list;
+        return Type::error;
+    }
+
     std::string type_name() const;
     bool is_error() const { return type() == Type::error; }
 
     // Unsafe getters
-    intmax_t unsafe_integer() const;
-    const std::string& unsafe_string() const;
-    bool unsafe_boolean() const;
-    double unsafe_floating() const;
-    const std::map<std::string, Object>& unsafe_map() const;
-    const std::vector<Object>& unsafe_list() const;
-    const std::string& unsafe_error() const;
+    Integer unsafe_integer() const { return std::get<Integer>(_data); }
+    const String& unsafe_string() const { return std::get<String>(_data); }
+    Boolean unsafe_boolean() const { return std::get<Boolean>(_data); }
+    Floating unsafe_floating() const { return std::get<Floating>(_data); }
+    const Map& unsafe_map() const { return std::get<Map>(_data); }
+    const List& unsafe_list() const { return std::get<List>(_data); }
+    const Error& unsafe_error() const { return std::get<Error>(_data); }
 
+    // Operators
     Object operator+(Object other);
     Object operator-(Object other);
 };

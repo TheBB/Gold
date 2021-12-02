@@ -125,3 +125,9 @@ TEST_CASE("Parse strings", "[parsing]") {
     REQUIRE(obj.type() == Gold::string);
     REQUIRE(obj.unsafe_string() == "ding\"bob");
 }
+
+
+TEST_CASE("Parse lists of atomics", "[parsing]") {
+    // auto obj = parse("[]")->object();
+    // REQUIRE(obj.type() == Gold::list);
+}
