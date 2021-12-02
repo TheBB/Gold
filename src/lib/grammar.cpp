@@ -16,6 +16,18 @@ using namespace Gold;
 namespace p = tao::pegtl;
 
 
+std::ostream& operator<<(std::ostream& os, Operator op) {
+    switch (op) {
+    case Operator::plus: os << "+"; break;
+    case Operator::minus: os << "-"; break;
+    case Operator::multiply: os << "*"; break;
+    case Operator::divide: os << "/"; break;
+    case Operator::integer_divide: os << "//"; break;
+    }
+    return os;
+}
+
+
 std::ostream& operator<<(std::ostream& os, const AstNode& obj) {
     obj.dump(os);
     return os;
@@ -51,14 +63,34 @@ void AstNode::dump(std::ostream& os) const {
         os << ")";
         break;
     }
+    case Type::opseq: {
+        os << "Opseq(";
+        auto opseq = unsafe_opseq();
+        auto operand_it = opseq.operands.begin();
+        auto operator_it = opseq.operators.begin();
+        os << *operand_it++;
+        while (operand_it != opseq.operands.end())
+            os << " " << *operator_it++ << " " << *operand_it++;
+        os << ")";
+        break;
     }
+    }
+}
+
+
+static Operator operator_from_string(std::string value) {
+    if (value == "+") return Operator::plus;
+    if (value == "-") return Operator::minus;
+    if (value == "*") return Operator::multiply;
+    if (value == "/") return Operator::divide;
+    return Operator::integer_divide;
 }
 
 
 namespace Grammar
 {
     // Forward declarations
-    struct atomic;
+    struct expression;
 
     // Miscellaneous
     struct whitespace: p::one<' ', '\t', '\n', '\r'> {};
@@ -85,7 +117,7 @@ namespace Grammar
     // Lists
     struct list: p::opt<p::seq<
         p::star<whitespace>,
-        p::list<atomic, p::one<','>, whitespace>,
+        p::list<expression, p::one<','>, whitespace>,
         p::opt<p::pad<p::one<','>, whitespace>>
     >> {};
     struct bracketed_list: p::seq<p::one<'['>, list, p::pad<p::one<']'>, whitespace>> {};
@@ -95,7 +127,7 @@ namespace Grammar
     struct map_entry: p::seq<
         map_identifier,
         p::pad<p::one<':'>, whitespace>,
-        atomic
+        expression
     > {};
     struct map: p::opt<p::seq<
         p::star<whitespace>,
@@ -104,7 +136,7 @@ namespace Grammar
     >> {};
     struct bracketed_map: p::seq<p::one<'{'>, map, p::pad<p::one<'}'>, whitespace>> {};
 
-    // Operator chain
+    // Atomic expressions
     struct atomic: p::sor<
         quoted_string,
         number,
@@ -113,7 +145,18 @@ namespace Grammar
         bracketed_map
     > {};
 
-    struct grammar: p::seq<atomic> {};
+    // Precedence level: multiplication
+    struct factor: p::seq<atomic> {};
+    struct product_operator: p::sor<p::string<'/','/'>, p::one<'*'>, p::one<'/'>> {};
+    struct product: p::list<factor, product_operator, whitespace> {};
+
+    // Precedence level: addition
+    struct term: p::seq<product> {};
+    struct sum_operator: p::sor<p::one<'+'>, p::one<'-'>> {};
+    struct sum: p::list<term, sum_operator, whitespace> {};
+
+    struct expression: p::seq<sum> {};
+    struct grammar: p::seq<expression> {};
 
     template<typename Rule>
     using selector = p::parse_tree::selector<Rule,
@@ -128,7 +171,11 @@ namespace Grammar
             list,
             map_identifier,
             map_entry,
-            map
+            map,
+            sum,
+            sum_operator,
+            product,
+            product_operator
         >>;
 }
 
@@ -204,6 +251,19 @@ static AstNode normalize(std::unique_ptr<p::parse_tree::node> node) {
             entries.push_back(std::pair(key, value));
         }
         return AstNode(entries);
+    }
+
+    else if (node->type == "Grammar::sum" || node->type == "Grammar::product") {
+        if (node->children.size() == 1)
+            return normalize(std::move(node->children[0]));
+        AstNode::Operator seq;
+        auto it = node->children.begin();
+        seq.operands.push_back(normalize(std::move(*it++)));
+        while (it != node->children.end()) {
+            seq.operators.push_back(operator_from_string((*it++)->string()));
+            seq.operands.push_back(normalize(std::move(*it++)));
+        }
+        return AstNode(seq);
     }
 
     throw ParseException();

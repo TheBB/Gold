@@ -8,7 +8,7 @@ using namespace Gold;
 
 
 int main(int argc, char **argv) {
-    std::string code("{ a : 1, b:2,  }");
+    std::string code("1 + 2 * 3 // 4");
     debug_parse(code);
     debug_parse_tree(code);
     auto node = parse(code);
