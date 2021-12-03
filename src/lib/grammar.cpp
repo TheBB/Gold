@@ -36,9 +36,15 @@ std::ostream& operator<<(std::ostream& os, const AstNode& obj) {
 
 void AstNode::dump(std::ostream& os) const {
     switch (type()) {
+
     case Type::literal:
         os << unsafe_object();
         break;
+
+    case Type::identifier:
+        os << unsafe_identifier();
+        break;
+
     case Type::list: {
         os << "List(" << std::endl;
         bool first = true;
@@ -51,6 +57,7 @@ void AstNode::dump(std::ostream& os) const {
         os << ")";
         break;
     }
+
     case Type::map: {
         os << "Map(";
         bool first = true;
@@ -63,6 +70,7 @@ void AstNode::dump(std::ostream& os) const {
         os << ")";
         break;
     }
+
     case Type::opseq: {
         os << "Opseq(";
         auto opseq = unsafe_opseq();
@@ -72,6 +80,24 @@ void AstNode::dump(std::ostream& os) const {
         while (operand_it != opseq.operands.end())
             os << " " << *operator_it++ << " " << *operand_it++;
         os << ")";
+        break;
+    }
+
+    case Type::block: {
+        os << "Block(";
+        auto block = unsafe_block();
+        auto name_it = block.names.begin();
+        auto expr_it = block.expressions.begin();
+        bool first = true;
+        while (name_it != block.names.end()) {
+            if (!first)
+                os << ", ";
+            os << "Entry(" << *name_it++ << ", " << *expr_it++ << ")";
+            first = false;
+        }
+        if (!first)
+            os << ", ";
+        os << *expr_it << ")";
         break;
     }
     }
@@ -136,13 +162,30 @@ namespace Grammar
     >> {};
     struct bracketed_map: p::seq<p::one<'{'>, map, p::pad<p::one<'}'>, whitespace>> {};
 
+    // Blocks
+    struct let_identifier: p::plus<p::alnum> {};
+    struct binding: p::seq<
+        p::string<'l','e','t'>,
+        p::pad<let_identifier, whitespace>,
+        p::pad<p::one<'='>, whitespace>,
+        expression
+    > {};
+    struct block: p::seq<
+        p::star<whitespace>,
+        p::star<p::seq<binding, p::star<whitespace>>>,
+        expression
+    > {};
+    struct bracketed_block: p::seq<p::one<'{'>, block, p::pad<p::one<'}'>, whitespace>> {};
+
     // Atomic expressions
     struct atomic: p::sor<
         quoted_string,
         number,
         boolean,
         bracketed_list,
-        bracketed_map
+        bracketed_map,
+        bracketed_block,
+        let_identifier
     > {};
 
     // Precedence level: multiplication
@@ -171,6 +214,9 @@ namespace Grammar
             list,
             map_identifier,
             map_entry,
+            block,
+            binding,
+            let_identifier,
             map,
             sum,
             sum_operator,
@@ -235,6 +281,10 @@ static AstNode normalize(std::unique_ptr<p::parse_tree::node> node) {
         return AstNode(obj);
     }
 
+    else if (node->type == "Grammar::let_identifier") {
+        return AstNode(node->string());
+    }
+
     else if (node->type == "Grammar::list") {
         AstNode::List elements;
         for (auto&& c : node->children) {
@@ -264,6 +314,21 @@ static AstNode normalize(std::unique_ptr<p::parse_tree::node> node) {
             seq.operands.push_back(normalize(std::move(*it++)));
         }
         return AstNode(seq);
+    }
+
+    else if (node->type == "Grammar::block") {
+        AstNode::Block block;
+        for (auto&& c : node->children) {
+            if (c->type == "Grammar::binding") {
+                block.names.push_back(c->children[0]->string());
+                block.expressions.push_back(normalize(std::move(c->children[1])));
+            }
+            else {
+                block.expressions.push_back(normalize(std::move(c)));
+                break;
+            }
+        }
+        return AstNode(block);
     }
 
     throw ParseException();

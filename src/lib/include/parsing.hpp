@@ -24,39 +24,50 @@ enum class Operator {
 
 class AstNode {
 public:
-    enum class Type { literal, list, map, opseq };
+    enum class Type { literal, identifier, list, map, opseq, block };
 
     using Literal = Object;
+    using Identifier = std::string;
     using List = std::vector<AstNode>;
     using Map = std::vector<std::pair<std::string, AstNode>>;
     using Operator = struct {
         std::vector<AstNode> operands;
         std::vector<Operator> operators;
     };
+    using Block = struct {
+        std::vector<std::string> names;
+        std::vector<AstNode> expressions;
+    };
 
 private:
-    std::variant<Literal, List, Map, Operator> _data;
+    std::variant<Literal, Identifier, List, Map, Operator, Block> _data;
 
 public:
     // Raw constructors
     AstNode(Object value) : _data(value) {}
+    AstNode(Identifier value) : _data(value) {}
     AstNode(List value) : _data(value) {}
     AstNode(Map value) : _data(value) {}
     AstNode(Operator value) : _data(value) {}
+    AstNode(Block value) : _data(value) {}
 
     // Type inspection
     Type type() const {
         if (std::holds_alternative<Literal>(_data)) return Type::literal;
+        if (std::holds_alternative<Identifier>(_data)) return Type::identifier;
         if (std::holds_alternative<List>(_data)) return Type::list;
         if (std::holds_alternative<Map>(_data)) return Type::map;
-        return Type::opseq;
+        if (std::holds_alternative<Operator>(_data)) return Type::opseq;
+        return Type::block;
     }
 
     // Unsafe getters
     Object unsafe_object() const { return std::get<Literal>(_data); }
+    const Identifier& unsafe_identifier() const { return std::get<Identifier>(_data); }
     const List& unsafe_list() const { return std::get<List>(_data); }
     const Map& unsafe_map() const { return std::get<Map>(_data); }
     const Operator& unsafe_opseq() const { return std::get<Operator>(_data); }
+    const Block& unsafe_block() const { return std::get<Block>(_data); }
 
     void dump(std::ostream&) const;
 };
