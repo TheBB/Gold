@@ -268,3 +268,43 @@ TEST_CASE("Nested maps", "[parsing]") {
     REQUIRE(obj[0].first == "b");
     REQUIRE(obj[0].second.unsafe_object().unsafe_integer() == 1);
 }
+
+
+TEST_CASE("Operator expressions", "[parsing]") {
+    auto obj = parse("1 + 2").unsafe_opseq();
+    REQUIRE(obj.operators.size() == 1);
+    REQUIRE(obj.operators[0] == Operator::plus);
+    REQUIRE(obj.operands.size() == 2);
+    REQUIRE(obj.operands[0].unsafe_object().unsafe_integer() == 1);
+    REQUIRE(obj.operands[1].unsafe_object().unsafe_integer() == 2);
+
+    obj = parse("1 / 2 + 3").unsafe_opseq();
+    REQUIRE(obj.operators.size() == 1);
+    REQUIRE(obj.operators[0] == Operator::plus);
+    REQUIRE(obj.operands.size() == 2);
+    REQUIRE(obj.operands[1].unsafe_object().unsafe_integer() == 3);
+    auto sobj = obj.operands[0].unsafe_opseq();
+    REQUIRE(sobj.operators.size() == 1);
+    REQUIRE(sobj.operators[0] == Operator::divide);
+    REQUIRE(sobj.operands.size() == 2);
+    REQUIRE(sobj.operands[0].unsafe_object().unsafe_integer() == 1);
+    REQUIRE(sobj.operands[1].unsafe_object().unsafe_integer() == 2);
+
+    obj = parse("1 + 2 - 3 * 4 // 5 / 6").unsafe_opseq();
+    REQUIRE(obj.operators.size() == 2);
+    REQUIRE(obj.operators[0] == Operator::plus);
+    REQUIRE(obj.operators[1] == Operator::minus);
+    REQUIRE(obj.operands.size() == 3);
+    REQUIRE(obj.operands[0].unsafe_object().unsafe_integer() == 1);
+    REQUIRE(obj.operands[1].unsafe_object().unsafe_integer() == 2);
+    sobj = obj.operands[2].unsafe_opseq();
+    REQUIRE(sobj.operators.size() == 3);
+    REQUIRE(sobj.operators[0] == Operator::multiply);
+    REQUIRE(sobj.operators[1] == Operator::integer_divide);
+    REQUIRE(sobj.operators[2] == Operator::divide);
+    REQUIRE(sobj.operands.size() == 4);
+    REQUIRE(sobj.operands[0].unsafe_object().unsafe_integer() == 3);
+    REQUIRE(sobj.operands[1].unsafe_object().unsafe_integer() == 4);
+    REQUIRE(sobj.operands[2].unsafe_object().unsafe_integer() == 5);
+    REQUIRE(sobj.operands[3].unsafe_object().unsafe_integer() == 6);
+}
