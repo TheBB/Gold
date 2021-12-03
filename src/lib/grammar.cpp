@@ -73,7 +73,7 @@ void AstNode::dump(std::ostream& os) const {
 
     case Type::opseq: {
         os << "Opseq(";
-        auto opseq = unsafe_opseq();
+        auto& opseq = unsafe_opseq();
         auto operand_it = opseq.operands.begin();
         auto operator_it = opseq.operators.begin();
         os << *operand_it++;
@@ -85,19 +85,17 @@ void AstNode::dump(std::ostream& os) const {
 
     case Type::block: {
         os << "Block(";
-        auto block = unsafe_block();
-        auto name_it = block.names.begin();
-        auto expr_it = block.expressions.begin();
+        auto& block = unsafe_block();
         bool first = true;
-        while (name_it != block.names.end()) {
+        for (auto& [name, value] : block.bindings) {
             if (!first)
                 os << ", ";
-            os << "Entry(" << *name_it++ << ", " << *expr_it++ << ")";
+            os << "Entry(" << name << ", " << value << ")";
             first = false;
         }
         if (!first)
             os << ", ";
-        os << *expr_it << ")";
+        os << *block.expression << ")";
         break;
     }
     }
@@ -226,23 +224,23 @@ namespace Grammar
 }
 
 
-static AstNode normalize(std::unique_ptr<p::parse_tree::node> node) {
-    if (node->is_root()) {
-        if (node->children.size() != 1)
+static AstNode normalize(p::parse_tree::node& node) {
+    if (node.is_root()) {
+        if (node.children.size() != 1)
             throw ParseException();
-        return normalize(std::move(node->children[0]));
+        return normalize(*node.children[0]);
     }
 
-    if (node->type == "Grammar::boolean") {
-        Object obj = Object::boolean(node->string_view() == "true");
+    if (node.type == "Grammar::boolean") {
+        Object obj = Object::boolean(node.string_view() == "true");
         return AstNode(obj);
     }
 
-    else if (node->type == "Grammar::number") {
+    else if (node.type == "Grammar::number") {
         bool positive = true;
         intmax_t integer = 0;
 
-        for (auto&& c : node->children) {
+        for (auto&& c : node.children) {
             if (c->type == "Grammar::sign") {
                 positive = c->string_view() == "+";
             }
@@ -253,7 +251,7 @@ static AstNode normalize(std::unique_ptr<p::parse_tree::node> node) {
                 }
             }
             else if (c->type == "Grammar::fractional" || c->type == "Grammar::exponent") {
-                double value = std::stod(node->string());
+                double value = std::stod(node.string());
                 Object obj = Object::floating(value);
                 return AstNode(obj);
             }
@@ -266,8 +264,8 @@ static AstNode normalize(std::unique_ptr<p::parse_tree::node> node) {
         return AstNode(obj);
     }
 
-    else if (node->type == "Grammar::string") {
-        auto data = node->string_view();
+    else if (node.type == "Grammar::string") {
+        auto data = node.string_view();
         std::stringstream builder;
         for (auto it = data.begin(); it != data.end(); it++) {
             if (*it == '\\') {
@@ -281,54 +279,56 @@ static AstNode normalize(std::unique_ptr<p::parse_tree::node> node) {
         return AstNode(obj);
     }
 
-    else if (node->type == "Grammar::let_identifier") {
-        return AstNode(node->string());
+    else if (node.type == "Grammar::let_identifier") {
+        return AstNode(node.string());
     }
 
-    else if (node->type == "Grammar::list") {
+    else if (node.type == "Grammar::list") {
         AstNode::List elements;
-        for (auto&& c : node->children) {
-            elements.push_back(normalize(std::move(c)));
+        for (auto&& c : node.children) {
+            elements.push_back(normalize(*c));
         }
-        return AstNode(elements);
+        return AstNode(std::move(elements));
     }
 
-    else if (node->type == "Grammar::map") {
+    else if (node.type == "Grammar::map") {
         AstNode::Map entries;
-        for (auto&& c : node->children) {
+        for (auto&& c : node.children) {
             auto key = c->children[0]->string();
-            auto value = normalize(std::move(c->children[1]));
-            entries.push_back(std::pair(key, value));
+            auto value = normalize(*c->children[1]);
+            entries.push_back(std::pair(key, std::move(value)));
         }
-        return AstNode(entries);
+        return AstNode(std::move(entries));
     }
 
-    else if (node->type == "Grammar::sum" || node->type == "Grammar::product") {
-        if (node->children.size() == 1)
-            return normalize(std::move(node->children[0]));
+    else if (node.type == "Grammar::sum" || node.type == "Grammar::product") {
+        if (node.children.size() == 1)
+            return normalize(*node.children[0]);
         AstNode::Operator seq;
-        auto it = node->children.begin();
-        seq.operands.push_back(normalize(std::move(*it++)));
-        while (it != node->children.end()) {
+        auto it = node.children.begin();
+        seq.operands.push_back(normalize(**it++));
+        while (it != node.children.end()) {
             seq.operators.push_back(operator_from_string((*it++)->string()));
-            seq.operands.push_back(normalize(std::move(*it++)));
+            seq.operands.push_back(normalize(**it++));
         }
-        return AstNode(seq);
+        return AstNode(std::move(seq));
     }
 
-    else if (node->type == "Grammar::block") {
+    else if (node.type == "Grammar::block") {
         AstNode::Block block;
-        for (auto&& c : node->children) {
+        for (auto&& c : node.children) {
             if (c->type == "Grammar::binding") {
-                block.names.push_back(c->children[0]->string());
-                block.expressions.push_back(normalize(std::move(c->children[1])));
+                block.bindings.push_back(std::pair(
+                    c->children[0]->string(),
+                    normalize(*c->children[1])
+                ));
             }
             else {
-                block.expressions.push_back(normalize(std::move(c)));
+                block.expression = std::make_unique<AstNode>(normalize(*c));
                 break;
             }
         }
-        return AstNode(block);
+        return AstNode(std::move(block));
     }
 
     throw ParseException();
@@ -360,7 +360,7 @@ AstNode Gold::parse(std::string input)
         auto tree = p::parse_tree::parse<Grammar::grammar, Grammar::selector>(in);
         if (!tree)
             throw ParseException();
-        return normalize(std::move(tree));
+        return normalize(*tree);
     }
     catch (const p::parse_error& e) {
         throw ParseException();

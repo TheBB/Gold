@@ -35,8 +35,8 @@ public:
         std::vector<Operator> operators;
     };
     using Block = struct {
-        std::vector<std::string> names;
-        std::vector<AstNode> expressions;
+        std::vector<std::pair<std::string, AstNode>> bindings;
+        std::unique_ptr<AstNode> expression;
     };
 
 private:
@@ -46,10 +46,10 @@ public:
     // Raw constructors
     AstNode(Object value) : _data(value) {}
     AstNode(Identifier value) : _data(value) {}
-    AstNode(List value) : _data(value) {}
-    AstNode(Map value) : _data(value) {}
-    AstNode(Operator value) : _data(value) {}
-    AstNode(Block value) : _data(value) {}
+    AstNode(List&& value) : _data(std::move(value)) {}
+    AstNode(Map&& value) : _data(std::move(value)) {}
+    AstNode(Operator&& value) : _data(std::move(value)) {}
+    AstNode(Block&& value) : _data(std::move(value)) {}
 
     // Type inspection
     Type type() const {

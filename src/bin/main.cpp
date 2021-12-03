@@ -1,5 +1,6 @@
 #include <iostream>
-#include <math.h>
+#include <memory>
+#include <vector>
 
 #include "gold.hpp"
 #include "parsing.hpp"
