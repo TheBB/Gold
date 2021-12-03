@@ -196,7 +196,7 @@ TEST_CASE("Nested lists", "[parsing]") {
 }
 
 
-TEST_CASE("Parse tree of atomics", "[parsing]") {
+TEST_CASE("Parse map of atomics", "[parsing]") {
     auto obj = parse("{}").unsafe_map();
     REQUIRE(obj.size() == 0);
 
@@ -225,4 +225,46 @@ TEST_CASE("Parse tree of atomics", "[parsing]") {
     REQUIRE(obj[2].second.unsafe_object().unsafe_floating() == 20.0);
     REQUIRE(obj[3].first == "d");
     REQUIRE(obj[3].second.unsafe_object().unsafe_string() == "hoho");
+}
+
+
+TEST_CASE("Flexible map parsing", "[parsing]") {
+    auto obj = parse("{   }").unsafe_map();
+    REQUIRE(obj.size() == 0);
+
+    obj = parse("{a:1,}").unsafe_map();
+    REQUIRE(obj.size() == 1);
+    REQUIRE(obj[0].first == "a");
+    REQUIRE(obj[0].second.unsafe_object().unsafe_integer() == 1);
+
+    obj = parse("{  a : 1, }").unsafe_map();
+    REQUIRE(obj.size() == 1);
+    REQUIRE(obj[0].first == "a");
+    REQUIRE(obj[0].second.unsafe_object().unsafe_integer() == 1);
+
+    obj = parse("{a : 1  ,b:2 }").unsafe_map();
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].first == "a");
+    REQUIRE(obj[0].second.unsafe_object().unsafe_integer() == 1);
+    REQUIRE(obj[1].first == "b");
+    REQUIRE(obj[1].second.unsafe_object().unsafe_integer() == 2);
+}
+
+
+TEST_CASE("Nested maps", "[parsing]") {
+    auto obj = parse("{a:{}}").unsafe_map();
+    REQUIRE(obj.size() == 1);
+    REQUIRE(obj[0].first == "a");
+    obj = obj[0].second.unsafe_map();
+    REQUIRE(obj.size() == 0);
+
+    obj = parse("{a: {b: 1}, c: 2}").unsafe_map();
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].first == "a");
+    REQUIRE(obj[1].first == "c");
+    REQUIRE(obj[1].second.unsafe_object().unsafe_integer() == 2);
+    obj = obj[0].second.unsafe_map();
+    REQUIRE(obj.size() == 1);
+    REQUIRE(obj[0].first == "b");
+    REQUIRE(obj[0].second.unsafe_object().unsafe_integer() == 1);
 }
