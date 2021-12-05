@@ -346,3 +346,18 @@ TEST_CASE("Block expressions", "[parsing]") {
     REQUIRE(ast.unsafe_block().expression->unsafe_opseq().operands[0].unsafe_identifier() == "a");
     REQUIRE(ast.unsafe_block().expression->unsafe_opseq().operands[1].unsafe_identifier() == "b");
 }
+
+
+TEST_CASE("Functions", "[parsing]") {
+    auto ast = parse("() => 1");
+    REQUIRE(ast.unsafe_function().params.size() == 0);
+    REQUIRE(ast.unsafe_function().expression->unsafe_object().unsafe_integer() == 1);
+
+    ast = parse("(a) => {let b = a b}");
+    REQUIRE(ast.unsafe_function().params.size() == 1);
+    REQUIRE(ast.unsafe_function().params[0] == "a");
+    REQUIRE(ast.unsafe_function().expression->unsafe_block().bindings.size() == 1);
+    REQUIRE(ast.unsafe_function().expression->unsafe_block().bindings[0].first == "b");
+    REQUIRE(ast.unsafe_function().expression->unsafe_block().bindings[0].second.unsafe_identifier() == "a");
+    REQUIRE(ast.unsafe_function().expression->unsafe_block().expression->unsafe_identifier() == "b");
+}

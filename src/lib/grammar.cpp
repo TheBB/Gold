@@ -98,6 +98,21 @@ void AstNode::dump(std::ostream& os) const {
         os << *block.expression << ")";
         break;
     }
+
+    case Type::function: {
+        os << "Function(";
+        bool first = true;
+        for (auto& p : unsafe_function().params) {
+            if (!first)
+                os << ", ";
+            os << p;
+            first = false;
+        }
+        if (!first)
+            os << ", ";
+        os << *unsafe_function().expression << ")";
+        break;
+    }
     }
 }
 
@@ -175,6 +190,20 @@ namespace Grammar
     > {};
     struct bracketed_block: p::seq<p::one<'{'>, block, p::pad<p::one<'}'>, whitespace>> {};
 
+    // Functions
+    struct param_identifier: p::seq<let_identifier> {};
+    struct param_list: p::opt<p::seq<
+        p::star<whitespace>,
+        p::list<param_identifier, p::one<','>, whitespace>,
+        p::opt<p::pad<p::one<','>, whitespace>>
+    >> {};
+    struct bracketed_param_list: p::seq<p::one<'('>, param_list, p::pad<p::one<')'>, whitespace>> {};
+    struct function: p::seq<
+        bracketed_param_list,
+        p::pad<p::string<'=','>'>, whitespace>,
+        p::pad<expression, whitespace>
+    > {};
+
     // Atomic expressions
     struct atomic: p::sor<
         quoted_string,
@@ -184,6 +213,7 @@ namespace Grammar
         bracketed_map,
         bracketed_block,
         let_identifier,
+        function,
         p::seq<p::one<'('>, p::pad<expression, whitespace>, p::one<')'>>
     > {};
 
@@ -216,12 +246,16 @@ namespace Grammar
             block,
             binding,
             let_identifier,
+            param_identifier,
+            param_list,
+            function,
             map,
             sum,
             sum_operator,
             product,
             product_operator
-        >>;
+        >
+    >;
 }
 
 
@@ -330,6 +364,15 @@ static AstNode normalize(p::parse_tree::node& node) {
             }
         }
         return AstNode(std::move(block));
+    }
+
+    else if (node.type == "Grammar::function") {
+        AstNode::Function function;
+        for (auto&& c : node.children[0]->children) {
+            function.params.push_back(c->string());
+        }
+        function.expression = std::make_unique<AstNode>(normalize(*node.children[1]));
+        return AstNode(std::move(function));
     }
 
     throw ParseException();

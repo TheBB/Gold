@@ -24,7 +24,7 @@ enum class Operator {
 
 class AstNode {
 public:
-    enum class Type { literal, identifier, list, map, opseq, block };
+    enum class Type { literal, identifier, list, map, opseq, block, function };
 
     using Literal = Object;
     using Identifier = std::string;
@@ -38,9 +38,13 @@ public:
         std::vector<std::pair<std::string, AstNode>> bindings;
         std::unique_ptr<AstNode> expression;
     };
+    using Function = struct {
+        std::vector<std::string> params;
+        std::unique_ptr<AstNode> expression;
+    };
 
 private:
-    std::variant<Literal, Identifier, List, Map, Operator, Block> _data;
+    std::variant<Literal, Identifier, List, Map, Operator, Block, Function> _data;
 
 public:
     // Raw constructors
@@ -50,6 +54,7 @@ public:
     AstNode(Map&& value) : _data(std::move(value)) {}
     AstNode(Operator&& value) : _data(std::move(value)) {}
     AstNode(Block&& value) : _data(std::move(value)) {}
+    AstNode(Function&& value) : _data(std::move(value)) {}
 
     // Type inspection
     Type type() const {
@@ -58,7 +63,8 @@ public:
         if (std::holds_alternative<List>(_data)) return Type::list;
         if (std::holds_alternative<Map>(_data)) return Type::map;
         if (std::holds_alternative<Operator>(_data)) return Type::opseq;
-        return Type::block;
+        if (std::holds_alternative<Block>(_data)) return Type::block;
+        return Type::function;
     }
 
     // Unsafe getters
@@ -68,6 +74,7 @@ public:
     const Map& unsafe_map() const { return std::get<Map>(_data); }
     const Operator& unsafe_opseq() const { return std::get<Operator>(_data); }
     const Block& unsafe_block() const { return std::get<Block>(_data); }
+    const Function& unsafe_function() const { return std::get<Function>(_data); }
 
     void dump(std::ostream&) const;
 };
