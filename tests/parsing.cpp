@@ -370,3 +370,11 @@ TEST_CASE("Functions", "[parsing]") {
     REQUIRE(ast.unsafe_function().expression->unsafe_block().bindings[0].second.unsafe_identifier() == "a");
     REQUIRE(ast.unsafe_function().expression->unsafe_block().expression->unsafe_identifier() == "b");
 }
+
+
+TEST_CASE("Conditionals", "[parsing]") {
+    auto ast = parse("if true then 1 else 2");
+    REQUIRE(ast.unsafe_conditional().condition->unsafe_object().unsafe_boolean() == true);
+    REQUIRE(ast.unsafe_conditional().if_branch->unsafe_object().unsafe_integer() == 1);
+    REQUIRE(ast.unsafe_conditional().else_branch->unsafe_object().unsafe_integer() == 2);
+}

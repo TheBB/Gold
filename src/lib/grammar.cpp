@@ -113,6 +113,12 @@ void AstNode::dump(std::ostream& os) const {
         os << *unsafe_function().expression << ")";
         break;
     }
+
+    case Type::conditional:
+        os << "Branch(" << *unsafe_conditional().condition
+           << ", " << *unsafe_conditional().if_branch
+           << ", " << *unsafe_conditional().else_branch << ")";
+        break;
     }
 }
 
@@ -222,6 +228,16 @@ namespace Grammar
         p::pad<expression, whitespace>
     > {};
 
+    // Conditionals
+    struct conditional: p::seq<
+        p::pad<p::string<'i','f'>, whitespace>,
+        p::pad<expression, whitespace>,
+        p::pad<p::string<'t','h','e','n'>, whitespace>,
+        p::pad<expression, whitespace>,
+        p::pad<p::string<'e','l','s','e'>, whitespace>,
+        p::pad<expression, whitespace>
+    > {};
+
     // Atomic expressions
     struct atomic: p::sor<
         quoted_string,
@@ -230,8 +246,9 @@ namespace Grammar
         bracketed_list,
         bracketed_map,
         bracketed_block,
-        let_identifier,
+        identifier,
         function,
+        conditional,
         p::seq<p::one<'('>, p::pad<expression, whitespace>, p::one<')'>>
     > {};
 
@@ -263,10 +280,12 @@ namespace Grammar
             map_entry,
             block,
             binding,
+            identifier,
             let_identifier,
             param_identifier,
             param_list,
             function,
+            conditional,
             map,
             sum,
             sum_operator,
@@ -332,7 +351,7 @@ static AstNode normalize(p::parse_tree::node& node) {
         return AstNode(obj);
     }
 
-    else if (node.type == "Grammar::let_identifier") {
+    else if (node.type == "Grammar::identifier") {
         return AstNode(node.string());
     }
 
@@ -391,6 +410,14 @@ static AstNode normalize(p::parse_tree::node& node) {
         }
         function.expression = std::make_unique<AstNode>(normalize(*node.children[1]));
         return AstNode(std::move(function));
+    }
+
+    else if (node.type == "Grammar::conditional") {
+        AstNode::Conditional conditional;
+        conditional.condition = std::make_unique<AstNode>(normalize(*node.children[0]));
+        conditional.if_branch = std::make_unique<AstNode>(normalize(*node.children[1]));
+        conditional.else_branch = std::make_unique<AstNode>(normalize(*node.children[2]));
+        return AstNode(std::move(conditional));
     }
 
     throw ParseException();
