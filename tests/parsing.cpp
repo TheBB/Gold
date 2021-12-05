@@ -127,6 +127,12 @@ TEST_CASE("Parse strings", "[parsing]") {
 }
 
 
+TEST_CASE("Parse identifiers", "[parsing]") {
+    auto ast = parse("dingbob");
+    REQUIRE(ast.unsafe_identifier() == "dingbob");
+}
+
+
 TEST_CASE("Parse lists of atomics", "[parsing]") {
     auto ast = parse("[]");
     REQUIRE(ast.unsafe_list().size() == 0);
@@ -141,8 +147,8 @@ TEST_CASE("Parse lists of atomics", "[parsing]") {
     REQUIRE(ast.unsafe_list()[0].unsafe_object().type() == Object::Type::string);
     REQUIRE(ast.unsafe_list()[0].unsafe_object().unsafe_string() == "");
 
-    ast = parse("[1, false, -2.3, \"fable\"]");
-    REQUIRE(ast.unsafe_list().size() == 4);
+    ast = parse("[1, false, -2.3, \"fable\", lel]");
+    REQUIRE(ast.unsafe_list().size() == 5);
     REQUIRE(ast.unsafe_list()[0].unsafe_object().type() == Object::Type::integer);
     REQUIRE(ast.unsafe_list()[0].unsafe_object().unsafe_integer() == 1);
     REQUIRE(ast.unsafe_list()[1].unsafe_object().type() == Object::Type::boolean);
@@ -151,6 +157,7 @@ TEST_CASE("Parse lists of atomics", "[parsing]") {
     REQUIRE(ast.unsafe_list()[2].unsafe_object().unsafe_floating() == -2.3);
     REQUIRE(ast.unsafe_list()[3].unsafe_object().type() == Object::Type::string);
     REQUIRE(ast.unsafe_list()[3].unsafe_object().unsafe_string() == "fable");
+    REQUIRE(ast.unsafe_list()[4].unsafe_identifier() == "lel");
 }
 
 
@@ -215,8 +222,8 @@ TEST_CASE("Parse map of atomics", "[parsing]") {
     REQUIRE(ast.unsafe_map()[0].first == "fable");
     REQUIRE(ast.unsafe_map()[0].second.unsafe_object().unsafe_string() == "fable");
 
-    ast = parse("{a: 1, b: true, c: 2.e1, d: \"hoho\"}");
-    REQUIRE(ast.unsafe_map().size() == 4);
+    ast = parse("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: lel}");
+    REQUIRE(ast.unsafe_map().size() == 5);
     REQUIRE(ast.unsafe_map()[0].first == "a");
     REQUIRE(ast.unsafe_map()[0].second.unsafe_object().unsafe_integer() == 1);
     REQUIRE(ast.unsafe_map()[1].first == "b");
@@ -225,6 +232,8 @@ TEST_CASE("Parse map of atomics", "[parsing]") {
     REQUIRE(ast.unsafe_map()[2].second.unsafe_object().unsafe_floating() == 20.0);
     REQUIRE(ast.unsafe_map()[3].first == "d");
     REQUIRE(ast.unsafe_map()[3].second.unsafe_object().unsafe_string() == "hoho");
+    REQUIRE(ast.unsafe_map()[4].first == "e");
+    REQUIRE(ast.unsafe_map()[4].second.unsafe_identifier() == "lel");
 }
 
 
@@ -303,4 +312,37 @@ TEST_CASE("Operator expressions", "[parsing]") {
     REQUIRE(ast.unsafe_opseq().operands[2].unsafe_opseq().operands[1].unsafe_object().unsafe_integer() == 4);
     REQUIRE(ast.unsafe_opseq().operands[2].unsafe_opseq().operands[2].unsafe_object().unsafe_integer() == 5);
     REQUIRE(ast.unsafe_opseq().operands[2].unsafe_opseq().operands[3].unsafe_object().unsafe_integer() == 6);
+}
+
+
+TEST_CASE("Parenthesised operator expressions", "[parsing]") {
+    auto ast = parse("1 * (2 + 3)");
+    REQUIRE(ast.unsafe_opseq().operators.size() == 1);
+    REQUIRE(ast.unsafe_opseq().operators[0] == Operator::multiply);
+    REQUIRE(ast.unsafe_opseq().operands.size() == 2);
+    REQUIRE(ast.unsafe_opseq().operands[0].unsafe_object().unsafe_integer() == 1);
+    REQUIRE(ast.unsafe_opseq().operands[1].unsafe_opseq().operators.size() == 1);
+    REQUIRE(ast.unsafe_opseq().operands[1].unsafe_opseq().operators[0] == Operator::plus);
+    REQUIRE(ast.unsafe_opseq().operands[1].unsafe_opseq().operands.size() == 2);
+    REQUIRE(ast.unsafe_opseq().operands[1].unsafe_opseq().operands[0].unsafe_object().unsafe_integer() == 2);
+    REQUIRE(ast.unsafe_opseq().operands[1].unsafe_opseq().operands[1].unsafe_object().unsafe_integer() == 3);
+}
+
+
+TEST_CASE("Block expressions", "[parsing]") {
+    auto ast = parse("{1}");
+    REQUIRE(ast.unsafe_block().bindings.size() == 0);
+    REQUIRE(ast.unsafe_block().expression->unsafe_object().unsafe_integer() == 1);
+
+    ast = parse("{let a = 1 let b = 2 a + b}");
+    REQUIRE(ast.unsafe_block().bindings.size() == 2);
+    REQUIRE(ast.unsafe_block().bindings[0].first == "a");
+    REQUIRE(ast.unsafe_block().bindings[0].second.unsafe_object().unsafe_integer() == 1);
+    REQUIRE(ast.unsafe_block().bindings[1].first == "b");
+    REQUIRE(ast.unsafe_block().bindings[1].second.unsafe_object().unsafe_integer() == 2);
+    REQUIRE(ast.unsafe_block().expression->unsafe_opseq().operators.size() == 1);
+    REQUIRE(ast.unsafe_block().expression->unsafe_opseq().operators[0] == Operator::plus);
+    REQUIRE(ast.unsafe_block().expression->unsafe_opseq().operands.size() == 2);
+    REQUIRE(ast.unsafe_block().expression->unsafe_opseq().operands[0].unsafe_identifier() == "a");
+    REQUIRE(ast.unsafe_block().expression->unsafe_opseq().operands[1].unsafe_identifier() == "b");
 }

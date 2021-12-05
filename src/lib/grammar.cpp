@@ -183,7 +183,8 @@ namespace Grammar
         bracketed_list,
         bracketed_map,
         bracketed_block,
-        let_identifier
+        let_identifier,
+        p::seq<p::one<'('>, p::pad<expression, whitespace>, p::one<')'>>
     > {};
 
     // Precedence level: multiplication
