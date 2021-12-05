@@ -130,6 +130,15 @@ TEST_CASE("Parse strings", "[parsing]") {
 TEST_CASE("Parse identifiers", "[parsing]") {
     auto ast = parse("dingbob");
     REQUIRE(ast.unsafe_identifier() == "dingbob");
+
+    // Identifiers that begin with keywords are ok
+    ast = parse("ift");
+    REQUIRE(ast.unsafe_identifier() == "ift");
+
+    // But identifiers that ARE keywords aren't
+    REQUIRE_THROWS_AS(parse("if"), ParseException);
+    REQUIRE_THROWS_AS(parse("then"), ParseException);
+    REQUIRE_THROWS_AS(parse("else"), ParseException);
 }
 
 

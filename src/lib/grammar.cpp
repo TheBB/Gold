@@ -130,6 +130,24 @@ namespace Grammar
 {
     // Forward declarations
     struct expression;
+    struct identifier_char;
+
+    // Keywords (illegal identifiers in expressions)
+    struct keyword: p::seq<
+        p::sor<
+            p::string<'i','f'>,
+            p::string<'t','h','e','n'>,
+            p::string<'e','l','s','e'>
+        >,
+        p::not_at<identifier_char>
+    > {};
+
+    // Identifiers
+    struct identifier_char: p::alnum {};
+    struct identifier: p::seq<
+        p::not_at<keyword>,
+        p::plus<identifier_char>
+    > {};
 
     // Miscellaneous
     struct whitespace: p::one<' ', '\t', '\n', '\r'> {};
@@ -176,7 +194,7 @@ namespace Grammar
     struct bracketed_map: p::seq<p::one<'{'>, map, p::pad<p::one<'}'>, whitespace>> {};
 
     // Blocks
-    struct let_identifier: p::plus<p::alnum> {};
+    struct let_identifier: p::seq<identifier> {};
     struct binding: p::seq<
         p::string<'l','e','t'>,
         p::pad<let_identifier, whitespace>,

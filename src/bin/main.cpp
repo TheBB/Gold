@@ -9,7 +9,7 @@ using namespace Gold;
 
 
 int main(int argc, char **argv) {
-    std::string code("(a, b, c) => a + b + c");
+    std::string code("if");
     debug_parse(code);
     debug_parse_tree(code);
     auto node = parse(code);
