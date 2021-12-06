@@ -263,4 +263,7 @@ TEST_CASE("Postfix operators", "[parsing]") {
 
     ast = parse("f.x(a)");
     REQUIRE(ast->dump() == "FunCall(Index(Id(f), Lit(\"x\")), Id(a))");
+
+    ast = parse("dingbob[\"roflmao\"]");
+    REQUIRE(ast->dump() == "Index(Id(dingbob), Lit(\"roflmao\"))");
 }

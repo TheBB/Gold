@@ -265,13 +265,14 @@ namespace Grammar
         p::list<expression, p::one<','>, whitespace>,
         p::opt<p::pad<p::one<','>, whitespace>>
     >> {};
-    struct funcall_operator: p::seq< p::one<'('>, funcall_args, p::pad<p::one<')'>, whitespace>> {};
-
+    struct funcall_operator: p::seq<p::one<'('>, funcall_args, p::pad<p::one<')'>, whitespace>> {};
     struct object_access: p::seq<p::one<'.'>, let_identifier> {};
+    struct subscript_operator: p::seq<p::one<'['>, p::pad<expression, whitespace>, p::pad<p::one<']'>, whitespace>> {};
 
     struct postfix: p::sor<
         funcall_operator,
-        object_access
+        object_access,
+        subscript_operator
     > {};
     struct atomic: p::seq<pure_atomic, p::star<p::pad<postfix, whitespace>>> {};
 
@@ -323,7 +324,8 @@ namespace Grammar
             product_operator,
             atomic,
             funcall_operator,
-            object_access
+            object_access,
+            subscript_operator
         >
     >;
 }
@@ -460,6 +462,13 @@ static std::unique_ptr<Node> normalize(p::parse_tree::node& node) {
                 auto index = std::make_unique<Index>(
                     std::move(value),
                     std::make_unique<Literal>(field)
+                );
+                value = std::move(index);
+            }
+            else if ((*it)->type == "Grammar::subscript_operator") {
+                auto index = std::make_unique<Index>(
+                    std::move(value),
+                    normalize(*(*it)->children[0])
                 );
                 value = std::move(index);
             }

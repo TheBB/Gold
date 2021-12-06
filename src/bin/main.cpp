@@ -10,7 +10,7 @@ using namespace Gold::Ast;
 
 
 int main(int argc, char **argv) {
-    std::string code("f(1).x");
+    std::string code("alpha[beta]");
     debug_parse(code);
     debug_parse_tree(code);
     auto node = parse(code);
