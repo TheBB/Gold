@@ -267,3 +267,9 @@ TEST_CASE("Postfix operators", "[parsing]") {
     ast = parse("dingbob[\"roflmao\"]");
     REQUIRE(ast->dump() == "Index(Id(dingbob), Lit(\"roflmao\"))");
 }
+
+
+TEST_CASE("File parsing as function call", "[parsing]") {
+    auto ast = parse("let a = 1\na", false);
+    REQUIRE(ast->dump() == "FunCall(Function(Block(Entry(a, Lit(1)), Id(a))))");
+}

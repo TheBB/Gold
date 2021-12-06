@@ -139,9 +139,9 @@ public:
 
 
 bool analyze_grammar();
-std::unique_ptr<Node> parse(std::string);
-void debug_parse(std::string);
-void debug_parse_tree(std::string);
+std::unique_ptr<Node> parse(std::string, bool as_expression = true);
+void debug_parse(std::string, bool as_expression = true);
+void debug_parse_tree(std::string, bool as_expression = true);
 
 }
 

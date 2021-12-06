@@ -294,7 +294,7 @@ namespace Grammar
     struct sum: p::list<term, sum_operator, whitespace> {};
 
     struct expression: p::seq<p::sor<sum, composite>> {};
-    struct grammar: p::seq<expression> {};
+    struct file: p::seq<p::bof, block, p::pad<p::eof, whitespace>> {};
 
     template<typename Rule>
     using selector = p::parse_tree::selector<Rule,
@@ -325,7 +325,8 @@ namespace Grammar
             atomic,
             funcall_operator,
             object_access,
-            subscript_operator
+            subscript_operator,
+            file
         >
     >;
 }
@@ -338,7 +339,13 @@ static std::unique_ptr<Node> normalize(p::parse_tree::node& node) {
         return normalize(*node.children[0]);
     }
 
-    if (node.type == "Grammar::boolean") {
+    if (node.type == "Grammar::file") {
+        auto function = std::make_unique<Function>();
+        function->set_expression(normalize(*node.children[0]));
+        return std::make_unique<FunCall>(std::move(function));
+    }
+
+    else if (node.type == "Grammar::boolean") {
         Object obj = Object::boolean(node.string_view() == "true");
         return std::make_unique<Literal>(obj);
     }
@@ -482,28 +489,35 @@ static std::unique_ptr<Node> normalize(p::parse_tree::node& node) {
 
 
 bool Gold::Ast::analyze_grammar() {
-    return p::analyze<Grammar::grammar>() == 0;
+    return p::analyze<Grammar::file>() == 0;
 }
 
 
-void Gold::Ast::debug_parse(std::string input) {
+void Gold::Ast::debug_parse(std::string input, bool as_expression) {
     p::string_input in(input, "x");
-    p::standard_trace<Grammar::grammar>(in);
+    if (as_expression)
+        p::standard_trace<Grammar::expression>(in);
+    else
+        p::standard_trace<Grammar::file>(in);
 }
 
 
-void Gold::Ast::debug_parse_tree(std::string input) {
+void Gold::Ast::debug_parse_tree(std::string input, bool as_expression) {
     p::string_input in(input, "x");
-    auto tree = p::parse_tree::parse<Grammar::grammar, Grammar::selector>(in);
+    auto tree = as_expression ?
+        p::parse_tree::parse<Grammar::expression, Grammar::selector>(in) :
+        p::parse_tree::parse<Grammar::file, Grammar::selector>(in);
     p::parse_tree::print_dot(std::cout, *tree);
 }
 
 
-std::unique_ptr<Node> Gold::Ast::parse(std::string input)
+std::unique_ptr<Node> Gold::Ast::parse(std::string input, bool as_expression)
 {
     p::string_input in(input, "x");
     try {
-        auto tree = p::parse_tree::parse<Grammar::grammar, Grammar::selector>(in);
+        auto tree = as_expression ?
+            p::parse_tree::parse<Grammar::expression, Grammar::selector>(in) :
+            p::parse_tree::parse<Grammar::file, Grammar::selector>(in);
         if (!tree)
             throw ParseException();
         return normalize(*tree);

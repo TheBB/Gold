@@ -10,9 +10,9 @@ using namespace Gold::Ast;
 
 
 int main(int argc, char **argv) {
-    std::string code("alpha[beta]");
-    debug_parse(code);
-    debug_parse_tree(code);
-    auto node = parse(code);
+    std::string code("let a = 1\na");
+    debug_parse(code, false);
+    debug_parse_tree(code, false);
+    auto node = parse(code, false);
     std::cout << *node << std::endl;
 }
