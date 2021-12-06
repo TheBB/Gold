@@ -248,10 +248,19 @@ TEST_CASE("Conditionals", "[parsing]") {
 }
 
 
-TEST_CASE("Function calls", "[parsing]") {
+TEST_CASE("Postfix operators", "[parsing]") {
     auto ast = parse("func(1,2,3)");
     REQUIRE(ast->dump() == "FunCall(Id(func), Lit(1), Lit(2), Lit(3))");
 
     ast = parse("((x,y) => x+y)(1,2)");
     REQUIRE(ast->dump() == "FunCall(Function(x, y, OpSeq(Id(x) + Id(y))), Lit(1), Lit(2))");
+
+    ast = parse("abc.def");
+    REQUIRE(ast->dump() == "Index(Id(abc), Lit(\"def\"))");
+
+    ast = parse("f(a).x");
+    REQUIRE(ast->dump() == "Index(FunCall(Id(f), Id(a)), Lit(\"x\"))");
+
+    ast = parse("f.x(a)");
+    REQUIRE(ast->dump() == "FunCall(Index(Id(f), Lit(\"x\")), Id(a))");
 }

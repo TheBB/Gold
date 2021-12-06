@@ -119,6 +119,11 @@ void Gold::Ast::FunCall::dump(std::ostream& os) const {
 }
 
 
+void Gold::Ast::Index::dump(std::ostream& os) const {
+    os << "Index(" << *haystack << ", " << *needle << ")";
+}
+
+
 static Operator operator_from_string(std::string value) {
     if (value == "+") return Operator::plus;
     if (value == "-") return Operator::minus;
@@ -262,7 +267,12 @@ namespace Grammar
     >> {};
     struct funcall_operator: p::seq< p::one<'('>, funcall_args, p::pad<p::one<')'>, whitespace>> {};
 
-    struct postfix: p::sor<funcall_operator> {};
+    struct object_access: p::seq<p::one<'.'>, let_identifier> {};
+
+    struct postfix: p::sor<
+        funcall_operator,
+        object_access
+    > {};
     struct atomic: p::seq<pure_atomic, p::star<p::pad<postfix, whitespace>>> {};
 
     // Composite expressions (can't have postfix operators)
@@ -312,7 +322,8 @@ namespace Grammar
             product,
             product_operator,
             atomic,
-            funcall_operator
+            funcall_operator,
+            object_access
         >
     >;
 }
@@ -443,6 +454,14 @@ static std::unique_ptr<Node> normalize(p::parse_tree::node& node) {
                 for (auto&& c : (*it)->children)
                     funcall->append(normalize(*c));
                 value = std::move(funcall);
+            }
+            else if ((*it)->type == "Grammar::object_access") {
+                auto field = Object::string((*it)->children[0]->string());
+                auto index = std::make_unique<Index>(
+                    std::move(value),
+                    std::make_unique<Literal>(field)
+                );
+                value = std::move(index);
             }
             it++;
         }

@@ -127,6 +127,17 @@ public:
 };
 
 
+class Index : public Node {
+private:
+    std::unique_ptr<Node> haystack;
+    std::unique_ptr<Node> needle;
+public:
+    Index(std::unique_ptr<Node> object, std::unique_ptr<Node> index)
+        : haystack(std::move(object)), needle(std::move(index)) {}
+    virtual void dump(std::ostream&) const;
+};
+
+
 bool analyze_grammar();
 std::unique_ptr<Node> parse(std::string);
 void debug_parse(std::string);
