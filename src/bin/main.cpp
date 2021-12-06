@@ -6,6 +6,7 @@
 #include "parsing.hpp"
 
 using namespace Gold;
+using namespace Gold::Ast;
 
 
 int main(int argc, char **argv) {
@@ -13,5 +14,5 @@ int main(int argc, char **argv) {
     debug_parse(code);
     debug_parse_tree(code);
     auto node = parse(code);
-    std::cout << node << std::endl;
+    std::cout << *node << std::endl;
 }

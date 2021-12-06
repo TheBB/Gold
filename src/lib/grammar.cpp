@@ -13,6 +13,7 @@
 #include "parsing.hpp"
 
 using namespace Gold;
+using namespace Gold::Ast;
 namespace p = tao::pegtl;
 
 
@@ -28,98 +29,85 @@ std::ostream& operator<<(std::ostream& os, Operator op) {
 }
 
 
-std::ostream& operator<<(std::ostream& os, const AstNode& obj) {
+std::string Gold::Ast::Node::dump() const {
+    std::stringstream ss;
+    ss << *this;
+    return ss.str();
+}
+
+
+std::ostream& operator<<(std::ostream& os, const Node& obj) {
     obj.dump(os);
     return os;
 }
 
 
-void AstNode::dump(std::ostream& os) const {
-    switch (type()) {
-
-    case Type::literal:
-        os << unsafe_object();
-        break;
-
-    case Type::identifier:
-        os << unsafe_identifier();
-        break;
-
-    case Type::list: {
-        os << "List(" << std::endl;
-        bool first = true;
-        for (auto& obj : unsafe_list()) {
-            if (!first)
-                os << ", ";
-            os << obj;
-            first = false;
-        }
-        os << ")";
-        break;
-    }
-
-    case Type::map: {
-        os << "Map(";
-        bool first = true;
-        for (auto& [key, value] : unsafe_map()) {
-            if (!first)
-                os << ", ";
-            os << "Entry(" << key << ", " << value << ")";
-            first = false;
-        }
-        os << ")";
-        break;
-    }
-
-    case Type::opseq: {
-        os << "Opseq(";
-        auto& opseq = unsafe_opseq();
-        auto operand_it = opseq.operands.begin();
-        auto operator_it = opseq.operators.begin();
-        os << *operand_it++;
-        while (operand_it != opseq.operands.end())
-            os << " " << *operator_it++ << " " << *operand_it++;
-        os << ")";
-        break;
-    }
-
-    case Type::block: {
-        os << "Block(";
-        auto& block = unsafe_block();
-        bool first = true;
-        for (auto& [name, value] : block.bindings) {
-            if (!first)
-                os << ", ";
-            os << "Entry(" << name << ", " << value << ")";
-            first = false;
-        }
+void Gold::Ast::List::dump(std::ostream& os) const {
+    os << "List(";
+    bool first = true;
+    for (auto& obj : elements) {
         if (!first)
             os << ", ";
-        os << *block.expression << ")";
-        break;
+        os << *obj;
+        first = false;
     }
+    os << ")";
+}
 
-    case Type::function: {
-        os << "Function(";
-        bool first = true;
-        for (auto& p : unsafe_function().params) {
-            if (!first)
-                os << ", ";
-            os << p;
-            first = false;
-        }
+
+void Gold::Ast::Map::dump(std::ostream& os) const {
+    os << "Map(";
+    bool first = true;
+    for (auto& [key, value] : entries) {
         if (!first)
             os << ", ";
-        os << *unsafe_function().expression << ")";
-        break;
+        os << "Entry(" << key << ", " << *value << ")";
+        first = false;
     }
+    os << ")";
+}
 
-    case Type::conditional:
-        os << "Branch(" << *unsafe_conditional().condition
-           << ", " << *unsafe_conditional().if_branch
-           << ", " << *unsafe_conditional().else_branch << ")";
-        break;
+
+void Gold::Ast::OpSeq::dump(std::ostream& os) const {
+    os << "OpSeq(" << *initial;
+    for (auto& [op, value] : sequence)
+        os << " " << op << " " << *value;
+    os << ")";
+}
+
+
+void Gold::Ast::Block::dump(std::ostream& os) const {
+    os << "Block(";
+    bool first = true;
+    for (auto& [name, value] : bindings) {
+        if (!first)
+            os << ", ";
+        os << "Entry(" << name << ", " << *value << ")";
+        first = false;
     }
+    if (!first)
+        os << ", ";
+    os << *expression << ")";
+}
+
+
+void Gold::Ast::Function::dump(std::ostream& os) const {
+    os << "Function(";
+    bool first = true;
+    for (auto& p : parameters) {
+        if (!first)
+            os << ", ";
+        os << p;
+        first = false;
+    }
+    if (!first)
+        os << ", ";
+    os << *expression << ")";
+}
+
+
+void Gold::Ast::Branch::dump(std::ostream& os) const {
+    os << "Branch(" << *condition << ", " << *if_value << ", " << *else_value << ")";
 }
 
 
@@ -229,7 +217,7 @@ namespace Grammar
     > {};
 
     // Conditionals
-    struct conditional: p::seq<
+    struct branch: p::seq<
         p::pad<p::string<'i','f'>, whitespace>,
         p::pad<expression, whitespace>,
         p::pad<p::string<'t','h','e','n'>, whitespace>,
@@ -248,7 +236,7 @@ namespace Grammar
         bracketed_block,
         identifier,
         function,
-        conditional,
+        branch,
         p::seq<p::one<'('>, p::pad<expression, whitespace>, p::one<')'>>
     > {};
 
@@ -285,7 +273,7 @@ namespace Grammar
             param_identifier,
             param_list,
             function,
-            conditional,
+            branch,
             map,
             sum,
             sum_operator,
@@ -296,7 +284,7 @@ namespace Grammar
 }
 
 
-static AstNode normalize(p::parse_tree::node& node) {
+static std::unique_ptr<Node> normalize(p::parse_tree::node& node) {
     if (node.is_root()) {
         if (node.children.size() != 1)
             throw ParseException();
@@ -305,7 +293,7 @@ static AstNode normalize(p::parse_tree::node& node) {
 
     if (node.type == "Grammar::boolean") {
         Object obj = Object::boolean(node.string_view() == "true");
-        return AstNode(obj);
+        return std::make_unique<Literal>(obj);
     }
 
     else if (node.type == "Grammar::number") {
@@ -325,7 +313,7 @@ static AstNode normalize(p::parse_tree::node& node) {
             else if (c->type == "Grammar::fractional" || c->type == "Grammar::exponent") {
                 double value = std::stod(node.string());
                 Object obj = Object::floating(value);
-                return AstNode(obj);
+                return std::make_unique<Literal>(obj);
             }
         }
 
@@ -333,7 +321,7 @@ static AstNode normalize(p::parse_tree::node& node) {
             integer *= -1;
 
         Object obj = Object::integer(integer);
-        return AstNode(obj);
+        return std::make_unique<Literal>(obj);
     }
 
     else if (node.type == "Grammar::string") {
@@ -348,101 +336,93 @@ static AstNode normalize(p::parse_tree::node& node) {
                 builder << *it;
         }
         Object obj = Object::string(builder.str());
-        return AstNode(obj);
+        return std::make_unique<Literal>(obj);
     }
 
     else if (node.type == "Grammar::identifier") {
-        return AstNode(node.string());
+        return std::make_unique<Identifier>(node.string());
     }
 
     else if (node.type == "Grammar::list") {
-        AstNode::List elements;
+        auto list = std::make_unique<List>();
         for (auto&& c : node.children) {
-            elements.push_back(normalize(*c));
+            list->append(normalize(*c));
         }
-        return AstNode(std::move(elements));
+        return list;
     }
 
     else if (node.type == "Grammar::map") {
-        AstNode::Map entries;
+        auto map = std::make_unique<Map>();
         for (auto&& c : node.children) {
             auto key = c->children[0]->string();
             auto value = normalize(*c->children[1]);
-            entries.push_back(std::pair(key, std::move(value)));
+            map->append(key, std::move(value));
         }
-        return AstNode(std::move(entries));
+        return map;
     }
 
     else if (node.type == "Grammar::sum" || node.type == "Grammar::product") {
         if (node.children.size() == 1)
             return normalize(*node.children[0]);
-        AstNode::Operator seq;
         auto it = node.children.begin();
-        seq.operands.push_back(normalize(**it++));
+        auto opseq = std::make_unique<OpSeq>(normalize(**it++));
         while (it != node.children.end()) {
-            seq.operators.push_back(operator_from_string((*it++)->string()));
-            seq.operands.push_back(normalize(**it++));
+            auto op = operator_from_string((*it++)->string());
+            opseq->append(op, normalize(**it++));
         }
-        return AstNode(std::move(seq));
+        return opseq;
     }
 
     else if (node.type == "Grammar::block") {
-        AstNode::Block block;
+        auto block = std::make_unique<Block>();
         for (auto&& c : node.children) {
-            if (c->type == "Grammar::binding") {
-                block.bindings.push_back(std::pair(
-                    c->children[0]->string(),
-                    normalize(*c->children[1])
-                ));
-            }
-            else {
-                block.expression = std::make_unique<AstNode>(normalize(*c));
-                break;
-            }
+            if (c->type == "Grammar::binding")
+                block->append(c->children[0]->string(), normalize(*c->children[1]));
+            else
+                block->set_expression(normalize(*c));
         }
-        return AstNode(std::move(block));
+        return block;
     }
 
     else if (node.type == "Grammar::function") {
-        AstNode::Function function;
+        auto function = std::make_unique<Function>();
         for (auto&& c : node.children[0]->children) {
-            function.params.push_back(c->string());
+            function->append(c->string());
         }
-        function.expression = std::make_unique<AstNode>(normalize(*node.children[1]));
-        return AstNode(std::move(function));
+        function->set_expression(normalize(*node.children[1]));
+        return function;
     }
 
-    else if (node.type == "Grammar::conditional") {
-        AstNode::Conditional conditional;
-        conditional.condition = std::make_unique<AstNode>(normalize(*node.children[0]));
-        conditional.if_branch = std::make_unique<AstNode>(normalize(*node.children[1]));
-        conditional.else_branch = std::make_unique<AstNode>(normalize(*node.children[2]));
-        return AstNode(std::move(conditional));
-    }
+    else if (node.type == "Grammar::branch")
+        return std::make_unique<Branch>(
+            normalize(*node.children[0]),
+            normalize(*node.children[1]),
+            normalize(*node.children[2])
+        );
 
     throw ParseException();
 }
 
 
-bool Gold::analyze_grammar() {
+bool Gold::Ast::analyze_grammar() {
     return p::analyze<Grammar::grammar>() == 0;
 }
 
 
-void Gold::debug_parse(std::string input) {
+void Gold::Ast::debug_parse(std::string input) {
     p::string_input in(input, "x");
     p::standard_trace<Grammar::grammar>(in);
 }
 
 
-void Gold::debug_parse_tree(std::string input) {
+void Gold::Ast::debug_parse_tree(std::string input) {
     p::string_input in(input, "x");
     auto tree = p::parse_tree::parse<Grammar::grammar, Grammar::selector>(in);
     p::parse_tree::print_dot(std::cout, *tree);
 }
 
 
-AstNode Gold::parse(std::string input)
+std::unique_ptr<Node> Gold::Ast::parse(std::string input)
 {
     p::string_input in(input, "x");
     try {
