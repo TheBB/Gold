@@ -246,3 +246,12 @@ TEST_CASE("Conditionals", "[parsing]") {
     auto ast = parse("if true then 1 else 2");
     REQUIRE(ast->dump() == "Branch(Lit(true), Lit(1), Lit(2))");
 }
+
+
+TEST_CASE("Function calls", "[parsing]") {
+    auto ast = parse("func(1,2,3)");
+    REQUIRE(ast->dump() == "FunCall(Id(func), Lit(1), Lit(2), Lit(3))");
+
+    ast = parse("((x,y) => x+y)(1,2)");
+    REQUIRE(ast->dump() == "FunCall(Function(x, y, OpSeq(Id(x) + Id(y))), Lit(1), Lit(2))");
+}

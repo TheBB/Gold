@@ -116,6 +116,17 @@ public:
 };
 
 
+class FunCall : public Node {
+private:
+    std::unique_ptr<Node> function;
+    std::vector<std::unique_ptr<Node>> args;
+public:
+    FunCall(std::unique_ptr<Node> func) : function(std::move(func)) {}
+    void append(std::unique_ptr<Node> arg) { args.push_back(std::move(arg)); }
+    virtual void dump(std::ostream&) const;
+};
+
+
 bool analyze_grammar();
 std::unique_ptr<Node> parse(std::string);
 void debug_parse(std::string);

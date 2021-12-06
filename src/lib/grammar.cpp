@@ -111,6 +111,14 @@ void Gold::Ast::Branch::dump(std::ostream& os) const {
 }
 
 
+void Gold::Ast::FunCall::dump(std::ostream& os) const {
+    os << "FunCall(" << *function;
+    for (auto& arg : args)
+        os << ", " << *arg;
+    os << ")";
+}
+
+
 static Operator operator_from_string(std::string value) {
     if (value == "+") return Operator::plus;
     if (value == "-") return Operator::minus;
@@ -226,8 +234,16 @@ namespace Grammar
         p::pad<expression, whitespace>
     > {};
 
-    // Atomic expressions
-    struct atomic: p::sor<
+    // Parenthesised expressions
+    struct paren: p::seq<
+        p::one<'('>,
+        p::pad<expression, whitespace>,
+        p::one<')'>,
+        p::not_at<p::pad<p::string<'=','>'>, whitespace>>
+    > {};
+
+    // Atomic expressions (can have postfix operators)
+    struct pure_atomic: p::sor<
         quoted_string,
         number,
         boolean,
@@ -235,9 +251,25 @@ namespace Grammar
         bracketed_map,
         bracketed_block,
         identifier,
+        paren
+    > {};
+
+    // Precedence level: postfix operators
+    struct funcall_args: p::opt<p::seq<
+        p::star<whitespace>,
+        p::list<expression, p::one<','>, whitespace>,
+        p::opt<p::pad<p::one<','>, whitespace>>
+    >> {};
+    struct funcall_operator: p::seq< p::one<'('>, funcall_args, p::pad<p::one<')'>, whitespace>> {};
+
+    struct postfix: p::sor<funcall_operator> {};
+    struct atomic: p::seq<pure_atomic, p::star<p::pad<postfix, whitespace>>> {};
+
+    // Composite expressions (can't have postfix operators)
+    struct composite: p::sor<
+        atomic,
         function,
-        branch,
-        p::seq<p::one<'('>, p::pad<expression, whitespace>, p::one<')'>>
+        branch
     > {};
 
     // Precedence level: multiplication
@@ -250,7 +282,7 @@ namespace Grammar
     struct sum_operator: p::sor<p::one<'+'>, p::one<'-'>> {};
     struct sum: p::list<term, sum_operator, whitespace> {};
 
-    struct expression: p::seq<sum> {};
+    struct expression: p::seq<p::sor<sum, composite>> {};
     struct grammar: p::seq<expression> {};
 
     template<typename Rule>
@@ -278,7 +310,9 @@ namespace Grammar
             sum,
             sum_operator,
             product,
-            product_operator
+            product_operator,
+            atomic,
+            funcall_operator
         >
     >;
 }
@@ -399,6 +433,21 @@ static std::unique_ptr<Node> normalize(p::parse_tree::node& node) {
             normalize(*node.children[1]),
             normalize(*node.children[2])
         );
+
+    else if (node.type == "Grammar::atomic") {
+        auto it = node.children.begin();
+        auto value = normalize(**it++);
+        while (it != node.children.end()) {
+            if ((*it)->type == "Grammar::funcall_operator") {
+                auto funcall = std::make_unique<FunCall>(std::move(value));
+                for (auto&& c : (*it)->children)
+                    funcall->append(normalize(*c));
+                value = std::move(funcall);
+            }
+            it++;
+        }
+        return value;
+    }
 
     throw ParseException();
 }

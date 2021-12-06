@@ -10,7 +10,8 @@ using namespace Gold::Ast;
 
 
 int main(int argc, char **argv) {
-    std::string code("if true then 1 else 2");
+    // std::string code("a(1, 2)");
+    std::string code("((x,y) => x + y)(1, 2)");
     debug_parse(code);
     debug_parse_tree(code);
     auto node = parse(code);
