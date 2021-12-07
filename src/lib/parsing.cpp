@@ -16,6 +16,24 @@ using namespace Gold;
 namespace p = tao::pegtl;
 
 
+Object EvaluationContext::lookup(std::string& key) {
+    for (auto& ns : namespaces) {
+        if (ns.find(key) == ns.end())
+            continue;
+        return ns[key];
+    }
+    throw EvalException();
+}
+
+
+Object EvaluationContext::lookup_object(std::string& key, int index) {
+    auto& ns = objects[objects.size() - index];
+    if (ns.find(key) == ns.end())
+        throw EvalException();
+    return ns[key];
+}
+
+
 std::ostream& operator<<(std::ostream& os, Operator op) {
     switch (op) {
     case Operator::plus: os << "+"; break;
@@ -41,7 +59,14 @@ std::ostream& operator<<(std::ostream& os, const Node& obj) {
 }
 
 
-void Gold::List::dump(std::ostream& os) const {
+std::set<std::string> Node::free_identifiers() const {
+    std::set<std::string> idents;
+    free_identifiers(idents);
+    return idents;
+}
+
+
+void List::dump(std::ostream& os) const {
     os << "List(";
     bool first = true;
     for (auto& obj : elements) {
@@ -54,7 +79,13 @@ void Gold::List::dump(std::ostream& os) const {
 }
 
 
-void Gold::Map::dump(std::ostream& os) const {
+void List::free_identifiers(std::set<std::string>& idents) const {
+    for (auto& obj : elements)
+        obj->free_identifiers(idents);
+}
+
+
+void Map::dump(std::ostream& os) const {
     os << "Map(";
     bool first = true;
     for (auto& [key, value] : entries) {
@@ -67,7 +98,13 @@ void Gold::Map::dump(std::ostream& os) const {
 }
 
 
-void Gold::OpSeq::dump(std::ostream& os) const {
+void Map::free_identifiers(std::set<std::string>& idents) const {
+    for (auto& obj : entries)
+        obj.second->free_identifiers(idents);
+}
+
+
+void OpSeq::dump(std::ostream& os) const {
     os << "OpSeq(" << *initial;
     for (auto& [op, value] : sequence)
         os << " " << op << " " << *value;
@@ -75,7 +112,14 @@ void Gold::OpSeq::dump(std::ostream& os) const {
 }
 
 
-void Gold::Block::dump(std::ostream& os) const {
+void OpSeq::free_identifiers(std::set<std::string>& idents) const {
+    initial->free_identifiers(idents);
+    for (auto& obj : sequence)
+        obj.second->free_identifiers(idents);
+}
+
+
+void Block::dump(std::ostream& os) const {
     os << "Block(";
     bool first = true;
     for (auto& [name, value] : bindings) {
@@ -90,7 +134,25 @@ void Gold::Block::dump(std::ostream& os) const {
 }
 
 
-void Gold::Function::dump(std::ostream& os) const {
+void Block::free_identifiers(std::set<std::string>& idents) const {
+    std::set<std::string> bound;
+    for (auto& [key, val] : bindings) {
+        auto candidates = val->free_identifiers();
+        for (auto& c : candidates) {
+            if (bound.find(c) == bound.end())
+                idents.insert(c);
+        }
+        bound.insert(key);
+    }
+    auto candidates = expression->free_identifiers();
+        for (auto& c : candidates) {
+            if (bound.find(c) == bound.end())
+                idents.insert(c);
+        }
+}
+
+
+void Function::dump(std::ostream& os) const {
     os << "Function(";
     bool first = true;
     for (auto& p : parameters) {
@@ -105,12 +167,28 @@ void Gold::Function::dump(std::ostream& os) const {
 }
 
 
-void Gold::Branch::dump(std::ostream& os) const {
+void Function::free_identifiers(std::set<std::string>& idents) const {
+    auto candidates = expression->free_identifiers();
+    for (auto& p : parameters)
+        candidates.erase(p);
+    for (auto& c : candidates)
+        idents.insert(c);
+}
+
+
+void Branch::dump(std::ostream& os) const {
     os << "Branch(" << *condition << ", " << *if_value << ", " << *else_value << ")";
 }
 
 
-void Gold::FunCall::dump(std::ostream& os) const {
+void Branch::free_identifiers(std::set<std::string>& idents) const {
+    condition->free_identifiers(idents);
+    if_value->free_identifiers(idents);
+    else_value->free_identifiers(idents);
+}
+
+
+void FunCall::dump(std::ostream& os) const {
     os << "FunCall(" << *function;
     for (auto& arg : args)
         os << ", " << *arg;
@@ -118,8 +196,21 @@ void Gold::FunCall::dump(std::ostream& os) const {
 }
 
 
-void Gold::Index::dump(std::ostream& os) const {
+void FunCall::free_identifiers(std::set<std::string>& idents) const {
+    function->free_identifiers(idents);
+    for (auto& arg : args)
+        arg->free_identifiers(idents);
+}
+
+
+void Index::dump(std::ostream& os) const {
     os << "Index(" << *haystack << ", " << *needle << ")";
+}
+
+
+void Index::free_identifiers(std::set<std::string>& idents) const {
+    haystack->free_identifiers(idents);
+    needle->free_identifiers(idents);
 }
 
 

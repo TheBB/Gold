@@ -20,3 +20,4 @@ target_include_directories(gold-test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/lib
 
 enable_testing()
 add_test(NAME parsing COMMAND $<TARGET_FILE:gold-test> [parsing])
+add_test(NAME bindings COMMAND $<TARGET_FILE:gold-test> [bindings])

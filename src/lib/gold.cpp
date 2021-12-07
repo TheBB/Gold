@@ -20,8 +20,9 @@ std::string Object::type_name() const {
     case Type::list: return "list";
     case Type::function: return "function";
     case Type::error: return "error";
-    default: return "??";
+    case Type::undefined: return "undefined";
     }
+    return "??";
 }
 
 
@@ -130,8 +131,15 @@ std::ostream& operator<<(std::ostream& os, const Object& obj) {
         os << "]";
         break;
     }
-    default:
-        os << "??";
+    case Object::Type::error:
+        os << "<error>";
+        break;
+    case Object::Type::function:
+        os << "<function>";
+        break;
+    case Object::Type::undefined:
+        os << "<undefined>";
+        break;
     }
     return os;
 }

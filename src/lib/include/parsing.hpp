@@ -1,4 +1,6 @@
+#include <list>
 #include <optional>
+#include <set>
 #include <string>
 #include <variant>
 
@@ -14,6 +16,19 @@ struct ParseException: public std::exception {};
 struct EvalException: public std::exception {};
 
 
+class Namespace : public std::map<std::string, Object> {};
+
+
+class EvaluationContext {
+private:
+    std::list<Namespace> namespaces;
+    std::vector<Namespace> objects;
+public:
+    Object lookup(std::string& key);
+    Object lookup_object(std::string& key, int index);
+};
+
+
 enum class Operator {
     plus,
     minus,
@@ -27,6 +42,8 @@ class Node {
 public:
     virtual void dump(std::ostream&) const = 0;
     std::string dump() const;
+    virtual void free_identifiers(std::set<std::string>&) const = 0;
+    std::set<std::string> free_identifiers() const;
 };
 
 
@@ -36,6 +53,7 @@ private:
 public:
     Literal(Object obj) : object(obj) {}
     virtual void dump(std::ostream& os) const { os << "Lit(" << object << ")"; }
+    virtual void free_identifiers(std::set<std::string>&) const {}
 };
 
 
@@ -46,6 +64,7 @@ public:
     Identifier(std::string name) : name(name) {}
     Identifier(std::string& name) : name(name) {}
     virtual void dump(std::ostream& os) const { os << "Id(" << name << ")"; }
+    virtual void free_identifiers(std::set<std::string>& idents) const { idents.insert(name); }
 };
 
 
@@ -55,6 +74,7 @@ private:
 public:
     void append(std::unique_ptr<Node> node) { elements.push_back(std::move(node)); }
     virtual void dump(std::ostream&) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
 };
 
 
@@ -66,6 +86,7 @@ public:
         entries.push_back(std::pair(key, std::move(value)));
     }
     virtual void dump(std::ostream&) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
 };
 
 
@@ -79,6 +100,7 @@ public:
         sequence.push_back(std::pair(op, std::move(operand)));
     }
     virtual void dump(std::ostream&) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
 };
 
 
@@ -92,6 +114,7 @@ public:
     }
     void set_expression(std::unique_ptr<Node> expr) { expression = std::move(expr); }
     virtual void dump(std::ostream&) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
 };
 
 
@@ -103,6 +126,7 @@ public:
     void append(std::string key) { parameters.push_back(key); }
     void set_expression(std::unique_ptr<Node> expr) { expression = std::move(expr); }
     virtual void dump(std::ostream&) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
 };
 
 
@@ -115,6 +139,7 @@ public:
     Branch(std::unique_ptr<Node> cond, std::unique_ptr<Node> yes, std::unique_ptr<Node> no)
         : condition(std::move(cond)), if_value(std::move(yes)), else_value(std::move(no)) { }
     virtual void dump(std::ostream&) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
 };
 
 
@@ -126,6 +151,7 @@ public:
     FunCall(std::unique_ptr<Node> func) : function(std::move(func)) {}
     void append(std::unique_ptr<Node> arg) { args.push_back(std::move(arg)); }
     virtual void dump(std::ostream&) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
 };
 
 
@@ -137,6 +163,7 @@ public:
     Index(std::unique_ptr<Node> object, std::unique_ptr<Node> index)
         : haystack(std::move(object)), needle(std::move(index)) {}
     virtual void dump(std::ostream&) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
 };
 
 

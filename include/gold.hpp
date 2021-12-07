@@ -12,7 +12,9 @@ namespace Gold {
 
 class Object {
 public:
-    enum class Type { integer, string, boolean, floating, map, list, function, error };
+    enum class Type { undefined, integer, string, boolean, floating, map, list, function, error };
+
+    using Undefined = std::monostate;
 
     using Integer = intmax_t;
     using String = std::string;
@@ -26,10 +28,11 @@ public:
     using List = std::shared_ptr<ListT>;
 
 private:
-    std::variant<Integer, String, Boolean, Floating, Map, List, Error> _data;
+    std::variant<Undefined, Integer, String, Boolean, Floating, Map, List, Error> _data;
 
 public:
     // Raw constructors
+    Object() : _data() {}
     Object(Integer value) : _data(value) {}
     Object(const String& value) : _data(value) {}
     Object(Boolean value) : _data(value) {}
@@ -39,6 +42,7 @@ public:
     Object(const String& type, const String& message) : _data(Error(type, message)) {}
 
     // Explicit constructors
+    static Object undefined() { return Object(); }
     static Object integer(Integer value) { return Object(value); }
     static Object string(const String& value) { return Object(value); }
     static Object boolean(Boolean value) { return Object(value); }
@@ -61,10 +65,12 @@ public:
         if (std::holds_alternative<Floating>(_data)) return Type::floating;
         if (std::holds_alternative<Map>(_data)) return Type::map;
         if (std::holds_alternative<List>(_data)) return Type::list;
+        if (std::holds_alternative<Undefined>(_data)) return Type::undefined;
         return Type::error;
     }
 
     std::string type_name() const;
+    bool is_undefined() const { return type() == Type::undefined; }
     bool is_error() const { return type() == Type::error; }
 
     // Unsafe getters
