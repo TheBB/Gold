@@ -18,7 +18,7 @@ std::string Object::type_name() const {
     case Type::floating: return "floating";
     case Type::map: return "map";
     case Type::list: return "list";
-    case Type::function: return "function";
+    case Type::closure: return "closure";
     case Type::error: return "error";
     case Type::undefined: return "undefined";
     }
@@ -62,7 +62,7 @@ Object Object::operator+(Object other) {
     default: break;
     }
 
-    return Object::error("TypeError", fmt::format("no match for `{}` + `{}`", type_name(), other.type_name()));
+    throw EvalException();
 }
 
 
@@ -89,7 +89,14 @@ Object Object::operator-(Object other) {
     default: break;
     }
 
-    return Object::error("TypeError", fmt::format("no match for `{}` - `{}`", type_name(), other.type_name()));
+    throw EvalException();
+}
+
+
+Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& args) {
+    if (type() != Type::closure)
+        throw EvalException();
+    return std::get<Evaluator>(_data)(ctx, args);
 }
 
 
@@ -134,12 +141,30 @@ std::ostream& operator<<(std::ostream& os, const Object& obj) {
     case Object::Type::error:
         os << "<error>";
         break;
-    case Object::Type::function:
-        os << "<function>";
+    case Object::Type::closure:
+        os << "<closure>";
         break;
     case Object::Type::undefined:
         os << "<undefined>";
         break;
     }
     return os;
+}
+
+
+Object EvaluationContext::lookup(std::string& key) {
+    for (auto& ns : namespaces) {
+        if (ns.find(key) == ns.end())
+            continue;
+        return ns[key];
+    }
+    throw EvalException();
+}
+
+
+Object EvaluationContext::lookup_object(std::string& key, int index) {
+    auto& ns = objects[objects.size() - index];
+    if (ns.find(key) == ns.end())
+        throw EvalException();
+    return ns[key];
 }

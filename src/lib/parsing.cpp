@@ -16,24 +16,6 @@ using namespace Gold;
 namespace p = tao::pegtl;
 
 
-Object EvaluationContext::lookup(std::string& key) {
-    for (auto& ns : namespaces) {
-        if (ns.find(key) == ns.end())
-            continue;
-        return ns[key];
-    }
-    throw EvalException();
-}
-
-
-Object EvaluationContext::lookup_object(std::string& key, int index) {
-    auto& ns = objects[objects.size() - index];
-    if (ns.find(key) == ns.end())
-        throw EvalException();
-    return ns[key];
-}
-
-
 std::ostream& operator<<(std::ostream& os, Operator op) {
     switch (op) {
     case Operator::plus: os << "+"; break;

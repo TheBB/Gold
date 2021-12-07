@@ -1,3 +1,4 @@
+#include <list>
 #include <map>
 #include <memory>
 #include <variant>
@@ -9,10 +10,12 @@
 namespace Gold {
 
 
+class EvaluationContext;
+
 
 class Object {
 public:
-    enum class Type { undefined, integer, string, boolean, floating, map, list, function, error };
+    enum class Type { undefined, integer, string, boolean, floating, map, list, closure, error };
 
     using Undefined = std::monostate;
 
@@ -27,8 +30,10 @@ public:
     using ListT = std::vector<Object>;
     using List = std::shared_ptr<ListT>;
 
+    using Evaluator = Object (*)(EvaluationContext&, const std::vector<Object>&);
+
 private:
-    std::variant<Undefined, Integer, String, Boolean, Floating, Map, List, Error> _data;
+    std::variant<Undefined, Integer, String, Boolean, Floating, Map, List, Evaluator, Error> _data;
 
 public:
     // Raw constructors
@@ -40,6 +45,7 @@ public:
     Object(const Map& value) : _data(value) {}
     Object(const List& value) : _data(value) {}
     Object(const String& type, const String& message) : _data(Error(type, message)) {}
+    Object(Evaluator eval) : _data(eval) {}
 
     // Explicit constructors
     static Object undefined() { return Object(); }
@@ -48,6 +54,7 @@ public:
     static Object boolean(Boolean value) { return Object(value); }
     static Object floating(Floating value) { return Object(value); }
     static Object error(const String& type, const String& message) { return Object(type, message); }
+    static Object closure(Evaluator eval) { return Object(eval); }
 
     static Object map(Map value) { return Object(value); }
     static Object map(MapT value) { return Object(std::make_shared<MapT>(value)); }
@@ -65,6 +72,7 @@ public:
         if (std::holds_alternative<Floating>(_data)) return Type::floating;
         if (std::holds_alternative<Map>(_data)) return Type::map;
         if (std::holds_alternative<List>(_data)) return Type::list;
+        if (std::holds_alternative<Evaluator>(_data)) return Type::closure;
         if (std::holds_alternative<Undefined>(_data)) return Type::undefined;
         return Type::error;
     }
@@ -85,7 +93,26 @@ public:
     // Operators
     Object operator+(Object other);
     Object operator-(Object other);
+    Object operator()(EvaluationContext&, const std::vector<Object>&);
 };
+
+
+struct EvalException: public std::exception {};
+
+
+class Namespace : public std::map<std::string, Object> {};
+
+
+class EvaluationContext {
+private:
+    std::list<Namespace> namespaces;
+    std::vector<Namespace> objects;
+public:
+    Object lookup(std::string& key);
+    Object lookup_object(std::string& key, int index);
+};
+
+
 
 }
 

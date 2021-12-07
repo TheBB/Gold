@@ -1,8 +1,5 @@
-#include <list>
-#include <optional>
 #include <set>
 #include <string>
-#include <variant>
 
 #include "gold.hpp"
 
@@ -13,20 +10,6 @@ namespace Gold
 {
 
 struct ParseException: public std::exception {};
-struct EvalException: public std::exception {};
-
-
-class Namespace : public std::map<std::string, Object> {};
-
-
-class EvaluationContext {
-private:
-    std::list<Namespace> namespaces;
-    std::vector<Namespace> objects;
-public:
-    Object lookup(std::string& key);
-    Object lookup_object(std::string& key, int index);
-};
 
 
 enum class Operator {
