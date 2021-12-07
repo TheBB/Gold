@@ -26,7 +26,7 @@ std::string Object::type_name() const {
 }
 
 
-Object Object::operator+(Object other) {
+Object Object::operator+(Object other) const {
     switch (type()) {
     case Type::integer:
         switch (other.type()) {
@@ -66,7 +66,7 @@ Object Object::operator+(Object other) {
 }
 
 
-Object Object::operator-(Object other) {
+Object Object::operator-(Object other) const {
     switch (type()) {
     case Type::integer:
         switch (other.type()) {
@@ -93,10 +93,30 @@ Object Object::operator-(Object other) {
 }
 
 
-Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& args) {
+Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& args) const {
     if (type() != Type::closure)
         throw EvalException();
     return std::get<Evaluator>(_data)(ctx, args);
+}
+
+
+Object Object::operator[](Object index) const {
+    if (type() == Object::Type::list && index.type() == Object::Type::integer) {
+        auto ix = index.unsafe_integer();
+        if (ix < 0 || ix >= (typeof(ix))unsafe_list()->size())
+            throw EvalException();
+        return (*unsafe_list())[ix];
+    }
+
+    else if (type() == Object::Type::map && index.type() == Object::Type::string) {
+        auto ix = index.unsafe_string();
+        auto map = unsafe_map();
+        if (map->find(ix) == map->end())
+            throw EvalException();
+        return (*map)[ix];
+    }
+
+    throw EvalException();
 }
 
 
@@ -152,7 +172,7 @@ std::ostream& operator<<(std::ostream& os, const Object& obj) {
 }
 
 
-Object EvaluationContext::lookup(std::string& key) {
+Object EvaluationContext::lookup(const std::string& key) {
     for (auto& ns : namespaces) {
         if (ns.find(key) == ns.end())
             continue;
@@ -162,9 +182,26 @@ Object EvaluationContext::lookup(std::string& key) {
 }
 
 
-Object EvaluationContext::lookup_object(std::string& key, int index) {
+Object EvaluationContext::lookup_object(const std::string& key, int index) {
     auto& ns = objects[objects.size() - index];
     if (ns.find(key) == ns.end())
         throw EvalException();
     return ns[key];
+}
+
+
+void EvaluationContext::assign(const std::string& key, Object value) {
+    namespaces.front()[key] = value;
+}
+
+
+void EvaluationContext::assign_object(const std::string& key, Object value) {
+    objects.back()[key] = value;
+}
+
+
+Object EvaluationContext::finalize_object() {
+    auto retval = Object::map(std::move(objects.back()));
+    objects.pop_back();
+    return retval;
 }

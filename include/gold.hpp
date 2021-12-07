@@ -1,3 +1,4 @@
+#include <functional>
 #include <list>
 #include <map>
 #include <memory>
@@ -30,7 +31,7 @@ public:
     using ListT = std::vector<Object>;
     using List = std::shared_ptr<ListT>;
 
-    using Evaluator = Object (*)(EvaluationContext&, const std::vector<Object>&);
+    using Evaluator = std::function<Object(EvaluationContext&, const std::vector<Object>&)>;
 
 private:
     std::variant<Undefined, Integer, String, Boolean, Floating, Map, List, Evaluator, Error> _data;
@@ -91,9 +92,10 @@ public:
     const Error& unsafe_error() const { return std::get<Error>(_data); }
 
     // Operators
-    Object operator+(Object other);
-    Object operator-(Object other);
-    Object operator()(EvaluationContext&, const std::vector<Object>&);
+    Object operator+(Object) const;
+    Object operator-(Object) const;
+    Object operator()(EvaluationContext&, const std::vector<Object>&) const;
+    Object operator[](Object) const;
 };
 
 
@@ -108,8 +110,17 @@ private:
     std::list<Namespace> namespaces;
     std::vector<Namespace> objects;
 public:
-    Object lookup(std::string& key);
-    Object lookup_object(std::string& key, int index);
+    Object lookup(const std::string& key);
+    Object lookup_object(const std::string& key, int index);
+    void assign(const std::string& key, Object value);
+
+    void push_namespace(Namespace ns) { namespaces.push_front(ns); }
+    void push_namespace() { namespaces.emplace_front(); }
+    void pop_namespace(int num = 1) { for (int i = 0; i < num; i++ ) namespaces.pop_front(); }
+
+    void push_object() { objects.emplace_back(); }
+    void assign_object(const std::string& key, Object value);
+    Object finalize_object();
 };
 
 

@@ -27,6 +27,8 @@ public:
     std::string dump() const;
     virtual void free_identifiers(std::set<std::string>&) const = 0;
     std::set<std::string> free_identifiers() const;
+    virtual Object evaluate(EvaluationContext&) const = 0;
+    Object evaluate() const;
 };
 
 
@@ -37,6 +39,7 @@ public:
     Literal(Object obj) : object(obj) {}
     virtual void dump(std::ostream& os) const { os << "Lit(" << object << ")"; }
     virtual void free_identifiers(std::set<std::string>&) const {}
+    virtual Object evaluate(EvaluationContext&) const { return object; }
 };
 
 
@@ -48,6 +51,7 @@ public:
     Identifier(std::string& name) : name(name) {}
     virtual void dump(std::ostream& os) const { os << "Id(" << name << ")"; }
     virtual void free_identifiers(std::set<std::string>& idents) const { idents.insert(name); }
+    virtual Object evaluate(EvaluationContext& ctx) const { return ctx.lookup(name); }
 };
 
 
@@ -58,6 +62,7 @@ public:
     void append(std::unique_ptr<Node> node) { elements.push_back(std::move(node)); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
+    virtual Object evaluate(EvaluationContext&) const;
 };
 
 
@@ -70,6 +75,7 @@ public:
     }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
+    virtual Object evaluate(EvaluationContext&) const;
 };
 
 
@@ -84,6 +90,7 @@ public:
     }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
+    virtual Object evaluate(EvaluationContext&) const;
 };
 
 
@@ -98,6 +105,7 @@ public:
     void set_expression(std::unique_ptr<Node> expr) { expression = std::move(expr); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
+    virtual Object evaluate(EvaluationContext&) const;
 };
 
 
@@ -110,6 +118,7 @@ public:
     void set_expression(std::unique_ptr<Node> expr) { expression = std::move(expr); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
+    virtual Object evaluate(EvaluationContext&) const;
 };
 
 
@@ -123,6 +132,7 @@ public:
         : condition(std::move(cond)), if_value(std::move(yes)), else_value(std::move(no)) { }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
+    virtual Object evaluate(EvaluationContext&) const;
 };
 
 
@@ -135,6 +145,7 @@ public:
     void append(std::unique_ptr<Node> arg) { args.push_back(std::move(arg)); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
+    virtual Object evaluate(EvaluationContext&) const;
 };
 
 
@@ -147,6 +158,7 @@ public:
         : haystack(std::move(object)), needle(std::move(index)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
+    virtual Object evaluate(EvaluationContext&) const;
 };
 
 

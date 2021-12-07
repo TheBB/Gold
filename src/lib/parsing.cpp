@@ -48,6 +48,12 @@ std::set<std::string> Node::free_identifiers() const {
 }
 
 
+Object Node::evaluate() const {
+    EvaluationContext ctx;
+    return evaluate(ctx);
+}
+
+
 void List::dump(std::ostream& os) const {
     os << "List(";
     bool first = true;
@@ -64,6 +70,14 @@ void List::dump(std::ostream& os) const {
 void List::free_identifiers(std::set<std::string>& idents) const {
     for (auto& obj : elements)
         obj->free_identifiers(idents);
+}
+
+
+Object List::evaluate(EvaluationContext& ctx) const {
+    std::vector<Object> objs;
+    for (auto& element : elements)
+        objs.push_back(element->evaluate(ctx));
+    return Object::list(std::move(objs));
 }
 
 
@@ -86,6 +100,14 @@ void Map::free_identifiers(std::set<std::string>& idents) const {
 }
 
 
+Object Map::evaluate(EvaluationContext& ctx) const {
+    ctx.push_object();
+    for (auto& [key, value] : entries)
+        ctx.assign_object(key, value->evaluate(ctx));
+    return ctx.finalize_object();
+}
+
+
 void OpSeq::dump(std::ostream& os) const {
     os << "OpSeq(" << *initial;
     for (auto& [op, value] : sequence)
@@ -98,6 +120,20 @@ void OpSeq::free_identifiers(std::set<std::string>& idents) const {
     initial->free_identifiers(idents);
     for (auto& obj : sequence)
         obj.second->free_identifiers(idents);
+}
+
+
+Object OpSeq::evaluate(EvaluationContext& ctx) const {
+    auto value = initial->evaluate(ctx);
+    for (auto& [op, operand] : sequence) {
+        auto rhs = operand->evaluate(ctx);
+        switch (op) {
+        case Operator::plus: value = value + rhs; break;
+        case Operator::minus: value = value - rhs; break;
+        default: throw EvalException();
+        }
+    }
+    return value;
 }
 
 
@@ -134,6 +170,17 @@ void Block::free_identifiers(std::set<std::string>& idents) const {
 }
 
 
+Object Block::evaluate(EvaluationContext& ctx) const {
+    ctx.push_namespace();
+    for (auto& [key, value] : bindings) {
+        ctx.assign(key, value->evaluate(ctx));
+    }
+    auto retval = expression->evaluate(ctx);
+    ctx.pop_namespace();
+    return retval;
+}
+
+
 void Function::dump(std::ostream& os) const {
     os << "Function(";
     bool first = true;
@@ -158,6 +205,29 @@ void Function::free_identifiers(std::set<std::string>& idents) const {
 }
 
 
+Object Function::evaluate(EvaluationContext& ctx) const {
+    auto free = Node::free_identifiers();
+    Namespace ns;
+    for (auto& id : free)
+        ns[id] = ctx.lookup(id);
+
+    auto eval = [this, ns](EvaluationContext& ctx, const std::vector<Object>& args) {
+        ctx.push_namespace(ns);
+        ctx.push_namespace();
+        auto id_it = parameters.begin();
+        auto arg_it = args.begin();
+        while (id_it != parameters.end() && arg_it != args.end()) {
+            ctx.assign(*id_it++, *arg_it++);
+        }
+        Object retval = expression->evaluate(ctx);
+        ctx.pop_namespace(2);
+        return retval;
+    };
+
+    return Object::closure(eval);
+}
+
+
 void Branch::dump(std::ostream& os) const {
     os << "Branch(" << *condition << ", " << *if_value << ", " << *else_value << ")";
 }
@@ -167,6 +237,16 @@ void Branch::free_identifiers(std::set<std::string>& idents) const {
     condition->free_identifiers(idents);
     if_value->free_identifiers(idents);
     else_value->free_identifiers(idents);
+}
+
+
+Object Branch::evaluate(EvaluationContext& ctx) const {
+    auto cond = condition->evaluate(ctx);
+    if (cond.type() != Object::Type::boolean)
+        throw EvalException();
+    if (cond.unsafe_boolean())
+        return if_value->evaluate(ctx);
+    return else_value->evaluate(ctx);
 }
 
 
@@ -185,6 +265,15 @@ void FunCall::free_identifiers(std::set<std::string>& idents) const {
 }
 
 
+Object FunCall::evaluate(EvaluationContext& ctx) const {
+    auto func = function->evaluate(ctx);
+    std::vector<Object> arglist;
+    for (auto& arg : args)
+        arglist.push_back(arg->evaluate(ctx));
+    return func(ctx, arglist);
+}
+
+
 void Index::dump(std::ostream& os) const {
     os << "Index(" << *haystack << ", " << *needle << ")";
 }
@@ -193,6 +282,13 @@ void Index::dump(std::ostream& os) const {
 void Index::free_identifiers(std::set<std::string>& idents) const {
     haystack->free_identifiers(idents);
     needle->free_identifiers(idents);
+}
+
+
+Object Index::evaluate(EvaluationContext& ctx) const {
+    auto container = haystack->evaluate(ctx);
+    auto index = needle->evaluate(ctx);
+    return container[index];
 }
 
 
