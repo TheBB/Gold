@@ -6,7 +6,6 @@
 #include "parsing.hpp"
 
 using namespace Gold;
-using namespace Gold::Ast;
 
 
 int main(int argc, char **argv) {

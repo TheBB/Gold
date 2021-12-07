@@ -3,7 +3,7 @@
 #include "gold.hpp"
 #include "parsing.hpp"
 
-using namespace Gold::Ast;
+using namespace Gold;
 
 
 TEST_CASE("Grammar is well-formed", "[parsing]") {

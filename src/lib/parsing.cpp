@@ -13,7 +13,6 @@
 #include "parsing.hpp"
 
 using namespace Gold;
-using namespace Gold::Ast;
 namespace p = tao::pegtl;
 
 
@@ -29,7 +28,7 @@ std::ostream& operator<<(std::ostream& os, Operator op) {
 }
 
 
-std::string Gold::Ast::Node::dump() const {
+std::string Gold::Node::dump() const {
     std::stringstream ss;
     ss << *this;
     return ss.str();
@@ -42,7 +41,7 @@ std::ostream& operator<<(std::ostream& os, const Node& obj) {
 }
 
 
-void Gold::Ast::List::dump(std::ostream& os) const {
+void Gold::List::dump(std::ostream& os) const {
     os << "List(";
     bool first = true;
     for (auto& obj : elements) {
@@ -55,7 +54,7 @@ void Gold::Ast::List::dump(std::ostream& os) const {
 }
 
 
-void Gold::Ast::Map::dump(std::ostream& os) const {
+void Gold::Map::dump(std::ostream& os) const {
     os << "Map(";
     bool first = true;
     for (auto& [key, value] : entries) {
@@ -68,7 +67,7 @@ void Gold::Ast::Map::dump(std::ostream& os) const {
 }
 
 
-void Gold::Ast::OpSeq::dump(std::ostream& os) const {
+void Gold::OpSeq::dump(std::ostream& os) const {
     os << "OpSeq(" << *initial;
     for (auto& [op, value] : sequence)
         os << " " << op << " " << *value;
@@ -76,7 +75,7 @@ void Gold::Ast::OpSeq::dump(std::ostream& os) const {
 }
 
 
-void Gold::Ast::Block::dump(std::ostream& os) const {
+void Gold::Block::dump(std::ostream& os) const {
     os << "Block(";
     bool first = true;
     for (auto& [name, value] : bindings) {
@@ -91,7 +90,7 @@ void Gold::Ast::Block::dump(std::ostream& os) const {
 }
 
 
-void Gold::Ast::Function::dump(std::ostream& os) const {
+void Gold::Function::dump(std::ostream& os) const {
     os << "Function(";
     bool first = true;
     for (auto& p : parameters) {
@@ -106,12 +105,12 @@ void Gold::Ast::Function::dump(std::ostream& os) const {
 }
 
 
-void Gold::Ast::Branch::dump(std::ostream& os) const {
+void Gold::Branch::dump(std::ostream& os) const {
     os << "Branch(" << *condition << ", " << *if_value << ", " << *else_value << ")";
 }
 
 
-void Gold::Ast::FunCall::dump(std::ostream& os) const {
+void Gold::FunCall::dump(std::ostream& os) const {
     os << "FunCall(" << *function;
     for (auto& arg : args)
         os << ", " << *arg;
@@ -119,7 +118,7 @@ void Gold::Ast::FunCall::dump(std::ostream& os) const {
 }
 
 
-void Gold::Ast::Index::dump(std::ostream& os) const {
+void Gold::Index::dump(std::ostream& os) const {
     os << "Index(" << *haystack << ", " << *needle << ")";
 }
 
@@ -488,12 +487,12 @@ static std::unique_ptr<Node> normalize(p::parse_tree::node& node) {
 }
 
 
-bool Gold::Ast::analyze_grammar() {
+bool Gold::analyze_grammar() {
     return p::analyze<Grammar::file>() == 0;
 }
 
 
-void Gold::Ast::debug_parse(std::string input, bool as_expression) {
+void Gold::debug_parse(std::string input, bool as_expression) {
     p::string_input in(input, "x");
     if (as_expression)
         p::standard_trace<Grammar::expression>(in);
@@ -502,7 +501,7 @@ void Gold::Ast::debug_parse(std::string input, bool as_expression) {
 }
 
 
-void Gold::Ast::debug_parse_tree(std::string input, bool as_expression) {
+void Gold::debug_parse_tree(std::string input, bool as_expression) {
     p::string_input in(input, "x");
     auto tree = as_expression ?
         p::parse_tree::parse<Grammar::expression, Grammar::selector>(in) :
@@ -511,7 +510,7 @@ void Gold::Ast::debug_parse_tree(std::string input, bool as_expression) {
 }
 
 
-std::unique_ptr<Node> Gold::Ast::parse(std::string input, bool as_expression)
+std::unique_ptr<Node> Gold::parse(std::string input, bool as_expression)
 {
     p::string_input in(input, "x");
     try {

@@ -7,10 +7,12 @@
 #pragma once
 
 
-namespace Gold::Ast
+namespace Gold
 {
 
 struct ParseException: public std::exception {};
+struct EvalException: public std::exception {};
+
 
 enum class Operator {
     plus,
@@ -145,6 +147,6 @@ void debug_parse_tree(std::string, bool as_expression = true);
 
 }
 
-std::ostream& operator<<(std::ostream&, const Gold::Ast::Node&);
-std::ostream& operator<<(std::ostream&, Gold::Ast::Operator);
-std::ostream& operator<<(std::ostream&, Gold::Ast::Operator);
+std::ostream& operator<<(std::ostream&, const Gold::Node&);
+std::ostream& operator<<(std::ostream&, Gold::Operator);
+std::ostream& operator<<(std::ostream&, Gold::Operator);
