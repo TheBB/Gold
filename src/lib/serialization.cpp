@@ -59,6 +59,9 @@ void Object::serialize(std::ostream& os) const {
         os << 'F';
         write(os, unsafe_floating());
         break;
+    case Type::null:
+        os << 'N';
+        break;
     case Type::map:
         os << 'M';
         write(os, unsafe_map()->size());
@@ -113,6 +116,8 @@ Object Object::deserialize(std::istream& is) {
     }
     case 'F':
         return Object::floating(read<double>(is));
+    case 'N':
+        return Object::null();
     case 'M': {
         auto size = read<size_t>(is);
         Object::MapT map;

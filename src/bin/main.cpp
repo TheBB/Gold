@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     // std::cout << retval << std::endl;
 
     // std::string code("let sum = (x,y) => x + y\nsum(1,2)");
-    std::string code("let double = (x) => x + x\nlet applytwice = (f,x) => f(f(x))\napplytwice(double, [1])");
+    std::string code("let double = (x) => x + x\nlet applytwice = (f,x) => f(f(x))\napplytwice(double, [null])");
     // debug_parse(code, false);
     // debug_parse_tree(code, false);
     auto node = parse(code, false);

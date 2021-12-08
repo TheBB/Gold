@@ -16,6 +16,7 @@ std::string Object::type_name() const {
     case Type::string: return "integer";
     case Type::boolean: return "boolean";
     case Type::floating: return "floating";
+    case Type::null: return "null";
     case Type::map: return "map";
     case Type::list: return "list";
     case Type::closure: return "closure";
@@ -144,6 +145,9 @@ std::ostream& operator<<(std::ostream& os, const Object& obj) {
         break;
     case Object::Type::floating:
         os << fmt::format("{}", obj.unsafe_floating());
+        break;
+    case Object::Type::null:
+        os << "null";
         break;
     case Object::Type::map: {
         os << "{";

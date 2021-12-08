@@ -105,6 +105,9 @@ TEST_CASE("Parse identifiers", "[parsing]") {
     auto ast = parse("dingbob");
     REQUIRE(ast->dump() == "Id(dingbob)");
 
+    ast = parse("nullt");
+    REQUIRE(ast->dump() == "Id(nullt)");
+
     // Identifiers that begin with keywords are ok
     ast = parse("ift");
     REQUIRE(ast->dump() == "Id(ift)");
@@ -113,6 +116,12 @@ TEST_CASE("Parse identifiers", "[parsing]") {
     REQUIRE_THROWS_AS(parse("if"), ParseException);
     REQUIRE_THROWS_AS(parse("then"), ParseException);
     REQUIRE_THROWS_AS(parse("else"), ParseException);
+}
+
+
+TEST_CASE("Parse null", "[parsing]") {
+    auto ast = parse("null");
+    REQUIRE(ast->dump() == "Lit(null)");
 }
 
 

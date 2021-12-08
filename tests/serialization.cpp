@@ -6,6 +6,14 @@
 using namespace Gold;
 
 
+TEST_CASE("Serialization of nulls", "[serialization]") {
+    auto val = Object::deserialize(Object::null().serialize());
+    REQUIRE(val.type() == Object::Type::null);
+    REQUIRE(val.is_null());
+    REQUIRE(!val.is_undefined());
+}
+
+
 TEST_CASE("Serialization of integers", "[serialization]") {
     auto val = Object::deserialize(Object::integer(1).serialize());
     REQUIRE(val.type() == Object::Type::integer);

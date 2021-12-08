@@ -315,7 +315,8 @@ namespace Grammar
         p::sor<
             p::string<'i','f'>,
             p::string<'t','h','e','n'>,
-            p::string<'e','l','s','e'>
+            p::string<'e','l','s','e'>,
+            p::string<'n','u','l','l'>
         >,
         p::not_at<identifier_char>
     > {};
@@ -345,6 +346,9 @@ namespace Grammar
     struct character: p::if_then_else<p::one<'\\'>, escaped, unescaped> {};
     struct string: p::until<p::at<p::one<'"'>>, character> {};
     struct quoted_string: p::seq<p::one<'"'>, string, p::one<'"'>> {};
+
+    // Null
+    struct nullp: p::string<'n','u','l','l'> {};
 
     // Booleans
     struct boolean: p::sor<p::string<'t','r','u','e'>, p::string<'f','a','l','s','e'>> {};
@@ -427,6 +431,7 @@ namespace Grammar
         bracketed_map,
         bracketed_block,
         identifier,
+        nullp,
         paren
     > {};
 
@@ -476,6 +481,7 @@ namespace Grammar
             fractional,
             exponent,
             string,
+            nullp,
             boolean,
             list,
             map_identifier,
@@ -562,6 +568,10 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         }
         Object obj = Object::string(builder.str());
         return std::make_unique<Literal>(obj);
+    }
+
+    else if (node.type == "Grammar::nullp") {
+        return std::make_unique<Literal>(Object::null());
     }
 
     else if (node.type == "Grammar::identifier") {
