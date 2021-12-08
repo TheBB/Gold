@@ -8,12 +8,12 @@
 using namespace Gold;
 
 
-Object mkfunc(int l) {
-    auto eval = [l](EvaluationContext& ctx, const std::vector<Object>& args) {
-        return Object::integer(l);
-    };
-    return Object::closure(eval);
-}
+// Object mkfunc(int l) {
+//     auto eval = [l](EvaluationContext& ctx, const std::vector<Object>& args) {
+//         return Object::integer(l);
+//     };
+//     return Object::closure(eval);
+// }
 
 
 int main(int argc, char **argv) {

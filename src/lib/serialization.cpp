@@ -1,4 +1,5 @@
 #include "gold.hpp"
+#include "parsing.hpp"
 
 using namespace Gold;
 
@@ -72,6 +73,18 @@ void Object::serialize(std::ostream& os) const {
         for (auto& value : *unsafe_list())
             value.serialize(os);
         break;
+    case Type::closure:
+        os << 'C';
+        write(os, unsafe_closure()->nonlocals.size());
+        for (auto& [key, value] : unsafe_closure()->nonlocals) {
+            write_str(os, key);
+            value.serialize(os);
+        }
+        write(os, unsafe_closure()->parameters.size());
+        for (auto& p : unsafe_closure()->parameters)
+            write_str(os, p);
+        unsafe_closure()->expression->serialize(os);
+        break;
     case Type::undefined:
         os << 'U';
         break;
@@ -117,7 +130,199 @@ Object Object::deserialize(std::istream& is) {
             list.push_back(Object::deserialize(is));
         return Object::list(std::move(list));
     }
+    case 'C': {
+        auto closure = std::make_shared<ClosureT>();
+        auto size = read<size_t>(is);
+        for (size_t i = 0; i < size; i++) {
+            auto key = read_str(is);
+            auto value = Object::deserialize(is);
+            closure->nonlocals[key] = value;
+        }
+        size = read<size_t>(is);
+        for (size_t i = 0; i < size; i++)
+            closure->parameters.push_back(read_str(is));
+        closure->expression = AstNode::deserialize(is);
+        return Object::closure(closure);
+    }
     case 'U':
         return Object::undefined();
+    }
+
+    throw std::exception();
+}
+
+
+std::string AstNode::serialize() const {
+    std::ostringstream os;
+    serialize(os);
+    return os.str();
+}
+
+
+void Literal::serialize(std::ostream& os) const {
+    os << 'T';
+    object.serialize(os);
+}
+
+
+void Identifier::serialize(std::ostream& os) const {
+    os << 'I';
+    write_str(os, name);
+}
+
+
+void List::serialize(std::ostream& os) const {
+    os << 'L';
+    write(os, elements.size());
+    for (auto& value : elements)
+        value->serialize(os);
+}
+
+
+void Map::serialize(std::ostream& os) const {
+    os << 'M';
+    write(os, entries.size());
+    for (auto& [key, value] : entries) {
+        write_str(os, key);
+        value->serialize(os);
+    }
+}
+
+
+void OpSeq::serialize(std::ostream& os) const {
+    os << 'O';
+    initial->serialize(os);
+    write(os, sequence.size());
+    for (auto& [op, operand] : sequence) {
+        write(os, op);
+        operand->serialize(os);
+    }
+}
+
+
+void Block::serialize(std::ostream& os) const {
+    os << 'B';
+    write(os, bindings.size());
+    for (auto& [key, value] : bindings) {
+        write_str(os, key);
+        value->serialize(os);
+    }
+    expression->serialize(os);
+}
+
+
+void Function::serialize(std::ostream& os) const {
+    os << 'F';
+    write(os, parameters.size());
+    for (auto& p : parameters)
+        write_str(os, p);
+    expression->serialize(os);
+}
+
+
+void Branch::serialize(std::ostream& os) const {
+    os << 'C';
+    condition->serialize(os);
+    if_value->serialize(os);
+    else_value->serialize(os);
+}
+
+
+void FunCall::serialize(std::ostream& os) const {
+    os << 'E';
+    function->serialize(os);
+    write(os, args.size());
+    for (auto& arg : args)
+        arg->serialize(os);
+}
+
+
+void Index::serialize(std::ostream& os) const {
+    os << 'S';
+    haystack->serialize(os);
+    needle->serialize(os);
+}
+
+
+std::unique_ptr<AstNode> AstNode::deserialize(std::string val) {
+    std::istringstream is(val);
+    return deserialize(is);
+}
+
+
+std::unique_ptr<AstNode> AstNode::deserialize(std::istream& is) {
+    char indicator;
+    is >> indicator;
+    switch (indicator) {
+    case 'T':
+        return std::make_unique<Literal>(Object::deserialize(is));
+    case 'I':
+        return std::make_unique<Identifier>(read_str(is));
+    case 'L': {
+        auto list = std::make_unique<List>();
+        auto size = read<size_t>(is);
+        for (size_t i = 0; i < size; i++)
+            list->append(AstNode::deserialize(is));
+        return list;
+    }
+    case 'M': {
+        auto map = std::make_unique<Map>();
+        auto size = read<size_t>(is);
+        for (size_t i = 0; i < size; i++) {
+            auto key = read_str(is);
+            auto value = AstNode::deserialize(is);
+            map->append(key, std::move(value));
+        }
+        return map;
+    }
+    case 'O': {
+        auto opseq = std::make_unique<OpSeq>(AstNode::deserialize(is));
+        auto size = read<size_t>(is);
+        for (size_t i = 0; i < size; i++) {
+            auto op = read<Operator>(is);
+            auto value = AstNode::deserialize(is);
+            opseq->append(op, std::move(value));
+        }
+        return opseq;
+    }
+    case 'B': {
+        auto block = std::make_unique<Block>();
+        auto size = read<size_t>(is);
+        for (size_t i = 0; i < size; i++) {
+            auto key = read_str(is);
+            auto value = AstNode::deserialize(is);
+            block->append(key, std::move(value));
+        }
+        block->set_expression(AstNode::deserialize(is));
+        return block;
+    }
+    case 'F': {
+        auto func = std::make_unique<Function>();
+        auto size = read<size_t>(is);
+        for (size_t i = 0; i < size; i++)
+            func->append(read_str(is));
+        func->set_expression(AstNode::deserialize(is));
+        return func;
+    }
+    case 'C': {
+        auto cond = AstNode::deserialize(is);
+        auto yes = AstNode::deserialize(is);
+        auto no = AstNode::deserialize(is);
+        return std::make_unique<Branch>(std::move(cond), std::move(yes), std::move(no));
+    }
+    case 'E': {
+        auto call = std::make_unique<FunCall>(AstNode::deserialize(is));
+        auto size = read<size_t>(is);
+        for (size_t i = 0; i < size; i++)
+            call->append(AstNode::deserialize(is));
+        return call;
+    }
+    case 'S': {
+        auto container = AstNode::deserialize(is);
+        auto index = AstNode::deserialize(is);
+        return std::make_unique<Index>(std::move(container), std::move(index));
+    }
+    default:
+        throw std::exception();
     }
 }

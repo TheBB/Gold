@@ -95,7 +95,19 @@ Object Object::operator-(Object other) const {
 Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& args) const {
     if (type() != Type::closure)
         throw EvalException();
-    return std::get<Evaluator>(_data)(ctx, args);
+    auto closure = unsafe_closure();
+
+    ctx.push_namespace(closure->nonlocals);
+    ctx.push_namespace();
+
+    auto id_it = closure->parameters.begin();
+    auto arg_it = args.begin();
+    while (id_it != closure->parameters.end() && arg_it != args.end())
+        ctx.assign(*id_it++, *arg_it++);
+    Object retval = closure->expression->evaluate(ctx);
+
+    ctx.pop_namespace(2);
+    return retval;
 }
 
 

@@ -29,6 +29,7 @@ public:
     virtual void dump(std::ostream& os) const { os << "Lit(" << object << ")"; }
     virtual void free_identifiers(std::set<std::string>&) const {}
     virtual Object evaluate(EvaluationContext&) const { return object; }
+    virtual void serialize(std::ostream&) const;
 };
 
 
@@ -41,6 +42,7 @@ public:
     virtual void dump(std::ostream& os) const { os << "Id(" << name << ")"; }
     virtual void free_identifiers(std::set<std::string>& idents) const { idents.insert(name); }
     virtual Object evaluate(EvaluationContext& ctx) const { return ctx.lookup(name); }
+    virtual void serialize(std::ostream&) const;
 };
 
 
@@ -52,6 +54,7 @@ public:
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
+    virtual void serialize(std::ostream&) const;
 };
 
 
@@ -65,6 +68,7 @@ public:
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
+    virtual void serialize(std::ostream&) const;
 };
 
 
@@ -80,6 +84,7 @@ public:
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
+    virtual void serialize(std::ostream&) const;
 };
 
 
@@ -95,6 +100,7 @@ public:
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
+    virtual void serialize(std::ostream&) const;
 };
 
 
@@ -108,6 +114,7 @@ public:
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
+    virtual void serialize(std::ostream&) const;
 };
 
 
@@ -122,6 +129,7 @@ public:
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
+    virtual void serialize(std::ostream&) const;
 };
 
 
@@ -135,6 +143,7 @@ public:
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
+    virtual void serialize(std::ostream&) const;
 };
 
 
@@ -148,6 +157,7 @@ public:
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
+    virtual void serialize(std::ostream&) const;
 };
 
 

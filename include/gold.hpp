@@ -15,6 +15,7 @@ namespace Gold {
 
 class EvaluationContext;
 class Object;
+class Namespace : public std::map<std::string, Object> {};
 
 
 class AstNode {
@@ -25,6 +26,11 @@ public:
     std::set<std::string> free_identifiers() const;
     virtual Object evaluate(EvaluationContext&) const = 0;
     Object evaluate() const;
+
+    std::string serialize() const;
+    virtual void serialize(std::ostream&) const = 0;
+    static std::unique_ptr<AstNode> deserialize(std::string);
+    static std::unique_ptr<AstNode> deserialize(std::istream&);
 };
 
 
@@ -45,16 +51,14 @@ public:
     using List = std::shared_ptr<ListT>;
 
     using ClosureT = struct {
-        std::map<std::string, Object> nonlocals;
-        std::list<std::string> parameters;
-        std::shared_ptr<AstNode> expression;
+        Namespace nonlocals;
+        std::vector<std::string> parameters;
+        std::unique_ptr<AstNode> expression;
     };
     using Closure = std::shared_ptr<ClosureT>;
 
-    using Evaluator = std::function<Object(EvaluationContext&, const std::vector<Object>&)>;
-
 private:
-    std::variant<Undefined, Integer, String, Boolean, Floating, Map, List, Evaluator> _data;
+    std::variant<Undefined, Integer, String, Boolean, Floating, Map, List, Closure> _data;
 
 public:
     // Raw constructors
@@ -65,7 +69,7 @@ public:
     Object(Floating value) : _data(value) {}
     Object(const Map& value) : _data(value) {}
     Object(const List& value) : _data(value) {}
-    Object(Evaluator eval) : _data(eval) {}
+    Object(Closure eval) : _data(eval) {}
 
     // Explicit constructors
     static Object undefined() { return Object(); }
@@ -73,7 +77,6 @@ public:
     static Object string(const String& value) { return Object(value); }
     static Object boolean(Boolean value) { return Object(value); }
     static Object floating(Floating value) { return Object(value); }
-    static Object closure(Evaluator eval) { return Object(eval); }
 
     static Object map(Map value) { return Object(value); }
     static Object map(MapT value) { return Object(std::make_shared<MapT>(value)); }
@@ -82,6 +85,8 @@ public:
     static Object list(List value) { return Object(value); }
     static Object list(ListT value) { return Object(std::make_shared<ListT>(value)); }
     static Object list(ListT& value) { return Object(std::make_shared<ListT>(value)); }
+
+    static Object closure(Closure value) { return Object(value); }
 
     static Object deserialize(std::string);
     static Object deserialize(std::istream&);
@@ -94,7 +99,7 @@ public:
         if (std::holds_alternative<Floating>(_data)) return Type::floating;
         if (std::holds_alternative<Map>(_data)) return Type::map;
         if (std::holds_alternative<List>(_data)) return Type::list;
-        if (std::holds_alternative<Evaluator>(_data)) return Type::closure;
+        if (std::holds_alternative<Closure>(_data)) return Type::closure;
         return Type::undefined;
     }
 
@@ -108,6 +113,7 @@ public:
     Floating unsafe_floating() const { return std::get<Floating>(_data); }
     const Map& unsafe_map() const { return std::get<Map>(_data); }
     const List& unsafe_list() const { return std::get<List>(_data); }
+    const Closure& unsafe_closure() const { return std::get<Closure>(_data); }
 
     // Serialization
     std::string serialize() const;
@@ -124,7 +130,6 @@ public:
 struct EvalException: public std::exception {};
 
 
-class Namespace : public std::map<std::string, Object> {};
 
 
 class EvaluationContext {

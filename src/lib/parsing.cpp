@@ -207,24 +207,27 @@ void Function::free_identifiers(std::set<std::string>& idents) const {
 
 Object Function::evaluate(EvaluationContext& ctx) const {
     auto free = AstNode::free_identifiers();
-    Namespace ns;
+    auto closure = std::make_shared<Object::ClosureT>();
+
     for (auto& id : free)
-        ns[id] = ctx.lookup(id);
+        closure->nonlocals[id] = ctx.lookup(id);
+    closure->parameters = parameters;
+    closure->expression = AstNode::deserialize(expression->serialize());
 
-    auto eval = [this, ns](EvaluationContext& ctx, const std::vector<Object>& args) {
-        ctx.push_namespace(ns);
-        ctx.push_namespace();
-        auto id_it = parameters.begin();
-        auto arg_it = args.begin();
-        while (id_it != parameters.end() && arg_it != args.end()) {
-            ctx.assign(*id_it++, *arg_it++);
-        }
-        Object retval = expression->evaluate(ctx);
-        ctx.pop_namespace(2);
-        return retval;
-    };
+    // auto eval = [this, ns](EvaluationContext& ctx, const std::vector<Object>& args) {
+    //     ctx.push_namespace(ns);
+    //     ctx.push_namespace();
+    //     auto id_it = parameters.begin();
+    //     auto arg_it = args.begin();
+    //     while (id_it != parameters.end() && arg_it != args.end()) {
+    //         ctx.assign(*id_it++, *arg_it++);
+    //     }
+    //     Object retval = expression->evaluate(ctx);
+    //     ctx.pop_namespace(2);
+    //     return retval;
+    // };
 
-    return Object::closure(eval);
+    return Object::closure(closure);
 }
 
 
