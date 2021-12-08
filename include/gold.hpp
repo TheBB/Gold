@@ -134,9 +134,6 @@ public:
 
 struct EvalException: public std::exception {};
 
-
-
-
 class EvaluationContext {
 private:
     std::list<Namespace> namespaces;
@@ -155,6 +152,8 @@ public:
     Object finalize_object();
 };
 
+
+Object evaluate_string(std::string);
 
 
 }

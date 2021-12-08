@@ -316,6 +316,9 @@ namespace Grammar
             p::string<'i','f'>,
             p::string<'t','h','e','n'>,
             p::string<'e','l','s','e'>,
+            p::string<'e','l','s','e'>,
+            p::string<'t','r','u','e'>,
+            p::string<'f','a','l','s','e'>,
             p::string<'n','u','l','l'>
         >,
         p::not_at<identifier_char>
@@ -426,11 +429,11 @@ namespace Grammar
     struct pure_atomic: p::sor<
         quoted_string,
         number,
-        boolean,
         bracketed_list,
         bracketed_map,
         bracketed_block,
         identifier,
+        boolean,
         nullp,
         paren
     > {};
@@ -692,8 +695,7 @@ void Gold::debug_parse_tree(std::string input, bool as_expression) {
 }
 
 
-std::unique_ptr<AstNode> Gold::parse(std::string input, bool as_expression)
-{
+std::unique_ptr<AstNode> Gold::parse(std::string input, bool as_expression) {
     p::string_input in(input, "x");
     try {
         auto tree = as_expression ?
@@ -706,4 +708,11 @@ std::unique_ptr<AstNode> Gold::parse(std::string input, bool as_expression)
     catch (const p::parse_error& e) {
         throw ParseException();
     }
+}
+
+
+Object Gold::evaluate_string(std::string code) {
+    auto ast = parse(code, false);
+    auto value = ast->evaluate();
+    return value;
 }

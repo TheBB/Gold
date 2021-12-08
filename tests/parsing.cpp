@@ -108,6 +108,12 @@ TEST_CASE("Parse identifiers", "[parsing]") {
     ast = parse("nullt");
     REQUIRE(ast->dump() == "Id(nullt)");
 
+    ast = parse("truet");
+    REQUIRE(ast->dump() == "Id(truet)");
+
+    ast = parse("falset");
+    REQUIRE(ast->dump() == "Id(falset)");
+
     // Identifiers that begin with keywords are ok
     ast = parse("ift");
     REQUIRE(ast->dump() == "Id(ift)");
