@@ -2,6 +2,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <sstream>
 #include <variant>
 #include <vector>
 
@@ -16,7 +17,7 @@ class EvaluationContext;
 
 class Object {
 public:
-    enum class Type { undefined, integer, string, boolean, floating, map, list, closure, error };
+    enum class Type { undefined, integer, string, boolean, floating, map, list, closure };
 
     using Undefined = std::monostate;
 
@@ -24,7 +25,6 @@ public:
     using String = std::string;
     using Boolean = bool;
     using Floating = double;
-    using Error = std::pair<std::string, std::string>;
 
     using MapT = std::map<std::string, Object>;
     using Map = std::shared_ptr<MapT>;
@@ -34,7 +34,7 @@ public:
     using Evaluator = std::function<Object(EvaluationContext&, const std::vector<Object>&)>;
 
 private:
-    std::variant<Undefined, Integer, String, Boolean, Floating, Map, List, Evaluator, Error> _data;
+    std::variant<Undefined, Integer, String, Boolean, Floating, Map, List, Evaluator> _data;
 
 public:
     // Raw constructors
@@ -45,7 +45,6 @@ public:
     Object(Floating value) : _data(value) {}
     Object(const Map& value) : _data(value) {}
     Object(const List& value) : _data(value) {}
-    Object(const String& type, const String& message) : _data(Error(type, message)) {}
     Object(Evaluator eval) : _data(eval) {}
 
     // Explicit constructors
@@ -54,7 +53,6 @@ public:
     static Object string(const String& value) { return Object(value); }
     static Object boolean(Boolean value) { return Object(value); }
     static Object floating(Floating value) { return Object(value); }
-    static Object error(const String& type, const String& message) { return Object(type, message); }
     static Object closure(Evaluator eval) { return Object(eval); }
 
     static Object map(Map value) { return Object(value); }
@@ -65,6 +63,9 @@ public:
     static Object list(ListT value) { return Object(std::make_shared<ListT>(value)); }
     static Object list(ListT& value) { return Object(std::make_shared<ListT>(value)); }
 
+    static Object deserialize(std::string);
+    static Object deserialize(std::istream&);
+
     // Type inspection
     Type type() const {
         if (std::holds_alternative<Integer>(_data)) return Type::integer;
@@ -74,13 +75,11 @@ public:
         if (std::holds_alternative<Map>(_data)) return Type::map;
         if (std::holds_alternative<List>(_data)) return Type::list;
         if (std::holds_alternative<Evaluator>(_data)) return Type::closure;
-        if (std::holds_alternative<Undefined>(_data)) return Type::undefined;
-        return Type::error;
+        return Type::undefined;
     }
 
     std::string type_name() const;
     bool is_undefined() const { return type() == Type::undefined; }
-    bool is_error() const { return type() == Type::error; }
 
     // Unsafe getters
     Integer unsafe_integer() const { return std::get<Integer>(_data); }
@@ -89,7 +88,10 @@ public:
     Floating unsafe_floating() const { return std::get<Floating>(_data); }
     const Map& unsafe_map() const { return std::get<Map>(_data); }
     const List& unsafe_list() const { return std::get<List>(_data); }
-    const Error& unsafe_error() const { return std::get<Error>(_data); }
+
+    // Serialization
+    std::string serialize() const;
+    void serialize(std::ostream&) const;
 
     // Operators
     Object operator+(Object) const;
