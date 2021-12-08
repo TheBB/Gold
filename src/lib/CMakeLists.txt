@@ -2,6 +2,7 @@ add_library(
     gold
     ${CMAKE_CURRENT_SOURCE_DIR}/gold.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/parsing.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/serialization.cpp
 )
 
 target_include_directories(gold PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)

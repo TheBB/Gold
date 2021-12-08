@@ -28,27 +28,27 @@ std::ostream& operator<<(std::ostream& os, Operator op) {
 }
 
 
-std::string Gold::Node::dump() const {
+std::string Gold::AstNode::dump() const {
     std::stringstream ss;
     ss << *this;
     return ss.str();
 }
 
 
-std::ostream& operator<<(std::ostream& os, const Node& obj) {
+std::ostream& operator<<(std::ostream& os, const AstNode& obj) {
     obj.dump(os);
     return os;
 }
 
 
-std::set<std::string> Node::free_identifiers() const {
+std::set<std::string> AstNode::free_identifiers() const {
     std::set<std::string> idents;
     free_identifiers(idents);
     return idents;
 }
 
 
-Object Node::evaluate() const {
+Object AstNode::evaluate() const {
     EvaluationContext ctx;
     return evaluate(ctx);
 }
@@ -206,7 +206,7 @@ void Function::free_identifiers(std::set<std::string>& idents) const {
 
 
 Object Function::evaluate(EvaluationContext& ctx) const {
-    auto free = Node::free_identifiers();
+    auto free = AstNode::free_identifiers();
     Namespace ns;
     for (auto& id : free)
         ns[id] = ctx.lookup(id);
@@ -500,7 +500,7 @@ namespace Grammar
 }
 
 
-static std::unique_ptr<Node> normalize(p::parse_tree::node& node) {
+static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     if (node.is_root()) {
         if (node.children.size() != 1)
             throw ParseException();
@@ -679,7 +679,7 @@ void Gold::debug_parse_tree(std::string input, bool as_expression) {
 }
 
 
-std::unique_ptr<Node> Gold::parse(std::string input, bool as_expression)
+std::unique_ptr<AstNode> Gold::parse(std::string input, bool as_expression)
 {
     p::string_input in(input, "x");
     try {

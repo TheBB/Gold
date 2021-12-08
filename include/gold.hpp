@@ -2,6 +2,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <variant>
 #include <vector>
@@ -13,6 +14,18 @@ namespace Gold {
 
 
 class EvaluationContext;
+class Object;
+
+
+class AstNode {
+public:
+    virtual void dump(std::ostream&) const = 0;
+    std::string dump() const;
+    virtual void free_identifiers(std::set<std::string>&) const = 0;
+    std::set<std::string> free_identifiers() const;
+    virtual Object evaluate(EvaluationContext&) const = 0;
+    Object evaluate() const;
+};
 
 
 class Object {
@@ -30,6 +43,13 @@ public:
     using Map = std::shared_ptr<MapT>;
     using ListT = std::vector<Object>;
     using List = std::shared_ptr<ListT>;
+
+    using ClosureT = struct {
+        std::map<std::string, Object> nonlocals;
+        std::list<std::string> parameters;
+        std::shared_ptr<AstNode> expression;
+    };
+    using Closure = std::shared_ptr<ClosureT>;
 
     using Evaluator = std::function<Object(EvaluationContext&, const std::vector<Object>&)>;
 

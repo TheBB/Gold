@@ -21,18 +21,7 @@ enum class Operator {
 };
 
 
-class Node {
-public:
-    virtual void dump(std::ostream&) const = 0;
-    std::string dump() const;
-    virtual void free_identifiers(std::set<std::string>&) const = 0;
-    std::set<std::string> free_identifiers() const;
-    virtual Object evaluate(EvaluationContext&) const = 0;
-    Object evaluate() const;
-};
-
-
-class Literal : public Node {
+class Literal : public AstNode {
 private:
     const Object object;
 public:
@@ -43,7 +32,7 @@ public:
 };
 
 
-class Identifier : public Node {
+class Identifier : public AstNode {
 private:
     const std::string name;
 public:
@@ -55,22 +44,22 @@ public:
 };
 
 
-class List : public Node {
+class List : public AstNode {
 private:
-    std::vector<std::unique_ptr<Node>> elements;
+    std::vector<std::unique_ptr<AstNode>> elements;
 public:
-    void append(std::unique_ptr<Node> node) { elements.push_back(std::move(node)); }
+    void append(std::unique_ptr<AstNode> node) { elements.push_back(std::move(node)); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
 };
 
 
-class Map : public Node {
+class Map : public AstNode {
 private:
-    std::vector<std::pair<std::string, std::unique_ptr<Node>>> entries;
+    std::vector<std::pair<std::string, std::unique_ptr<AstNode>>> entries;
 public:
-    void append(std::string key, std::unique_ptr<Node> value) {
+    void append(std::string key, std::unique_ptr<AstNode> value) {
         entries.push_back(std::pair(key, std::move(value)));
     }
     virtual void dump(std::ostream&) const;
@@ -79,13 +68,13 @@ public:
 };
 
 
-class OpSeq : public Node {
+class OpSeq : public AstNode {
 private:
-    std::unique_ptr<Node> initial;
-    std::vector<std::pair<Operator, std::unique_ptr<Node>>> sequence;
+    std::unique_ptr<AstNode> initial;
+    std::vector<std::pair<Operator, std::unique_ptr<AstNode>>> sequence;
 public:
-    OpSeq(std::unique_ptr<Node> init) : initial(std::move(init)) {}
-    void append(Operator op, std::unique_ptr<Node> operand) {
+    OpSeq(std::unique_ptr<AstNode> init) : initial(std::move(init)) {}
+    void append(Operator op, std::unique_ptr<AstNode> operand) {
         sequence.push_back(std::pair(op, std::move(operand)));
     }
     virtual void dump(std::ostream&) const;
@@ -94,41 +83,41 @@ public:
 };
 
 
-class Block : public Node {
+class Block : public AstNode {
 private:
-    std::vector<std::pair<std::string, std::unique_ptr<Node>>> bindings;
-    std::unique_ptr<Node> expression;
+    std::vector<std::pair<std::string, std::unique_ptr<AstNode>>> bindings;
+    std::unique_ptr<AstNode> expression;
 public:
-    void append(std::string key, std::unique_ptr<Node> value) {
+    void append(std::string key, std::unique_ptr<AstNode> value) {
         bindings.push_back(std::pair(key, std::move(value)));
     }
-    void set_expression(std::unique_ptr<Node> expr) { expression = std::move(expr); }
+    void set_expression(std::unique_ptr<AstNode> expr) { expression = std::move(expr); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
 };
 
 
-class Function : public Node {
+class Function : public AstNode {
 private:
     std::vector<std::string> parameters;
-    std::unique_ptr<Node> expression;
+    std::unique_ptr<AstNode> expression;
 public:
     void append(std::string key) { parameters.push_back(key); }
-    void set_expression(std::unique_ptr<Node> expr) { expression = std::move(expr); }
+    void set_expression(std::unique_ptr<AstNode> expr) { expression = std::move(expr); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
 };
 
 
-class Branch : public Node {
+class Branch : public AstNode {
 private:
-    std::unique_ptr<Node> condition;
-    std::unique_ptr<Node> if_value;
-    std::unique_ptr<Node> else_value;
+    std::unique_ptr<AstNode> condition;
+    std::unique_ptr<AstNode> if_value;
+    std::unique_ptr<AstNode> else_value;
 public:
-    Branch(std::unique_ptr<Node> cond, std::unique_ptr<Node> yes, std::unique_ptr<Node> no)
+    Branch(std::unique_ptr<AstNode> cond, std::unique_ptr<AstNode> yes, std::unique_ptr<AstNode> no)
         : condition(std::move(cond)), if_value(std::move(yes)), else_value(std::move(no)) { }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -136,25 +125,25 @@ public:
 };
 
 
-class FunCall : public Node {
+class FunCall : public AstNode {
 private:
-    std::unique_ptr<Node> function;
-    std::vector<std::unique_ptr<Node>> args;
+    std::unique_ptr<AstNode> function;
+    std::vector<std::unique_ptr<AstNode>> args;
 public:
-    FunCall(std::unique_ptr<Node> func) : function(std::move(func)) {}
-    void append(std::unique_ptr<Node> arg) { args.push_back(std::move(arg)); }
+    FunCall(std::unique_ptr<AstNode> func) : function(std::move(func)) {}
+    void append(std::unique_ptr<AstNode> arg) { args.push_back(std::move(arg)); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
 };
 
 
-class Index : public Node {
+class Index : public AstNode {
 private:
-    std::unique_ptr<Node> haystack;
-    std::unique_ptr<Node> needle;
+    std::unique_ptr<AstNode> haystack;
+    std::unique_ptr<AstNode> needle;
 public:
-    Index(std::unique_ptr<Node> object, std::unique_ptr<Node> index)
+    Index(std::unique_ptr<AstNode> object, std::unique_ptr<AstNode> index)
         : haystack(std::move(object)), needle(std::move(index)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -163,12 +152,12 @@ public:
 
 
 bool analyze_grammar();
-std::unique_ptr<Node> parse(std::string, bool as_expression = true);
+std::unique_ptr<AstNode> parse(std::string, bool as_expression = true);
 void debug_parse(std::string, bool as_expression = true);
 void debug_parse_tree(std::string, bool as_expression = true);
 
 }
 
-std::ostream& operator<<(std::ostream&, const Gold::Node&);
+std::ostream& operator<<(std::ostream&, const Gold::AstNode&);
 std::ostream& operator<<(std::ostream&, Gold::Operator);
 std::ostream& operator<<(std::ostream&, Gold::Operator);
