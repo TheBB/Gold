@@ -107,7 +107,11 @@ TEST_CASE("Arithmetic", "[evaluate]") {
     REQUIRE(evaluate_string("3 + 2").unsafe_integer() == 5);
     REQUIRE(evaluate_string("3 + 2 - 5").unsafe_integer() == 0);
     REQUIRE(evaluate_string("3 - -5").unsafe_integer() == 8);
-
+    REQUIRE(evaluate_string("2 * 4").unsafe_integer() == 8);
+    REQUIRE(evaluate_string("2 * 4 + 1").unsafe_integer() == 9);
+    REQUIRE(evaluate_string("2 * (4 + 1)").unsafe_integer() == 10);
+    REQUIRE(evaluate_string("3 / 2").unsafe_floating() == 1.5);
+    REQUIRE(evaluate_string("3 // 2").unsafe_integer() == 1);
     REQUIRE(evaluate_string("1 + 2.0").unsafe_floating() == 3.0);
     REQUIRE(evaluate_string("1.0 - 2.0").unsafe_floating() == -1.0);
 }
@@ -133,6 +137,14 @@ TEST_CASE("Evaluation of functions", "[evaluate]") {
     REQUIRE(obj[1].unsafe_integer() == 1);
     REQUIRE(obj[2].unsafe_integer() == 1);
     REQUIRE(obj[3].unsafe_integer() == 1);
+
+    obj = evaluate_string(
+        "let a = 1\n"
+        "let b = () => a\n"
+        "let a = 2\n"
+        "b()"
+    );
+    REQUIRE(obj.unsafe_integer() == 1);
 }
 
 

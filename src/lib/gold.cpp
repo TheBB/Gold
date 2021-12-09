@@ -98,6 +98,77 @@ Object Object::operator-(Object other) const {
 }
 
 
+Object Object::operator*(Object other) const {
+    switch (type()) {
+    case Type::integer:
+        switch (other.type()) {
+        case Type::integer:
+            return Object::integer(unsafe_integer() * other.unsafe_integer());
+        case Type::floating:
+            return Object::floating(unsafe_integer() * other.unsafe_floating());
+        default: break;
+        }
+        break;
+    case Type::floating:
+        switch (other.type()) {
+        case Type::integer:
+            return Object::floating(unsafe_floating() * other.unsafe_integer());
+        case Type::floating:
+            return Object::floating(unsafe_floating() * other.unsafe_floating());
+        default: break;
+        }
+        break;
+    default: break;
+    }
+
+    throw EvalException(fmt::format(
+        "unsupported types for operator `*`: `{}` and `{}`",
+        type_name(), other.type_name()
+    ));
+}
+
+
+Object Object::operator/(Object other) const {
+    switch (type()) {
+    case Type::integer:
+        switch (other.type()) {
+        case Type::integer:
+            return Object::floating((double)unsafe_integer() / other.unsafe_integer());
+        case Type::floating:
+            return Object::floating(unsafe_integer() / other.unsafe_floating());
+        default: break;
+        }
+        break;
+    case Type::floating:
+        switch (other.type()) {
+        case Type::integer:
+            return Object::floating(unsafe_floating() / other.unsafe_integer());
+        case Type::floating:
+            return Object::floating(unsafe_floating() / other.unsafe_floating());
+        default: break;
+        }
+        break;
+    default: break;
+    }
+
+    throw EvalException(fmt::format(
+        "unsupported types for operator `/`: `{}` and `{}`",
+        type_name(), other.type_name()
+    ));
+}
+
+
+Object Object::operator_idiv(Object other) const {
+    if (type() == Type::integer && other.type() == Type::integer)
+        return Object::integer(unsafe_integer() / other.unsafe_integer());
+
+    throw EvalException(fmt::format(
+        "unsupported types for operator `//`: `{}` and `{}`",
+        type_name(), other.type_name()
+    ));
+}
+
+
 Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& args) const {
     if (type() != Type::closure)
         throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));

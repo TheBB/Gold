@@ -158,7 +158,9 @@ Object OpSeq::evaluate(EvaluationContext& ctx) const {
             switch (op) {
             case Operator::plus: value = value + rhs; break;
             case Operator::minus: value = value - rhs; break;
-            default: throw EvalException(source(), fmt::format("unimplemented operator: `{}`", operator_to_string(op)));
+            case Operator::multiply: value = value * rhs; break;
+            case Operator::divide: value = value / rhs; break;
+            case Operator::integer_divide: value = value.operator_idiv(rhs); break;
             }
         }
     }
