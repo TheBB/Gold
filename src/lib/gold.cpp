@@ -20,9 +20,8 @@ std::string Object::type_name() const {
     case Type::map: return "map";
     case Type::list: return "list";
     case Type::closure: return "closure";
-    case Type::undefined: return "undefined";
     }
-    return "??";
+    return "null";
 }
 
 
@@ -175,9 +174,6 @@ std::ostream& operator<<(std::ostream& os, const Object& obj) {
     }
     case Object::Type::closure:
         os << "<closure>";
-        break;
-    case Object::Type::undefined:
-        os << "<undefined>";
         break;
     }
     return os;

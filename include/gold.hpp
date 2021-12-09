@@ -36,10 +36,9 @@ public:
 
 class Object {
 public:
-    enum class Type { undefined, integer, string, null, boolean, floating, map, list, closure };
+    enum class Type { integer, string, null, boolean, floating, map, list, closure };
 
-    using Undefined = std::monostate;
-    using Null = struct {};
+    using Null = std::monostate;
 
     using Integer = intmax_t;
     using String = std::string;
@@ -59,7 +58,7 @@ public:
     using Closure = std::shared_ptr<ClosureT>;
 
 private:
-    std::variant<Undefined, Null, Integer, String, Boolean, Floating, Map, List, Closure> _data;
+    std::variant<Null, Integer, String, Boolean, Floating, Map, List, Closure> _data;
 
 public:
     // Raw constructors
@@ -74,12 +73,11 @@ public:
     Object(Closure eval) : _data(eval) {}
 
     // Explicit constructors
-    static Object undefined() { return Object(); }
+    static Object null() { return Object(); }
     static Object integer(Integer value) { return Object(value); }
     static Object string(const String& value) { return Object(value); }
     static Object boolean(Boolean value) { return Object(value); }
     static Object floating(Floating value) { return Object(value); }
-    static Object null() { return Object(Null {}); }
 
     static Object map(Map value) { return Object(value); }
     static Object map(MapT value) { return Object(std::make_shared<MapT>(value)); }
@@ -100,15 +98,13 @@ public:
         if (std::holds_alternative<String>(_data)) return Type::string;
         if (std::holds_alternative<Boolean>(_data)) return Type::boolean;
         if (std::holds_alternative<Floating>(_data)) return Type::floating;
-        if (std::holds_alternative<Null>(_data)) return Type::null;
         if (std::holds_alternative<Map>(_data)) return Type::map;
         if (std::holds_alternative<List>(_data)) return Type::list;
         if (std::holds_alternative<Closure>(_data)) return Type::closure;
-        return Type::undefined;
+        return Type::null;
     }
 
     std::string type_name() const;
-    bool is_undefined() const { return type() == Type::undefined; }
     bool is_null() const { return type() == Type::null; }
 
     // Unsafe getters

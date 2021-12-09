@@ -88,9 +88,6 @@ void Object::serialize(std::ostream& os) const {
             write_str(os, p);
         unsafe_closure()->expression->serialize(os);
         break;
-    case Type::undefined:
-        os << 'U';
-        break;
     }
 }
 
@@ -149,8 +146,6 @@ Object Object::deserialize(std::istream& is) {
         closure->expression = AstNode::deserialize(is);
         return Object::closure(closure);
     }
-    case 'U':
-        return Object::undefined();
     }
 
     throw std::exception();

@@ -10,7 +10,6 @@ TEST_CASE("Serialization of nulls", "[serialization]") {
     auto val = Object::deserialize(Object::null().serialize());
     REQUIRE(val.type() == Object::Type::null);
     REQUIRE(val.is_null());
-    REQUIRE(!val.is_undefined());
 }
 
 
@@ -86,12 +85,6 @@ TEST_CASE("Serialization of lists", "[serialization]") {
     REQUIRE(val.type() == Object::Type::list);
     REQUIRE(val.unsafe_list()->size() == 4);
     REQUIRE((*val.unsafe_list())[0].unsafe_integer() == 1);
-}
-
-
-TEST_CASE("Serialization of undefined", "[serialization]") {
-    auto val = Object::deserialize(Object::undefined().serialize());
-    REQUIRE(val.is_undefined());
 }
 
 
