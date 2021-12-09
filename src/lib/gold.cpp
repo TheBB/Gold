@@ -9,6 +9,9 @@
 using namespace Gold;
 
 
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
 
 std::string Object::type_name() const {
     switch (type()) {
@@ -26,146 +29,154 @@ std::string Object::type_name() const {
 
 
 Object Object::operator+(Object other) const {
-    switch (type()) {
-    case Type::integer:
-        switch (other.type()) {
-        case Type::integer:
-            return Object::integer(unsafe_integer() + other.unsafe_integer());
-        case Type::floating:
-            return Object::floating(unsafe_integer() + other.unsafe_floating());
-        default: break;
-        }
-        break;
-    case Type::floating:
-        switch (other.type()) {
-        case Type::integer:
-            return Object::floating(unsafe_floating() + other.unsafe_integer());
-        case Type::floating:
-            return Object::floating(unsafe_floating() + other.unsafe_floating());
-        default: break;
-        }
-        break;
-    case Type::string:
-        if (other.type() == Type::string) {
-            return Object::string(unsafe_string() + other.unsafe_string());
-        }
-        break;
-    case Type::list:
-        if (other.type() == Type::list) {
-            Object::List elements = std::make_shared<std::vector<Object>>();
-            std::copy(unsafe_list()->begin(), unsafe_list()->end(), std::back_inserter(*elements));
-            std::copy(other.unsafe_list()->begin(), other.unsafe_list()->end(), std::back_inserter(*elements));
+    return std::visit(overloaded {
+        [](Integer a, Integer b) { return Object::integer(a + b); },
+        [](Integer a, Floating b) { return Object::floating(a + b); },
+        [](Floating a, Integer b) { return Object::floating(a + b); },
+        [](Floating a, Floating b) { return Object::floating(a + b); },
+        [](String a, String b) { return Object::string(a + b); },
+        [](List a, List b) {
+            List elements = std::make_shared<std::vector<Object>>();
+            std::copy(a->begin(), a->end(), std::back_inserter(*elements));
+            std::copy(b->begin(), b->end(), std::back_inserter(*elements));
             return Object::list(elements);
+        },
+        [this, other](auto&&, auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported types for operator `+`: `{}` and `{}`",
+                type_name(), other.type_name()
+            ));
         }
-        break;
-    default: break;
-    }
-
-    throw EvalException(fmt::format(
-        "unsupported types for operator `+`: `{}` and `{}`",
-        type_name(), other.type_name()
-    ));
+    }, _data, other._data);
 }
 
 
 Object Object::operator-(Object other) const {
-    switch (type()) {
-    case Type::integer:
-        switch (other.type()) {
-        case Type::integer:
-            return Object::integer(unsafe_integer() - other.unsafe_integer());
-        case Type::floating:
-            return Object::floating(unsafe_integer() - other.unsafe_floating());
-        default: break;
+    return std::visit(overloaded {
+        [](Integer a, Integer b) { return Object::integer(a - b); },
+        [](Floating a, Integer b) { return Object::floating(a - b); },
+        [](Integer a, Floating b) { return Object::floating(a - b); },
+        [](Floating a, Floating b) { return Object::floating(a - b); },
+        [this, other](auto&&, auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported types for operator `-`: `{}` and `{}`",
+                type_name(), other.type_name()
+            ));
         }
-        break;
-    case Type::floating:
-        switch (other.type()) {
-        case Type::integer:
-            return Object::floating(unsafe_floating() - other.unsafe_integer());
-        case Type::floating:
-            return Object::floating(unsafe_floating() - other.unsafe_floating());
-        default: break;
-        }
-        break;
-    default: break;
-    }
-
-    throw EvalException(fmt::format(
-        "unsupported types for operator `-`: `{}` and `{}`",
-        type_name(), other.type_name()
-    ));
+    }, _data, other._data);
 }
 
 
 Object Object::operator*(Object other) const {
-    switch (type()) {
-    case Type::integer:
-        switch (other.type()) {
-        case Type::integer:
-            return Object::integer(unsafe_integer() * other.unsafe_integer());
-        case Type::floating:
-            return Object::floating(unsafe_integer() * other.unsafe_floating());
-        default: break;
+    return std::visit(overloaded {
+        [](Integer a, Integer b) { return Object::integer(a * b); },
+        [](Floating a, Integer b) { return Object::floating(a * b); },
+        [](Integer a, Floating b) { return Object::floating(a * b); },
+        [](Floating a, Floating b) { return Object::floating(a * b); },
+        [this, other](auto&&, auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported types for operator `*`: `{}` and `{}`",
+                type_name(), other.type_name()
+            ));
         }
-        break;
-    case Type::floating:
-        switch (other.type()) {
-        case Type::integer:
-            return Object::floating(unsafe_floating() * other.unsafe_integer());
-        case Type::floating:
-            return Object::floating(unsafe_floating() * other.unsafe_floating());
-        default: break;
-        }
-        break;
-    default: break;
-    }
-
-    throw EvalException(fmt::format(
-        "unsupported types for operator `*`: `{}` and `{}`",
-        type_name(), other.type_name()
-    ));
+    }, _data, other._data);
 }
 
 
 Object Object::operator/(Object other) const {
-    switch (type()) {
-    case Type::integer:
-        switch (other.type()) {
-        case Type::integer:
-            return Object::floating((double)unsafe_integer() / other.unsafe_integer());
-        case Type::floating:
-            return Object::floating(unsafe_integer() / other.unsafe_floating());
-        default: break;
+    return std::visit(overloaded {
+        [](Integer a, Integer b) { return Object::floating((double)a / b); },
+        [](Floating a, Integer b) { return Object::floating(a / b); },
+        [](Integer a, Floating b) { return Object::floating(a / b); },
+        [](Floating a, Floating b) { return Object::floating(a / b); },
+        [this, other](auto&&, auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported types for operator `/`: `{}` and `{}`",
+                type_name(), other.type_name()
+            ));
         }
-        break;
-    case Type::floating:
-        switch (other.type()) {
-        case Type::integer:
-            return Object::floating(unsafe_floating() / other.unsafe_integer());
-        case Type::floating:
-            return Object::floating(unsafe_floating() / other.unsafe_floating());
-        default: break;
-        }
-        break;
-    default: break;
-    }
-
-    throw EvalException(fmt::format(
-        "unsupported types for operator `/`: `{}` and `{}`",
-        type_name(), other.type_name()
-    ));
+    }, _data, other._data);
 }
 
 
 Object Object::operator_idiv(Object other) const {
-    if (type() == Type::integer && other.type() == Type::integer)
-        return Object::integer(unsafe_integer() / other.unsafe_integer());
+    return std::visit(overloaded {
+        [](Integer a, Integer b) { return Object::integer(a / b); },
+        [this, other](auto&&, auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported types for operator `//`: `{}` and `{}`",
+                type_name(), other.type_name()
+            ));
+        }
+    }, _data, other._data);
+}
 
-    throw EvalException(fmt::format(
-        "unsupported types for operator `//`: `{}` and `{}`",
-        type_name(), other.type_name()
-    ));
+
+Object Object::operator<(Object other) const {
+    return std::visit(overloaded {
+        [](Integer a, Integer b) { return Object::boolean(a < b); },
+        [](Floating a, Integer b) { return Object::boolean(a < b); },
+        [](Integer a, Floating b) { return Object::boolean(a < b); },
+        [](Floating a, Floating b) { return Object::boolean(a < b); },
+        [](String a, String b) { return Object::boolean(a < b); },
+        [this, other](auto&&, auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported types for operator `<`: `{}` and `{}`",
+                type_name(), other.type_name()
+            ));
+        }
+    }, _data, other._data);
+}
+
+
+Object Object::operator<=(Object other) const {
+    return std::visit(overloaded {
+        [](Integer a, Integer b) { return Object::boolean(a <= b); },
+        [](Floating a, Integer b) { return Object::boolean(a <= b); },
+        [](Integer a, Floating b) { return Object::boolean(a <= b); },
+        [](Floating a, Floating b) { return Object::boolean(a <= b); },
+        [](String a, String b) { return Object::boolean(a <= b); },
+        [this, other](auto&&, auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported types for operator `<=`: `{}` and `{}`",
+                type_name(), other.type_name()
+            ));
+        }
+    }, _data, other._data);
+}
+
+
+Object Object::operator>(Object other) const {
+    return std::visit(overloaded {
+        [](Integer a, Integer b) { return Object::boolean(a > b); },
+        [](Floating a, Integer b) { return Object::boolean(a > b); },
+        [](Integer a, Floating b) { return Object::boolean(a > b); },
+        [](Floating a, Floating b) { return Object::boolean(a > b); },
+        [](String a, String b) { return Object::boolean(a > b); },
+        [this, other](auto&&, auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported types for operator `>`: `{}` and `{}`",
+                type_name(), other.type_name()
+            ));
+        }
+    }, _data, other._data);
+}
+
+
+Object Object::operator>=(Object other) const {
+    return std::visit(overloaded {
+        [](Integer a, Integer b) { return Object::boolean(a >= b); },
+        [](Floating a, Integer b) { return Object::boolean(a >= b); },
+        [](Integer a, Floating b) { return Object::boolean(a >= b); },
+        [](Floating a, Floating b) { return Object::boolean(a >= b); },
+        [](String a, String b) { return Object::boolean(a >= b); },
+        [this, other](auto&&, auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported types for operator `>=` `{}` and `{}`",
+                type_name(), other.type_name()
+            ));
+        }
+    }, _data, other._data);
 }
 
 

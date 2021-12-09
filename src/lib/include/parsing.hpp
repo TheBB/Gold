@@ -17,7 +17,11 @@ enum class Operator {
     minus,
     multiply,
     divide,
-    integer_divide
+    integer_divide,
+    less_than,
+    less_than_or_eq,
+    greater_than,
+    greater_than_or_eq
 };
 
 

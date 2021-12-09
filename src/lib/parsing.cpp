@@ -23,6 +23,10 @@ static std::string operator_to_string(Operator op) {
     case Operator::multiply: return "*";
     case Operator::divide: return "/";
     case Operator::integer_divide: return "//";
+    case Operator::less_than: return "<";
+    case Operator::less_than_or_eq: return "<=";
+    case Operator::greater_than: return ">";
+    case Operator::greater_than_or_eq: return ">=";
     }
     return "?";
 }
@@ -33,6 +37,10 @@ static Operator operator_from_string(std::string value) {
     if (value == "-") return Operator::minus;
     if (value == "*") return Operator::multiply;
     if (value == "/") return Operator::divide;
+    if (value == "<") return Operator::less_than;
+    if (value == "<=") return Operator::less_than_or_eq;
+    if (value == ">") return Operator::greater_than;
+    if (value == ">=") return Operator::greater_than_or_eq;
     return Operator::integer_divide;
 }
 
@@ -161,6 +169,10 @@ Object OpSeq::evaluate(EvaluationContext& ctx) const {
             case Operator::multiply: value = value * rhs; break;
             case Operator::divide: value = value / rhs; break;
             case Operator::integer_divide: value = value.operator_idiv(rhs); break;
+            case Operator::less_than: value = value < rhs; break;
+            case Operator::less_than_or_eq: value = value <= rhs; break;
+            case Operator::greater_than: value = value > rhs; break;
+            case Operator::greater_than_or_eq: value = value >= rhs; break;
             }
         }
     }
@@ -513,7 +525,20 @@ namespace Grammar
     struct sum_operator: p::sor<p::one<'+'>, p::one<'-'>> {};
     struct sum: p::list<term, sum_operator, whitespace> {};
 
-    struct expression: p::seq<p::sor<sum, composite>> {};
+    // Precedence level: inequality
+    struct ineq_operand: p::seq<sum> {};
+    struct ineq_operator: p::sor<
+        p::string<'<','='>,
+        p::string<'>','='>,
+        p::one<'<'>,
+        p::one<'>'>
+    > {};
+    struct ineq: p::seq<
+        ineq_operand,
+        p::opt<p::seq<p::pad<ineq_operator, whitespace>, p::pad<ineq_operand, whitespace>>>
+    > {};
+
+    struct expression: p::seq<p::sor<ineq, composite>> {};
     struct file: p::seq<p::bof, block, p::pad<p::eof, whitespace>> {};
 
     template<typename Rule>

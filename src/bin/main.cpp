@@ -8,30 +8,28 @@
 using namespace Gold;
 
 
+using vt = std::variant<int, double>;
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
 int main(int argc, char **argv) {
+    // std::string code("1 + 2");
+    // debug_parse(code, false);
+
+    // vt a(1);
+    // vt b(2.0);
+
+    // std::visit(overloaded {
+    //     [](int& a, double& b) { std::cout << "int double" << std::endl; },
+    //     [](auto&& a, auto&& b) { std::cout << "whatever" << std::endl; }
+    // }, a, b);
+
     try {
-        std::string code("() => a");
+        std::string code("[] - []");
         auto value = evaluate_string(code);
         std::cout << value << std::endl;
     }
     catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
     }
-
-    // // Namespace ns;
-    // // ns["hi"] = Object::integer(1);
-    // // ns["bob"] = Object::integer(2);
-
-    // auto myfunc = [](EvaluationContext& ctx, const std::vector<Object>& args) {
-    //     return Object::integer(1);
-    // };
-
-    // auto myclosure = Object::closure(myfunc);
-
-    // EvaluationContext ctx;
-    // std::vector<Object> args;
-    // auto retval = myclosure(ctx, args);
-    // std::cout << retval << std::endl;
-
-    // return 1;
 }
