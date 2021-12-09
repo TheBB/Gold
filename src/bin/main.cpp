@@ -13,8 +13,9 @@ template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 int main(int argc, char **argv) {
-    // std::string code("1 + 2");
+    // std::string code("1 < 2");
     // debug_parse(code, false);
+    // debug_parse_tree(code, false);
 
     // vt a(1);
     // vt b(2.0);
@@ -25,7 +26,7 @@ int main(int argc, char **argv) {
     // }, a, b);
 
     try {
-        std::string code("[] - []");
+        std::string code("1 <= 1");
         auto value = evaluate_string(code);
         std::cout << value << std::endl;
     }

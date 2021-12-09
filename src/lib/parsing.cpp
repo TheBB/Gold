@@ -547,9 +547,6 @@ namespace Grammar
             number,
             integer,
             floating,
-            // sign,
-            // fractional,
-            // exponent,
             string,
             nullp,
             boolean,
@@ -569,6 +566,8 @@ namespace Grammar
             sum_operator,
             product,
             product_operator,
+            ineq,
+            ineq_operator,
             atomic,
             funcall_operator,
             object_access,
@@ -659,7 +658,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return map;
     }
 
-    else if (node.type == "Grammar::sum" || node.type == "Grammar::product") {
+    else if (node.type == "Grammar::sum" || node.type == "Grammar::product" || node.type == "Grammar::ineq") {
         if (node.children.size() == 1)
             return normalize(*node.children[0]);
         auto it = node.children.begin();
