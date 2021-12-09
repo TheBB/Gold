@@ -134,7 +134,12 @@ public:
 };
 
 
-struct EvalException: public std::exception {};
+struct EvalException: public std::exception {
+    std::string reason;
+    EvalException() : reason("") {}
+    EvalException(std::string s) : reason(s) {}
+    const char* what() const noexcept { return reason.c_str(); }
+};
 
 class EvaluationContext {
 private:

@@ -16,14 +16,29 @@ using namespace Gold;
 namespace p = tao::pegtl;
 
 
-std::ostream& operator<<(std::ostream& os, Operator op) {
+static std::string operator_to_string(Operator op) {
     switch (op) {
-    case Operator::plus: os << "+"; break;
-    case Operator::minus: os << "-"; break;
-    case Operator::multiply: os << "*"; break;
-    case Operator::divide: os << "/"; break;
-    case Operator::integer_divide: os << "//"; break;
+    case Operator::plus: return "+";
+    case Operator::minus: return "-";
+    case Operator::multiply: return "*";
+    case Operator::divide: return "/";
+    case Operator::integer_divide: return "//";
     }
+    return "?";
+}
+
+
+static Operator operator_from_string(std::string value) {
+    if (value == "+") return Operator::plus;
+    if (value == "-") return Operator::minus;
+    if (value == "*") return Operator::multiply;
+    if (value == "/") return Operator::divide;
+    return Operator::integer_divide;
+}
+
+
+std::ostream& operator<<(std::ostream& os, Operator op) {
+    os << operator_to_string(op);
     return os;
 }
 
@@ -130,7 +145,7 @@ Object OpSeq::evaluate(EvaluationContext& ctx) const {
         switch (op) {
         case Operator::plus: value = value + rhs; break;
         case Operator::minus: value = value - rhs; break;
-        default: throw EvalException();
+        default: throw EvalException(fmt::format("unimplemented operator: `{}`", operator_to_string(op)));
         }
     }
     return value;
@@ -233,7 +248,7 @@ void Branch::free_identifiers(std::set<std::string>& idents) const {
 Object Branch::evaluate(EvaluationContext& ctx) const {
     auto cond = condition->evaluate(ctx);
     if (cond.type() != Object::Type::boolean)
-        throw EvalException();
+        throw EvalException(fmt::format("attempted branching with non-boolean type `{}`", cond.type_name()));
     if (cond.unsafe_boolean())
         return if_value->evaluate(ctx);
     return else_value->evaluate(ctx);
@@ -279,15 +294,6 @@ Object Index::evaluate(EvaluationContext& ctx) const {
     auto container = haystack->evaluate(ctx);
     auto index = needle->evaluate(ctx);
     return container[index];
-}
-
-
-static Operator operator_from_string(std::string value) {
-    if (value == "+") return Operator::plus;
-    if (value == "-") return Operator::minus;
-    if (value == "*") return Operator::multiply;
-    if (value == "/") return Operator::divide;
-    return Operator::integer_divide;
 }
 
 

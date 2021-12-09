@@ -61,7 +61,10 @@ Object Object::operator+(Object other) const {
     default: break;
     }
 
-    throw EvalException();
+    throw EvalException(fmt::format(
+        "unsupported types for operator `+`: `{}` and `{}`",
+        type_name(), other.type_name()
+    ));
 }
 
 
@@ -88,23 +91,34 @@ Object Object::operator-(Object other) const {
     default: break;
     }
 
-    throw EvalException();
+    throw EvalException(fmt::format(
+        "unsupported types for operator `-`: `{}` and `{}`",
+        type_name(), other.type_name()
+    ));
 }
 
 
 Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& args) const {
     if (type() != Type::closure)
-        throw EvalException();
+        throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));
     auto closure = unsafe_closure();
 
     ctx.push_namespace(closure->nonlocals);
     ctx.push_namespace();
 
-    auto id_it = closure->parameters.begin();
-    auto arg_it = args.begin();
-    while (id_it != closure->parameters.end() && arg_it != args.end())
-        ctx.assign(*id_it++, *arg_it++);
-    Object retval = closure->expression->evaluate(ctx);
+    Object retval;
+
+    try {
+        auto id_it = closure->parameters.begin();
+        auto arg_it = args.begin();
+        while (id_it != closure->parameters.end() && arg_it != args.end())
+            ctx.assign(*id_it++, *arg_it++);
+        retval = closure->expression->evaluate(ctx);
+    }
+    catch (const std::exception&) {
+        ctx.pop_namespace();
+        throw;
+    }
 
     ctx.pop_namespace(2);
     return retval;
@@ -112,40 +126,39 @@ Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& arg
 
 
 Object Object::operator[](Object index) const {
-    if (type() == Object::Type::list && index.type() == Object::Type::integer) {
+    if (index.type() == Object::Type::integer) {
         auto ix = index.unsafe_integer();
-        if (ix < 0 || (size_t)ix >= unsafe_list()->size())
-            throw EvalException();
-        return (*unsafe_list())[ix];
+        return (*this)[ix];
     }
 
-    else if (type() == Object::Type::map && index.type() == Object::Type::string) {
+    else if (index.type() == Object::Type::string) {
         auto ix = index.unsafe_string();
-        auto map = unsafe_map();
-        if (map->find(ix) == map->end())
-            throw EvalException();
-        return (*map)[ix];
+        return (*this)[ix];
     }
 
-    throw EvalException();
+    throw EvalException(fmt::format("unsupported subscript type: `{}`", index.type_name()));
 }
 
 
 Object Object::operator[](intmax_t index) const {
     if (type() != Object::Type::list)
-        throw EvalException();
-    if (index < 0 || (size_t)index >= unsafe_list()->size())
-        throw EvalException();
-    return (*unsafe_list())[index];
+        throw EvalException(fmt::format("unsupported type for integer subscripting: `{}`", type_name()));
+    if (index < 0)
+        throw EvalException(fmt::format("list index out of range: {}", index));
+    auto& list = unsafe_list();
+    if ((size_t)index >= unsafe_list()->size())
+        throw EvalException(fmt::format("list index out of range: {} > {}", index, unsafe_list()->size()));
+    return (*list)[index];
 }
 
 
 Object Object::operator[](std::string index) const {
     if (type() != Object::Type::map)
-        throw EvalException();
-    if (unsafe_map()->find(index) == unsafe_map()->end())
-        throw EvalException();
-    return (*unsafe_map())[index];
+        throw EvalException(fmt::format("unsupported type for string subscripting: `{}`", type_name()));
+    auto& map = unsafe_map();
+    if (map->find(index) == unsafe_map()->end())
+        throw EvalException(fmt::format("key not found: {}", index));
+    return (*map)[index];
 }
 
 
@@ -154,7 +167,7 @@ size_t Object::size() const {
         return unsafe_list()->size();
     if (type() == Object::Type::map)
         return unsafe_map()->size();
-    throw EvalException();
+    throw EvalException(fmt::format("unsupported type for size(): `{}`", type_name()));
 }
 
 
@@ -213,14 +226,18 @@ Object EvaluationContext::lookup(const std::string& key) {
             continue;
         return ns[key];
     }
-    throw EvalException();
+    throw EvalException(fmt::format("unbound name: `{}`", key));
 }
 
 
 Object EvaluationContext::lookup_object(const std::string& key, int index) {
     auto& ns = objects[objects.size() - index];
-    if (ns.find(key) == ns.end())
-        throw EvalException();
+    if (ns.find(key) == ns.end()) {
+        std::ostringstream os;
+        for (int i = 0; i < index; i++)
+            os << '.';
+        throw EvalException(fmt::format("unbound key: `{}{}`", os.str(), key));
+    }
     return ns[key];
 }
 

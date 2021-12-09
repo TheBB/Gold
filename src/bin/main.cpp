@@ -9,16 +9,14 @@ using namespace Gold;
 
 
 int main(int argc, char **argv) {
-    std::string code("1e2");
-    // auto value = evaluate_string(code);
-    debug_parse(code, false);
-    debug_parse_tree(code, false);
-    auto node = parse(code, false);
-    std::cout << *node << std::endl;
-
-    // auto object = node->evaluate();
-
-    // std::cout << value << std::endl;
+    try {
+        std::string code("if 1 then 2 else 3");
+        auto value = evaluate_string(code);
+        std::cout << value << std::endl;
+    }
+    catch (const std::exception& e) {
+        std::cerr << e.what() << std::endl;
+    }
 
     // // Namespace ns;
     // // ns["hi"] = Object::integer(1);
