@@ -10,12 +10,12 @@ using namespace Gold;
 
 int main(int argc, char **argv) {
     try {
-        std::string code("if 1 then 2 else 3");
+        std::string code("() => a");
         auto value = evaluate_string(code);
         std::cout << value << std::endl;
     }
     catch (const std::exception& e) {
-        std::cerr << e.what() << std::endl;
+        std::cerr << "Error: " << e.what() << std::endl;
     }
 
     // // Namespace ns;

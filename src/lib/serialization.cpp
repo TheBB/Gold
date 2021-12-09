@@ -152,6 +152,21 @@ Object Object::deserialize(std::istream& is) {
 }
 
 
+void Source::serialize(std::ostream& os) const {
+    write(os, byte);
+    write(os, line);
+    write(os, column);
+}
+
+
+Source Source::deserialize(std::istream& is) {
+    auto byte = read<size_t>(is);
+    auto line = read<size_t>(is);
+    auto column = read<size_t>(is);
+    return Source { byte, line, column };
+}
+
+
 std::string AstNode::serialize() const {
     std::ostringstream os;
     serialize(os);
@@ -161,18 +176,21 @@ std::string AstNode::serialize() const {
 
 void Literal::serialize(std::ostream& os) const {
     os << 'T';
+    source().serialize(os);
     object.serialize(os);
 }
 
 
 void Identifier::serialize(std::ostream& os) const {
     os << 'I';
+    source().serialize(os);
     write_str(os, name);
 }
 
 
 void List::serialize(std::ostream& os) const {
     os << 'L';
+    source().serialize(os);
     write(os, elements.size());
     for (auto& value : elements)
         value->serialize(os);
@@ -181,6 +199,7 @@ void List::serialize(std::ostream& os) const {
 
 void Map::serialize(std::ostream& os) const {
     os << 'M';
+    source().serialize(os);
     write(os, entries.size());
     for (auto& [key, value] : entries) {
         write_str(os, key);
@@ -191,6 +210,7 @@ void Map::serialize(std::ostream& os) const {
 
 void OpSeq::serialize(std::ostream& os) const {
     os << 'O';
+    source().serialize(os);
     initial->serialize(os);
     write(os, sequence.size());
     for (auto& [op, operand] : sequence) {
@@ -202,6 +222,7 @@ void OpSeq::serialize(std::ostream& os) const {
 
 void Block::serialize(std::ostream& os) const {
     os << 'B';
+    source().serialize(os);
     write(os, bindings.size());
     for (auto& [key, value] : bindings) {
         write_str(os, key);
@@ -213,6 +234,7 @@ void Block::serialize(std::ostream& os) const {
 
 void Function::serialize(std::ostream& os) const {
     os << 'F';
+    source().serialize(os);
     write(os, parameters.size());
     for (auto& p : parameters)
         write_str(os, p);
@@ -222,6 +244,7 @@ void Function::serialize(std::ostream& os) const {
 
 void Branch::serialize(std::ostream& os) const {
     os << 'C';
+    source().serialize(os);
     condition->serialize(os);
     if_value->serialize(os);
     else_value->serialize(os);
@@ -230,6 +253,7 @@ void Branch::serialize(std::ostream& os) const {
 
 void FunCall::serialize(std::ostream& os) const {
     os << 'E';
+    source().serialize(os);
     function->serialize(os);
     write(os, args.size());
     for (auto& arg : args)
@@ -239,6 +263,7 @@ void FunCall::serialize(std::ostream& os) const {
 
 void Index::serialize(std::ostream& os) const {
     os << 'S';
+    source().serialize(os);
     haystack->serialize(os);
     needle->serialize(os);
 }
@@ -253,20 +278,21 @@ std::unique_ptr<AstNode> AstNode::deserialize(std::string val) {
 std::unique_ptr<AstNode> AstNode::deserialize(std::istream& is) {
     char indicator;
     is >> indicator;
+    auto source = Source::deserialize(is);
     switch (indicator) {
     case 'T':
-        return std::make_unique<Literal>(Object::deserialize(is));
+        return std::make_unique<Literal>(source, Object::deserialize(is));
     case 'I':
-        return std::make_unique<Identifier>(read_str(is));
+        return std::make_unique<Identifier>(source, read_str(is));
     case 'L': {
-        auto list = std::make_unique<List>();
+        auto list = std::make_unique<List>(source);
         auto size = read<size_t>(is);
         for (size_t i = 0; i < size; i++)
             list->append(AstNode::deserialize(is));
         return list;
     }
     case 'M': {
-        auto map = std::make_unique<Map>();
+        auto map = std::make_unique<Map>(source);
         auto size = read<size_t>(is);
         for (size_t i = 0; i < size; i++) {
             auto key = read_str(is);
@@ -276,7 +302,7 @@ std::unique_ptr<AstNode> AstNode::deserialize(std::istream& is) {
         return map;
     }
     case 'O': {
-        auto opseq = std::make_unique<OpSeq>(AstNode::deserialize(is));
+        auto opseq = std::make_unique<OpSeq>(source, AstNode::deserialize(is));
         auto size = read<size_t>(is);
         for (size_t i = 0; i < size; i++) {
             auto op = read<Operator>(is);
@@ -286,7 +312,7 @@ std::unique_ptr<AstNode> AstNode::deserialize(std::istream& is) {
         return opseq;
     }
     case 'B': {
-        auto block = std::make_unique<Block>();
+        auto block = std::make_unique<Block>(source);
         auto size = read<size_t>(is);
         for (size_t i = 0; i < size; i++) {
             auto key = read_str(is);
@@ -297,7 +323,7 @@ std::unique_ptr<AstNode> AstNode::deserialize(std::istream& is) {
         return block;
     }
     case 'F': {
-        auto func = std::make_unique<Function>();
+        auto func = std::make_unique<Function>(source);
         auto size = read<size_t>(is);
         for (size_t i = 0; i < size; i++)
             func->append(read_str(is));
@@ -308,10 +334,10 @@ std::unique_ptr<AstNode> AstNode::deserialize(std::istream& is) {
         auto cond = AstNode::deserialize(is);
         auto yes = AstNode::deserialize(is);
         auto no = AstNode::deserialize(is);
-        return std::make_unique<Branch>(std::move(cond), std::move(yes), std::move(no));
+        return std::make_unique<Branch>(source, std::move(cond), std::move(yes), std::move(no));
     }
     case 'E': {
-        auto call = std::make_unique<FunCall>(AstNode::deserialize(is));
+        auto call = std::make_unique<FunCall>(source, AstNode::deserialize(is));
         auto size = read<size_t>(is);
         for (size_t i = 0; i < size; i++)
             call->append(AstNode::deserialize(is));
@@ -320,7 +346,7 @@ std::unique_ptr<AstNode> AstNode::deserialize(std::istream& is) {
     case 'S': {
         auto container = AstNode::deserialize(is);
         auto index = AstNode::deserialize(is);
-        return std::make_unique<Index>(std::move(container), std::move(index));
+        return std::make_unique<Index>(source, std::move(container), std::move(index));
     }
     default:
         throw std::exception();

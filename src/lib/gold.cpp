@@ -103,6 +103,12 @@ Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& arg
         throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));
     auto closure = unsafe_closure();
 
+    if (args.size() != closure->parameters.size())
+        throw EvalException(fmt::format(
+            "wrong number of parameters: got {} but expected {}",
+            args.size(), closure->parameters.size()
+        ));
+
     ctx.push_namespace(closure->nonlocals);
     ctx.push_namespace();
 
@@ -217,6 +223,13 @@ std::ostream& operator<<(std::ostream& os, const Object& obj) {
         break;
     }
     return os;
+}
+
+
+void EvalException::position(Source source) noexcept {
+    if (!has_position)
+        reason = fmt::format("at {}:{}: {}", source.line, source.column, reason);
+    has_position = true;
 }
 
 

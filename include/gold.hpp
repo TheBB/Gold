@@ -18,8 +18,21 @@ class Object;
 class Namespace : public std::map<std::string, Object> {};
 
 
+struct Source {
+    size_t byte;
+    size_t line;
+    size_t column;
+
+    void serialize(std::ostream&) const;
+    static Source deserialize(std::istream&);
+};
+
+
 class AstNode {
+private:
+    Source src;
 public:
+    AstNode(Source source) : src(source) {}
     virtual void dump(std::ostream&) const = 0;
     std::string dump() const;
     virtual void free_identifiers(std::set<std::string>&) const = 0;
@@ -31,6 +44,8 @@ public:
     virtual void serialize(std::ostream&) const = 0;
     static std::unique_ptr<AstNode> deserialize(std::string);
     static std::unique_ptr<AstNode> deserialize(std::istream&);
+
+    const Source source() const { return src; }
 };
 
 
@@ -135,11 +150,15 @@ public:
 
 
 struct EvalException: public std::exception {
+    bool has_position;
     std::string reason;
-    EvalException() : reason("") {}
-    EvalException(std::string s) : reason(s) {}
+    EvalException() : has_position(false), reason("") {}
+    EvalException(std::string s) : has_position(false), reason(s) {}
+    EvalException(Source src, std::string s) : EvalException(s) { position(src); }
+    void position(Source source) noexcept;
     const char* what() const noexcept { return reason.c_str(); }
 };
+
 
 class EvaluationContext {
 private:

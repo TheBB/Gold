@@ -69,6 +69,17 @@ Object AstNode::evaluate() const {
 }
 
 
+Object Identifier::evaluate(EvaluationContext& ctx) const {
+    try {
+        return ctx.lookup(name);
+    }
+    catch (EvalException& e) {
+        e.position(source());
+        throw;
+    }
+}
+
+
 void List::dump(std::ostream& os) const {
     os << "List(";
     bool first = true;
@@ -140,14 +151,22 @@ void OpSeq::free_identifiers(std::set<std::string>& idents) const {
 
 Object OpSeq::evaluate(EvaluationContext& ctx) const {
     auto value = initial->evaluate(ctx);
-    for (auto& [op, operand] : sequence) {
-        auto rhs = operand->evaluate(ctx);
-        switch (op) {
-        case Operator::plus: value = value + rhs; break;
-        case Operator::minus: value = value - rhs; break;
-        default: throw EvalException(fmt::format("unimplemented operator: `{}`", operator_to_string(op)));
+
+    try {
+        for (auto& [op, operand] : sequence) {
+            auto rhs = operand->evaluate(ctx);
+            switch (op) {
+            case Operator::plus: value = value + rhs; break;
+            case Operator::minus: value = value - rhs; break;
+            default: throw EvalException(source(), fmt::format("unimplemented operator: `{}`", operator_to_string(op)));
+            }
         }
     }
+    catch (EvalException& e) {
+        e.position(source());
+        throw;
+    }
+
     return value;
 }
 
@@ -224,11 +243,17 @@ Object Function::evaluate(EvaluationContext& ctx) const {
     auto free = AstNode::free_identifiers();
     auto closure = std::make_shared<Object::ClosureT>();
 
-    for (auto& id : free)
-        closure->nonlocals[id] = ctx.lookup(id);
+    try {
+        for (auto& id : free)
+            closure->nonlocals[id] = ctx.lookup(id);
+    }
+    catch (EvalException& e) {
+        e.position(source());
+        throw;
+    }
+
     closure->parameters = parameters;
     closure->expression = AstNode::deserialize(expression->serialize());
-
     return Object::closure(closure);
 }
 
@@ -248,7 +273,10 @@ void Branch::free_identifiers(std::set<std::string>& idents) const {
 Object Branch::evaluate(EvaluationContext& ctx) const {
     auto cond = condition->evaluate(ctx);
     if (cond.type() != Object::Type::boolean)
-        throw EvalException(fmt::format("attempted branching with non-boolean type `{}`", cond.type_name()));
+        throw EvalException(
+            condition->source(),
+            fmt::format("attempted branching with non-boolean type `{}`", cond.type_name())
+        );
     if (cond.unsafe_boolean())
         return if_value->evaluate(ctx);
     return else_value->evaluate(ctx);
@@ -275,7 +303,13 @@ Object FunCall::evaluate(EvaluationContext& ctx) const {
     std::vector<Object> arglist;
     for (auto& arg : args)
         arglist.push_back(arg->evaluate(ctx));
-    return func(ctx, arglist);
+    try {
+        return func(ctx, arglist);
+    }
+    catch (EvalException& e) {
+        e.position(source());
+        throw;
+    }
 }
 
 
@@ -293,7 +327,13 @@ void Index::free_identifiers(std::set<std::string>& idents) const {
 Object Index::evaluate(EvaluationContext& ctx) const {
     auto container = haystack->evaluate(ctx);
     auto index = needle->evaluate(ctx);
-    return container[index];
+    try {
+        return container[index];
+    }
+    catch (EvalException& e) {
+        e.position(source());
+        throw;
+    }
 }
 
 
@@ -512,6 +552,12 @@ namespace Grammar
 }
 
 
+static Source source(p::parse_tree::node& node) {
+    auto src = node.begin();
+    return Source { src.byte, src.line, src.column };
+}
+
+
 static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     if (node.is_root()) {
         if (node.children.size() != 1)
@@ -520,14 +566,14 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     }
 
     if (node.type == "Grammar::file") {
-        auto function = std::make_unique<Function>();
+        auto function = std::make_unique<Function>(source(node));
         function->set_expression(normalize(*node.children[0]));
-        return std::make_unique<FunCall>(std::move(function));
+        return std::make_unique<FunCall>(source(node), std::move(function));
     }
 
     else if (node.type == "Grammar::boolean") {
         Object obj = Object::boolean(node.string_view() == "true");
-        return std::make_unique<Literal>(obj);
+        return std::make_unique<Literal>(source(node), obj);
     }
 
     else if (node.type == "Grammar::number") {
@@ -536,12 +582,12 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         if (c->type == "Grammar::integer") {
             auto str = node.string();
             auto value = std::strtoimax(str.c_str(), nullptr, 10);
-            return std::make_unique<Literal>(Object::integer(value));
+            return std::make_unique<Literal>(source(node), Object::integer(value));
         }
         else {
             auto str = node.string();
             auto value = std::stod(str);
-            return std::make_unique<Literal>(Object::floating(value));
+            return std::make_unique<Literal>(source(node), Object::floating(value));
         }
     }
 
@@ -557,19 +603,19 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
                 builder << *it;
         }
         Object obj = Object::string(builder.str());
-        return std::make_unique<Literal>(obj);
+        return std::make_unique<Literal>(source(node), obj);
     }
 
     else if (node.type == "Grammar::nullp") {
-        return std::make_unique<Literal>(Object::null());
+        return std::make_unique<Literal>(source(node), Object::null());
     }
 
     else if (node.type == "Grammar::identifier") {
-        return std::make_unique<Identifier>(node.string());
+        return std::make_unique<Identifier>(source(node), node.string());
     }
 
     else if (node.type == "Grammar::list") {
-        auto list = std::make_unique<List>();
+        auto list = std::make_unique<List>(source(node));
         for (auto&& c : node.children) {
             list->append(normalize(*c));
         }
@@ -577,7 +623,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     }
 
     else if (node.type == "Grammar::map") {
-        auto map = std::make_unique<Map>();
+        auto map = std::make_unique<Map>(source(node));
         for (auto&& c : node.children) {
             auto key = c->children[0]->string();
             auto value = normalize(*c->children[1]);
@@ -590,7 +636,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         if (node.children.size() == 1)
             return normalize(*node.children[0]);
         auto it = node.children.begin();
-        auto opseq = std::make_unique<OpSeq>(normalize(**it++));
+        auto opseq = std::make_unique<OpSeq>(source(node), normalize(**it++));
         while (it != node.children.end()) {
             auto op = operator_from_string((*it++)->string());
             opseq->append(op, normalize(**it++));
@@ -599,7 +645,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     }
 
     else if (node.type == "Grammar::block") {
-        auto block = std::make_unique<Block>();
+        auto block = std::make_unique<Block>(source(node));
         for (auto&& c : node.children) {
             if (c->type == "Grammar::binding")
                 block->append(c->children[0]->string(), normalize(*c->children[1]));
@@ -610,7 +656,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     }
 
     else if (node.type == "Grammar::function") {
-        auto function = std::make_unique<Function>();
+        auto function = std::make_unique<Function>(source(node));
         for (auto&& c : node.children[0]->children) {
             function->append(c->string());
         }
@@ -620,6 +666,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
 
     else if (node.type == "Grammar::branch")
         return std::make_unique<Branch>(
+            source(node),
             normalize(*node.children[0]),
             normalize(*node.children[1]),
             normalize(*node.children[2])
@@ -630,7 +677,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         auto value = normalize(**it++);
         while (it != node.children.end()) {
             if ((*it)->type == "Grammar::funcall_operator") {
-                auto funcall = std::make_unique<FunCall>(std::move(value));
+                auto funcall = std::make_unique<FunCall>(source(**it), std::move(value));
                 for (auto&& c : (*it)->children)
                     funcall->append(normalize(*c));
                 value = std::move(funcall);
@@ -638,13 +685,15 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
             else if ((*it)->type == "Grammar::object_access") {
                 auto field = Object::string((*it)->children[0]->string());
                 auto index = std::make_unique<Index>(
+                    source(**it),
                     std::move(value),
-                    std::make_unique<Literal>(field)
+                    std::make_unique<Literal>(source(**it), field)
                 );
                 value = std::move(index);
             }
             else if ((*it)->type == "Grammar::subscript_operator") {
                 auto index = std::make_unique<Index>(
+                    source(**it),
                     std::move(value),
                     normalize(*(*it)->children[0])
                 );
