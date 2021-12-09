@@ -1,0 +1,141 @@
+#include "catch.hpp"
+
+#include "gold.hpp"
+
+using namespace Gold;
+
+
+TEST_CASE("Evaluating literals", "[evaluate]") {
+    REQUIRE(evaluate_string("1").unsafe_integer() == 1);
+    REQUIRE(evaluate_string("-1").unsafe_integer() == -1);
+    REQUIRE(evaluate_string("+1").unsafe_integer() == 1);
+    REQUIRE(evaluate_string("true").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("false").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("null").is_null());
+    REQUIRE(evaluate_string("2.").unsafe_floating() == 2.0);
+    REQUIRE(evaluate_string("1.2").unsafe_floating() == 1.2);
+    REQUIRE(evaluate_string("-3e1").unsafe_floating() == -30.0);
+    REQUIRE(evaluate_string("+4e-1").unsafe_floating() == 0.4);
+    REQUIRE(evaluate_string("5e+1").unsafe_floating() == 50.0);
+
+    REQUIRE(evaluate_string("\"\"").unsafe_string() == "");
+    REQUIRE(evaluate_string("\"dingbob\"").unsafe_string() == "dingbob");
+    REQUIRE(evaluate_string("\"ding\\\"bob\"").unsafe_string() == "ding\"bob");
+    REQUIRE(evaluate_string("\"ding\\\\bob\"").unsafe_string() == "ding\\bob");
+}
+
+
+TEST_CASE("Evaluating lists", "[evaluate]") {
+    auto obj = evaluate_string("[]").unsafe_list();
+    REQUIRE(obj->size() == 0);
+
+    obj = evaluate_string("[1, false, \"dingbob\", 2.2, null]").unsafe_list();
+    REQUIRE(obj->size() == 5);
+    REQUIRE((*obj)[0].unsafe_integer() == 1);
+    REQUIRE((*obj)[1].unsafe_boolean() == false);
+    REQUIRE((*obj)[2].unsafe_string() == "dingbob");
+    REQUIRE((*obj)[3].unsafe_floating() == 2.2);
+    REQUIRE((*obj)[4].is_null());
+}
+
+
+TEST_CASE("Evaluating maps", "[evaluate]") {
+    auto obj = evaluate_string("{}").unsafe_map();
+    REQUIRE(obj->size() == 0);
+
+    obj = evaluate_string("{a: -1, b: true, c: \"\", d: 3.14, e: null}").unsafe_map();
+    REQUIRE(obj->size() == 5);
+    REQUIRE((*obj)["a"].unsafe_integer() == -1);
+    REQUIRE((*obj)["b"].unsafe_boolean() == true);
+    REQUIRE((*obj)["c"].unsafe_string() == "");
+    REQUIRE((*obj)["d"].unsafe_floating() == 3.14);
+    REQUIRE((*obj)["e"].is_null());
+}
+
+
+TEST_CASE("Blocks and bindings", "[evaluate]") {
+    auto obj = evaluate_string(
+        "let a = 1\n"
+        "a"
+    );
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string(
+        "let a = 2.1\n"
+        "let b = \"zomg\"\n"
+        "[a, b]"
+    );
+    REQUIRE(obj.unsafe_list()->size() == 2);
+    REQUIRE((*obj.unsafe_list())[0].unsafe_floating() == 2.1);
+    REQUIRE((*obj.unsafe_list())[1].unsafe_string() == "zomg");
+
+    obj = evaluate_string(
+        "let a = 2.1\n"
+        "let b = a\n"
+        "b"
+    );
+    REQUIRE(obj.unsafe_floating() == 2.1);
+
+    obj = evaluate_string(
+        "let a = 1\n"
+        "let b = {\n"
+        "  let a = 2\n"
+        "  a\n"
+        "}\n"
+        "[a, b]"
+    );
+    REQUIRE(obj.unsafe_list()->size() == 2);
+    REQUIRE((*obj.unsafe_list())[0].unsafe_integer() == 1);
+    REQUIRE((*obj.unsafe_list())[1].unsafe_integer() == 2);
+
+    obj = evaluate_string(
+        "let a = 1\n"
+        "let b = a\n"
+        "let a = 2\n"
+        "[a, b]"
+    );
+    REQUIRE(obj.unsafe_list()->size() == 2);
+    REQUIRE((*obj.unsafe_list())[0].unsafe_integer() == 2);
+    REQUIRE((*obj.unsafe_list())[1].unsafe_integer() == 1);
+}
+
+
+TEST_CASE("Arithmetic", "[evaluate]") {
+    REQUIRE(evaluate_string("1 + 2").unsafe_integer() == 3);
+    REQUIRE(evaluate_string("3 + 2").unsafe_integer() == 5);
+    REQUIRE(evaluate_string("3 + 2 - 5").unsafe_integer() == 0);
+    REQUIRE(evaluate_string("3 - -5").unsafe_integer() == 8);
+
+    REQUIRE(evaluate_string("1 + 2.0").unsafe_floating() == 3.0);
+    REQUIRE(evaluate_string("1.0 - 2.0").unsafe_floating() == -1.0);
+}
+
+
+TEST_CASE("List concatenation", "[evaluate]") {
+    auto obj = evaluate_string("[1, 2] + [3]");
+    REQUIRE(obj.unsafe_list()->size() == 3);
+    REQUIRE((*obj.unsafe_list())[0].unsafe_integer() == 1);
+    REQUIRE((*obj.unsafe_list())[1].unsafe_integer() == 2);
+    REQUIRE((*obj.unsafe_list())[2].unsafe_integer() == 3);
+}
+
+
+TEST_CASE("Evaluation of functions", "[evaluate]") {
+    auto obj = evaluate_string(
+        "let double = (x) => x + x\n"
+        "let applytwice = (f,x) => f(f(x))\n"
+        "applytwice(double, [1])"
+    );
+    REQUIRE(obj.unsafe_list()->size() == 4);
+    REQUIRE((*obj.unsafe_list())[0].unsafe_integer() == 1);
+    REQUIRE((*obj.unsafe_list())[1].unsafe_integer() == 1);
+    REQUIRE((*obj.unsafe_list())[2].unsafe_integer() == 1);
+    REQUIRE((*obj.unsafe_list())[3].unsafe_integer() == 1);
+}
+
+
+TEST_CASE("Subscripting", "[evaluate]") {
+    REQUIRE(evaluate_string("[1,2,3][0]").unsafe_integer() == 1);
+    REQUIRE(evaluate_string("{a: 1, b: 2}.a").unsafe_integer() == 1);
+    REQUIRE(evaluate_string("{a: 1, b: 2}[\"a\"]").unsafe_integer() == 1);
+}
