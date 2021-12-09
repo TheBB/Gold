@@ -14,17 +14,30 @@ template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 
 std::string Object::type_name() const {
-    switch (type()) {
-    case Type::integer: return "integer";
-    case Type::string: return "integer";
-    case Type::boolean: return "boolean";
-    case Type::floating: return "floating";
-    case Type::null: return "null";
-    case Type::map: return "map";
-    case Type::list: return "list";
-    case Type::closure: return "closure";
-    }
-    return "null";
+    return std::visit(overloaded {
+        [](Null) { return "null"; },
+        [](Integer) { return "integer"; },
+        [](String) { return "string"; },
+        [](Boolean) { return "boolean"; },
+        [](Floating) { return "floating"; },
+        [](Map) { return "map"; },
+        [](List) { return "list"; },
+        [](Closure) { return "closure"; }
+    }, _data);
+}
+
+
+Object::Type Object::type() const {
+    return std::visit(overloaded {
+        [](Null) { return Type::null; },
+        [](Integer) { return Type::integer; },
+        [](String) { return Type::string; },
+        [](Boolean) { return Type::boolean; },
+        [](Floating) { return Type::floating; },
+        [](Map) { return Type::map; },
+        [](List) { return Type::list; },
+        [](Closure) { return Type::closure; }
+    }, _data);
 }
 
 
@@ -214,17 +227,13 @@ Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& arg
 
 
 Object Object::operator[](Object index) const {
-    if (index.type() == Object::Type::integer) {
-        auto ix = index.unsafe_integer();
-        return (*this)[ix];
-    }
-
-    else if (index.type() == Object::Type::string) {
-        auto ix = index.unsafe_string();
-        return (*this)[ix];
-    }
-
-    throw EvalException(fmt::format("unsupported subscript type: `{}`", index.type_name()));
+    return std::visit(overloaded {
+        [this](Integer x) { return (*this)[x]; },
+        [this](String x) { return (*this)[x]; },
+        [&index](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported subscript type: `{}`", index.type_name()));
+        }
+    }, index._data);
 }
 
 
@@ -251,60 +260,53 @@ Object Object::operator[](std::string index) const {
 
 
 size_t Object::size() const {
-    if (type() == Object::Type::list)
-        return unsafe_list()->size();
-    if (type() == Object::Type::map)
-        return unsafe_map()->size();
-    throw EvalException(fmt::format("unsupported type for size(): `{}`", type_name()));
+    return std::visit(overloaded {
+        [](List x) { return x->size(); },
+        [](Map x) { return x->size(); },
+        [this](auto&&) -> size_t {
+            throw EvalException(fmt::format("unsuppurted type for size(): `{}`", type_name()));
+        }
+    }, _data);
 }
 
 
 std::ostream& operator<<(std::ostream& os, const Object& obj) {
-    switch (obj.type()) {
-    case Object::Type::integer:
-        os << obj.unsafe_integer();
-        break;
-    case Object::Type::string:
-        os << "\"" << obj.unsafe_string() << "\"";
-        break;
-    case Object::Type::boolean:
-        os << (obj.unsafe_boolean() ? "true" : "false");
-        break;
-    case Object::Type::floating:
-        os << fmt::format("{}", obj.unsafe_floating());
-        break;
-    case Object::Type::null:
-        os << "null";
-        break;
-    case Object::Type::map: {
-        os << "{";
-        bool first = true;
-        for (auto const& it : *obj.unsafe_map()) {
-            if (!first)
-                os << ", ";
-            os << it.first << ": " << it.second;
-            first = false;
-        }
-        os << "}";
-        break;
-    }
-    case Object::Type::list: {
-        os << "[";
-        bool first = true;
-        for (auto obj : *obj.unsafe_list()) {
-            if (!first)
-                os << ", ";
-            os << obj;
-            first = false;
-        }
-        os << "]";
-        break;
-    }
-    case Object::Type::closure:
-        os << "<closure>";
-        break;
-    }
+    obj.dump(os);
     return os;
+}
+
+
+void Object::dump(std::ostream& os) const {
+    std::visit(overloaded {
+        [&os](Integer x) { os << x; },
+        [&os](String x) { os << '"' << x << '"'; },
+        [&os](Boolean x) { os << (x ? "true" : "false"); },
+        [&os](Floating x) { os << fmt::format("{}", x); },
+        [&os](Null) { os << "null"; },
+        [&os](Closure) { os << "<closure>"; },
+        [&os](List x) {
+            os << "[";
+            bool first = true;
+            for (auto obj : *x) {
+                if (!first)
+                    os << ", ";
+                os << obj;
+                first = false;
+            }
+            os << "]";
+        },
+        [&os](Map x) {
+            os << "{";
+            bool first = true;
+            for (auto const& [key, val] : *x) {
+                if (!first)
+                    os << ", ";
+                os << key << ": " << val;
+                first = false;
+            }
+            os << "}";
+        }
+    }, _data);
 }
 
 

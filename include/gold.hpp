@@ -108,17 +108,7 @@ public:
     static Object deserialize(std::istream&);
 
     // Type inspection
-    Type type() const {
-        if (std::holds_alternative<Integer>(_data)) return Type::integer;
-        if (std::holds_alternative<String>(_data)) return Type::string;
-        if (std::holds_alternative<Boolean>(_data)) return Type::boolean;
-        if (std::holds_alternative<Floating>(_data)) return Type::floating;
-        if (std::holds_alternative<Map>(_data)) return Type::map;
-        if (std::holds_alternative<List>(_data)) return Type::list;
-        if (std::holds_alternative<Closure>(_data)) return Type::closure;
-        return Type::null;
-    }
-
+    Type type() const;
     std::string type_name() const;
     bool is_null() const { return type() == Type::null; }
 
@@ -154,6 +144,8 @@ public:
 
     // More convenient access
     size_t size() const;
+
+    void dump(std::ostream&) const;
 };
 
 
