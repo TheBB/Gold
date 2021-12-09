@@ -114,7 +114,7 @@ Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& arg
 Object Object::operator[](Object index) const {
     if (type() == Object::Type::list && index.type() == Object::Type::integer) {
         auto ix = index.unsafe_integer();
-        if (ix < 0 || ix >= (typeof(ix))unsafe_list()->size())
+        if (ix < 0 || (size_t)ix >= unsafe_list()->size())
             throw EvalException();
         return (*unsafe_list())[ix];
     }
@@ -127,6 +127,33 @@ Object Object::operator[](Object index) const {
         return (*map)[ix];
     }
 
+    throw EvalException();
+}
+
+
+Object Object::operator[](intmax_t index) const {
+    if (type() != Object::Type::list)
+        throw EvalException();
+    if (index < 0 || (size_t)index >= unsafe_list()->size())
+        throw EvalException();
+    return (*unsafe_list())[index];
+}
+
+
+Object Object::operator[](std::string index) const {
+    if (type() != Object::Type::map)
+        throw EvalException();
+    if (unsafe_map()->find(index) == unsafe_map()->end())
+        throw EvalException();
+    return (*unsafe_map())[index];
+}
+
+
+size_t Object::size() const {
+    if (type() == Object::Type::list)
+        return unsafe_list()->size();
+    if (type() == Object::Type::map)
+        return unsafe_map()->size();
     throw EvalException();
 }
 

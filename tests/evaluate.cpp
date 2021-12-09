@@ -26,30 +26,32 @@ TEST_CASE("Evaluating literals", "[evaluate]") {
 
 
 TEST_CASE("Evaluating lists", "[evaluate]") {
-    auto obj = evaluate_string("[]").unsafe_list();
-    REQUIRE(obj->size() == 0);
+    auto obj = evaluate_string("[]");
+    REQUIRE(obj.type() == Object::Type::list);
+    REQUIRE(obj.size() == 0);
 
-    obj = evaluate_string("[1, false, \"dingbob\", 2.2, null]").unsafe_list();
-    REQUIRE(obj->size() == 5);
-    REQUIRE((*obj)[0].unsafe_integer() == 1);
-    REQUIRE((*obj)[1].unsafe_boolean() == false);
-    REQUIRE((*obj)[2].unsafe_string() == "dingbob");
-    REQUIRE((*obj)[3].unsafe_floating() == 2.2);
-    REQUIRE((*obj)[4].is_null());
+    obj = evaluate_string("[1, false, \"dingbob\", 2.2, null]");
+    REQUIRE(obj.type() == Object::Type::list);
+    REQUIRE(obj.size() == 5);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_boolean() == false);
+    REQUIRE(obj[2].unsafe_string() == "dingbob");
+    REQUIRE(obj[3].unsafe_floating() == 2.2);
+    REQUIRE(obj[4].is_null());
 }
 
 
 TEST_CASE("Evaluating maps", "[evaluate]") {
-    auto obj = evaluate_string("{}").unsafe_map();
-    REQUIRE(obj->size() == 0);
+    auto obj = evaluate_string("{}");
+    REQUIRE(obj.size() == 0);
 
-    obj = evaluate_string("{a: -1, b: true, c: \"\", d: 3.14, e: null}").unsafe_map();
-    REQUIRE(obj->size() == 5);
-    REQUIRE((*obj)["a"].unsafe_integer() == -1);
-    REQUIRE((*obj)["b"].unsafe_boolean() == true);
-    REQUIRE((*obj)["c"].unsafe_string() == "");
-    REQUIRE((*obj)["d"].unsafe_floating() == 3.14);
-    REQUIRE((*obj)["e"].is_null());
+    obj = evaluate_string("{a: -1, b: true, c: \"\", d: 3.14, e: null}");
+    REQUIRE(obj.size() == 5);
+    REQUIRE(obj["a"].unsafe_integer() == -1);
+    REQUIRE(obj["b"].unsafe_boolean() == true);
+    REQUIRE(obj["c"].unsafe_string() == "");
+    REQUIRE(obj["d"].unsafe_floating() == 3.14);
+    REQUIRE(obj["e"].is_null());
 }
 
 
@@ -65,9 +67,9 @@ TEST_CASE("Blocks and bindings", "[evaluate]") {
         "let b = \"zomg\"\n"
         "[a, b]"
     );
-    REQUIRE(obj.unsafe_list()->size() == 2);
-    REQUIRE((*obj.unsafe_list())[0].unsafe_floating() == 2.1);
-    REQUIRE((*obj.unsafe_list())[1].unsafe_string() == "zomg");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].unsafe_floating() == 2.1);
+    REQUIRE(obj[1].unsafe_string() == "zomg");
 
     obj = evaluate_string(
         "let a = 2.1\n"
@@ -84,9 +86,9 @@ TEST_CASE("Blocks and bindings", "[evaluate]") {
         "}\n"
         "[a, b]"
     );
-    REQUIRE(obj.unsafe_list()->size() == 2);
-    REQUIRE((*obj.unsafe_list())[0].unsafe_integer() == 1);
-    REQUIRE((*obj.unsafe_list())[1].unsafe_integer() == 2);
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 2);
 
     obj = evaluate_string(
         "let a = 1\n"
@@ -94,9 +96,9 @@ TEST_CASE("Blocks and bindings", "[evaluate]") {
         "let a = 2\n"
         "[a, b]"
     );
-    REQUIRE(obj.unsafe_list()->size() == 2);
-    REQUIRE((*obj.unsafe_list())[0].unsafe_integer() == 2);
-    REQUIRE((*obj.unsafe_list())[1].unsafe_integer() == 1);
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].unsafe_integer() == 2);
+    REQUIRE(obj[1].unsafe_integer() == 1);
 }
 
 
@@ -113,10 +115,10 @@ TEST_CASE("Arithmetic", "[evaluate]") {
 
 TEST_CASE("List concatenation", "[evaluate]") {
     auto obj = evaluate_string("[1, 2] + [3]");
-    REQUIRE(obj.unsafe_list()->size() == 3);
-    REQUIRE((*obj.unsafe_list())[0].unsafe_integer() == 1);
-    REQUIRE((*obj.unsafe_list())[1].unsafe_integer() == 2);
-    REQUIRE((*obj.unsafe_list())[2].unsafe_integer() == 3);
+    REQUIRE(obj.size() == 3);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 2);
+    REQUIRE(obj[2].unsafe_integer() == 3);
 }
 
 
@@ -126,11 +128,11 @@ TEST_CASE("Evaluation of functions", "[evaluate]") {
         "let applytwice = (f,x) => f(f(x))\n"
         "applytwice(double, [1])"
     );
-    REQUIRE(obj.unsafe_list()->size() == 4);
-    REQUIRE((*obj.unsafe_list())[0].unsafe_integer() == 1);
-    REQUIRE((*obj.unsafe_list())[1].unsafe_integer() == 1);
-    REQUIRE((*obj.unsafe_list())[2].unsafe_integer() == 1);
-    REQUIRE((*obj.unsafe_list())[3].unsafe_integer() == 1);
+    REQUIRE(obj.size() == 4);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 1);
+    REQUIRE(obj[2].unsafe_integer() == 1);
+    REQUIRE(obj[3].unsafe_integer() == 1);
 }
 
 

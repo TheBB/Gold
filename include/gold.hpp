@@ -63,14 +63,14 @@ private:
 public:
     // Raw constructors
     Object() : _data() {}
-    Object(Null value) : _data(value) {}
-    Object(Integer value) : _data(value) {}
-    Object(const String& value) : _data(value) {}
-    Object(Boolean value) : _data(value) {}
-    Object(Floating value) : _data(value) {}
-    Object(const Map& value) : _data(value) {}
-    Object(const List& value) : _data(value) {}
-    Object(Closure eval) : _data(eval) {}
+    explicit Object(Null value) : _data(value) {}
+    explicit Object(Integer value) : _data(value) {}
+    explicit Object(const String& value) : _data(value) {}
+    explicit Object(Boolean value) : _data(value) {}
+    explicit Object(Floating value) : _data(value) {}
+    explicit Object(const Map& value) : _data(value) {}
+    explicit Object(const List& value) : _data(value) {}
+    explicit Object(Closure eval) : _data(eval) {}
 
     // Explicit constructors
     static Object null() { return Object(); }
@@ -124,7 +124,13 @@ public:
     Object operator+(Object) const;
     Object operator-(Object) const;
     Object operator()(EvaluationContext&, const std::vector<Object>&) const;
+
     Object operator[](Object) const;
+    Object operator[](intmax_t) const;
+    Object operator[](std::string) const;
+
+    // More convenient access
+    size_t size() const;
 };
 
 
