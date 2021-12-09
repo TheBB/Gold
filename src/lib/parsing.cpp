@@ -214,19 +214,6 @@ Object Function::evaluate(EvaluationContext& ctx) const {
     closure->parameters = parameters;
     closure->expression = AstNode::deserialize(expression->serialize());
 
-    // auto eval = [this, ns](EvaluationContext& ctx, const std::vector<Object>& args) {
-    //     ctx.push_namespace(ns);
-    //     ctx.push_namespace();
-    //     auto id_it = parameters.begin();
-    //     auto arg_it = args.begin();
-    //     while (id_it != parameters.end() && arg_it != args.end()) {
-    //         ctx.assign(*id_it++, *arg_it++);
-    //     }
-    //     Object retval = expression->evaluate(ctx);
-    //     ctx.pop_namespace(2);
-    //     return retval;
-    // };
-
     return Object::closure(closure);
 }
 
@@ -336,10 +323,16 @@ namespace Grammar
 
     // Numbers
     struct sign: p::one<'-','+'> {};
-    struct integer: p::sor<p::one<'0'>, p::seq<p::range<'1','9'>, p::star<p::digit>>> {};
-    struct fractional: p::seq<p::one<'.'>, p::star<p::digit>> {};
-    struct exponent: p::seq<p::one<'e','E'>, p::opt<sign>, integer> {};
-    struct number: p::seq<p::opt<sign>, integer, p::opt<fractional>, p::opt<exponent>> {};
+    struct dot: p::one<'.'> {};
+    struct leading: p::sor<p::one<'0'>, p::seq<p::range<'1','9'>, p::star<p::digit>>> {};
+    struct trailing: p::plus<p::digit> {};
+    struct exponent: p::seq<p::one<'e','E'>, p::opt<sign>, leading> {};
+    struct integer: p::seq<p::opt<sign>, leading> {};
+    struct float1: p::seq<p::opt<sign>, leading, dot, p::opt<trailing>, p::opt<exponent>> {};
+    struct float2: p::seq<p::opt<sign>, p::opt<leading>, dot, trailing, p::opt<exponent>> {};
+    struct float3: p::seq<p::opt<sign>, leading, exponent> {};
+    struct floating: p::sor<float1, float2, float3> {};
+    struct number: p::sor<floating, integer> {};
 
     // Strings
     // struct escaped_unicode: p::seq<p::one<'u'>, p::rep<4, p::xdigit>> {};
@@ -479,10 +472,11 @@ namespace Grammar
     using selector = p::parse_tree::selector<Rule,
         p::parse_tree::store_content::on<
             number,
-            sign,
             integer,
-            fractional,
-            exponent,
+            floating,
+            // sign,
+            // fractional,
+            // exponent,
             string,
             nullp,
             boolean,
@@ -531,31 +525,18 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     }
 
     else if (node.type == "Grammar::number") {
-        bool positive = true;
-        intmax_t integer = 0;
+        auto& c = node.children[0];
 
-        for (auto&& c : node.children) {
-            if (c->type == "Grammar::sign") {
-                positive = c->string_view() == "+";
-            }
-            else if (c->type == "Grammar::integer") {
-                for (auto ch : c->string_view()) {
-                    integer *= 10;
-                    integer += ch - '0';
-                }
-            }
-            else if (c->type == "Grammar::fractional" || c->type == "Grammar::exponent") {
-                double value = std::stod(node.string());
-                Object obj = Object::floating(value);
-                return std::make_unique<Literal>(obj);
-            }
+        if (c->type == "Grammar::integer") {
+            auto str = node.string();
+            auto value = std::strtoimax(str.c_str(), nullptr, 10);
+            return std::make_unique<Literal>(Object::integer(value));
         }
-
-        if (!positive)
-            integer *= -1;
-
-        Object obj = Object::integer(integer);
-        return std::make_unique<Literal>(obj);
+        else {
+            auto str = node.string();
+            auto value = std::stod(str);
+            return std::make_unique<Literal>(Object::floating(value));
+        }
     }
 
     else if (node.type == "Grammar::string") {

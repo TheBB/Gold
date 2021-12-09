@@ -36,8 +36,8 @@ TEST_CASE("Parse integers", "[parsing]") {
     ast = parse("9223372036854775807");
     REQUIRE(ast->dump() == "Lit(9223372036854775807)");
 
-    ast = parse("-9223372036854775807");
-    REQUIRE(ast->dump() == "Lit(-9223372036854775807)");
+    ast = parse("-9223372036854775808");
+    REQUIRE(ast->dump() == "Lit(-9223372036854775808)");
 }
 
 
@@ -46,6 +46,9 @@ TEST_CASE("Parse floats", "[parsing]") {
     REQUIRE(ast->dump() == "Lit(0.0)");
 
     ast = parse("0.");
+    REQUIRE(ast->dump() == "Lit(0.0)");
+
+    ast = parse(".0");
     REQUIRE(ast->dump() == "Lit(0.0)");
 
     ast = parse("0e0");
