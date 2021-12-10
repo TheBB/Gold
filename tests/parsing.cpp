@@ -287,7 +287,7 @@ TEST_CASE("Postfix operators", "[parsing]") {
 }
 
 
-TEST_CASE("File parsing as function call", "[parsing]") {
+TEST_CASE("File parsing as block", "[parsing]") {
     auto ast = parse("let a = 1\na", false);
-    REQUIRE(ast->dump() == "FunCall(Function(Block(Entry(a, Lit(1)), Id(a))))");
+    REQUIRE(ast->dump() == "Block(Entry(a, Lit(1)), Id(a))");
 }

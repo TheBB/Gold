@@ -609,9 +609,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     }
 
     if (node.type == "Grammar::file") {
-        auto function = std::make_unique<Function>(source(node));
-        function->set_expression(normalize(*node.children[0]));
-        return std::make_unique<FunCall>(source(node), std::move(function));
+        return normalize(*node.children[0]);
     }
 
     else if (node.type == "Grammar::boolean") {
