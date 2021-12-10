@@ -223,22 +223,22 @@ TEST_CASE("Nested maps", "[parsing]") {
 
 TEST_CASE("Operator expressions", "[parsing]") {
     auto ast = parse("1 + 2");
-    REQUIRE(ast->dump() == "OpSeq(Lit(1) + Lit(2))");
+    REQUIRE(ast->dump() == "BinOp(Lit(1) + Lit(2))");
 
     ast = parse("1 / 2 + 3");
-    REQUIRE(ast->dump() == "OpSeq(OpSeq(Lit(1) / Lit(2)) + Lit(3))");
+    REQUIRE(ast->dump() == "BinOp(BinOp(Lit(1) / Lit(2)) + Lit(3))");
 
     ast = parse("1 + 2 - 3 * 4 // 5 / 6");
     REQUIRE(ast->dump() ==
-        "OpSeq(Lit(1) + Lit(2) - OpSeq("
-        "Lit(3) * Lit(4) // Lit(5) / Lit(6)))"
+        "BinOp(Lit(1) + BinOp(Lit(2) - BinOp(Lit(3) "
+        "* BinOp(Lit(4) // BinOp(Lit(5) / Lit(6))))))"
     );
 }
 
 
 TEST_CASE("Parenthesised operator expressions", "[parsing]") {
     auto ast = parse("1 * (2 + 3)");
-    REQUIRE(ast->dump() == "OpSeq(Lit(1) * OpSeq(Lit(2) + Lit(3)))");
+    REQUIRE(ast->dump() == "BinOp(Lit(1) * BinOp(Lit(2) + Lit(3)))");
 }
 
 
@@ -247,7 +247,7 @@ TEST_CASE("Block expressions", "[parsing]") {
     REQUIRE(ast->dump() == "Block(Lit(1))");
 
     ast = parse("{let a = 1 let b = 2 a + b}");
-    REQUIRE(ast->dump() == "Block(Entry(a, Lit(1)), Entry(b, Lit(2)), OpSeq(Id(a) + Id(b)))");
+    REQUIRE(ast->dump() == "Block(Entry(a, Lit(1)), Entry(b, Lit(2)), BinOp(Id(a) + Id(b)))");
 }
 
 
@@ -271,7 +271,7 @@ TEST_CASE("Postfix operators", "[parsing]") {
     REQUIRE(ast->dump() == "FunCall(Id(func), Lit(1), Lit(2), Lit(3))");
 
     ast = parse("((x,y) => x+y)(1,2)");
-    REQUIRE(ast->dump() == "FunCall(Function(x, y, OpSeq(Id(x) + Id(y))), Lit(1), Lit(2))");
+    REQUIRE(ast->dump() == "FunCall(Function(x, y, BinOp(Id(x) + Id(y))), Lit(1), Lit(2))");
 
     ast = parse("abc.def");
     REQUIRE(ast->dump() == "Index(Id(abc), Lit(\"def\"))");

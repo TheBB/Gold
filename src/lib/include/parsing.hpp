@@ -82,15 +82,13 @@ public:
 };
 
 
-class OpSeq : public AstNode {
+class BinOp : public AstNode {
 private:
-    std::unique_ptr<AstNode> initial;
-    std::vector<std::pair<Operator, std::unique_ptr<AstNode>>> sequence;
+    std::unique_ptr<AstNode> lhs, rhs;
+    Operator op;
 public:
-    OpSeq(Source source, std::unique_ptr<AstNode> init) : AstNode(source), initial(std::move(init)) {}
-    void append(Operator op, std::unique_ptr<AstNode> operand) {
-        sequence.push_back(std::pair(op, std::move(operand)));
-    }
+    BinOp(Source source, std::unique_ptr<AstNode> l, std::unique_ptr<AstNode> r, Operator oper)
+        : AstNode(source), lhs(std::move(l)), rhs(std::move(r)), op(oper) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;

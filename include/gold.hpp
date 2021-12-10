@@ -164,6 +164,13 @@ struct EvalException: public std::exception {
 };
 
 
+struct InternalException: public std::exception {
+    const char* what() const noexcept {
+        return "an internal error happened - please report";
+    }
+};
+
+
 class EvaluationContext {
 private:
     std::list<Namespace> namespaces;

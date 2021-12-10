@@ -208,15 +208,12 @@ void Map::serialize(std::ostream& os) const {
 }
 
 
-void OpSeq::serialize(std::ostream& os) const {
+void BinOp::serialize(std::ostream& os) const {
     os << 'O';
     source().serialize(os);
-    initial->serialize(os);
-    write(os, sequence.size());
-    for (auto& [op, operand] : sequence) {
-        write(os, op);
-        operand->serialize(os);
-    }
+    lhs->serialize(os);
+    write(os, op);
+    rhs->serialize(os);
 }
 
 
@@ -302,14 +299,10 @@ std::unique_ptr<AstNode> AstNode::deserialize(std::istream& is) {
         return map;
     }
     case 'O': {
-        auto opseq = std::make_unique<OpSeq>(source, AstNode::deserialize(is));
-        auto size = read<size_t>(is);
-        for (size_t i = 0; i < size; i++) {
-            auto op = read<Operator>(is);
-            auto value = AstNode::deserialize(is);
-            opseq->append(op, std::move(value));
-        }
-        return opseq;
+        auto lhs = AstNode::deserialize(is);
+        auto op = read<Operator>(is);
+        auto rhs = AstNode::deserialize(is);
+        return std::make_unique<BinOp>(source, std::move(lhs), std::move(rhs), op);
     }
     case 'B': {
         auto block = std::make_unique<Block>(source);

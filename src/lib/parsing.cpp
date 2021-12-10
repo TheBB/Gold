@@ -150,51 +150,39 @@ Object Map::evaluate(EvaluationContext& ctx) const {
 }
 
 
-void OpSeq::dump(std::ostream& os) const {
-    os << "OpSeq(" << *initial;
-    for (auto& [op, value] : sequence)
-        os << " " << op << " " << *value;
-    os << ")";
+void BinOp::dump(std::ostream& os) const {
+    os << "BinOp(" << *lhs << " " << op << " " <<  *rhs << ")";
 }
 
 
-void OpSeq::free_identifiers(std::set<std::string>& idents) const {
-    initial->free_identifiers(idents);
-    for (auto& obj : sequence)
-        obj.second->free_identifiers(idents);
+void BinOp::free_identifiers(std::set<std::string>& idents) const {
+    lhs->free_identifiers(idents);
+    rhs->free_identifiers(idents);
 }
 
 
-Object OpSeq::evaluate(EvaluationContext& ctx) const {
-    auto value = initial->evaluate(ctx);
-
+Object BinOp::evaluate(EvaluationContext& ctx) const {
+    auto l = lhs->evaluate(ctx);
     try {
-        for (auto& [op, operand] : sequence) {
-            if (op == Operator::conjunction) {
-                value = (bool)value ? operand->evaluate(ctx) : value;
-                break;
-            }
-            else if (op == Operator::disjunction) {
-                value = (bool)value ? value : operand->evaluate(ctx);
-                break;
-            }
+        if (op == Operator::conjunction)
+            return (bool)l ? rhs->evaluate(ctx) : l;
+        if (op == Operator::disjunction)
+            return (bool)l ? l : rhs->evaluate(ctx);
 
-            auto rhs = operand->evaluate(ctx);
-
-            switch (op) {
-            case Operator::plus: value = value + rhs; break;
-            case Operator::minus: value = value - rhs; break;
-            case Operator::multiply: value = value * rhs; break;
-            case Operator::divide: value = value / rhs; break;
-            case Operator::integer_divide: value = value.operator_idiv(rhs); break;
-            case Operator::less_than: value = value < rhs; break;
-            case Operator::less_than_or_eq: value = value <= rhs; break;
-            case Operator::greater_than: value = value > rhs; break;
-            case Operator::greater_than_or_eq: value = value >= rhs; break;
-            case Operator::equal: value = value == rhs; break;
-            case Operator::not_equal: value = value != rhs; break;
-            default: break;
-            }
+        auto r = rhs->evaluate(ctx);
+        switch (op) {
+        case Operator::plus: return l + r; break;
+        case Operator::minus: return l - r; break;
+        case Operator::multiply: return l * r; break;
+        case Operator::divide: return l / r; break;
+        case Operator::integer_divide: return l.operator_idiv(r); break;
+        case Operator::less_than: return l < r; break;
+        case Operator::less_than_or_eq: return l <= r; break;
+        case Operator::greater_than: return l > r; break;
+        case Operator::greater_than_or_eq: return l >= r; break;
+        case Operator::equal: return l == r; break;
+        case Operator::not_equal: return l != r; break;
+        default: throw InternalException();
         }
     }
     catch (EvalException& e) {
@@ -202,7 +190,7 @@ Object OpSeq::evaluate(EvaluationContext& ctx) const {
         throw;
     }
 
-    return value;
+    throw InternalException();
 }
 
 
@@ -537,49 +525,27 @@ namespace Grammar
         branch
     > {};
 
-    // Precedence level: multiplication
-    struct factor: p::seq<atomic> {};
-    struct product_operator: p::sor<p::string<'/','/'>, p::one<'*'>, p::one<'/'>> {};
-    struct product: p::list<factor, product_operator, whitespace> {};
+    // Binary operator template
+    template <typename T, typename O>
+    struct binop {
+        struct operand: p::seq<T> {};
+        struct optor: O {};
+        struct operation: p::seq<
+            operand,
+            p::opt<p::seq<p::pad<optor, whitespace>, p::pad<operation, whitespace>>>
+        > {};
+    };
 
-    // Precedence level: addition
-    struct term: p::seq<product> {};
-    struct sum_operator: p::sor<p::one<'+'>, p::one<'-'>> {};
-    struct sum: p::list<term, sum_operator, whitespace> {};
-
-    // Precedence level: inequality
-    struct ineq_operand: p::seq<sum> {};
-    struct ineq_operator: p::sor<
-        p::string<'<','='>,
-        p::string<'>','='>,
-        p::one<'<'>,
-        p::one<'>'>
-    > {};
-    struct ineq: p::seq<
-        ineq_operand,
-        p::opt<p::seq<p::pad<ineq_operator, whitespace>, p::pad<ineq_operand, whitespace>>>
-    > {};
-
-    // Precedence level: equality
-    struct eq_operand: p::seq<ineq> {};
-    struct eq_operator: p::sor<p::string<'=','='>, p::string<'!','='>> {};
-    struct eq: p::seq<
-        eq_operand,
-        p::opt<p::seq<p::pad<eq_operator, whitespace>, p::pad<eq_operand, whitespace>>>
-    > {};
-
-    // Precedence level: conjunction
-    struct conj_operand: p::seq<eq> {};
-    struct conj_operator: p::string<'a','n','d'> {};
-    struct conj: p::list<conj_operand, conj_operator, whitespace> {};
-
-    // Precedence level: disjunction
-    struct disj_operand: p::seq<conj> {};
-    struct disj_operator: p::string<'o','r'> {};
-    struct disj: p::list<disj_operand, disj_operator, whitespace> {};
+    // Binary operator precedence levels (left-to-right)
+    struct product: binop<atomic, p::sor<p::string<'/','/'>, p::one<'*'>, p::one<'/'>>> {};
+    struct sum: binop<product::operation, p::sor<p::string<'+'>, p::string<'-'>>> {};
+    struct ineq: binop<sum::operation, p::sor<p::string<'<','='>, p::string<'>','='>, p::one<'<'>, p::one<'>'>>> {};
+    struct eq: binop<ineq::operation, p::sor<p::string<'=','='>, p::string<'!','='>>> {};
+    struct conj: binop<eq::operation, p::string<'a','n','d'>> {};
+    struct disj: binop<conj::operation, p::string<'o','r'>> {};
 
     // Finalize
-    struct expression: p::seq<p::sor<disj, composite>> {};
+    struct expression: p::seq<p::sor<eq::operation, composite>> {};
     struct file: p::seq<p::bof, block, p::pad<p::eof, whitespace>> {};
 
     template<typename Rule>
@@ -603,18 +569,18 @@ namespace Grammar
             function,
             branch,
             map,
-            sum,
-            sum_operator,
-            product,
-            product_operator,
-            ineq,
-            ineq_operator,
-            eq,
-            eq_operator,
-            conj_operator,
-            conj,
-            disj_operator,
-            disj,
+            product::operation,
+            product::optor,
+            sum::operation,
+            sum::optor,
+            ineq::operation,
+            ineq::optor,
+            eq::operation,
+            eq::optor,
+            conj::operation,
+            conj::optor,
+            disj::operation,
+            disj::optor,
             atomic,
             funcall_operator,
             object_access,
@@ -703,19 +669,16 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return map;
     }
 
-    else if (node.type == "Grammar::sum" || node.type == "Grammar::product" ||
-             node.type == "Grammar::ineq" || node.type == "Grammar::eq" ||
-             node.type == "Grammar::conj" || node.type == "Grammar::disj")
+    else if (node.type.substr(0, 14) == "Grammar::binop")
     {
         if (node.children.size() == 1)
             return normalize(*node.children[0]);
-        auto it = node.children.begin();
-        auto opseq = std::make_unique<OpSeq>(source(node), normalize(**it++));
-        while (it != node.children.end()) {
-            auto op = operator_from_string((*it++)->string());
-            opseq->append(op, normalize(**it++));
-        }
-        return opseq;
+        return std::make_unique<BinOp>(
+            source(node),
+            normalize(*node.children[0]),
+            normalize(*node.children[2]),
+            operator_from_string(node.children[1]->string())
+        );
     }
 
     else if (node.type == "Grammar::block") {
