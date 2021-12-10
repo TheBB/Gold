@@ -280,6 +280,15 @@ Object Object::operator[](std::string index) const {
 }
 
 
+Object::operator bool() const {
+    return std::visit(overloaded {
+        [](Null x) { return false; },
+        [](Boolean x) { return x; },
+        [](auto&&) { return true; }
+    }, _data);
+}
+
+
 size_t Object::size() const {
     return std::visit(overloaded {
         [](List x) { return x->size(); },

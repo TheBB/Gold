@@ -23,7 +23,9 @@ enum class Operator {
     greater_than,
     greater_than_or_eq,
     equal,
-    not_equal
+    not_equal,
+    conjunction,
+    disjunction
 };
 
 

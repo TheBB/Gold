@@ -29,6 +29,8 @@ static std::string operator_to_string(Operator op) {
     case Operator::greater_than_or_eq: return ">=";
     case Operator::equal: return "==";
     case Operator::not_equal: return "!=";
+    case Operator::conjunction: return "and";
+    case Operator::disjunction: return "or";
     }
     return "?";
 }
@@ -45,7 +47,9 @@ static Operator operator_from_string(std::string value) {
     if (value == ">") return Operator::greater_than;
     if (value == ">=") return Operator::greater_than_or_eq;
     if (value == "==") return Operator::equal;
-    return Operator::not_equal;
+    if (value == "!=") return Operator::not_equal;
+    if (value == "and") return Operator::conjunction;
+    return Operator::disjunction;
 }
 
 
@@ -166,7 +170,17 @@ Object OpSeq::evaluate(EvaluationContext& ctx) const {
 
     try {
         for (auto& [op, operand] : sequence) {
+            if (op == Operator::conjunction) {
+                value = (bool)value ? operand->evaluate(ctx) : value;
+                break;
+            }
+            else if (op == Operator::disjunction) {
+                value = (bool)value ? value : operand->evaluate(ctx);
+                break;
+            }
+
             auto rhs = operand->evaluate(ctx);
+
             switch (op) {
             case Operator::plus: value = value + rhs; break;
             case Operator::minus: value = value - rhs; break;
@@ -179,6 +193,7 @@ Object OpSeq::evaluate(EvaluationContext& ctx) const {
             case Operator::greater_than_or_eq: value = value >= rhs; break;
             case Operator::equal: value = value == rhs; break;
             case Operator::not_equal: value = value != rhs; break;
+            default: break;
             }
         }
     }
@@ -372,7 +387,8 @@ namespace Grammar
             p::string<'e','l','s','e'>,
             p::string<'t','r','u','e'>,
             p::string<'f','a','l','s','e'>,
-            p::string<'n','u','l','l'>
+            p::string<'n','u','l','l'>,
+            p::string<'a','n','d'>
         >,
         p::not_at<identifier_char>
     > {};
@@ -552,8 +568,18 @@ namespace Grammar
         p::opt<p::seq<p::pad<eq_operator, whitespace>, p::pad<eq_operand, whitespace>>>
     > {};
 
+    // Precedence level: conjunction
+    struct conj_operand: p::seq<eq> {};
+    struct conj_operator: p::string<'a','n','d'> {};
+    struct conj: p::list<conj_operand, conj_operator, whitespace> {};
+
+    // Precedence level: disjunction
+    struct disj_operand: p::seq<conj> {};
+    struct disj_operator: p::string<'o','r'> {};
+    struct disj: p::list<disj_operand, disj_operator, whitespace> {};
+
     // Finalize
-    struct expression: p::seq<p::sor<eq, composite>> {};
+    struct expression: p::seq<p::sor<disj, composite>> {};
     struct file: p::seq<p::bof, block, p::pad<p::eof, whitespace>> {};
 
     template<typename Rule>
@@ -585,6 +611,10 @@ namespace Grammar
             ineq_operator,
             eq,
             eq_operator,
+            conj_operator,
+            conj,
+            disj_operator,
+            disj,
             atomic,
             funcall_operator,
             object_access,
@@ -674,7 +704,9 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     }
 
     else if (node.type == "Grammar::sum" || node.type == "Grammar::product" ||
-             node.type == "Grammar::ineq" || node.type == "Grammar::eq") {
+             node.type == "Grammar::ineq" || node.type == "Grammar::eq" ||
+             node.type == "Grammar::conj" || node.type == "Grammar::disj")
+    {
         if (node.children.size() == 1)
             return normalize(*node.children[0]);
         auto it = node.children.begin();

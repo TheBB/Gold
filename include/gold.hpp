@@ -144,10 +144,7 @@ public:
     Object operator[](intmax_t) const;
     Object operator[](std::string) const;
 
-    explicit operator bool() const {
-        if (is_null()) return false;
-        return unsafe_boolean();
-    }
+    explicit operator bool() const;
 
     // More convenient access
     size_t size() const;

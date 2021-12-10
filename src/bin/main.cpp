@@ -13,7 +13,7 @@ template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 int main(int argc, char **argv) {
-    // std::string code("1 < 2");
+    // std::string code("true and true");
     // debug_parse(code, false);
     // debug_parse_tree(code, false);
 
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     // }, a, b);
 
     try {
-        std::string code("{a: 1} == {a: 1.0, a: 1}");
+        std::string code("true or true");
         auto value = evaluate_string(code);
         std::cout << value << std::endl;
     }
