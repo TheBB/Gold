@@ -91,7 +91,7 @@ public:
     static Object null() { return Object(); }
     static Object integer(Integer value) { return Object(value); }
     static Object string(const String& value) { return Object(value); }
-    static Object boolean(Boolean value) { return Object(value); }
+    static Object boolean(Boolean value) { return Object(value ? true : false); }
     static Object floating(Floating value) { return Object(value); }
 
     static Object map(Map value) { return Object(value); }
@@ -135,12 +135,19 @@ public:
     Object operator<=(Object) const;
     Object operator>(Object) const;
     Object operator>=(Object) const;
+    Object operator==(Object) const;
+    Object operator!=(Object) const;
 
     Object operator()(EvaluationContext&, const std::vector<Object>&) const;
 
     Object operator[](Object) const;
     Object operator[](intmax_t) const;
     Object operator[](std::string) const;
+
+    explicit operator bool() const {
+        if (is_null()) return false;
+        return unsafe_boolean();
+    }
 
     // More convenient access
     size_t size() const;

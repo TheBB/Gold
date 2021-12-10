@@ -27,6 +27,8 @@ static std::string operator_to_string(Operator op) {
     case Operator::less_than_or_eq: return "<=";
     case Operator::greater_than: return ">";
     case Operator::greater_than_or_eq: return ">=";
+    case Operator::equal: return "==";
+    case Operator::not_equal: return "!=";
     }
     return "?";
 }
@@ -37,11 +39,13 @@ static Operator operator_from_string(std::string value) {
     if (value == "-") return Operator::minus;
     if (value == "*") return Operator::multiply;
     if (value == "/") return Operator::divide;
+    if (value == "//") return Operator::integer_divide;
     if (value == "<") return Operator::less_than;
     if (value == "<=") return Operator::less_than_or_eq;
     if (value == ">") return Operator::greater_than;
     if (value == ">=") return Operator::greater_than_or_eq;
-    return Operator::integer_divide;
+    if (value == "==") return Operator::equal;
+    return Operator::not_equal;
 }
 
 
@@ -173,6 +177,8 @@ Object OpSeq::evaluate(EvaluationContext& ctx) const {
             case Operator::less_than_or_eq: value = value <= rhs; break;
             case Operator::greater_than: value = value > rhs; break;
             case Operator::greater_than_or_eq: value = value >= rhs; break;
+            case Operator::equal: value = value == rhs; break;
+            case Operator::not_equal: value = value != rhs; break;
             }
         }
     }
@@ -538,7 +544,16 @@ namespace Grammar
         p::opt<p::seq<p::pad<ineq_operator, whitespace>, p::pad<ineq_operand, whitespace>>>
     > {};
 
-    struct expression: p::seq<p::sor<ineq, composite>> {};
+    // Precedence level: equality
+    struct eq_operand: p::seq<ineq> {};
+    struct eq_operator: p::sor<p::string<'=','='>, p::string<'!','='>> {};
+    struct eq: p::seq<
+        eq_operand,
+        p::opt<p::seq<p::pad<eq_operator, whitespace>, p::pad<eq_operand, whitespace>>>
+    > {};
+
+    // Finalize
+    struct expression: p::seq<p::sor<eq, composite>> {};
     struct file: p::seq<p::bof, block, p::pad<p::eof, whitespace>> {};
 
     template<typename Rule>
@@ -568,6 +583,8 @@ namespace Grammar
             product_operator,
             ineq,
             ineq_operator,
+            eq,
+            eq_operator,
             atomic,
             funcall_operator,
             object_access,
@@ -658,7 +675,8 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return map;
     }
 
-    else if (node.type == "Grammar::sum" || node.type == "Grammar::product" || node.type == "Grammar::ineq") {
+    else if (node.type == "Grammar::sum" || node.type == "Grammar::product" ||
+             node.type == "Grammar::ineq" || node.type == "Grammar::eq") {
         if (node.children.size() == 1)
             return normalize(*node.children[0]);
         auto it = node.children.begin();

@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     // }, a, b);
 
     try {
-        std::string code("1 <= 1");
+        std::string code("{a: 1} == {a: 1.0, a: 1}");
         auto value = evaluate_string(code);
         std::cout << value << std::endl;
     }

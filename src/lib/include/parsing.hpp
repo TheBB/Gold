@@ -21,7 +21,9 @@ enum class Operator {
     less_than,
     less_than_or_eq,
     greater_than,
-    greater_than_or_eq
+    greater_than_or_eq,
+    equal,
+    not_equal
 };
 
 

@@ -193,6 +193,27 @@ Object Object::operator>=(Object other) const {
 }
 
 
+Object Object::operator==(Object other) const {
+    return Object::boolean(std::visit(overloaded {
+        [](Integer a, Integer b) { return a == b; },
+        [](Floating a, Integer b) { return a == b; },
+        [](Integer a, Floating b) { return a == b; },
+        [](Floating a, Floating b) { return a == b; },
+        [](String a, String b) { return a == b; },
+        [](Boolean a, Boolean b) { return a == b; },
+        [](Null, Null) { return true; },
+        [](Map a, Map b) { return *a == *b; },
+        [](List a, List b) { return *a == *b; },
+        [](auto&&, auto&&) { return false; }
+    }, _data, other._data));
+}
+
+
+Object Object::operator!=(Object other) const {
+    return Object::boolean(!(bool)(*this == other));
+}
+
+
 Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& args) const {
     if (type() != Type::closure)
         throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));
