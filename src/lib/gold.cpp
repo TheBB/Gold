@@ -22,7 +22,8 @@ std::string Object::type_name() const {
         [](Floating) { return "floating"; },
         [](Map) { return "map"; },
         [](List) { return "list"; },
-        [](Closure) { return "closure"; }
+        [](Closure) { return "function"; },
+        [](Builtin) { return "function"; }
     }, _data);
 }
 
@@ -36,7 +37,8 @@ Object::Type Object::type() const {
         [](Floating) { return Type::floating; },
         [](Map) { return Type::map; },
         [](List) { return Type::list; },
-        [](Closure) { return Type::closure; }
+        [](Closure) { return Type::closure; },
+        [](Builtin) { return Type::builtin; }
     }, _data);
 }
 
@@ -215,9 +217,11 @@ Object Object::operator!=(Object other) const {
 
 
 Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& args) const {
+    if (type() == Type::builtin)
+        return std::get<Builtin>(_data).callable(args);
     if (type() != Type::closure)
         throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));
-    auto closure = unsafe_closure();
+    auto closure = std::get<Closure>(_data);
 
     if (args.size() != closure->parameters.size())
         throw EvalException(fmt::format(
@@ -314,6 +318,7 @@ void Object::dump(std::ostream& os) const {
         [&os](Floating x) { os << fmt::format("{}", x); },
         [&os](Null) { os << "null"; },
         [&os](Closure) { os << "<closure>"; },
+        [&os](Builtin) { os << "<builtin>"; },
         [&os](List x) {
             os << "[";
             bool first = true;
@@ -384,3 +389,13 @@ Object EvaluationContext::finalize_object() {
     objects.pop_back();
     return retval;
 }
+
+
+static Object builtin_hi(const std::vector<Object>& args) {
+    return Object::boolean(true);
+}
+
+
+Namespace Gold::builtins = {
+    {"hi", Object(Object::Builtin { "hi", builtin_hi })}
+};

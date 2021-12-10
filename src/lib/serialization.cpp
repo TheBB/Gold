@@ -76,17 +76,23 @@ void Object::serialize(std::ostream& os) const {
         for (auto& value : *unsafe_list())
             value.serialize(os);
         break;
-    case Type::closure:
+    case Type::closure: {
+        auto closure = std::get<Closure>(_data);
         os << 'C';
-        write(os, unsafe_closure()->nonlocals.size());
-        for (auto& [key, value] : unsafe_closure()->nonlocals) {
+        write(os, closure->nonlocals.size());
+        for (auto& [key, value] : closure->nonlocals) {
             write_str(os, key);
             value.serialize(os);
         }
-        write(os, unsafe_closure()->parameters.size());
-        for (auto& p : unsafe_closure()->parameters)
+        write(os, closure->parameters.size());
+        for (auto& p : closure->parameters)
             write_str(os, p);
-        unsafe_closure()->expression->serialize(os);
+        closure->expression->serialize(os);
+        break;
+    }
+    case Type::builtin:
+        os << 'U';
+        write_str(os, std::get<Builtin>(_data).name);
         break;
     }
 }
@@ -148,7 +154,7 @@ Object Object::deserialize(std::istream& is) {
     }
     }
 
-    throw std::exception();
+    throw InternalException();
 }
 
 
@@ -342,6 +348,6 @@ std::unique_ptr<AstNode> AstNode::deserialize(std::istream& is) {
         return std::make_unique<Index>(source, std::move(container), std::move(index));
     }
     default:
-        throw std::exception();
+        throw InternalException();
     }
 }

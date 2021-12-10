@@ -15,7 +15,14 @@ namespace Gold {
 
 class EvaluationContext;
 class Object;
-class Namespace : public std::map<std::string, Object> {};
+class Namespace : public std::map<std::string, Object> {
+public:
+    Namespace() : std::map<std::string, Object>() {}
+    Namespace(std::initializer_list<value_type> list) : std::map<std::string, Object>(list) {}
+};
+
+
+extern Namespace builtins;
 
 
 struct Source {
@@ -51,7 +58,7 @@ public:
 
 class Object {
 public:
-    enum class Type { integer, string, null, boolean, floating, map, list, closure };
+    enum class Type { integer, string, null, boolean, floating, map, list, closure, builtin };
 
     using Null = std::monostate;
 
@@ -72,8 +79,13 @@ public:
     };
     using Closure = std::shared_ptr<ClosureT>;
 
+    using Builtin = struct {
+        std::string name;
+        std::function<Object(const std::vector<Object>&)> callable;
+    };
+
 private:
-    std::variant<Null, Integer, String, Boolean, Floating, Map, List, Closure> _data;
+    std::variant<Null, Integer, String, Boolean, Floating, Map, List, Closure, Builtin> _data;
 
 public:
     // Raw constructors
@@ -85,7 +97,8 @@ public:
     explicit Object(Floating value) : _data(value) {}
     explicit Object(const Map& value) : _data(value) {}
     explicit Object(const List& value) : _data(value) {}
-    explicit Object(Closure eval) : _data(eval) {}
+    explicit Object(Closure value) : _data(value) {}
+    explicit Object(Builtin value) : _data(value) {}
 
     // Explicit constructors
     static Object null() { return Object(); }
@@ -103,6 +116,7 @@ public:
     static Object list(ListT& value) { return Object(std::make_shared<ListT>(value)); }
 
     static Object closure(Closure value) { return Object(value); }
+    static Object builtin(Builtin value) { return Object(value); }
 
     static Object deserialize(std::string);
     static Object deserialize(std::istream&);
@@ -119,7 +133,6 @@ public:
     Floating unsafe_floating() const { return std::get<Floating>(_data); }
     const Map& unsafe_map() const { return std::get<Map>(_data); }
     const List& unsafe_list() const { return std::get<List>(_data); }
-    const Closure& unsafe_closure() const { return std::get<Closure>(_data); }
 
     // Serialization
     std::string serialize() const;
@@ -176,6 +189,8 @@ private:
     std::list<Namespace> namespaces;
     std::vector<Namespace> objects;
 public:
+    EvaluationContext() { push_namespace(builtins); }
+
     Object lookup(const std::string& key);
     Object lookup_object(const std::string& key, int index);
     void assign(const std::string& key, Object value);
