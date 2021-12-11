@@ -13,6 +13,7 @@ target_include_directories(gold INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/bin)
 target_link_libraries(gold-to-json gold)
 target_include_directories(gold-to-json PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/lib/include)
+target_include_directories(gold-to-json PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/tests)
 target_link_libraries(gold-test PRIVATE gold)
