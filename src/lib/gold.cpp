@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cinttypes>
 #include <iterator>
 #include <iostream>
 
@@ -218,7 +219,7 @@ Object Object::operator!=(Object other) const {
 
 Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& args) const {
     if (type() == Type::builtin)
-        return std::get<Builtin>(_data).callable(args);
+        return std::get<Builtin>(_data).callable(ctx, args);
     if (type() != Type::closure)
         throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));
     auto closure = std::get<Closure>(_data);
@@ -391,11 +392,103 @@ Object EvaluationContext::finalize_object() {
 }
 
 
-static Object builtin_hi(const std::vector<Object>& args) {
-    return Object::boolean(true);
+static Object builtin_int(EvaluationContext&, const std::vector<Object>& args) {
+    Object arg = args[0];
+    return std::visit(overloaded {
+        [&arg](Object::Integer x) { return arg; },
+        [](Object::Floating x) { return Object::integer((intmax_t)x); },
+        [](Object::Boolean x) { return Object::integer(x ? 1 : 0); },
+        [](Object::String x) {
+            return Object::integer(std::strtoimax(x.c_str(), nullptr, 10));
+        },
+        [&arg](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for `int()`: `{}`", arg.type_name()));
+        }
+    }, arg.data());
 }
 
 
+static Object builtin_bool(EvaluationContext&, const std::vector<Object>& args) {
+    Object arg = args[0];
+    return std::visit(overloaded {
+        [](Object::Integer x) { return Object::boolean(x != 0 ? true : false); },
+        [](Object::Floating x) { return Object::boolean(x != 0 ? true : false); },
+        [&arg](Object::Boolean x) { return arg; },
+        [](Object::Null) { return Object::boolean(false); },
+        [](auto&&) { return Object::boolean(true); }
+    }, arg.data());
+}
+
+
+static Object builtin_str(EvaluationContext&, const std::vector<Object>& args) {
+    Object arg = args[0];
+    return std::visit(overloaded {
+        [](Object::Integer x) { return Object::string(fmt::format("{}", x)); },
+        [](Object::Floating x) { return Object::string(fmt::format("{}", x)); },
+        [](Object::Boolean x) { return Object::string(x ? "true" : "false"); },
+        [](Object::Null) { return Object::string("null"); },
+        [&arg](Object::String) { return arg; },
+        [&arg](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for `str()`: `{}`", arg.type_name()));
+        }
+    }, arg.data());
+}
+
+
+static Object builtin_float(EvaluationContext&, const std::vector<Object>& args) {
+    Object arg = args[0];
+    return std::visit(overloaded {
+        [](Object::Integer x) { return Object::floating((double)x); },
+        [&arg](Object::Floating x) { return arg; },
+        [](Object::Boolean x) { return Object::floating(x ? 1.0 : 0.0); },
+        [](Object::String x) { return Object::floating(std::stod(x)); },
+        [&arg](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for `float()`: `{}`", arg.type_name()));
+        }
+    }, arg.data());
+}
+
+
+static Object builtin_len(EvaluationContext&, const std::vector<Object>& args) {
+    Object arg = args[0];
+    return std::visit(overloaded {
+        [](Object::List x) { return Object::integer(x->size()); },
+        [](Object::Map x) { return Object::integer(x->size()); },
+        [&arg](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for `size()`: `{}`", arg.type_name()));
+        }
+    }, arg.data());
+}
+
+
+static Object builtin_map(EvaluationContext& ctx, const std::vector<Object>& args) {
+    Object func = args[0];
+    Object sequence = args[1];
+    return std::visit(overloaded {
+        [&func, &ctx](Object::List x) {
+            auto result = std::make_shared<Object::ListT>();
+            result->resize(x->size());
+            std::transform(
+                x->begin(), x->end(), result->begin(),
+                [&func, &ctx](Object x) { return func(ctx, {x}); }
+            );
+            return Object::list(result);
+        },
+        [&sequence](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for `map()`: `{}`", sequence.type_name()));
+        }
+    }, sequence.data());
+}
+
+
+#define BUILTIN(x,y) { x, Object(Object::Builtin { x, y })}
+
+
 Namespace Gold::builtins = {
-    {"hi", Object(Object::Builtin { "hi", builtin_hi })}
+    BUILTIN("int", builtin_int),
+    BUILTIN("bool", builtin_bool),
+    BUILTIN("str", builtin_str),
+    BUILTIN("float", builtin_float),
+    BUILTIN("len", builtin_len),
+    BUILTIN("map", builtin_map),
 };

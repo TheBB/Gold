@@ -152,6 +152,8 @@ Object Object::deserialize(std::istream& is) {
         closure->expression = AstNode::deserialize(is);
         return Object::closure(closure);
     }
+    case 'U':
+        return builtins[read_str(is)];
     }
 
     throw InternalException();

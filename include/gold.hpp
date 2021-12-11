@@ -81,11 +81,13 @@ public:
 
     using Builtin = struct {
         std::string name;
-        std::function<Object(const std::vector<Object>&)> callable;
+        std::function<Object(EvaluationContext& ctx, const std::vector<Object>&)> callable;
     };
 
+    using Variant = std::variant<Null, Integer, String, Boolean, Floating, Map, List, Closure, Builtin>;
+
 private:
-    std::variant<Null, Integer, String, Boolean, Floating, Map, List, Closure, Builtin> _data;
+     Variant _data;
 
 public:
     // Raw constructors
@@ -133,6 +135,8 @@ public:
     Floating unsafe_floating() const { return std::get<Floating>(_data); }
     const Map& unsafe_map() const { return std::get<Map>(_data); }
     const List& unsafe_list() const { return std::get<List>(_data); }
+
+    const Variant& data() const { return _data; }
 
     // Serialization
     std::string serialize() const;
