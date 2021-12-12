@@ -55,11 +55,15 @@ public:
 
 
 class List : public AstNode {
+    using Entry = struct {
+        std::unique_ptr<AstNode> node;
+        bool splat;
+    };
 private:
-    std::vector<std::unique_ptr<AstNode>> elements;
+    std::vector<Entry> elements;
 public:
     List(Source source) : AstNode(source) {}
-    void append(std::unique_ptr<AstNode> node) { elements.push_back(std::move(node)); }
+    void append(std::unique_ptr<AstNode> node, bool splat) { elements.push_back({std::move(node), splat}); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -68,12 +72,17 @@ public:
 
 
 class Map : public AstNode {
+    using Entry = struct {
+        std::string key;
+        std::unique_ptr<AstNode> node;
+        bool splat;
+    };
 private:
-    std::vector<std::pair<std::string, std::unique_ptr<AstNode>>> entries;
+    std::vector<Entry> entries;
 public:
     Map(Source source) : AstNode(source) {}
-    void append(std::string key, std::unique_ptr<AstNode> value) {
-        entries.push_back(std::pair(key, std::move(value)));
+    void append(std::string key, std::unique_ptr<AstNode> value, bool splat) {
+        entries.push_back({key, std::move(value), splat});
     }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;

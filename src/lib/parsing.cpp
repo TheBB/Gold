@@ -99,10 +99,13 @@ Object Identifier::evaluate(EvaluationContext& ctx) const {
 void List::dump(std::ostream& os) const {
     os << "List(";
     bool first = true;
-    for (auto& obj : elements) {
+    for (auto& entry : elements) {
         if (!first)
             os << ", ";
-        os << *obj;
+        if (entry.splat)
+            os << "Splat(" << *entry.node << ")";
+        else
+            os << *entry.node;
         first = false;
     }
     os << ")";
@@ -110,15 +113,24 @@ void List::dump(std::ostream& os) const {
 
 
 void List::free_identifiers(std::set<std::string>& idents) const {
-    for (auto& obj : elements)
-        obj->free_identifiers(idents);
+    for (auto& entry : elements)
+        entry.node->free_identifiers(idents);
 }
 
 
 Object List::evaluate(EvaluationContext& ctx) const {
     std::vector<Object> objs;
-    for (auto& element : elements)
-        objs.push_back(element->evaluate(ctx));
+    for (auto& entry : elements) {
+        auto val = entry.node->evaluate(ctx);
+        if (entry.splat) {
+            if (val.type() != Object::Type::list)
+                throw EvalException(entry.node->source(), fmt::format("unable to splat non-list: `{}`", val.type_name()));
+            auto& list = val.unsafe_list();
+            std::copy(list->begin(), list->end(), std::back_inserter(objs));
+        }
+        else
+            objs.push_back(entry.node->evaluate(ctx));
+    }
     return Object::list(std::move(objs));
 }
 
@@ -126,10 +138,13 @@ Object List::evaluate(EvaluationContext& ctx) const {
 void Map::dump(std::ostream& os) const {
     os << "Map(";
     bool first = true;
-    for (auto& [key, value] : entries) {
+    for (auto& entry : entries) {
         if (!first)
             os << ", ";
-        os << "Entry(" << key << ", " << *value << ")";
+        if (entry.splat)
+            os << "Splat(" << *entry.node << ")";
+        else
+            os << "Entry(" << entry.key << ", " << *entry.node << ")";
         first = false;
     }
     os << ")";
@@ -138,14 +153,24 @@ void Map::dump(std::ostream& os) const {
 
 void Map::free_identifiers(std::set<std::string>& idents) const {
     for (auto& obj : entries)
-        obj.second->free_identifiers(idents);
+        obj.node->free_identifiers(idents);
 }
 
 
 Object Map::evaluate(EvaluationContext& ctx) const {
     ctx.push_object();
-    for (auto& [key, value] : entries)
-        ctx.assign_object(key, value->evaluate(ctx));
+    for (auto& entry : entries) {
+        auto value = entry.node->evaluate(ctx);
+        if (entry.splat) {
+            if (value.type() != Object::Type::map)
+                throw EvalException(entry.node->source(), fmt::format("unable to splat non-map: `{}`", value.type_name()));
+            auto& map = value.unsafe_map();
+            for (auto& [key, val] : *map)
+                ctx.assign_object(key, val);
+        }
+        else
+            ctx.assign_object(entry.key, value);
+    }
     return ctx.finalize_object();
 }
 
@@ -423,9 +448,11 @@ namespace Grammar
     struct boolean: p::sor<p::string<'t','r','u','e'>, p::string<'f','a','l','s','e'>> {};
 
     // Lists
+    struct splatted_atomic;
+    struct list_element: p::sor<splatted_atomic, expression> {};
     struct list: p::opt<p::seq<
         p::star<whitespace>,
-        p::list<expression, p::one<','>, whitespace>,
+        p::list<list_element, p::one<','>, whitespace>,
         p::opt<p::pad<p::one<','>, whitespace>>
     >> {};
     struct bracketed_list: p::seq<p::one<'['>, list, p::pad<p::one<']'>, whitespace>> {};
@@ -437,9 +464,10 @@ namespace Grammar
         p::pad<p::one<':'>, whitespace>,
         expression
     > {};
+    struct map_element: p::sor<splatted_atomic, map_entry> {};
     struct map: p::opt<p::seq<
         p::star<whitespace>,
-        p::list<map_entry, p::one<','>, whitespace>,
+        p::list<map_element, p::one<','>, whitespace>,
         p::opt<p::pad<p::one<','>, whitespace>>
     >> {};
     struct bracketed_map: p::seq<p::one<'{'>, map, p::pad<p::one<'}'>, whitespace>> {};
@@ -521,6 +549,9 @@ namespace Grammar
     > {};
     struct atomic: p::seq<pure_atomic, p::star<p::pad<postfix, whitespace>>> {};
 
+    struct splat: p::string<'.','.','.'> {};
+    struct splatted_atomic: p::seq<atomic, p::pad<splat, whitespace>> {};
+
     // Composite expressions (can't have postfix operators)
     struct composite: p::sor<
         atomic,
@@ -561,6 +592,7 @@ namespace Grammar
             nullp,
             boolean,
             list,
+            splatted_atomic,
             map_identifier,
             map_entry,
             block,
@@ -704,7 +736,10 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     else if (node.type == "Grammar::list") {
         auto list = std::make_unique<List>(source(node));
         for (auto&& c : node.children) {
-            list->append(normalize(*c));
+            if (c->type == "Grammar::splatted_atomic")
+                list->append(normalize(*c->children[0]), true);
+            else
+                list->append(normalize(*c), false);
         }
         return list;
     }
@@ -712,9 +747,15 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     else if (node.type == "Grammar::map") {
         auto map = std::make_unique<Map>(source(node));
         for (auto&& c : node.children) {
-            auto key = c->children[0]->string();
-            auto value = normalize(*c->children[1]);
-            map->append(key, std::move(value));
+            if (c->type == "Grammar::splatted_atomic") {
+                auto value = normalize(*c->children[0]);
+                map->append("", std::move(value), true);
+            }
+            else {
+                auto key = c->children[0]->string();
+                auto value = normalize(*c->children[1]);
+                map->append(key, std::move(value), false);
+            }
         }
         return map;
     }
@@ -791,6 +832,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return value;
     }
 
+    std::cout << node.type << std::endl;
     throw ParseException();
 }
 

@@ -53,7 +53,8 @@ void Object::serialize(std::ostream& os) const {
         write_str(os, unsafe_string());
         break;
     case Type::boolean:
-        os << 'B' << (unsafe_boolean() ? '1' : '0');
+        os << 'B';
+        write(os, unsafe_boolean());
         break;
     case Type::floating:
         os << 'F';
@@ -112,11 +113,8 @@ Object Object::deserialize(std::istream& is) {
         return Object::integer(read<Integer>(is));
     case 'S':
         return Object::string(read_str(is));
-    case 'B': {
-        char val;
-        is >> val;
-        return Object::boolean(val == '1' ? true : false);
-    }
+    case 'B':
+        return Object::boolean(read<bool>(is));
     case 'F':
         return Object::floating(read<double>(is));
     case 'N':
@@ -200,8 +198,10 @@ void List::serialize(std::ostream& os) const {
     os << 'L';
     source().serialize(os);
     write(os, elements.size());
-    for (auto& value : elements)
-        value->serialize(os);
+    for (auto& entry : elements) {
+        entry.node->serialize(os);
+        write(os, entry.splat);
+    }
 }
 
 
@@ -209,9 +209,10 @@ void Map::serialize(std::ostream& os) const {
     os << 'M';
     source().serialize(os);
     write(os, entries.size());
-    for (auto& [key, value] : entries) {
-        write_str(os, key);
-        value->serialize(os);
+    for (auto& entry : entries) {
+        write_str(os, entry.key);
+        entry.node->serialize(os);
+        write(os, entry.splat);
     }
 }
 
@@ -292,8 +293,11 @@ std::unique_ptr<AstNode> AstNode::deserialize(std::istream& is) {
     case 'L': {
         auto list = std::make_unique<List>(source);
         auto size = read<size_t>(is);
-        for (size_t i = 0; i < size; i++)
-            list->append(AstNode::deserialize(is));
+        for (size_t i = 0; i < size; i++) {
+            auto node = AstNode::deserialize(is);
+            auto splat = read<bool>(is);
+            list->append(std::move(node), splat);
+        }
         return list;
     }
     case 'M': {
@@ -302,7 +306,8 @@ std::unique_ptr<AstNode> AstNode::deserialize(std::istream& is) {
         for (size_t i = 0; i < size; i++) {
             auto key = read_str(is);
             auto value = AstNode::deserialize(is);
-            map->append(key, std::move(value));
+            auto splat = read<bool>(is);
+            map->append(key, std::move(value), splat);
         }
         return map;
     }
