@@ -405,8 +405,11 @@ namespace Grammar
     struct number: p::sor<floating, integer> {};
 
     // Strings
-    // struct escaped_unicode: p::seq<p::one<'u'>, p::rep<4, p::xdigit>> {};
-    struct escaped_char: p::one<'\\', '"'> {};
+    struct escaped_unicode: p::seq<p::one<'u'>, p::rep<4, p::xdigit>> {};
+    struct escaped_char: p::sor<
+        p::one<'\\', '"', 'b', 'f', 'n', 'r', 't'>,
+        escaped_unicode
+    > {};
     struct escaped: p::sor<escaped_char> {};
     struct unescaped: p::utf8::range<0x20, 0x10ffff> {};
     struct character: p::if_then_else<p::one<'\\'>, escaped, unescaped> {};
@@ -597,6 +600,41 @@ static Source source(p::parse_tree::node& node) {
 }
 
 
+static std::string codepoint_as_string(const char* it, int nchars) {
+    uint16_t codepoint = 0;
+    for (int i = 0; i < nchars; i++) {
+        codepoint *= 16;
+        char s = it[i + 1];
+        if ('A' <= s && s <= 'F')
+            codepoint += s - 'A' + 10;
+        else if ('a' <= s && s <= 'f')
+            codepoint += s - 'a' + 10;
+        else
+            codepoint += s - '0';
+    }
+
+    std::cout << codepoint << std::endl;
+
+    if (codepoint < 128) {
+        char a = codepoint & 0b0111'1111;
+        return std::string{a};
+    }
+    else if (codepoint < 2048) {
+        char a = ((codepoint & 0b0000'0111'1100'0000) >> 6) | 0b1100'0000;
+        char b = ((codepoint & 0b0000'0000'0011'1111) >> 0) | 0b1000'0000;
+        return std::string{a,b};
+    }
+    else {
+        char a = ((codepoint & 0b1111'0000'0000'0000) >> 12) | 0b1110'0000;
+        char b = ((codepoint & 0b0000'1111'1100'0000) >>  6) | 0b1000'0000;
+        char c = ((codepoint & 0b0000'0000'0011'1111) >>  0) | 0b1000'0000;
+        return std::string{a,b,c};
+    }
+
+    return "";
+}
+
+
 static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     if (node.is_root()) {
         if (node.children.size() != 1)
@@ -634,7 +672,19 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         for (auto it = data.begin(); it != data.end(); it++) {
             if (*it == '\\') {
                 it++;
-                builder << *it;
+                switch (*it) {
+                case 'u': {
+                    builder << codepoint_as_string(it, 4);
+                    it += 4;
+                    break;
+                }
+                case 'b': builder << '\b'; break;
+                case 'f': builder << '\f'; break;
+                case 'n': builder << '\n'; break;
+                case 'r': builder << '\r'; break;
+                case 't': builder << '\t'; break;
+                default: builder << *it; break;
+                }
             }
             else
                 builder << *it;
