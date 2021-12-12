@@ -97,10 +97,10 @@ TEST_CASE("Parse strings", "[parsing]") {
     REQUIRE(ast->dump() == "Lit(\"dingbob\")");
 
     ast = parse_string("\"ding\\\\bob\"");
-    REQUIRE(ast->dump() == "Lit(\"ding\\bob\")");
+    REQUIRE(ast->dump() == "Lit(\"ding\\\\bob\")");
 
     ast = parse_string("\"ding\\\"bob\"");
-    REQUIRE(ast->dump() == "Lit(\"ding\"bob\")");
+    REQUIRE(ast->dump() == "Lit(\"ding\\\"bob\")");
 }
 
 

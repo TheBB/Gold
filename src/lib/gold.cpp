@@ -314,7 +314,22 @@ std::ostream& operator<<(std::ostream& os, const Object& obj) {
 void Object::dump(std::ostream& os) const {
     std::visit(overloaded {
         [&os](Integer x) { os << x; },
-        [&os](String x) { os << '"' << x << '"'; },
+        [&os](String x) {
+            os << '"';
+            for (char c : x) {
+                switch (c) {
+                case '\b': os << "\\b"; break;
+                case '\f': os << "\\f"; break;
+                case '\n': os << "\\n"; break;
+                case '\r': os << "\\r"; break;
+                case '\t': os << "\\t"; break;
+                case '"': os << "\\\""; break;
+                case '\\': os << "\\\\"; break;
+                default: os << c;
+                }
+            }
+            os << '"';
+        },
         [&os](Boolean x) { os << (x ? "true" : "false"); },
         [&os](Floating x) { os << fmt::format("{}", x); },
         [&os](Null) { os << "null"; },
