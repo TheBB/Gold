@@ -89,120 +89,120 @@ TEST_CASE("Serialization of lists", "[serialization]") {
 
 
 TEST_CASE("Serialization of AST literals", "[serialization]") {
-    auto ast = parse("1");
+    auto ast = parse_string("1");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("true");
+    ast = parse_string("true");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("false");
+    ast = parse_string("false");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("-1.23");
+    ast = parse_string("-1.23");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("\"dingbob\"");
+    ast = parse_string("\"dingbob\"");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of AST identifiers", "[serialization]") {
-    auto ast = parse("dingbob");
+    auto ast = parse_string("dingbob");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("ift");
+    ast = parse_string("ift");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of list ASTs", "[serialization]") {
-    auto ast = parse("[]");
+    auto ast = parse_string("[]");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("[true]");
+    ast = parse_string("[true]");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("[\"\"]");
+    ast = parse_string("[\"\"]");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("[1, false, -2.3, \"fable\", lel]");
+    ast = parse_string("[1, false, -2.3, \"fable\", lel]");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of map ASTs", "[serialization]") {
-    auto ast = parse("{}");
+    auto ast = parse_string("{}");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("{a: 1}");
+    ast = parse_string("{a: 1}");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("{che9: false}");
+    ast = parse_string("{che9: false}");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("{fable: \"fable\"}");
+    ast = parse_string("{fable: \"fable\"}");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: lel}");
+    ast = parse_string("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: lel}");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of opseq ASTs", "[serialization]") {
-    auto ast = parse("1 + 2");
+    auto ast = parse_string("1 + 2");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("1 / 2 + 3");
+    ast = parse_string("1 / 2 + 3");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("1 + 2 - 3 * 4 // 5 / 6");
+    ast = parse_string("1 + 2 - 3 * 4 // 5 / 6");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("1 * (2 + 3)");
+    ast = parse_string("1 * (2 + 3)");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of block ASTs", "[serialization]") {
-    auto ast = parse("{1}");
+    auto ast = parse_string("{1}");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("{let a = 1 let b = 2 a + b}");
+    ast = parse_string("{let a = 1 let b = 2 a + b}");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of function ASTs", "[serialization]") {
-    auto ast = parse("() => 1");
+    auto ast = parse_string("() => 1");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("(a) => {let b = a b}");
+    ast = parse_string("(a) => {let b = a b}");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of conditional ASTs", "[serialization]") {
-    auto ast = parse("if true then 1 else 2");
+    auto ast = parse_string("if true then 1 else 2");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of postfix operator ASTs", "[serialization]") {
-    auto ast = parse("func(1,2,3)");
+    auto ast = parse_string("func(1,2,3)");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("((x,y) => x+y)(1,2)");
+    ast = parse_string("((x,y) => x+y)(1,2)");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("abc.def");
+    ast = parse_string("abc.def");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("f(a).x");
+    ast = parse_string("f(a).x");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("f.x(a)");
+    ast = parse_string("f.x(a)");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse("dingbob[\"roflmao\"]");
+    ast = parse_string("dingbob[\"roflmao\"]");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }

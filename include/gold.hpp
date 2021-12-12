@@ -210,6 +210,7 @@ public:
 
 
 Object evaluate_string(std::string);
+Object evaluate_file(std::string);
 
 
 }

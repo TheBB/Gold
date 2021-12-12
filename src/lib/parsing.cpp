@@ -768,12 +768,12 @@ void Gold::debug_parse_tree(std::string input, bool as_expression) {
 }
 
 
-std::unique_ptr<AstNode> Gold::parse(std::string input, bool as_expression) {
-    p::string_input in(input, "x");
+template <typename I>
+static std::unique_ptr<AstNode> _parse(I& input, bool as_expression) {
     try {
         auto tree = as_expression ?
-            p::parse_tree::parse<Grammar::expression, Grammar::selector>(in) :
-            p::parse_tree::parse<Grammar::file, Grammar::selector>(in);
+            p::parse_tree::parse<Grammar::expression, Grammar::selector>(input) :
+            p::parse_tree::parse<Grammar::file, Grammar::selector>(input);
         if (!tree)
             throw ParseException();
         return normalize(*tree);
@@ -784,8 +784,27 @@ std::unique_ptr<AstNode> Gold::parse(std::string input, bool as_expression) {
 }
 
 
+std::unique_ptr<AstNode> Gold::parse_string(std::string code, bool as_expression) {
+    p::string_input in(code, "code");
+    return _parse(in, as_expression);
+}
+
+
+std::unique_ptr<AstNode> Gold::parse_file(std::string path, bool as_expression) {
+    p::file_input in(path, "code");
+    return _parse(in, as_expression);
+}
+
+
 Object Gold::evaluate_string(std::string code) {
-    auto ast = parse(code, false);
+    auto ast = parse_string(code, false);
+    auto value = ast->evaluate();
+    return value;
+}
+
+
+Object Gold::evaluate_file(std::string path) {
+    auto ast = parse_file(path, false);
     auto value = ast->evaluate();
     return value;
 }

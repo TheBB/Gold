@@ -4,6 +4,7 @@
 
 #include <fmt/core.h>
 #include "json.hpp"
+#include "cxxopts.hpp"
 
 #include "gold.hpp"
 #include "parsing.hpp"
@@ -50,14 +51,39 @@ static json from_object(Object obj) {
 
 
 int main(int argc, char **argv) {
+    cxxopts::Options options("gold-to-json", "Convert Gold scripts to JSON");
+    options.add_options()
+        ("h,help", "show usage")
+        ("c,code", "code to evaluate", cxxopts::value<std::string>())
+        ("file", "path of file to evaluate", cxxopts::value<std::vector<std::string>>());
+    options.parse_positional({"file"});
+    options.positional_help("[FILE]");
+    auto result = options.parse(argc, argv);
+
+    if (result.count("help")) {
+        std::cout << options.help() << std::endl;
+        return 0;
+    }
+
+    if (!result.count("code") && !result.count("file")) {
+        std::cerr << "Missing path to file or code to evaluate" << std::endl;
+        return 1;
+    }
+    else if (result.count("file") > 1) {
+        std::cerr << "Too many arguments" << std::endl;
+        return 1;
+    }
+
     Object value;
     try {
-        std::string code(argv[1]);
-        value = evaluate_string(code);
+        if (result.count("code"))
+            value = evaluate_string(result["code"].as<std::string>());
+        else
+            value = evaluate_file(result["file"].as<std::vector<std::string>>()[0]);
     }
     catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
-        return 1;
+        return 2;
     }
 
     json j;
@@ -66,7 +92,7 @@ int main(int argc, char **argv) {
     }
     catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
-        return 2;
+        return 3;
     }
 
     std::cout << j.dump(2) << std::endl;
