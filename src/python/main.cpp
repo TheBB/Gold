@@ -114,7 +114,14 @@ namespace pybind11 { namespace detail {
 
 
 PYBIND11_MODULE(pygold, m) {
-    py::class_<Object>(m, "Object");
+    py::class_<Object>(m, "Object")
+        .def("__call__", [](Object& obj, py::args args) {
+            py::detail::type_caster<std::vector<Object>> caster;
+            if (!caster.load(args, false))
+                throw pybind11::type_error("incompatible function arguments");
+            EvaluationContext ctx;
+            return obj(ctx, (std::vector<Object>&)caster);
+        });
     m.def("evaluate_string", evaluate_string);
     m.def("evaluate_file", evaluate_file);
 }
