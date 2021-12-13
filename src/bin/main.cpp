@@ -8,7 +8,6 @@
 #include "cxxopts.hpp"
 
 #include "gold.hpp"
-#include "parsing.hpp"
 
 using namespace Gold;
 using namespace nlohmann;

@@ -1,18 +1,22 @@
 cmake_minimum_required(VERSION 3.13)
 project(gold)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 17)
 add_compile_options(-Wall -Wextra -Wno-unused-parameter -pedantic)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/submodules/pegtl)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/submodules/pybind11)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/lib)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/python)
 
 target_include_directories(gold PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(gold INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+target_include_directories(pygold PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/bin)
 target_link_libraries(gold-to-json gold)
-target_include_directories(gold-to-json PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/lib/include)
 target_include_directories(gold-to-json PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/tests)
@@ -24,3 +28,5 @@ add_test(NAME parsing COMMAND $<TARGET_FILE:gold-test> [parsing])
 add_test(NAME serialization COMMAND $<TARGET_FILE:gold-test> [serialization])
 add_test(NAME bindings COMMAND $<TARGET_FILE:gold-test> [bindings])
 add_test(NAME evaluate COMMAND $<TARGET_FILE:gold-test> [evaluate])
+
+target_link_libraries(pygold PRIVATE gold)
