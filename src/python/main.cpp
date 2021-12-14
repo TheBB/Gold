@@ -114,6 +114,8 @@ namespace pybind11 { namespace detail {
 
 
 PYBIND11_MODULE(pygold, m) {
+    py::register_exception<EvalException>(m, "EvalException");
+    py::register_exception<InternalException>(m, "InternalException");
     py::class_<Object>(m, "Object")
         .def("__call__", [](Object& obj, py::args args) {
             py::detail::type_caster<std::vector<Object>> caster;
