@@ -50,7 +50,7 @@ static json from_object(Object obj) {
 }
 
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     cxxopts::Options options("gold-to-json", "Convert Gold scripts to JSON");
     options.add_options()
         ("h,help", "show usage")

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cinttypes>
+#include <filesystem>
 #include <iterator>
 #include <iostream>
 
@@ -368,6 +369,29 @@ void EvalException::position(Source source) noexcept {
 }
 
 
+static std::unique_ptr<std::vector<std::unique_ptr<LibFinder>>> _stdlibs = nullptr;
+
+std::vector<std::unique_ptr<LibFinder>>& stdlibs() {
+    if (!_stdlibs)
+        _stdlibs = std::make_unique<std::vector<std::unique_ptr<LibFinder>>>();
+    return *_stdlibs;
+}
+
+void Gold::register_stdlib(std::unique_ptr<LibFinder> finder) {
+    stdlibs().push_back(std::move(finder));
+}
+
+
+Object EvaluationContext::import(const std::string& path) const {
+    for (auto& finder : stdlibs()) {
+        auto result = finder->find(path);
+        if (result.has_value())
+            return result.value();
+    }
+    throw EvalException(fmt::format("cannot locate file: {}", path));
+}
+
+
 Object EvaluationContext::lookup(const std::string& key) {
     for (auto& ns : namespaces) {
         if (ns.find(key) == ns.end())
@@ -496,6 +520,14 @@ static Object builtin_map(EvaluationContext& ctx, const std::vector<Object>& arg
 }
 
 
+static Object builtin_import(EvaluationContext& ctx, const std::vector<Object>& args) {
+    Object arg = args[0];
+    if (arg.type() != Object::Type::string)
+        throw EvalException(fmt::format("unsupported type for `import()`: `{}`", arg.type_name()));
+    return ctx.import(arg.unsafe_string());
+}
+
+
 #define BUILTIN(x,y) { x, Object(Object::Builtin { x, y })}
 
 
@@ -506,4 +538,5 @@ Namespace Gold::builtins = {
     BUILTIN("float", builtin_float),
     BUILTIN("len", builtin_len),
     BUILTIN("map", builtin_map),
+    BUILTIN("import", builtin_import),
 };

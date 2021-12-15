@@ -188,6 +188,12 @@ struct InternalException: public std::exception {
 };
 
 
+class LibFinder {
+public:
+    virtual std::optional<Object> find(const std::string&) const = 0;
+};
+
+
 class EvaluationContext {
 private:
     std::list<Namespace> namespaces;
@@ -206,9 +212,12 @@ public:
     void push_object() { objects.emplace_back(); }
     void assign_object(const std::string& key, Object value);
     Object finalize_object();
+
+    Object import(const std::string& path) const;
 };
 
 
+void register_stdlib(std::unique_ptr<LibFinder>);
 Object evaluate_string(std::string);
 Object evaluate_file(std::string);
 
