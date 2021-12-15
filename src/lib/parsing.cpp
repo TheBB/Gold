@@ -79,12 +79,6 @@ std::set<std::string> AstNode::free_identifiers() const {
 }
 
 
-Object AstNode::evaluate() const {
-    EvaluationContext ctx;
-    return evaluate(ctx);
-}
-
-
 Object Identifier::evaluate(EvaluationContext& ctx) const {
     try {
         return ctx.lookup(name);
@@ -889,14 +883,26 @@ std::unique_ptr<AstNode> Gold::parse_file(std::string path, bool as_expression) 
 
 
 Object Gold::evaluate_string(std::string code) {
+    EvaluationContext ctx;
+    return evaluate_string(ctx, code);
+}
+
+
+Object Gold::evaluate_string(EvaluationContext& ctx, std::string code) {
     auto ast = parse_string(code, false);
-    auto value = ast->evaluate();
+    auto value = ast->evaluate(ctx);
     return value;
 }
 
 
-Object Gold::evaluate_file(std::string path) {
+Object Gold::evaluate_file(std::string code) {
+    EvaluationContext ctx;
+    return evaluate_file(ctx, code);
+}
+
+
+Object Gold::evaluate_file(EvaluationContext& ctx, std::string path) {
     auto ast = parse_file(path, false);
-    auto value = ast->evaluate();
+    auto value = ast->evaluate(ctx);
     return value;
 }

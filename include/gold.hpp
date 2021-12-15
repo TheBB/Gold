@@ -45,7 +45,6 @@ public:
     virtual void free_identifiers(std::set<std::string>&) const = 0;
     std::set<std::string> free_identifiers() const;
     virtual Object evaluate(EvaluationContext&) const = 0;
-    Object evaluate() const;
 
     std::string serialize() const;
     virtual void serialize(std::ostream&) const = 0;
@@ -198,6 +197,7 @@ class EvaluationContext {
 private:
     std::list<Namespace> namespaces;
     std::vector<Namespace> objects;
+    std::vector<std::shared_ptr<LibFinder>> libfinders;
 public:
     EvaluationContext() { push_namespace(builtins); }
 
@@ -213,13 +213,16 @@ public:
     void assign_object(const std::string& key, Object value);
     Object finalize_object();
 
+    void append_libfinder(std::shared_ptr<LibFinder> finder) { libfinders.push_back(std::move(finder)); }
     Object import(const std::string& path) const;
 };
 
 
 void register_stdlib(std::unique_ptr<LibFinder>);
 Object evaluate_string(std::string);
+Object evaluate_string(EvaluationContext&, std::string);
 Object evaluate_file(std::string);
+Object evaluate_file(EvaluationContext&, std::string);
 
 
 }

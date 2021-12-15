@@ -113,9 +113,24 @@ namespace pybind11 { namespace detail {
 }}
 
 
+class PyLibFinder: public LibFinder {
+public:
+    using LibFinder::LibFinder;
+    std::optional<Object> find(const std::string& path) const override {
+        PYBIND11_OVERRIDE_PURE(std::optional<Object>, LibFinder, find, path);
+    }
+};
+
+
 PYBIND11_MODULE(pygold, m) {
     py::register_exception<EvalException>(m, "EvalException");
     py::register_exception<InternalException>(m, "InternalException");
+    py::class_<EvaluationContext>(m, "EvaluationContext")
+        .def(py::init<>())
+        .def("append_libfinder", &EvaluationContext::append_libfinder);
+    py::class_<LibFinder, PyLibFinder, std::shared_ptr<LibFinder>>(m, "LibFinder")
+        .def(py::init<>())
+        .def("find", &LibFinder::find);
     py::class_<Object>(m, "Object")
         .def("__call__", [](Object& obj, py::args args) {
             py::detail::type_caster<std::vector<Object>> caster;
@@ -124,6 +139,8 @@ PYBIND11_MODULE(pygold, m) {
             EvaluationContext ctx;
             return obj(ctx, (std::vector<Object>&)caster);
         });
-    m.def("evaluate_string", evaluate_string);
-    m.def("evaluate_file", evaluate_file);
+    m.def("evaluate_string", py::overload_cast<std::string>(&evaluate_string));
+    m.def("evaluate_string", py::overload_cast<EvaluationContext&, std::string>(&evaluate_string));
+    m.def("evaluate_file", py::overload_cast<std::string>(&evaluate_file));
+    m.def("evaluate_file", py::overload_cast<EvaluationContext&, std::string>(&evaluate_file));
 }

@@ -388,6 +388,11 @@ Object EvaluationContext::import(const std::string& path) const {
         if (result.has_value())
             return result.value();
     }
+    for (auto& finder : libfinders) {
+        auto result = finder->find(path);
+        if (result.has_value())
+            return result.value();
+    }
     throw EvalException(fmt::format("cannot locate file: {}", path));
 }
 
