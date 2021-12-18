@@ -426,14 +426,33 @@ namespace Grammar
     // Strings
     struct escaped_unicode: p::seq<p::one<'u'>, p::rep<4, p::xdigit>> {};
     struct escaped_char: p::sor<
-        p::one<'\\', '"', 'b', 'f', 'n', 'r', 't'>,
+        p::one<'\\', '"', 'b', 'f', 'n', 'r', 't', '$'>,
         escaped_unicode
     > {};
     struct escaped: p::sor<escaped_char> {};
     struct unescaped: p::utf8::range<0x20, 0x10ffff> {};
-    struct character: p::if_then_else<p::one<'\\'>, escaped, unescaped> {};
-    struct string: p::until<p::at<p::one<'"'>>, character> {};
-    struct quoted_string: p::seq<p::one<'"'>, string, p::one<'"'>> {};
+    struct string_character: p::if_then_else<p::one<'\\'>, escaped, unescaped> {};
+    struct string_data: p::seq<
+        p::not_at<p::string<'$','{'>>,
+        p::until<
+            p::at<p::sor<p::eof, p::string<'$','{'>>>,
+            string_character
+        >
+    > {};
+    struct string_interp: p::seq<
+        p::string<'$','{'>,
+        p::star<whitespace>,
+        expression,
+        p::star<whitespace>,
+        p::one<'}'>
+    > {};
+    struct string: p::until<p::at<p::one<'"'>>, string_character> {};
+    struct istring: p::until<p::eof, p::sor<string_interp, string_data>> {};
+    struct quoted_string: p::seq<
+        p::one<'"'>,
+        p::rematch<string, p::seq<istring, p::eof>>,
+        p::one<'"'>
+    > {};
 
     // Null
     struct nullp: p::string<'n','u','l','l'> {};
@@ -582,7 +601,9 @@ namespace Grammar
             number,
             integer,
             floating,
-            string,
+            istring,
+            string_data,
+            string_interp,
             nullp,
             boolean,
             list,
@@ -692,7 +713,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         }
     }
 
-    else if (node.type == "Grammar::string") {
+    else if (node.type == "Grammar::string_data") {
         auto data = node.string_view();
         std::stringstream builder;
         for (auto it = data.begin(); it != data.end(); it++) {
@@ -717,6 +738,25 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         }
         Object obj = Object::string(builder.str());
         return std::make_unique<Literal>(source(node), obj);
+    }
+
+    else if (node.type == "Grammar::string_interp") {
+        auto func = std::make_unique<Identifier>(source(node), "str");
+        auto call = std::make_unique<FunCall>(source(node), std::move(func));
+        call->append(normalize(*node.children[0]));
+        return call;
+    }
+
+    else if (node.type == "Grammar::istring") {
+        if (node.children.size() == 0)
+            return std::make_unique<Literal>(source(node), Object::string(""));
+        auto ast = normalize(*node.children[0]);
+        auto it = node.children.begin();
+        while (++it != node.children.end()) {
+            auto rhs = normalize(**it);
+            ast = std::make_unique<BinOp>(source(**it), std::move(ast), std::move(rhs), Operator::plus);
+        }
+        return ast;
     }
 
     else if (node.type == "Grammar::nullp") {
