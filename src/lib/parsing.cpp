@@ -433,26 +433,16 @@ namespace Grammar
     struct unescaped: p::utf8::range<0x20, 0x10ffff> {};
     struct string_character: p::if_then_else<p::one<'\\'>, escaped, unescaped> {};
     struct string_data: p::seq<
-        p::not_at<p::string<'$','{'>>,
+        string_character,
         p::until<
             p::at<p::sor<p::eof, p::string<'$','{'>>>,
             string_character
         >
     > {};
-    struct string_interp: p::seq<
-        p::string<'$','{'>,
-        p::star<whitespace>,
-        expression,
-        p::star<whitespace>,
-        p::one<'}'>
-    > {};
+    struct string_interp: p::seq<p::pad<expression, whitespace>, p::one<'}'>> {};
     struct string: p::until<p::at<p::one<'"'>>, string_character> {};
-    struct istring: p::until<p::eof, p::sor<string_interp, string_data>> {};
-    struct quoted_string: p::seq<
-        p::one<'"'>,
-        p::rematch<string, p::seq<istring, p::eof>>,
-        p::one<'"'>
-    > {};
+    struct istring: p::until<p::eof, p::if_then_else<p::string<'$','{'>, string_interp, string_data>> {};
+    struct quoted_string: p::seq<p::one<'"'>, p::rematch<string, p::seq<istring, p::eof>>, p::one<'"'>> {};
 
     // Null
     struct nullp: p::string<'n','u','l','l'> {};
