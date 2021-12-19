@@ -499,9 +499,32 @@ static Object builtin_len(EvaluationContext&, const std::vector<Object>& args) {
         [](Object::List x) { return Object::integer(x->size()); },
         [](Object::Map x) { return Object::integer(x->size()); },
         [&arg](auto&&) -> Object {
-            throw EvalException(fmt::format("unsupported type for `size()`: `{}`", arg.type_name()));
+            throw EvalException(fmt::format("unsupported type for `len()`: `{}`", arg.type_name()));
         }
     }, arg.data());
+}
+
+
+static Object builtin_range(EvaluationContext&, const std::vector<Object>& args) {
+    std::for_each(args.begin(), args.end(), [](auto x) {
+        if (x.type() != Object::Type::integer)
+            throw EvalException(fmt::format("unsupported type for `range()`: `{}`", x.type_name()));
+    });
+
+    intmax_t start, stop;
+    if (args.size() == 1) {
+        start = 0;
+        stop = args[0].unsafe_integer();
+    }
+    else {
+        start = args[0].unsafe_integer();
+        stop = args[1].unsafe_integer();
+    }
+
+    std::vector<Object> range;
+    for (intmax_t i = start; i < stop; i++)
+        range.push_back(Object::integer(i));
+    return Object::list(std::move(range));
 }
 
 
@@ -542,6 +565,7 @@ Namespace Gold::builtins = {
     BUILTIN("str", builtin_str),
     BUILTIN("float", builtin_float),
     BUILTIN("len", builtin_len),
+    BUILTIN("range", builtin_range),
     BUILTIN("map", builtin_map),
     BUILTIN("import", builtin_import),
 };
