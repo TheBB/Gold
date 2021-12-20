@@ -1,0 +1,11 @@
+{
+    "name": "gold",
+    "version-string": "0.1.0",
+    "dependencies": [
+        "cxxopts",
+        "fmt",
+        "nlohmann-json",
+        "pegtl",
+        "pybind11"
+    ]
+}

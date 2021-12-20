@@ -12,7 +12,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 17)
 add_compile_options(-Wall -Wextra -Wno-unused-parameter -pedantic)
 
+find_package(cxxopts CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 find_package(pegtl CONFIG REQUIRED)
 find_package(pybind11 CONFIG REQUIRED)
 
@@ -45,12 +47,11 @@ add_dependencies(gold-stdlib stdlib-serialize)
 target_include_directories(gold-nostdlib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(gold-nostdlib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(gold-stdlib PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/stdlib)
-target_include_directories(gold-to-json PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor)
 target_include_directories(pygold PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 target_link_libraries(gold-nostdlib fmt::fmt taocpp::pegtl)
 target_link_libraries(gold-serialize gold-nostdlib)
-target_link_libraries(gold-to-json gold-nostdlib gold-stdlib)
+target_link_libraries(gold-to-json gold-nostdlib gold-stdlib nlohmann_json cxxopts::cxxopts)
 target_link_libraries(gold-stdlib gold-nostdlib)
 target_link_libraries(pygold PRIVATE gold-nostdlib gold-stdlib)
 
