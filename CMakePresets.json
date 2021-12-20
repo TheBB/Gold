@@ -18,10 +18,28 @@
             }
         },
         {
-            "name": "ci",
+            "name": "ci-ubuntu-latest",
             "displayName": "Continuous Integration",
             "binaryDir": "${sourceDir}/build/${presetName}",
-            "generator": "Ninja Multi-Config",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "ci-macos-latest",
+            "displayName": "Continuous Integration",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "ci-windows-latest",
+            "displayName": "Continuous Integration",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "generator": "MinGW Makefiles",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
             }
@@ -38,8 +56,18 @@
             "targets": ["all", "gold-test"]
         },
         {
-            "name": "ci",
-            "configurePreset": "ci",
+            "name": "ci-ubuntu-latest",
+            "configurePreset": "ci-ubuntu-latest",
+            "targets": ["all", "gold-test"]
+        },
+        {
+            "name": "ci-macos-latest",
+            "configurePreset": "ci-macos-latest",
+            "targets": ["all", "gold-test"]
+        },
+        {
+            "name": "ci-windows-latest",
+            "configurePreset": "ci-windows-latest",
             "targets": ["all", "gold-test"]
         }
     ],
@@ -49,8 +77,16 @@
             "configurePreset": "dev"
         },
         {
-            "name": "ci",
-            "configurePreset": "ci"
+            "name": "ci-ubuntu-latest",
+            "configurePreset": "ci-ubuntu-latest"
+        },
+        {
+            "name": "ci-macos-latest",
+            "configurePreset": "ci-macos-latest"
+        },
+        {
+            "name": "ci-windows-latest",
+            "configurePreset": "ci-windows-latest"
         }
     ]
 }

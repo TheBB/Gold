@@ -25,8 +25,8 @@ jobs:
       - uses: lukka/run-cmake@v10
         id: runcmke
         with:
-          configurePreset: ci
-          buildPreset: ci
+          configurePreset: ci-${{matrix.os}}
+          buildPreset: ci-${{matrix.os}}
 
       - name: Test
-        run: ctest --preset ci --build-config Debug
+        run: ctest --preset ci-${{matrix.os}} --build-config Debug
