@@ -30,30 +30,30 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/bin)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/python)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/stdlib)
 
-add_custom_target(stdlib-serialize ALL)
+# add_custom_target(stdlib-serialize ALL)
 
-foreach(LIBFILE ${GOLD_STDLIBS})
-    set(FIN ${CMAKE_CURRENT_BINARY_DIR}/stdlib/${LIBFILE}.serialized.c)
-    set(OUT ${CMAKE_CURRENT_BINARY_DIR}/stdlib/${LIBFILE}.serialized)
-    set(IN ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/${LIBFILE})
-    add_custom_command(
-        COMMAND xxd -i ${LIBFILE}.serialized ${FIN}
-        OUTPUT ${FIN} DEPENDS ${OUT}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/stdlib
-    )
-    add_custom_command(
-        COMMAND $<TARGET_FILE:gold-serialize> ${IN} ${OUT}
-        OUTPUT ${OUT} DEPENDS ${IN}
-    )
-    add_custom_target(stdlib-serialize-${LIBFILE} DEPENDS ${FIN})
-    add_dependencies(stdlib-serialize stdlib-serialize-${LIBFILE})
-endforeach()
+# foreach(LIBFILE ${GOLD_STDLIBS})
+#     set(FIN ${CMAKE_CURRENT_BINARY_DIR}/stdlib/${LIBFILE}.serialized.c)
+#     set(OUT ${CMAKE_CURRENT_BINARY_DIR}/stdlib/${LIBFILE}.serialized)
+#     set(IN ${CMAKE_CURRENT_SOURCE_DIR}/stdlib/${LIBFILE})
+#     add_custom_command(
+#         COMMAND xxd -i ${LIBFILE}.serialized ${FIN}
+#         OUTPUT ${FIN} DEPENDS ${OUT}
+#         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/stdlib
+#     )
+#     add_custom_command(
+#         COMMAND $<TARGET_FILE:gold-serialize> ${IN} ${OUT}
+#         OUTPUT ${OUT} DEPENDS ${IN}
+#     )
+#     add_custom_target(stdlib-serialize-${LIBFILE} DEPENDS ${FIN})
+#     add_dependencies(stdlib-serialize stdlib-serialize-${LIBFILE})
+# endforeach()
 
-add_dependencies(gold-stdlib stdlib-serialize)
+# add_dependencies(gold-stdlib stdlib-serialize)
 
 target_include_directories(gold-nostdlib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(gold-nostdlib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_include_directories(gold-stdlib PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/stdlib)
+# target_include_directories(gold-stdlib PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/stdlib)
 target_include_directories(pygold PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 target_link_libraries(gold-nostdlib fmt::fmt taocpp::pegtl)

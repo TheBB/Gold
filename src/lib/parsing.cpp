@@ -651,8 +651,6 @@ static std::string codepoint_as_string(T it, int nchars) {
             codepoint += s - '0';
     }
 
-    std::cout << codepoint << std::endl;
-
     if (codepoint < 128) {
         char a = codepoint & 0b0111'1111;
         return std::string{a};
@@ -673,6 +671,14 @@ static std::string codepoint_as_string(T it, int nchars) {
 }
 
 
+static std::string nodetype(p::parse_tree::node& node) {
+    std::string type(node.type);
+    if (type.substr(0, 6) == "struct")
+        type = type.substr(7);
+    return type;
+}
+
+
 static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     if (node.is_root()) {
         if (node.children.size() != 1)
@@ -680,19 +686,21 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return normalize(*node.children[0]);
     }
 
-    if (node.type == "Grammar::file") {
+    auto type = nodetype(node);
+
+    if (type == "Grammar::file") {
         return normalize(*node.children[0]);
     }
 
-    else if (node.type == "Grammar::boolean") {
+    else if (type == "Grammar::boolean") {
         Object obj = Object::boolean(node.string_view() == "true");
         return std::make_unique<Literal>(source(node), obj);
     }
 
-    else if (node.type == "Grammar::number") {
+    else if (type == "Grammar::number") {
         auto& c = node.children[0];
 
-        if (c->type == "Grammar::integer") {
+        if (nodetype(*c) == "Grammar::integer") {
             auto str = node.string();
             auto value = std::strtoimax(str.c_str(), nullptr, 10);
             return std::make_unique<Literal>(source(node), Object::integer(value));
@@ -704,7 +712,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         }
     }
 
-    else if (node.type == "Grammar::string_data") {
+    else if (type == "Grammar::string_data") {
         auto data = node.string_view();
         std::stringstream builder;
         for (auto it = data.begin(); it != data.end(); it++) {
@@ -731,14 +739,14 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return std::make_unique<Literal>(source(node), obj);
     }
 
-    else if (node.type == "Grammar::string_interp") {
+    else if (type == "Grammar::string_interp") {
         auto func = std::make_unique<Identifier>(source(node), "str");
         auto call = std::make_unique<FunCall>(source(node), std::move(func));
         call->append(normalize(*node.children[0]));
         return call;
     }
 
-    else if (node.type == "Grammar::istring") {
+    else if (type == "Grammar::istring") {
         if (node.children.size() == 0)
             return std::make_unique<Literal>(source(node), Object::string(""));
         auto ast = normalize(*node.children[0]);
@@ -750,18 +758,18 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return ast;
     }
 
-    else if (node.type == "Grammar::nullp") {
+    else if (type == "Grammar::nullp") {
         return std::make_unique<Literal>(source(node), Object::null());
     }
 
-    else if (node.type == "Grammar::identifier") {
+    else if (type == "Grammar::identifier") {
         return std::make_unique<Identifier>(source(node), node.string());
     }
 
-    else if (node.type == "Grammar::list") {
+    else if (type == "Grammar::list") {
         auto list = std::make_unique<List>(source(node));
         for (auto&& c : node.children) {
-            if (c->type == "Grammar::splatted_atomic")
+            if (nodetype(*c) == "Grammar::splatted_atomic")
                 list->append(normalize(*c->children[0]), true);
             else
                 list->append(normalize(*c), false);
@@ -769,10 +777,10 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return list;
     }
 
-    else if (node.type == "Grammar::map") {
+    else if (type == "Grammar::map") {
         auto map = std::make_unique<Map>(source(node));
         for (auto&& c : node.children) {
-            if (c->type == "Grammar::splatted_atomic") {
+            if (nodetype(*c) == "Grammar::splatted_atomic") {
                 auto value = normalize(*c->children[0]);
                 map->append("", std::move(value), true);
             }
@@ -785,7 +793,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return map;
     }
 
-    else if (node.type.substr(0, 14) == "Grammar::binop")
+    else if (type.substr(0, 14) == "Grammar::binop")
     {
         if (node.children.size() == 1)
             return normalize(*node.children[0]);
@@ -797,10 +805,10 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         );
     }
 
-    else if (node.type == "Grammar::block") {
+    else if (type == "Grammar::block") {
         auto block = std::make_unique<Block>(source(node));
         for (auto&& c : node.children) {
-            if (c->type == "Grammar::binding")
+            if (nodetype(*c) == "Grammar::binding")
                 block->append(c->children[0]->string(), normalize(*c->children[1]));
             else
                 block->set_expression(normalize(*c));
@@ -808,7 +816,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return block;
     }
 
-    else if (node.type == "Grammar::function") {
+    else if (type == "Grammar::function") {
         auto function = std::make_unique<Function>(source(node));
         for (auto&& c : node.children[0]->children) {
             function->append(c->string());
@@ -817,7 +825,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return function;
     }
 
-    else if (node.type == "Grammar::branch")
+    else if (type == "Grammar::branch")
         return std::make_unique<Branch>(
             source(node),
             normalize(*node.children[0]),
@@ -825,17 +833,18 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
             normalize(*node.children[2])
         );
 
-    else if (node.type == "Grammar::atomic") {
+    else if (type == "Grammar::atomic") {
         auto it = node.children.begin();
         auto value = normalize(**it++);
         while (it != node.children.end()) {
-            if ((*it)->type == "Grammar::funcall_operator") {
+            auto stype = nodetype(**it);
+            if (stype == "Grammar::funcall_operator") {
                 auto funcall = std::make_unique<FunCall>(source(**it), std::move(value));
                 for (auto&& c : (*it)->children)
                     funcall->append(normalize(*c));
                 value = std::move(funcall);
             }
-            else if ((*it)->type == "Grammar::object_access") {
+            else if (stype == "Grammar::object_access") {
                 auto field = Object::string((*it)->children[0]->string());
                 auto index = std::make_unique<Index>(
                     source(**it),
@@ -844,7 +853,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
                 );
                 value = std::move(index);
             }
-            else if ((*it)->type == "Grammar::subscript_operator") {
+            else if (stype == "Grammar::subscript_operator") {
                 auto index = std::make_unique<Index>(
                     source(**it),
                     std::move(value),
@@ -857,7 +866,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return value;
     }
 
-    std::cout << node.type << std::endl;
+    std::cout << type << std::endl;
     throw ParseException();
 }
 

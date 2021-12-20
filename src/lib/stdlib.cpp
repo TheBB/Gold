@@ -2,7 +2,7 @@
 
 #include "gold.hpp"
 
-#include "std.gold.serialized.c"
+// #include "std.gold.serialized.c"
 
 
 using namespace Gold;
@@ -10,8 +10,8 @@ using namespace Gold;
 
 #define STDLIB(name) {#name, std::string((char*)name ## _gold_serialized, name ## _gold_serialized_len)}
 
-struct std::map<std::string, std::string> stdlibs = {
-    STDLIB(std),
+static std::map<std::string, std::string> stdlibs = {
+    // STDLIB(std),
 };
 
 
