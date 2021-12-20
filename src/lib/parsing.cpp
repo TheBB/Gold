@@ -637,7 +637,8 @@ static Source source(p::parse_tree::node& node) {
 }
 
 
-static std::string codepoint_as_string(const char* it, int nchars) {
+template<typename T>
+static std::string codepoint_as_string(T it, int nchars) {
     uint16_t codepoint = 0;
     for (int i = 0; i < nchars; i++) {
         codepoint *= 16;
