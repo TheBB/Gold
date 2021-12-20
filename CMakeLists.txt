@@ -1,13 +1,21 @@
 cmake_minimum_required(VERSION 3.13)
+
+set(
+    CMAKE_TOOLCHAIN_FILE
+    ${CMAKE_CURRENT_SOURCE_DIR}/submodules/vcpkg/scripts/buildsystems/vcpkg.cmake
+    CACHE STRING "Vcpkg toolchain file"
+)
+
 project(gold)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 17)
 add_compile_options(-Wall -Wextra -Wno-unused-parameter -pedantic)
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/submodules/pegtl EXCLUDE_FROM_ALL)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/submodules/pybind11 EXCLUDE_FROM_ALL)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/submodules/fmt EXCLUDE_FROM_ALL)
+find_package(fmt CONFIG REQUIRED)
+find_package(pegtl CONFIG REQUIRED)
+find_package(pybind11 CONFIG REQUIRED)
+
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/lib)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/bin)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/python)
