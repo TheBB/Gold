@@ -16,10 +16,7 @@ if(CMAKE_COMPILER_IS_GNUCXX)
 endif()
 
 if(MSVC)
-    message("MSVC")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
-else()
-    message("NOT MSVC")
 endif()
 
 find_package(cxxopts CONFIG REQUIRED)
