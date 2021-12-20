@@ -16,6 +16,15 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
             }
+        },
+        {
+            "name": "ci",
+            "displayName": "Continuous Integration",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "generator": "Ninja Multi-Config",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
         }
     ],
     "buildPresets": [
@@ -26,6 +35,11 @@
         {
             "name": "dev",
             "configurePreset": "dev",
+            "targets": ["all", "gold-test"]
+        },
+        {
+            "name": "ci",
+            "configurePreset": "ci",
             "targets": ["all", "gold-test"]
         }
     ],

@@ -25,8 +25,8 @@ jobs:
       - uses: lukka/run-cmake@v10
         id: runcmke
         with:
-          configurePreset: dev
-          buildPreset: dev
+          configurePreset: ci
+          buildPreset: ci
 
       - name: Test
         run: ctest --preset dev
