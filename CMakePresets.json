@@ -47,6 +47,10 @@
         {
             "name": "dev",
             "configurePreset": "dev"
+        },
+        {
+            "name": "ci",
+            "configurePreset": "ci"
         }
     ]
 }

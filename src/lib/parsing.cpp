@@ -895,7 +895,7 @@ static std::unique_ptr<AstNode> _parse(I& input, bool as_expression) {
             throw ParseException();
         return normalize(*tree);
     }
-    catch (const p::parse_error& e) {
+    catch (const p::parse_error&) {
         throw ParseException();
     }
 }

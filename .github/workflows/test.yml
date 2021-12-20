@@ -29,4 +29,4 @@ jobs:
           buildPreset: ci
 
       - name: Test
-        run: ctest --preset dev
+        run: ctest --preset ci --build-config Debug
