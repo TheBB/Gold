@@ -10,7 +10,9 @@ project(gold)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 17)
-add_compile_options(-Wall -Wextra -Wno-unused-parameter -pedantic)
+if(CMAKE_COMPILER_IS_GNUCXX)
+    add_compile_options(-Wall -Wextra -Wno-unused-parameter -pedantic)
+endif()
 
 find_package(cxxopts CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
