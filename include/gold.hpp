@@ -191,6 +191,7 @@ struct InternalException: public std::exception {
 
 class LibFinder {
 public:
+    virtual ~LibFinder() {};
     virtual std::optional<Object> find(const std::string&) const = 0;
 };
 
