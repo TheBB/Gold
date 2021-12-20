@@ -11,6 +11,3 @@ add_library(
 )
 
 target_include_directories(gold-nostdlib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-find_package(fmt)
-target_link_libraries(gold-nostdlib fmt::fmt taocpp::pegtl)

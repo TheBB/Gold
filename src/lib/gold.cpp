@@ -332,7 +332,7 @@ void Object::dump(std::ostream& os) const {
             os << '"';
         },
         [&os](Boolean x) { os << (x ? "true" : "false"); },
-        [&os](Floating x) { os << fmt::format("{}", x); },
+        [&os](Floating x) { os << fmt::format("{:#}", x); },
         [&os](Null) { os << "null"; },
         [&os](Closure) { os << "<closure>"; },
         [&os](Builtin) { os << "<builtin>"; },

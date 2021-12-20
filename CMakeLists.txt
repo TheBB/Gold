@@ -7,6 +7,7 @@ add_compile_options(-Wall -Wextra -Wno-unused-parameter -pedantic)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/submodules/pegtl EXCLUDE_FROM_ALL)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/submodules/pybind11 EXCLUDE_FROM_ALL)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/submodules/fmt EXCLUDE_FROM_ALL)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/lib)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/bin)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/python)
@@ -39,6 +40,7 @@ target_include_directories(gold-stdlib PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/stdli
 target_include_directories(gold-to-json PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/vendor)
 target_include_directories(pygold PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+target_link_libraries(gold-nostdlib fmt::fmt taocpp::pegtl)
 target_link_libraries(gold-serialize gold-nostdlib)
 target_link_libraries(gold-to-json gold-nostdlib gold-stdlib)
 target_link_libraries(gold-stdlib gold-nostdlib)
@@ -54,6 +56,3 @@ add_test(NAME serialization COMMAND $<TARGET_FILE:gold-test> [serialization])
 add_test(NAME bindings COMMAND $<TARGET_FILE:gold-test> [bindings])
 add_test(NAME evaluate COMMAND $<TARGET_FILE:gold-test> [evaluate])
 add_custom_target(check COMMAND cmake --build ${CMAKE_CURRENT_BINARY_DIR} --target test DEPENDS gold-test)
-
-# install(TARGETS gold gold-to-json)
-# install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/share/ TYPE DATA)
