@@ -195,12 +195,12 @@ Object BinOp::evaluate(EvaluationContext& ctx) const {
         case Operator::multiply: return l * r; break;
         case Operator::divide: return l / r; break;
         case Operator::integer_divide: return l.operator_idiv(r); break;
-        case Operator::less_than: return l < r; break;
-        case Operator::less_than_or_eq: return l <= r; break;
-        case Operator::greater_than: return l > r; break;
-        case Operator::greater_than_or_eq: return l >= r; break;
-        case Operator::equal: return l == r; break;
-        case Operator::not_equal: return l != r; break;
+        case Operator::less_than: return Object::boolean(l < r); break;
+        case Operator::less_than_or_eq: return Object::boolean(l <= r); break;
+        case Operator::greater_than: return Object::boolean(l > r); break;
+        case Operator::greater_than_or_eq: return Object::boolean(l >= r); break;
+        case Operator::equal: return Object::boolean(l == r); break;
+        case Operator::not_equal: return Object::boolean(l != r); break;
         default: throw InternalException();
         }
     }

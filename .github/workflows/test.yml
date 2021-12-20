@@ -27,4 +27,7 @@ jobs:
         with:
           configurePreset: dev
           buildPreset: dev
+
+      - name: Test
+        run: ctest --preset dev
     

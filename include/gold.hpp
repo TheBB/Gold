@@ -147,12 +147,12 @@ public:
     Object operator*(Object) const;
     Object operator/(Object) const;
     Object operator_idiv(Object) const;
-    Object operator<(Object) const;
-    Object operator<=(Object) const;
-    Object operator>(Object) const;
-    Object operator>=(Object) const;
-    Object operator==(Object) const;
-    Object operator!=(Object) const;
+    bool operator<(Object) const;
+    bool operator<=(Object) const;
+    bool operator>(Object) const;
+    bool operator>=(Object) const;
+    bool operator==(Object) const;
+    bool operator!=(Object) const;
 
     Object operator()(EvaluationContext&, const std::vector<Object>&) const;
 
