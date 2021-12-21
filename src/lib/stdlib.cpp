@@ -10,7 +10,7 @@ using namespace Gold;
 
 #define STDLIB(name) {#name, std::string((char*)name ## _gold_serialized, name ## _gold_serialized_len)}
 
-struct std::map<std::string, std::string> stdlibs = {
+static std::map<std::string, std::string> stdlibs = {
     STDLIB(std),
 };
 

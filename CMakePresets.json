@@ -1,17 +1,92 @@
 {
-    "version": 2,
+    "version": 3,
     "configurePresets": [
         {
-            "name": "Dev",
-            "displayName": "GCC 9.3.0 x86_64-linux-gnu",
-            "description": "Using compilers: C = /bin/x86_64-linux-gnu-gcc-9, CXX = /bin/x86_64-linux-gnu-g++-9",
-            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "name": "release",
+            "displayName": "Release",
+            "binaryDir": "${sourceDir}/build/${presetName}",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
-                "CMAKE_C_COMPILER": "/bin/x86_64-linux-gnu-gcc-9",
-                "CMAKE_CXX_COMPILER": "/bin/x86_64-linux-gnu-g++-9"
+                "CMAKE_BUILD_TYPE": "Release"
             }
+        },
+        {
+            "name": "dev",
+            "displayName": "Development",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "ci-ubuntu-latest",
+            "displayName": "Continuous Integration",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "ci-macos-latest",
+            "displayName": "Continuous Integration",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "ci-windows-latest",
+            "displayName": "Continuous Integration",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "generator": "MinGW Makefiles",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "release",
+            "configurePreset": "release"
+        },
+        {
+            "name": "dev",
+            "configurePreset": "dev",
+            "targets": ["all", "gold-test"]
+        },
+        {
+            "name": "ci-ubuntu-latest",
+            "configurePreset": "ci-ubuntu-latest",
+            "targets": ["all", "gold-test"]
+        },
+        {
+            "name": "ci-macos-latest",
+            "configurePreset": "ci-macos-latest",
+            "targets": ["all", "gold-test"]
+        },
+        {
+            "name": "ci-windows-latest",
+            "configurePreset": "ci-windows-latest",
+            "targets": ["all", "gold-test"]
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "dev",
+            "configurePreset": "dev"
+        },
+        {
+            "name": "ci-ubuntu-latest",
+            "configurePreset": "ci-ubuntu-latest"
+        },
+        {
+            "name": "ci-macos-latest",
+            "configurePreset": "ci-macos-latest"
+        },
+        {
+            "name": "ci-windows-latest",
+            "configurePreset": "ci-windows-latest"
         }
     ]
 }

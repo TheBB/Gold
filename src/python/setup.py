@@ -23,6 +23,8 @@ class CMakeBuild(build_ext):
             extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
             cmake_args = [
                 '-DCMAKE_BUILD_TYPE=Release',
+                f'-B{os.path.abspath(self.build_temp)}',
+                f'-S{ext.cmake_lists_dir}',
                 f'-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE={extdir}',
                 f'-DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE={self.build_temp}',
             ]

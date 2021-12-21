@@ -2,6 +2,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <variant>
@@ -40,6 +41,7 @@ private:
     Source src;
 public:
     AstNode(Source source) : src(source) {}
+    virtual ~AstNode() {};
     virtual void dump(std::ostream&) const = 0;
     std::string dump() const;
     virtual void free_identifiers(std::set<std::string>&) const = 0;
@@ -147,12 +149,12 @@ public:
     Object operator*(Object) const;
     Object operator/(Object) const;
     Object operator_idiv(Object) const;
-    Object operator<(Object) const;
-    Object operator<=(Object) const;
-    Object operator>(Object) const;
-    Object operator>=(Object) const;
-    Object operator==(Object) const;
-    Object operator!=(Object) const;
+    bool operator<(Object) const;
+    bool operator<=(Object) const;
+    bool operator>(Object) const;
+    bool operator>=(Object) const;
+    bool operator==(Object) const;
+    bool operator!=(Object) const;
 
     Object operator()(EvaluationContext&, const std::vector<Object>&) const;
 
@@ -189,6 +191,7 @@ struct InternalException: public std::exception {
 
 class LibFinder {
 public:
+    virtual ~LibFinder() {};
     virtual std::optional<Object> find(const std::string&) const = 0;
 };
 

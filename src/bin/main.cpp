@@ -4,7 +4,7 @@
 #include <vector>
 
 #include <fmt/core.h>
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 #include "cxxopts.hpp"
 
 #include "gold.hpp"

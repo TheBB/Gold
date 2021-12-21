@@ -129,14 +129,14 @@ Object Object::operator_idiv(Object other) const {
 }
 
 
-Object Object::operator<(Object other) const {
+bool Object::operator<(Object other) const {
     return std::visit(overloaded {
-        [](Integer a, Integer b) { return Object::boolean(a < b); },
-        [](Floating a, Integer b) { return Object::boolean(a < b); },
-        [](Integer a, Floating b) { return Object::boolean(a < b); },
-        [](Floating a, Floating b) { return Object::boolean(a < b); },
-        [](String a, String b) { return Object::boolean(a < b); },
-        [this, other](auto&&, auto&&) -> Object {
+        [](Integer a, Integer b) { return a < b; },
+        [](Floating a, Integer b) { return a < b; },
+        [](Integer a, Floating b) { return a < b; },
+        [](Floating a, Floating b) { return a < b; },
+        [](String a, String b) { return a < b; },
+        [this, other](auto&&, auto&&) -> bool {
             throw EvalException(fmt::format(
                 "unsupported types for operator `<`: `{}` and `{}`",
                 type_name(), other.type_name()
@@ -146,14 +146,14 @@ Object Object::operator<(Object other) const {
 }
 
 
-Object Object::operator<=(Object other) const {
+bool Object::operator<=(Object other) const {
     return std::visit(overloaded {
-        [](Integer a, Integer b) { return Object::boolean(a <= b); },
-        [](Floating a, Integer b) { return Object::boolean(a <= b); },
-        [](Integer a, Floating b) { return Object::boolean(a <= b); },
-        [](Floating a, Floating b) { return Object::boolean(a <= b); },
-        [](String a, String b) { return Object::boolean(a <= b); },
-        [this, other](auto&&, auto&&) -> Object {
+        [](Integer a, Integer b) { return a <= b; },
+        [](Floating a, Integer b) { return a <= b; },
+        [](Integer a, Floating b) { return a <= b; },
+        [](Floating a, Floating b) { return a <= b; },
+        [](String a, String b) { return a <= b; },
+        [this, other](auto&&, auto&&) -> bool {
             throw EvalException(fmt::format(
                 "unsupported types for operator `<=`: `{}` and `{}`",
                 type_name(), other.type_name()
@@ -163,14 +163,14 @@ Object Object::operator<=(Object other) const {
 }
 
 
-Object Object::operator>(Object other) const {
+bool Object::operator>(Object other) const {
     return std::visit(overloaded {
-        [](Integer a, Integer b) { return Object::boolean(a > b); },
-        [](Floating a, Integer b) { return Object::boolean(a > b); },
-        [](Integer a, Floating b) { return Object::boolean(a > b); },
-        [](Floating a, Floating b) { return Object::boolean(a > b); },
-        [](String a, String b) { return Object::boolean(a > b); },
-        [this, other](auto&&, auto&&) -> Object {
+        [](Integer a, Integer b) { return a > b; },
+        [](Floating a, Integer b) { return a > b; },
+        [](Integer a, Floating b) { return a > b; },
+        [](Floating a, Floating b) { return a > b; },
+        [](String a, String b) { return a > b; },
+        [this, other](auto&&, auto&&) -> bool {
             throw EvalException(fmt::format(
                 "unsupported types for operator `>`: `{}` and `{}`",
                 type_name(), other.type_name()
@@ -180,14 +180,14 @@ Object Object::operator>(Object other) const {
 }
 
 
-Object Object::operator>=(Object other) const {
+bool Object::operator>=(Object other) const {
     return std::visit(overloaded {
-        [](Integer a, Integer b) { return Object::boolean(a >= b); },
-        [](Floating a, Integer b) { return Object::boolean(a >= b); },
-        [](Integer a, Floating b) { return Object::boolean(a >= b); },
-        [](Floating a, Floating b) { return Object::boolean(a >= b); },
-        [](String a, String b) { return Object::boolean(a >= b); },
-        [this, other](auto&&, auto&&) -> Object {
+        [](Integer a, Integer b) { return a >= b; },
+        [](Floating a, Integer b) { return a >= b; },
+        [](Integer a, Floating b) { return a >= b; },
+        [](Floating a, Floating b) { return a >= b; },
+        [](String a, String b) { return a >= b; },
+        [this, other](auto&&, auto&&) -> bool {
             throw EvalException(fmt::format(
                 "unsupported types for operator `>=` `{}` and `{}`",
                 type_name(), other.type_name()
@@ -197,8 +197,8 @@ Object Object::operator>=(Object other) const {
 }
 
 
-Object Object::operator==(Object other) const {
-    return Object::boolean(std::visit(overloaded {
+bool Object::operator==(Object other) const {
+    return std::visit(overloaded {
         [](Integer a, Integer b) { return a == b; },
         [](Floating a, Integer b) { return a == b; },
         [](Integer a, Floating b) { return a == b; },
@@ -209,12 +209,12 @@ Object Object::operator==(Object other) const {
         [](Map a, Map b) { return *a == *b; },
         [](List a, List b) { return *a == *b; },
         [](auto&&, auto&&) { return false; }
-    }, _data, other._data));
+    }, _data, other._data);
 }
 
 
-Object Object::operator!=(Object other) const {
-    return Object::boolean(!(bool)(*this == other));
+bool Object::operator!=(Object other) const {
+    return !(*this == other);
 }
 
 

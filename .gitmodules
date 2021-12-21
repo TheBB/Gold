@@ -1,9 +1,3 @@
-[submodule "submodules/pegtl"]
-	path = submodules/pegtl
-	url = git@github.com:taocpp/pegtl
-[submodule "submodules/pybind11"]
-	path = submodules/pybind11
-	url = git@github.com:pybind/pybind11
-[submodule "submodules/fmt"]
-	path = submodules/fmt
-	url = git@github.com:fmtlib/fmt
+[submodule "submodules/vcpkg"]
+	path = submodules/vcpkg
+	url = git@github.com:microsoft/vcpkg
