@@ -4,13 +4,13 @@
 #include <vector>
 
 #include <fmt/core.h>
-#include "nlohmann/json.hpp"
+// #include "nlohmann/json.hpp"
 #include "cxxopts.hpp"
 
 #include "gold.hpp"
 
 using namespace Gold;
-using namespace nlohmann;
+// using namespace nlohmann;
 
 
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
@@ -24,30 +24,30 @@ struct TypeException: public std::exception {
 };
 
 
-static json from_object(Object obj) {
-    return std::visit(overloaded {
-        [](Object::Null) { return json(nullptr); },
-        [](Object::Integer x) { return json(x); },
-        [](Object::String x) { return json(x); },
-        [](Object::Boolean x) { return json(x); },
-        [](Object::Floating x) { return json(x); },
-        [](Object::Map x) {
-            json r;
-            for (auto& [key, value] : *x)
-                r[key] = from_object(value);
-            return r;
-        },
-        [](Object::List x) {
-            json r;
-            for (auto& value : *x)
-                r.push_back(from_object(value));
-            return r;
-        },
-        [&obj](auto&&) -> json {
-            throw TypeException(fmt::format("not convertible to json: `{}`", obj.type_name()));
-        }
-    }, obj.data());
-}
+// static json from_object(Object obj) {
+//     return std::visit(overloaded {
+//         [](Object::Null) { return json(nullptr); },
+//         [](Object::Integer x) { return json(x); },
+//         [](Object::String x) { return json(x); },
+//         [](Object::Boolean x) { return json(x); },
+//         [](Object::Floating x) { return json(x); },
+//         [](Object::Map x) {
+//             json r;
+//             for (auto& [key, value] : *x)
+//                 r[key] = from_object(value);
+//             return r;
+//         },
+//         [](Object::List x) {
+//             json r;
+//             for (auto& value : *x)
+//                 r.push_back(from_object(value));
+//             return r;
+//         },
+//         [&obj](auto&&) -> json {
+//             throw TypeException(fmt::format("not convertible to json: `{}`", obj.type_name()));
+//         }
+//     }, obj.data());
+// }
 
 
 int main(int argc, char** argv) {
@@ -86,14 +86,14 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    json j;
-    try {
-        j = from_object(value);
-    }
-    catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 3;
-    }
+    // json j;
+    // try {
+    //     j = from_object(value);
+    // }
+    // catch (const std::exception& e) {
+    //     std::cerr << "Error: " << e.what() << std::endl;
+    //     return 3;
+    // }
 
-    std::cout << j.dump(2) << std::endl;
+    // std::cout << j.dump(2) << std::endl;
 }

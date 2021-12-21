@@ -39,10 +39,6 @@ class CMakeBuild(build_ext):
                     cmake_args += [
                         f'-DCMAKE_GENERATOR_PLATFORM={plat}',
                     ]
-                else:
-                    cmake_args += [
-                        '-G', 'MinGW Makefiles',
-                    ]
 
             if not os.path.exists(self.build_temp):
                 os.makedirs(self.build_temp)

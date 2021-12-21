@@ -20,9 +20,12 @@ if(MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
 endif()
 
+if(APPLE)
+    find_package(Boost COMPONENTS filesystem)
+endif()
+
 find_package(cxxopts CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
-find_package(nlohmann_json CONFIG REQUIRED)
 find_package(pegtl CONFIG REQUIRED)
 find_package(pybind11 CONFIG REQUIRED)
 

@@ -2,6 +2,10 @@
     "name": "gold",
     "version-string": "0.1.0",
     "dependencies": [
+        {
+            "name": "boost-filesystem",
+            "platform": "osx"
+        },
         "cxxopts",
         "fmt",
         "nlohmann-json",
