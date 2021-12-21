@@ -5,9 +5,16 @@ add_library(
     ${CMAKE_CURRENT_SOURCE_DIR}/serialization.cpp
 )
 
+target_include_directories(gold-nostdlib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(gold-nostdlib PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(gold-nostdlib fmt::fmt taocpp::pegtl)
+
+
+
 add_library(
     gold-stdlib OBJECT
     ${CMAKE_CURRENT_SOURCE_DIR}/stdlib.cpp
 )
 
-target_include_directories(gold-nostdlib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(gold-stdlib PRIVATE ${CMAKE_BINARY_DIR}/stdlib)
+target_link_libraries(gold-stdlib gold-nostdlib)
