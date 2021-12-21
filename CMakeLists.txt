@@ -1,11 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
 
-set(
-    CMAKE_TOOLCHAIN_FILE
-    ${CMAKE_CURRENT_SOURCE_DIR}/submodules/vcpkg/scripts/buildsystems/vcpkg.cmake
-    CACHE STRING "Vcpkg toolchain file"
-)
-
 project(gold)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -16,19 +10,13 @@ if(CMAKE_COMPILER_IS_GNUCXX)
     add_compile_options(-Wall -Wextra -Wno-unused-parameter -pedantic)
 endif()
 
-if(MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
-endif()
-
-find_package(cxxopts CONFIG REQUIRED)
-find_package(fmt CONFIG REQUIRED)
-find_package(nlohmann_json CONFIG REQUIRED)
-find_package(pegtl CONFIG REQUIRED)
-find_package(pybind11 CONFIG REQUIRED)
+add_subdirectory(submodules/cxxopts EXCLUDE_FROM_ALL)
+add_subdirectory(submodules/fmt EXCLUDE_FROM_ALL)
+add_subdirectory(submodules/json EXCLUDE_FROM_ALL)
+add_subdirectory(submodules/pegtl EXCLUDE_FROM_ALL)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/lib)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/bin)
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/python)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/stdlib)
 
 add_custom_target(stdlib-serialize ALL)

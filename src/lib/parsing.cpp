@@ -4,10 +4,8 @@
 #include <fmt/core.h>
 
 #include <tao/pegtl.hpp>
-#include <tao/pegtl/contrib/analyze.hpp>
 #include <tao/pegtl/contrib/parse_tree.hpp>
 #include <tao/pegtl/contrib/parse_tree_to_dot.hpp>
-#include <tao/pegtl/contrib/trace.hpp>
 
 #include "gold.hpp"
 #include "parsing.hpp"
@@ -693,7 +691,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     }
 
     else if (type == "Grammar::boolean") {
-        Object obj = Object::boolean(node.string_view() == "true");
+        Object obj = Object::boolean(node.string() == "true");
         return std::make_unique<Literal>(source(node), obj);
     }
 
@@ -713,7 +711,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
     }
 
     else if (type == "Grammar::string_data") {
-        auto data = node.string_view();
+        auto data = node.string();
         std::stringstream builder;
         for (auto it = data.begin(); it != data.end(); it++) {
             if (*it == '\\') {
@@ -872,16 +870,17 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
 
 
 bool Gold::analyze_grammar() {
-    return p::analyze<Grammar::file>() == 0;
+    // return p::analyze<Grammar::file>() == 0;
+    return true;
 }
 
 
 void Gold::debug_parse(std::string input, bool as_expression) {
-    p::string_input in(input, "x");
-    if (as_expression)
-        p::standard_trace<Grammar::expression>(in);
-    else
-        p::standard_trace<Grammar::file>(in);
+    // p::string_input in(input, "x");
+    // if (as_expression)
+    //     p::standard_trace<Grammar::expression>(in);
+    // else
+    //     p::standard_trace<Grammar::file>(in);
 }
 
 
@@ -917,7 +916,7 @@ std::unique_ptr<AstNode> Gold::parse_string(std::string code, bool as_expression
 
 
 std::unique_ptr<AstNode> Gold::parse_file(std::string path, bool as_expression) {
-    p::file_input in(path, "code");
+    p::read_input in(path);
     return _parse(in, as_expression);
 }
 
