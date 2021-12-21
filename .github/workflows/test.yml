@@ -1,9 +1,9 @@
-name: Test
+name: CI
 on: [push, workflow_dispatch]
 
 jobs:
-  job:
-    name: ${{matrix.os}}-${{github.workflow}}
+  test:
+    name: Test (${{matrix.os}})
     runs-on: ${{matrix.os}}
     strategy:
       fail-fast: false
