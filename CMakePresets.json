@@ -39,7 +39,6 @@
             "name": "ci-windows-latest",
             "displayName": "Continuous Integration",
             "binaryDir": "${sourceDir}/build/${presetName}",
-            "generator": "MinGW Makefiles",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
             }
