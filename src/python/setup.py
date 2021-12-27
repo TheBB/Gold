@@ -7,7 +7,7 @@ import subprocess
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 
 class CMakeExtension(Extension):
@@ -39,6 +39,8 @@ class CMakeBuild(build_ext):
                     cmake_args += [
                         f'-DCMAKE_GENERATOR_PLATFORM={plat}',
                     ]
+            elif platform.system() == 'Linux':
+                cmake_args.append(f'-DPYTHON_EXECUTABLE={sys.executable}')
 
             if not os.path.exists(self.build_temp):
                 os.makedirs(self.build_temp)
