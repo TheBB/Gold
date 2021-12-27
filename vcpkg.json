@@ -9,7 +9,6 @@
         "cxxopts",
         "fmt",
         "nlohmann-json",
-        "pegtl",
-        "pybind11"
+        "pegtl"
     ]
 }

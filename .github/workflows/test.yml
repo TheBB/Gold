@@ -59,8 +59,6 @@ jobs:
           CIBW_BEFORE_ALL_LINUX: >
             yum install -y curl zip unzip tar vim-common &&
             ./submodules/vcpkg/bootstrap-vcpkg.sh
-          CIBW_BEFORE_BUILD: >
-            pip install pybind11
 
       - uses: actions/upload-artifact@v2
         with:

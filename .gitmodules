@@ -1,3 +1,6 @@
 [submodule "submodules/vcpkg"]
 	path = submodules/vcpkg
 	url = git@github.com:microsoft/vcpkg
+[submodule "submodules/pybind11"]
+	path = submodules/pybind11
+	url = git@github.com:pybind/pybind11

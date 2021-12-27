@@ -27,7 +27,7 @@ endif()
 find_package(cxxopts CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(pegtl CONFIG REQUIRED)
-find_package(pybind11 CONFIG REQUIRED)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/submodules/pybind11)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/lib)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/bin)
