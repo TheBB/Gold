@@ -1,5 +1,12 @@
 name: CI
-on: [push, workflow_dispatch]
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  create:
+    tags:
 
 jobs:
 
@@ -32,6 +39,7 @@ jobs:
         run: ctest --preset ci-${{matrix.os}} --build-config Debug
 
   build_wheels:
+    if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
     name: Build wheels (${{matrix.os}})
     needs: [test]
     runs-on: ${{matrix.os}}
@@ -66,11 +74,10 @@ jobs:
           path: ./wheelhouse/*.whl
 
   upload_wheels:
+    if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
     name: Upload wheels
     needs: [build_wheels]
     runs-on: ubuntu-latest
-    # upload to PyPI on every tag starting with 'v'
-    # if: github.event_name == 'push' && startsWith(github.event.ref, 'refs/tags/v')
     steps:
       - uses: actions/download-artifact@v2
         with:
