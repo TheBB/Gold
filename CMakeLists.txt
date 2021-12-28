@@ -12,6 +12,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
+set(GOLD_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set(GOLD_BINARY_ROOT_DIR ${CMAKE_CURRENT_BINARY_DIR})
+
 if(CMAKE_COMPILER_IS_GNUCXX)
     add_compile_options(-Wall -Wextra -Wno-unused-parameter -pedantic)
 endif()
