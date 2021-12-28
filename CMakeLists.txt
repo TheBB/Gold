@@ -30,11 +30,9 @@ endif()
 find_package(cxxopts CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(pegtl CONFIG REQUIRED)
-# add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/submodules/pybind11)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/lib)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/bin)
-# add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/python)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/stdlib)
 
 add_custom_target(stdlib-serialize ALL)
