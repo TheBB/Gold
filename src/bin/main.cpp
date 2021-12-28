@@ -86,6 +86,8 @@ int main(int argc, char** argv) {
         return 2;
     }
 
+    std::cout << value << std::endl;
+
     // json j;
     // try {
     //     j = from_object(value);

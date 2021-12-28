@@ -230,8 +230,8 @@ TEST_CASE("Operator expressions", "[parsing]") {
 
     ast = parse_string("1 + 2 - 3 * 4 // 5 / 6");
     REQUIRE(ast->dump() ==
-        "BinOp(Lit(1) + BinOp(Lit(2) - BinOp(Lit(3) "
-        "* BinOp(Lit(4) // BinOp(Lit(5) / Lit(6))))))"
+        "BinOp(BinOp(Lit(1) + Lit(2)) - "
+        "BinOp(BinOp(BinOp(Lit(3) * Lit(4)) // Lit(5)) / Lit(6)))"
     );
 }
 

@@ -562,9 +562,9 @@ namespace Grammar
         branch
     > {};
 
-    // Binary operator template
+    // Right-associative binary operator template
     template <typename T, typename O>
-    struct binop {
+    struct rbinop {
         struct operand: p::seq<T> {};
         struct optor: O {};
         struct operation: p::seq<
@@ -573,13 +573,21 @@ namespace Grammar
         > {};
     };
 
+    // Left-associative operator sequence template
+    template <typename T, typename O>
+    struct lbinop {
+        struct operand: p::seq<T> {};
+        struct optor: O {};
+        struct operation: p::list<operand, optor, whitespace> {};
+    };
+
     // Binary operator precedence levels (left-to-right)
-    struct product: binop<atomic, p::sor<p::string<'/','/'>, p::one<'*'>, p::one<'/'>>> {};
-    struct sum: binop<product::operation, p::sor<p::string<'+'>, p::string<'-'>>> {};
-    struct ineq: binop<sum::operation, p::sor<p::string<'<','='>, p::string<'>','='>, p::one<'<'>, p::one<'>'>>> {};
-    struct eq: binop<ineq::operation, p::sor<p::string<'=','='>, p::string<'!','='>>> {};
-    struct conj: binop<eq::operation, p::string<'a','n','d'>> {};
-    struct disj: binop<conj::operation, p::string<'o','r'>> {};
+    struct product: lbinop<atomic, p::sor<p::string<'/','/'>, p::one<'*'>, p::one<'/'>>> {};
+    struct sum: lbinop<product::operation, p::sor<p::string<'+'>, p::string<'-'>>> {};
+    struct ineq: lbinop<sum::operation, p::sor<p::string<'<','='>, p::string<'>','='>, p::one<'<'>, p::one<'>'>>> {};
+    struct eq: lbinop<ineq::operation, p::sor<p::string<'=','='>, p::string<'!','='>>> {};
+    struct conj: lbinop<eq::operation, p::string<'a','n','d'>> {};
+    struct disj: lbinop<conj::operation, p::string<'o','r'>> {};
 
     // Finalize
     struct expression: p::seq<p::sor<eq::operation, composite>> {};
@@ -793,8 +801,7 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
         return map;
     }
 
-    else if (type.substr(0, 14) == "Grammar::binop")
-    {
+    else if (type.substr(0, 15) == "Grammar::rbinop") {
         if (node.children.size() == 1)
             return normalize(*node.children[0]);
         return std::make_unique<BinOp>(
@@ -803,6 +810,21 @@ static std::unique_ptr<AstNode> normalize(p::parse_tree::node& node) {
             normalize(*node.children[2]),
             operator_from_string(node.children[1]->string())
         );
+    }
+
+    else if (type.substr(0, 15) == "Grammar::lbinop") {
+        auto it = node.children.begin();
+        auto ast = normalize(**it++);
+        while (it != node.children.end()) {
+            auto op = operator_from_string((*it++)->string());
+            ast = std::make_unique<BinOp>(
+                source(node),
+                std::move(ast),
+                normalize(**it++),
+                op
+            );
+        }
+        return ast;
     }
 
     else if (type == "Grammar::block") {

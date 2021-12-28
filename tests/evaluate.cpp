@@ -114,6 +114,8 @@ TEST_CASE("Arithmetic", "[evaluate]") {
     REQUIRE(evaluate_string("3 // 2").unsafe_integer() == 1);
     REQUIRE(evaluate_string("1 + 2.0").unsafe_floating() == 3.0);
     REQUIRE(evaluate_string("1.0 - 2.0").unsafe_floating() == -1.0);
+    REQUIRE(evaluate_string("1 - 2 + 3").unsafe_integer() == 2);
+    REQUIRE(evaluate_string("2 // 2 * 2").unsafe_integer() == 2);
 }
 
 
