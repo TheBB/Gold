@@ -8,6 +8,8 @@ set(
 
 project(gold)
 
+option(GOLD_BUILD_UTILS "Build utilities" ON)
+
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
@@ -27,7 +29,10 @@ if(APPLE)
     find_package(Boost COMPONENTS filesystem)
 endif()
 
-find_package(cxxopts CONFIG REQUIRED)
+if(GOLD_BUILD_UTILS)
+    find_package(cxxopts CONFIG REQUIRED)
+endif()
+
 find_package(fmt CONFIG REQUIRED)
 find_package(pegtl CONFIG REQUIRED)
 
