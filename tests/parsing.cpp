@@ -291,3 +291,12 @@ TEST_CASE("File parsing as block", "[parsing]") {
     auto ast = parse_string("let a = 1\na", false);
     REQUIRE(ast->dump() == "Block(Entry(a, Lit(1)), Id(a))");
 }
+
+
+TEST_CASE("Comments", "[parsing]") {
+    auto ast = parse_string("# comment\n1\n# comment");
+    REQUIRE(ast->dump() == "Lit(1)");
+
+    ast = parse_string("1 + #comment\n2");
+    REQUIRE(ast->dump() == "BinOp(Lit(1) + Lit(2))");
+}
