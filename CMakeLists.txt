@@ -31,6 +31,7 @@ endif()
 
 if(GOLD_BUILD_UTILS)
     find_package(cxxopts CONFIG REQUIRED)
+    find_package(nlohmann_json CONFIG REQUIRED)
 endif()
 
 find_package(fmt CONFIG REQUIRED)

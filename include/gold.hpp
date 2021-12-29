@@ -231,3 +231,4 @@ Object evaluate_file(EvaluationContext&, std::string);
 }
 
 std::ostream& operator<<(std::ostream&, const Gold::Object&);
+std::ostream& operator<<(std::ostream&, const Gold::AstNode&);
