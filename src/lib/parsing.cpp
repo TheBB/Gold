@@ -294,7 +294,8 @@ void Gold::debug_parse_tree(std::string input, bool as_expression) {
     auto tree = as_expression ?
         p::parse_tree::parse<Grammar::expression, Grammar::selector>(in) :
         p::parse_tree::parse<Grammar::file, Grammar::selector>(in);
-    p::parse_tree::print_dot(std::cout, *tree);
+    if (tree)
+        p::parse_tree::print_dot(std::cout, *tree);
 }
 
 

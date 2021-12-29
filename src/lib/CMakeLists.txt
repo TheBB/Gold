@@ -1,3 +1,6 @@
+set(GOLD_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include PARENT_SCOPE)
+
+
 add_library(
     gold-nostdlib
     ${CMAKE_CURRENT_SOURCE_DIR}/gold.cpp
