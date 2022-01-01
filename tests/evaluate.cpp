@@ -56,6 +56,7 @@ TEST_CASE("Evaluating maps", "[evaluate]") {
 
 
 TEST_CASE("Blocks and bindings", "[evaluate]") {
+
     auto obj = evaluate_string(
         "let a = 1\n"
         "a"

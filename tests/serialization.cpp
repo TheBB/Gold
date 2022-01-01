@@ -167,7 +167,7 @@ TEST_CASE("Serialization of block ASTs", "[serialization]") {
     auto ast = parse_string("{1}");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse_string("{let a = 1 let b = 2 a + b}");
+    ast = parse_string("{let a = 1\nlet b = 2\na + b}");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
@@ -176,7 +176,7 @@ TEST_CASE("Serialization of function ASTs", "[serialization]") {
     auto ast = parse_string("() => 1");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse_string("(a) => {let b = a b}");
+    ast = parse_string("(a) => {let b = a\nb}");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 

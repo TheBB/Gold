@@ -185,10 +185,10 @@ public:
 
 
 bool analyze_grammar();
-std::unique_ptr<AstNode> parse_string(std::string, bool as_expression = true);
-std::unique_ptr<AstNode> parse_file(std::string, bool as_expression = true);
-void debug_parse(std::string, bool as_expression = true);
-void debug_parse_tree(std::string, bool as_expression = true);
+std::unique_ptr<AstNode> parse_string(std::string);
+std::unique_ptr<AstNode> parse_file(std::string);
+void debug_parse(std::string);
+void debug_parse_tree(std::string);
 
 std::unique_ptr<AstNode> normalize(tao::pegtl::parse_tree::node&);
 

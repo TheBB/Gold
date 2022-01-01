@@ -17,245 +17,292 @@ namespace p = tao::pegtl;
 
 namespace Grammar
 {
+    /*
+
+    Generally, rules are responsible for consuming whitespace before and should
+    not consume whitespace after.  For this, we use the prepad template below.
+
+    Atomic expressions are strings, numbers, lists, maps, block expressions,
+    identifiers, the true, false and null constants as well as parenthesised
+    expressions.
+
+    All atomic expressions may be followed by postfix operators: object access,
+    subscripting and function calls.
+
+    Postfixed expressions in turn, constitute the building blocks for the
+    operator hierarchy, from highest to lowest precedence.
+
+    Operator expressions, together with function definitions and branch blocks
+    constitute the wider class of composite expressions. Function definitions
+    and branches may not participate in operator expressions unless
+    parenthesised.
+
+    */
+
     // Forward declarations
     struct expression;
-    struct identifier_char;
+    struct splatted;
+    struct identifier_char: p::alnum {};
 
-    // Keywords (illegal identifiers in expressions)
-    struct keyword: p::seq<
-        p::sor<
-            p::string<'i','f'>,
-            p::string<'t','h','e','n'>,
-            p::string<'e','l','s','e'>,
-            p::string<'e','l','s','e'>,
-            p::string<'t','r','u','e'>,
-            p::string<'f','a','l','s','e'>,
-            p::string<'n','u','l','l'>,
-            p::string<'a','n','d'>
-        >,
-        p::not_at<identifier_char>
-    > {};
+    // Ignorables: whitespace and comments
+    struct ignore {
+        struct whitespace_noeol: p::one<' ', '\t', '\n', '\r'> {};
+        struct whitespace: p::sor<whitespace_noeol, p::one<'\n'>> {};
+        struct comment: p::seq<p::one<'#'>, p::until<p::eolf>> {};
+        struct noeol: p::sor<whitespace_noeol, comment> {};
+        struct rule: p::sor<whitespace, comment> {};
+    };
+
+    // Keywords - these rules do not consume leading whitespace
+    struct keyword {
+        struct If: p::string<'i','f'> {};
+        struct Then: p::string<'t','h','e','n'> {};
+        struct Else: p::string<'e','l','s','e'> {};
+        struct Let: p::string<'l','e','t'> {};
+        struct True: p::string<'t','r','u','e'> {};
+        struct False: p::string<'f','a','l','s','e'> {};
+        struct Null: p::string<'n','u','l','l'> {};
+        struct And: p::string<'a','n','d'> {};
+        struct Or: p::string<'o','r'> {};
+
+        struct any: p::sor<If, Then, Else, Let, True, False, Null, And, Or> {};
+        struct rule: p::seq<any, p::not_at<identifier_char>> {};
+    };
+
+    // Prepad: consume whitespace before a rule but not after
+    template <typename T, typename W = ignore::rule>
+    struct prepad: p::pad<T, W, p::failure> {};
+
+    // Common tokens
+    struct token {
+        struct equals: prepad<p::one<'='>> {};
+        struct colon: prepad<p::one<':'>> {};
+        struct dot: prepad<p::one<'.'>> {};
+        struct comma: prepad<p::one<','>> {};
+        struct op_paren: prepad<p::one<'('>> {};
+        struct cl_paren: prepad<p::one<')'>> {};
+        struct op_brace: prepad<p::one<'{'>> {};
+        struct cl_brace: prepad<p::one<'}'>> {};
+        struct op_bracket: prepad<p::one<'['>> {};
+        struct cl_bracket: prepad<p::one<']'>> {};
+        struct implies: prepad<p::string<'=','>'>> {};
+        struct splat: prepad<p::string<'.','.','.'>> {};
+    };
+
+    // List of elements separated by commas with optional trailing comma
+    // This rule does not consume surrounding delimiters
+    template <typename T>
+    struct listof: p::opt<p::seq<p::list<T, token::comma>, p::opt<token::comma>>> {};
+
+    // Operators - these rules do not consume leading whitespace
+    struct op {
+        struct divide: p::one<'/'> {};
+        struct idivide: p::string<'/','/'> {};
+        struct multiply: p::one<'*'> {};
+        struct plus: p::one<'+'> {};
+        struct minus: p::one<'-'> {};
+        struct le: p::string<'<','='> {};
+        struct ge: p::string<'>','='> {};
+        struct lt: p::one<'<'> {};
+        struct gt: p::one<'>'> {};
+        struct dbleq: p::string<'=','='> {};
+        struct ineq: p::string<'!','='> {};
+    };
 
     // Identifiers
-    struct identifier_char: p::alnum {};
     struct identifier: p::seq<
-        p::not_at<keyword>,
+        p::not_at<keyword::rule>,
         p::plus<identifier_char>
     > {};
 
-    // Ignorables
-    struct whitespace: p::one<' ', '\t', '\n', '\r'> {};
-    struct comment: p::seq<p::one<'#'>, p::until<p::eolf>> {};
-    struct ignore: p::sor<whitespace, comment> {};
-
     // Numbers
-    struct sign: p::one<'-','+'> {};
-    struct dot: p::one<'.'> {};
-    struct leading: p::sor<p::one<'0'>, p::seq<p::range<'1','9'>, p::star<p::digit>>> {};
-    struct trailing: p::plus<p::digit> {};
-    struct exponent: p::seq<p::one<'e','E'>, p::opt<sign>, leading> {};
-    struct integer: p::seq<p::opt<sign>, leading> {};
-    struct float1: p::seq<p::opt<sign>, leading, dot, p::opt<trailing>, p::opt<exponent>> {};
-    struct float2: p::seq<p::opt<sign>, p::opt<leading>, dot, trailing, p::opt<exponent>> {};
-    struct float3: p::seq<p::opt<sign>, leading, exponent> {};
-    struct floating: p::sor<float1, float2, float3> {};
-    struct number: p::sor<floating, integer> {};
+    struct number {
+        struct decimal: p::one<'.'> {};
+        struct sign: p::opt<p::one<'-','+'>> {};
+        struct leading: p::sor<p::one<'0'>, p::seq<p::range<'1','9'>, p::star<p::digit>>> {};
+        struct trailing: p::plus<p::digit> {};
+        struct exponent: p::seq<p::one<'e','E'>, sign, leading> {};
+        struct integer: p::seq<sign, leading> {};
+        struct float1: p::seq<sign, leading, decimal, p::opt<trailing>, p::opt<exponent>> {};
+        struct float2: p::seq<sign, p::opt<leading>, decimal, trailing, p::opt<exponent>> {};
+        struct float3: p::seq<sign, leading, exponent> {};
+        struct floating: p::sor<float1, float2, float3> {};
+        struct rule: p::sor<floating, integer> {};
+    };
 
-    // Strings
-    struct escaped_unicode: p::seq<p::one<'u'>, p::rep<4, p::xdigit>> {};
-    struct escaped_char: p::sor<
-        p::one<'\\', '"', 'b', 'f', 'n', 'r', 't', '$'>,
-        escaped_unicode
-    > {};
-    struct escaped: p::sor<escaped_char> {};
-    struct unescaped: p::utf8::range<0x20, 0x10ffff> {};
-    struct string_character: p::if_then_else<p::one<'\\'>, escaped, unescaped> {};
-    struct string_data: p::seq<
-        string_character,
-        p::until<
-            p::at<p::sor<p::eof, p::string<'$','{'>>>,
-            string_character
-        >
-    > {};
-    struct string_interp: p::seq<p::pad<expression, ignore>, p::one<'}'>> {};
-    struct string: p::until<p::at<p::one<'"'>>, string_character> {};
-    struct istring: p::until<p::eof, p::if_then_else<p::string<'$','{'>, string_interp, string_data>> {};
-    struct quoted_string: p::seq<p::one<'"'>, p::rematch<string, p::seq<istring, p::eof>>, p::one<'"'>> {};
+    // Strings are parsed in two passes:
+    // - the first pass identifies the string as a sequence of possibly escaped
+    //   characters surrounded by quotes
+    // - the second pass divides the string into components, all of which are
+    //   either data (regular string literals) or interpolations (expressions)
+    // The result of the second pass is converted into AST
+    struct string {
+        struct interpolate: p::string<'$','{'> {};
+        struct quote: p::one<'"'> {};
 
-    // Null
-    struct nullp: p::string<'n','u','l','l'> {};
+        // First pass
+        struct escaped_unicode: p::seq<p::one<'u'>, p::rep<4, p::xdigit>> {};
+        struct escaped: p::sor<
+            p::one<'\\', '"', 'b', 'f', 'n', 'r', 't', '$'>,
+            escaped_unicode
+        > {};
+        struct unescaped: p::utf8::range<0x20, 0x10ffff> {};
+        struct character: p::if_then_else<p::one<'\\'>, escaped, unescaped> {};
+        struct pre: p::until<p::at<quote>, character> {};
+
+        // Second pass
+        struct data: p::seq<character, p::until<p::at<p::sor<p::eof, interpolate>>, character>> {};
+        struct interp: p::seq<prepad<expression>, prepad<token::cl_brace>> {};
+        struct post: p::until<p::eof, p::if_then_else<interpolate, interp, data>> {};
+
+        struct rule: p::seq<quote, p::rematch<pre, p::seq<post, p::eof>>, quote> {};
+    };
 
     // Booleans
-    struct boolean: p::sor<p::string<'t','r','u','e'>, p::string<'f','a','l','s','e'>> {};
+    struct boolean: p::sor<keyword::True, keyword::False> {};
 
     // Lists
-    struct splatted_atomic;
-    struct list_element: p::sor<splatted_atomic, expression> {};
-    struct list: p::opt<p::seq<
-        p::star<ignore>,
-        p::list<list_element, p::one<','>, ignore>,
-        p::opt<p::pad<p::one<','>, ignore>>
-    >> {};
-    struct bracketed_list: p::seq<p::one<'['>, list, p::pad<p::one<']'>, ignore>> {};
+    struct list {
+        struct element: p::sor<splatted, expression> {};
+        struct seq: p::seq<listof<element>> {};
+        struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
+    };
 
     // Maps
-    struct map_identifier: p::plus<p::alnum> {};
-    struct map_entry: p::seq<
-        map_identifier,
-        p::pad<p::one<':'>, ignore>,
-        expression
-    > {};
-    struct map_element: p::sor<splatted_atomic, map_entry> {};
-    struct map: p::opt<p::seq<
-        p::star<ignore>,
-        p::list<map_element, p::one<','>, ignore>,
-        p::opt<p::pad<p::one<','>, ignore>>
-    >> {};
-    struct bracketed_map: p::seq<p::one<'{'>, map, p::pad<p::one<'}'>, ignore>> {};
+    struct map {
+        struct identifier: p::plus<p::alnum> {};
+        struct entry: p::seq<prepad<identifier>, token::colon, expression> {};
+        struct element: p::sor<splatted, entry> {};
+        struct seq: p::seq<listof<element>> {};
+        struct rule: p::seq<token::op_brace, seq, token::cl_brace> {};
+    };
 
     // Blocks
-    struct let_identifier: p::seq<identifier> {};
-    struct binding: p::seq<
-        p::string<'l','e','t'>,
-        p::pad<let_identifier, ignore>,
-        p::pad<p::one<'='>, ignore>,
-        expression
-    > {};
-    struct block: p::seq<
-        p::star<ignore>,
-        p::star<p::seq<binding, p::star<ignore>>>,
-        expression
-    > {};
-    struct bracketed_block: p::seq<p::one<'{'>, block, p::pad<p::one<'}'>, ignore>> {};
+    struct block {
+        struct let_identifier: p::seq<identifier> {};
+        struct binding: p::seq<
+            prepad<keyword::Let>,
+            prepad<let_identifier>,
+            token::equals,
+            expression,
+            p::until<p::eol, ignore::noeol>
+        > {};
+        struct seq: p::seq<p::star<binding>, expression> {};
+        struct rule: p::seq<token::op_brace, seq, token::cl_brace> {};
+    };
 
     // Functions
-    struct param_identifier: p::seq<let_identifier> {};
-    struct param_list: p::opt<p::seq<
-        p::star<ignore>,
-        p::list<param_identifier, p::one<','>, ignore>,
-        p::opt<p::pad<p::one<','>, ignore>>
-    >> {};
-    struct bracketed_param_list: p::seq<p::one<'('>, param_list, p::pad<p::one<')'>, ignore>> {};
-    struct function: p::seq<
-        bracketed_param_list,
-        p::pad<p::string<'=','>'>, ignore>,
-        p::pad<expression, ignore>
-    > {};
+    struct func {
+        struct param_identifier: p::seq<identifier> {};
+        struct param_list: listof<prepad<param_identifier>> {};
+        struct bracketed_param_list: p::seq<token::op_paren, param_list, token::cl_paren> {};
+        struct rule: p::seq<
+            bracketed_param_list,
+            token::implies,
+            expression
+        > {};
+    };
 
     // Conditionals
     struct branch: p::seq<
-        p::pad<p::string<'i','f'>, ignore>,
-        p::pad<expression, ignore>,
-        p::pad<p::string<'t','h','e','n'>, ignore>,
-        p::pad<expression, ignore>,
-        p::pad<p::string<'e','l','s','e'>, ignore>,
-        p::pad<expression, ignore>
+        prepad<keyword::If>,
+        expression,
+        prepad<keyword::Then>,
+        expression,
+        prepad<keyword::Else>,
+        expression
     > {};
 
     // Parenthesised expressions
     struct paren: p::seq<
-        p::one<'('>,
-        p::pad<expression, ignore>,
-        p::one<')'>,
-        p::not_at<p::pad<p::string<'=','>'>, ignore>>
+        token::op_paren,
+        expression,
+        token::cl_paren,
+        p::not_at<token::implies>
     > {};
 
     // Atomic expressions (can have postfix operators)
-    struct pure_atomic: p::sor<
-        quoted_string,
-        number,
-        bracketed_list,
-        bracketed_map,
-        bracketed_block,
+    struct atomic: prepad<p::sor<
+        string::rule,
+        number::rule,
+        list::rule,
+        map::rule,
+        block::rule,
         identifier,
         boolean,
-        nullp,
+        keyword::Null,
         paren
-    > {};
+    >> {};
 
     // Precedence level: postfix operators
-    struct funcall_args: p::opt<p::seq<
-        p::star<ignore>,
-        p::list<expression, p::one<','>, ignore>,
-        p::opt<p::pad<p::one<','>, ignore>>
-    >> {};
-    struct funcall_operator: p::seq<p::one<'('>, funcall_args, p::pad<p::one<')'>, ignore>> {};
-    struct object_access: p::seq<p::one<'.'>, let_identifier> {};
-    struct subscript_operator: p::seq<p::one<'['>, p::pad<expression, ignore>, p::pad<p::one<']'>, ignore>> {};
+    struct postfix {
+        struct funcall_args: listof<expression> {};
+        struct funcall_operator: p::seq<token::op_paren, funcall_args, token::cl_paren> {};
+        struct object_access: p::seq<token::dot, identifier> {};
+        struct subscript_operator: p::seq<token::op_bracket, expression, token::cl_bracket> {};
 
-    struct postfix: p::sor<
-        funcall_operator,
-        object_access,
-        subscript_operator
-    > {};
-    struct atomic: p::seq<pure_atomic, p::star<p::pad<postfix, ignore>>> {};
+        struct post_op: p::sor<
+            funcall_operator,
+            object_access,
+            subscript_operator
+        > {};
+        struct rule: p::seq<atomic, p::star<post_op>> {};
+    };
 
-    struct splat: p::string<'.','.','.'> {};
-    struct splatted_atomic: p::seq<atomic, p::pad<splat, ignore>> {};
+    // Special case: splat expressions
+    struct splatted: p::seq<postfix::rule, token::splat> {};
 
     // Composite expressions (can't have postfix operators)
     struct composite: p::sor<
-        atomic,
-        function,
+        postfix::rule,
+        func::rule,
         branch
     > {};
-
-    // Right-associative binary operator template
-    template <typename T, typename O>
-    struct rbinop {
-        struct operand: p::seq<T> {};
-        struct optor: O {};
-        struct operation: p::seq<
-            operand,
-            p::opt<p::seq<p::pad<optor, ignore>, p::pad<operation, ignore>>>
-        > {};
-    };
 
     // Left-associative operator sequence template
     template <typename T, typename O>
     struct lbinop {
         struct operand: p::seq<T> {};
         struct optor: O {};
-        struct operation: p::list<operand, optor, ignore> {};
+        struct operation: p::list<operand, prepad<optor>> {};
     };
 
     // Binary operator precedence levels (left-to-right)
-    struct product: lbinop<atomic, p::sor<p::string<'/','/'>, p::one<'*'>, p::one<'/'>>> {};
-    struct sum: lbinop<product::operation, p::sor<p::string<'+'>, p::string<'-'>>> {};
-    struct ineq: lbinop<sum::operation, p::sor<p::string<'<','='>, p::string<'>','='>, p::one<'<'>, p::one<'>'>>> {};
-    struct eq: lbinop<ineq::operation, p::sor<p::string<'=','='>, p::string<'!','='>>> {};
-    struct conj: lbinop<eq::operation, p::string<'a','n','d'>> {};
-    struct disj: lbinop<conj::operation, p::string<'o','r'>> {};
+    struct product: lbinop<postfix::rule, p::sor<op::idivide, op::multiply, op::divide>> {};
+    struct sum: lbinop<product::operation, p::sor<op::plus, op::minus>> {};
+    struct ineq: lbinop<sum::operation, p::sor<op::le, op::ge, op::lt, op::gt>> {};
+    struct eq: lbinop<ineq::operation, p::sor<op::dbleq, op::ineq>> {};
+    struct conj: lbinop<eq::operation, keyword::And> {};
+    struct disj: lbinop<conj::operation, keyword::Or> {};
 
     // Finalize
     struct expression: p::seq<p::sor<eq::operation, composite>> {};
-    struct tl_expression: p::seq<p::bof, p::star<ignore>, expression, p::pad<p::eof, ignore>> {};
-    struct file: p::seq<p::bof, p::star<ignore>, block, p::pad<p::eof, ignore>> {};
+    struct file: p::seq<p::bof, block::seq, prepad<p::eof>> {};
 
     template<typename Rule>
     using selector = p::parse_tree::selector<Rule,
         p::parse_tree::store_content::on<
-            number,
-            integer,
-            floating,
-            istring,
-            string_data,
-            string_interp,
-            nullp,
+            number::rule,
+            number::integer,
+            number::floating,
+            string::post,
+            string::data,
+            string::interp,
+            keyword::Null,
             boolean,
-            list,
-            splatted_atomic,
-            map_identifier,
-            map_entry,
-            block,
-            binding,
+            list::seq,
+            splatted,
+            map::identifier,
+            map::entry,
+            map::seq,
+            block::seq,
+            block::binding,
+            block::let_identifier,
             identifier,
-            let_identifier,
-            param_identifier,
-            param_list,
-            function,
+            func::param_identifier,
+            func::param_list,
+            func::rule,
             branch,
-            map,
             product::operation,
             product::optor,
             sum::operation,
@@ -268,10 +315,10 @@ namespace Grammar
             conj::optor,
             disj::operation,
             disj::optor,
-            atomic,
-            funcall_operator,
-            object_access,
-            subscript_operator,
+            postfix::rule,
+            postfix::funcall_operator,
+            postfix::object_access,
+            postfix::subscript_operator,
             file
         >
     >;
@@ -283,31 +330,24 @@ bool Gold::analyze_grammar() {
 }
 
 
-void Gold::debug_parse(std::string input, bool as_expression) {
+void Gold::debug_parse(std::string input) {
     p::string_input in(input, "x");
-    if (as_expression)
-        p::standard_trace<Grammar::tl_expression>(in);
-    else
-        p::standard_trace<Grammar::file>(in);
+    p::standard_trace<Grammar::file>(in);
 }
 
 
-void Gold::debug_parse_tree(std::string input, bool as_expression) {
+void Gold::debug_parse_tree(std::string input) {
     p::string_input in(input, "x");
-    auto tree = as_expression ?
-        p::parse_tree::parse<Grammar::tl_expression, Grammar::selector>(in) :
-        p::parse_tree::parse<Grammar::file, Grammar::selector>(in);
+    auto tree = p::parse_tree::parse<Grammar::file, Grammar::selector>(in);
     if (tree)
         p::parse_tree::print_dot(std::cout, *tree);
 }
 
 
 template <typename I>
-static std::unique_ptr<AstNode> _parse(I& input, bool as_expression) {
+static std::unique_ptr<AstNode> _parse(I& input) {
     try {
-        auto tree = as_expression ?
-            p::parse_tree::parse<Grammar::tl_expression, Grammar::selector>(input) :
-            p::parse_tree::parse<Grammar::file, Grammar::selector>(input);
+        auto tree = p::parse_tree::parse<Grammar::file, Grammar::selector>(input);
         if (!tree)
             throw ParseException();
         return normalize(*tree);
@@ -318,15 +358,15 @@ static std::unique_ptr<AstNode> _parse(I& input, bool as_expression) {
 }
 
 
-std::unique_ptr<AstNode> Gold::parse_string(std::string code, bool as_expression) {
+std::unique_ptr<AstNode> Gold::parse_string(std::string code) {
     p::string_input in(code, "code");
-    return _parse(in, as_expression);
+    return _parse(in);
 }
 
 
-std::unique_ptr<AstNode> Gold::parse_file(std::string path, bool as_expression) {
+std::unique_ptr<AstNode> Gold::parse_file(std::string path) {
     p::file_input in(path, "code");
-    return _parse(in, as_expression);
+    return _parse(in);
 }
 
 
@@ -337,7 +377,7 @@ Object Gold::evaluate_string(std::string code) {
 
 
 Object Gold::evaluate_string(EvaluationContext& ctx, std::string code) {
-    auto ast = parse_string(code, false);
+    auto ast = parse_string(code);
     auto value = ast->evaluate(ctx);
     return value;
 }
@@ -350,7 +390,7 @@ Object Gold::evaluate_file(std::string code) {
 
 
 Object Gold::evaluate_file(EvaluationContext& ctx, std::string path) {
-    auto ast = parse_file(path, false);
+    auto ast = parse_file(path);
     auto value = ast->evaluate(ctx);
     return value;
 }
