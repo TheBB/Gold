@@ -564,7 +564,7 @@ std::unique_ptr<AstNode> Gold::normalize(p::parse_tree::node& node) {
         return ast;
     }
 
-    else if (type == "Grammar::block::seq") {
+    else if (type == "Grammar::block::rule") {
         if (node.children.size() == 1)
             return normalize(*node.children[0]);
         auto block = std::make_unique<Block>(source(node));

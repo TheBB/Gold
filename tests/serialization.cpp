@@ -164,10 +164,7 @@ TEST_CASE("Serialization of opseq ASTs", "[serialization]") {
 
 
 TEST_CASE("Serialization of block ASTs", "[serialization]") {
-    auto ast = parse_string("{1}");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
-
-    ast = parse_string("{let a = 1\nlet b = 2\nin a + b}");
+    auto ast = parse_string("let a = 1\nlet b = 2\nin a + b");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
@@ -176,7 +173,7 @@ TEST_CASE("Serialization of function ASTs", "[serialization]") {
     auto ast = parse_string("() => 1");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 
-    ast = parse_string("(a) => {let b = a\nin b}");
+    ast = parse_string("(a) => let b = a in b");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 

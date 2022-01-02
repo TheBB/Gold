@@ -81,10 +81,7 @@ TEST_CASE("Blocks and bindings", "[evaluate]") {
 
     obj = evaluate_string(
         "let a = 1\n"
-        "let b = {\n"
-        "  let a = 2\n"
-        "  in a\n"
-        "}\n"
+        "let b = let a = 2 in a\n"
         "in [a, b]"
     );
     REQUIRE(obj.size() == 2);

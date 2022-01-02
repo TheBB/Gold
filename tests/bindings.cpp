@@ -46,13 +46,13 @@ TEST_CASE("Indentifier resolution: operator expressions", "[bindings]") {
 
 
 TEST_CASE("Identifier resolution: blocks", "[bindings]") {
-    auto ast = parse_string("{let a = b\nin a}");
+    auto ast = parse_string("let a = b in a");
     REQUIRE(ast->free_identifiers() == std::set<std::string> {"b"});
 
-    ast = parse_string("{let a = b\nlet c = a\nin c}");
+    ast = parse_string("let a = b\nlet c = a\nin c");
     REQUIRE(ast->free_identifiers() == std::set<std::string> {"b"});
 
-    ast = parse_string("{let a = b\nin c}");
+    ast = parse_string("let a = b\nin c");
     REQUIRE(ast->free_identifiers() == std::set<std::string> {"b", "c"});
 }
 
@@ -64,7 +64,7 @@ TEST_CASE("Identifier resolution: functions", "[bindings]") {
     ast = parse_string("(a, b) => a + b + c");
     REQUIRE(ast->free_identifiers() == std::set<std::string> {"c"});
 
-    ast = parse_string("(a) => {let b = a\nin b + c}");
+    ast = parse_string("(a) => let b = a in b + c");
     REQUIRE(ast->free_identifiers() == std::set<std::string> {"c"});
 }
 

@@ -243,10 +243,7 @@ TEST_CASE("Parenthesised operator expressions", "[parsing]") {
 
 
 TEST_CASE("Block expressions", "[parsing]") {
-    auto ast = parse_string("{1}");
-    REQUIRE(ast->dump() == "Lit(1)");
-
-    ast = parse_string("{let a = 1 let b = 2 in a + b}");
+    auto ast = parse_string("let a = 1 let b = 2 in a + b");
     REQUIRE(ast->dump() == "Block(Entry(a, Lit(1)), Entry(b, Lit(2)), BinOp(Id(a) + Id(b)))");
 }
 
@@ -255,7 +252,7 @@ TEST_CASE("Functions", "[parsing]") {
     auto ast = parse_string("() => 1");
     REQUIRE(ast->dump() == "Function(Lit(1))");
 
-    ast = parse_string("(a) => {let b = a\nin b}");
+    ast = parse_string("(a) => let b = a\nin b");
     REQUIRE(ast->dump() == "Function(a, Block(Entry(b, Id(a)), Id(b)))");
 }
 

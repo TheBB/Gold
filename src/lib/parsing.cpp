@@ -22,9 +22,8 @@ namespace Grammar
     Generally, rules are responsible for consuming whitespace before and should
     not consume whitespace after.  For this, we use the prepad template below.
 
-    Atomic expressions are strings, numbers, lists, maps, block expressions,
-    identifiers, the true, false and null constants as well as parenthesised
-    expressions.
+    Atomic expressions are strings, numbers, lists, maps, identifiers, the true,
+    false and null constants as well as parenthesised expressions.
 
     All atomic expressions may be followed by postfix operators: object access,
     subscripting and function calls.
@@ -32,9 +31,9 @@ namespace Grammar
     Postfixed expressions in turn, constitute the building blocks for the
     operator hierarchy, from highest to lowest precedence.
 
-    Operator expressions, together with function definitions and branch blocks
-    constitute the wider class of composite expressions. Function definitions
-    and branches may not participate in operator expressions unless
+    Operator expressions, together with function definitions, branches and
+    let-expressions constitute the wider class of composite expressions.  The
+    non-postfixed expressions may not participate in operator expressions unless
     parenthesised.
 
     */
@@ -187,11 +186,12 @@ namespace Grammar
             token::equals,
             expression
         > {};
-        struct seq: p::sor<
-            p::seq<p::star<binding>, prepad<keyword::In>, expression>,
+        struct rule: p::seq<
+            binding,
+            p::star<binding>,
+            prepad<keyword::In>,
             expression
         > {};
-        struct rule: p::seq<token::op_brace, seq, token::cl_brace> {};
     };
 
     // Functions
@@ -230,7 +230,6 @@ namespace Grammar
         number::rule,
         list::rule,
         map::rule,
-        block::rule,
         identifier,
         boolean,
         keyword::Null,
@@ -259,6 +258,7 @@ namespace Grammar
     struct composite: p::sor<
         postfix::rule,
         func::rule,
+        block::rule,
         branch
     > {};
 
@@ -280,7 +280,7 @@ namespace Grammar
 
     // Finalize
     struct expression: p::seq<p::sor<eq::operation, composite>> {};
-    struct file: p::seq<p::bof, block::seq, prepad<p::eof>> {};
+    struct file: p::seq<p::bof, expression, prepad<p::eof>> {};
 
     template<typename Rule>
     using selector = p::parse_tree::selector<Rule,
@@ -298,7 +298,7 @@ namespace Grammar
             map::identifier,
             map::entry,
             map::seq,
-            block::seq,
+            block::rule,
             block::binding,
             block::let_identifier,
             identifier,
@@ -342,8 +342,11 @@ void Gold::debug_parse(std::string input) {
 void Gold::debug_parse_tree(std::string input) {
     p::string_input in(input, "x");
     auto tree = p::parse_tree::parse<Grammar::file, Grammar::selector>(in);
-    if (tree)
+    if (tree) {
         p::parse_tree::print_dot(std::cout, *tree);
+        auto ast = normalize(*tree);
+        std::cout << *ast << std::endl;
+    }
 }
 
 
