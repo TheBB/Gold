@@ -59,13 +59,14 @@ namespace Grammar
         struct Then: p::string<'t','h','e','n'> {};
         struct Else: p::string<'e','l','s','e'> {};
         struct Let: p::string<'l','e','t'> {};
+        struct In: p::string<'i','n'> {};
         struct True: p::string<'t','r','u','e'> {};
         struct False: p::string<'f','a','l','s','e'> {};
         struct Null: p::string<'n','u','l','l'> {};
         struct And: p::string<'a','n','d'> {};
         struct Or: p::string<'o','r'> {};
 
-        struct any: p::sor<If, Then, Else, Let, True, False, Null, And, Or> {};
+        struct any: p::sor<If, Then, Else, Let, In, True, False, Null, And, Or> {};
         struct rule: p::seq<any, p::not_at<identifier_char>> {};
     };
 
@@ -184,10 +185,12 @@ namespace Grammar
             prepad<keyword::Let>,
             prepad<let_identifier>,
             token::equals,
-            expression,
-            p::until<p::eol, ignore::noeol>
+            expression
         > {};
-        struct seq: p::seq<p::star<binding>, expression> {};
+        struct seq: p::sor<
+            p::seq<p::star<binding>, prepad<keyword::In>, expression>,
+            expression
+        > {};
         struct rule: p::seq<token::op_brace, seq, token::cl_brace> {};
     };
 

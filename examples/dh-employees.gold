@@ -15,4 +15,4 @@ let alice = {
     position: job
 }
 
-[john, alice]
+in [john, alice]

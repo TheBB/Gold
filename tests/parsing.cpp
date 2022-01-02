@@ -246,7 +246,7 @@ TEST_CASE("Block expressions", "[parsing]") {
     auto ast = parse_string("{1}");
     REQUIRE(ast->dump() == "Lit(1)");
 
-    ast = parse_string("{let a = 1\nlet b = 2\na + b}");
+    ast = parse_string("{let a = 1 let b = 2 in a + b}");
     REQUIRE(ast->dump() == "Block(Entry(a, Lit(1)), Entry(b, Lit(2)), BinOp(Id(a) + Id(b)))");
 }
 
@@ -255,7 +255,7 @@ TEST_CASE("Functions", "[parsing]") {
     auto ast = parse_string("() => 1");
     REQUIRE(ast->dump() == "Function(Lit(1))");
 
-    ast = parse_string("(a) => {let b = a\nb}");
+    ast = parse_string("(a) => {let b = a\nin b}");
     REQUIRE(ast->dump() == "Function(a, Block(Entry(b, Id(a)), Id(b)))");
 }
 
@@ -288,7 +288,7 @@ TEST_CASE("Postfix operators", "[parsing]") {
 
 
 TEST_CASE("File parsing as block", "[parsing]") {
-    auto ast = parse_string("let a = 1\na");
+    auto ast = parse_string("let a = 1\nin a");
     REQUIRE(ast->dump() == "Block(Entry(a, Lit(1)), Id(a))");
 }
 

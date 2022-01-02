@@ -59,14 +59,14 @@ TEST_CASE("Blocks and bindings", "[evaluate]") {
 
     auto obj = evaluate_string(
         "let a = 1\n"
-        "a"
+        "in a"
     );
     REQUIRE(obj.unsafe_integer() == 1);
 
     obj = evaluate_string(
         "let a = 2.1\n"
         "let b = \"zomg\"\n"
-        "[a, b]"
+        "in [a, b]"
     );
     REQUIRE(obj.size() == 2);
     REQUIRE(obj[0].unsafe_floating() == 2.1);
@@ -75,7 +75,7 @@ TEST_CASE("Blocks and bindings", "[evaluate]") {
     obj = evaluate_string(
         "let a = 2.1\n"
         "let b = a\n"
-        "b"
+        "in b"
     );
     REQUIRE(obj.unsafe_floating() == 2.1);
 
@@ -83,9 +83,9 @@ TEST_CASE("Blocks and bindings", "[evaluate]") {
         "let a = 1\n"
         "let b = {\n"
         "  let a = 2\n"
-        "  a\n"
+        "  in a\n"
         "}\n"
-        "[a, b]"
+        "in [a, b]"
     );
     REQUIRE(obj.size() == 2);
     REQUIRE(obj[0].unsafe_integer() == 1);
@@ -95,7 +95,7 @@ TEST_CASE("Blocks and bindings", "[evaluate]") {
         "let a = 1\n"
         "let b = a\n"
         "let a = 2\n"
-        "[a, b]"
+        "in [a, b]"
     );
     REQUIRE(obj.size() == 2);
     REQUIRE(obj[0].unsafe_integer() == 2);
@@ -133,7 +133,7 @@ TEST_CASE("Evaluation of functions", "[evaluate]") {
     auto obj = evaluate_string(
         "let double = (x) => x + x\n"
         "let applytwice = (f,x) => f(f(x))\n"
-        "applytwice(double, [1])"
+        "in applytwice(double, [1])"
     );
     REQUIRE(obj.size() == 4);
     REQUIRE(obj[0].unsafe_integer() == 1);
@@ -145,7 +145,7 @@ TEST_CASE("Evaluation of functions", "[evaluate]") {
         "let a = 1\n"
         "let b = () => a\n"
         "let a = 2\n"
-        "b()"
+        "in b()"
     );
     REQUIRE(obj.unsafe_integer() == 1);
 }

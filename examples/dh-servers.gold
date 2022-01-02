@@ -19,7 +19,7 @@ let largeServer = (hostname) => {
     terabytesOfDisk: 16,
 }
 
-[
+in [
     smallServer("eu-west.example.com"),
     largeServer("us-east.example.com"),
     largeServer("ap-northeast.example.com"),

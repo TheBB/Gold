@@ -2,7 +2,7 @@ let makeUser = (user) => {
     let home = "/home/${user}"
     let privateKey = "${home}/.ssh/id_ed25519"
     let publicKey = "${privateKey}.pub"
-    {
+    in {
         home: home,
         privateKey: privateKey,
         publicKey: publicKey,
@@ -11,4 +11,4 @@ let makeUser = (user) => {
 
 let buildUser = (index) => makeUser("build${index}")
 
-map(buildUser, range(10))
+in map(buildUser, range(10))
