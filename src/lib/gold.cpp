@@ -548,6 +548,25 @@ static Object builtin_map(EvaluationContext& ctx, const std::vector<Object>& arg
 }
 
 
+static Object builtin_filter(EvaluationContext& ctx, const std::vector<Object>& args) {
+    Object func = args[0];
+    Object sequence = args[1];
+    return std::visit(overloaded {
+        [&func, &ctx](Object::List x) {
+            auto result = std::make_shared<Object::ListT>();
+            std::copy_if(
+                x->begin(), x->end(), std::back_inserter(*result),
+                [&func, &ctx](auto x) { return (bool)func(ctx, {x}); }
+            );
+            return Object::list(result);
+        },
+        [&sequence](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for `filter()`: `{}`", sequence.type_name()));
+        }
+    }, sequence.data());
+}
+
+
 static Object builtin_import(EvaluationContext& ctx, const std::vector<Object>& args) {
     Object arg = args[0];
     if (arg.type() != Object::Type::string)
@@ -567,5 +586,6 @@ Namespace Gold::builtins = {
     BUILTIN("len", builtin_len),
     BUILTIN("range", builtin_range),
     BUILTIN("map", builtin_map),
+    BUILTIN("filter", builtin_filter),
     BUILTIN("import", builtin_import),
 };
