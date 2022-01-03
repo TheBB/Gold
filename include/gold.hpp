@@ -17,6 +17,9 @@ namespace Gold {
 class EvaluationContext;
 class Object;
 class Serializer;
+class Deserializer;
+
+
 class Namespace : public std::map<std::string, Object> {
 public:
     Namespace() : std::map<std::string, Object>() {}
@@ -54,6 +57,7 @@ public:
     virtual void serialize(Serializer&) const = 0;
     static std::unique_ptr<AstNode> deserialize(std::string);
     static std::unique_ptr<AstNode> deserialize(std::istream&);
+    static std::unique_ptr<AstNode> deserialize(Deserializer&);
 
     const Source source() const { return src; }
 };
@@ -125,6 +129,7 @@ public:
 
     static Object deserialize(std::string);
     static Object deserialize(std::istream&);
+    static Object deserialize(Deserializer&);
 
     // Type inspection
     Type type() const;
@@ -185,6 +190,25 @@ public:
     Serializer& operator<<(const Object&);
     Serializer& operator<<(const AstNode&);
 };
+
+
+class Deserializer {
+private:
+    std::istream& is;
+public:
+    Deserializer(std::istream& stream) : is(stream) {}
+
+    template<typename T>
+    T read() {
+        T val;
+        is.read((char *) &val, sizeof val);
+        return val;
+    }
+};
+
+template<> std::string Deserializer::read<std::string>();
+template<> Object Deserializer::read<Object>();
+template<> std::unique_ptr<AstNode> Deserializer::read<std::unique_ptr<AstNode>>();
 
 
 struct EvalException: public std::exception {
