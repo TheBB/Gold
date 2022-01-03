@@ -58,14 +58,14 @@ public:
 
 class List : public AstNode {
     using Entry = struct {
-        std::unique_ptr<AstNode> node;
+        AstPtr node;
         bool splat;
     };
 private:
     std::vector<Entry> elements;
 public:
     List(Source source) : AstNode(source) {}
-    void append(std::unique_ptr<AstNode> node, bool splat) { elements.push_back({std::move(node), splat}); }
+    void append(AstPtr node, bool splat) { elements.push_back({std::move(node), splat}); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -76,14 +76,14 @@ public:
 class Map : public AstNode {
     using Entry = struct {
         std::string key;
-        std::unique_ptr<AstNode> node;
+        AstPtr node;
         bool splat;
     };
 private:
     std::vector<Entry> entries;
 public:
     Map(Source source) : AstNode(source) {}
-    void append(std::string key, std::unique_ptr<AstNode> value, bool splat) {
+    void append(std::string key, AstPtr value, bool splat) {
         entries.push_back({key, std::move(value), splat});
     }
     virtual void dump(std::ostream&) const;
@@ -95,10 +95,10 @@ public:
 
 class BinOp : public AstNode {
 private:
-    std::unique_ptr<AstNode> lhs, rhs;
+    AstPtr lhs, rhs;
     Operator op;
 public:
-    BinOp(Source source, std::unique_ptr<AstNode> l, std::unique_ptr<AstNode> r, Operator oper)
+    BinOp(Source source, AstPtr l, AstPtr r, Operator oper)
         : AstNode(source), lhs(std::move(l)), rhs(std::move(r)), op(oper) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -109,14 +109,14 @@ public:
 
 class Block : public AstNode {
 private:
-    std::vector<std::pair<std::string, std::unique_ptr<AstNode>>> bindings;
-    std::unique_ptr<AstNode> expression;
+    std::vector<std::pair<std::string, AstPtr>> bindings;
+    AstPtr expression;
 public:
     Block(Source source) : AstNode(source) {}
-    void append(std::string key, std::unique_ptr<AstNode> value) {
+    void append(std::string key, AstPtr value) {
         bindings.push_back(std::pair(key, std::move(value)));
     }
-    void set_expression(std::unique_ptr<AstNode> expr) { expression = std::move(expr); }
+    void set_expression(AstPtr expr) { expression = std::move(expr); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -127,11 +127,11 @@ public:
 class Function : public AstNode {
 private:
     std::vector<std::string> parameters;
-    std::unique_ptr<AstNode> expression;
+    AstPtr expression;
 public:
     Function(Source source) : AstNode(source) {}
     void append(std::string key) { parameters.push_back(key); }
-    void set_expression(std::unique_ptr<AstNode> expr) { expression = std::move(expr); }
+    void set_expression(AstPtr expr) { expression = std::move(expr); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -141,13 +141,13 @@ public:
 
 class Branch : public AstNode {
 private:
-    std::unique_ptr<AstNode> condition;
-    std::unique_ptr<AstNode> if_value;
-    std::unique_ptr<AstNode> else_value;
+    AstPtr condition;
+    AstPtr if_value;
+    AstPtr else_value;
 public:
     Branch(
-        Source source, std::unique_ptr<AstNode> cond,
-        std::unique_ptr<AstNode> yes, std::unique_ptr<AstNode> no
+        Source source, AstPtr cond,
+        AstPtr yes, AstPtr no
     ) : AstNode(source), condition(std::move(cond)), if_value(std::move(yes)), else_value(std::move(no)) { }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -158,11 +158,11 @@ public:
 
 class FunCall : public AstNode {
 private:
-    std::unique_ptr<AstNode> function;
-    std::vector<std::unique_ptr<AstNode>> args;
+    AstPtr function;
+    std::vector<AstPtr> args;
 public:
-    FunCall(Source source, std::unique_ptr<AstNode> func) : AstNode(source), function(std::move(func)) {}
-    void append(std::unique_ptr<AstNode> arg) { args.push_back(std::move(arg)); }
+    FunCall(Source source, AstPtr func) : AstNode(source), function(std::move(func)) {}
+    void append(AstPtr arg) { args.push_back(std::move(arg)); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -172,10 +172,10 @@ public:
 
 class Index : public AstNode {
 private:
-    std::unique_ptr<AstNode> haystack;
-    std::unique_ptr<AstNode> needle;
+    AstPtr haystack;
+    AstPtr needle;
 public:
-    Index(Source source, std::unique_ptr<AstNode> object, std::unique_ptr<AstNode> index)
+    Index(Source source, AstPtr object, AstPtr index)
         : AstNode(source), haystack(std::move(object)), needle(std::move(index)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -185,12 +185,12 @@ public:
 
 
 bool analyze_grammar();
-std::unique_ptr<AstNode> parse_string(std::string);
-std::unique_ptr<AstNode> parse_file(std::string);
+AstPtr parse_string(std::string);
+AstPtr parse_file(std::string);
 void debug_parse(std::string);
 void debug_parse_tree(std::string);
 
-std::unique_ptr<AstNode> normalize(tao::pegtl::parse_tree::node&);
+AstPtr normalize(tao::pegtl::parse_tree::node&);
 
 }
 

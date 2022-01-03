@@ -50,7 +50,7 @@ Serializer& Serializer::operator<<(const AstNode& node) {
 
 
 template<>
-std::unique_ptr<AstNode> Deserializer::read<std::unique_ptr<AstNode>>() {
+AstPtr Deserializer::read<AstPtr>() {
     return AstNode::deserialize(*this);
 }
 
@@ -165,7 +165,7 @@ Object Object::deserialize(Deserializer& is) {
         size = is.read<size_t>();
         for (size_t i = 0; i < size; i++)
             closure->parameters.push_back(is.read<std::string>());
-        closure->expression = is.read<std::unique_ptr<AstNode>>();
+        closure->expression = is.read<AstPtr>();
         return Object::closure(closure);
     }
     case 'U':
@@ -250,19 +250,19 @@ void Index::serialize(Serializer& os) const {
 }
 
 
-std::unique_ptr<AstNode> AstNode::deserialize(std::string val) {
+AstPtr AstNode::deserialize(std::string val) {
     std::istringstream is(val);
     return deserialize(is);
 }
 
 
-std::unique_ptr<AstNode> AstNode::deserialize(std::istream& is) {
+AstPtr AstNode::deserialize(std::istream& is) {
     Deserializer d(is);
     return deserialize(d);
 }
 
 
-std::unique_ptr<AstNode> AstNode::deserialize(Deserializer& is) {
+AstPtr AstNode::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     auto source = is.read<Source>();
     switch (indicator) {
@@ -274,9 +274,8 @@ std::unique_ptr<AstNode> AstNode::deserialize(Deserializer& is) {
         auto list = std::make_unique<List>(source);
         auto size = is.read<size_t>();
         for (size_t i = 0; i < size; i++) {
-            auto node = is.read<std::unique_ptr<AstNode>>();
-            auto splat = is.read<bool>();
-            list->append(std::move(node), splat);
+            auto node = is.read<AstPtr>();
+            list->append(std::move(node), is.read<bool>());
         }
         return list;
     }
@@ -285,7 +284,7 @@ std::unique_ptr<AstNode> AstNode::deserialize(Deserializer& is) {
         auto size = is.read<size_t>();
         for (size_t i = 0; i < size; i++) {
             auto key = is.read<std::string>();
-            auto value = is.read<std::unique_ptr<AstNode>>();
+            auto value = is.read<AstPtr>();
             auto splat = is.read<bool>();
             map->append(key, std::move(value), splat);
         }
@@ -294,7 +293,7 @@ std::unique_ptr<AstNode> AstNode::deserialize(Deserializer& is) {
     case 'O': {
         auto lhs = AstNode::deserialize(is);
         auto op = is.read<Operator>();
-        auto rhs = is.read<std::unique_ptr<AstNode>>();
+        auto rhs = is.read<AstPtr>();
         return std::make_unique<BinOp>(source, std::move(lhs), std::move(rhs), op);
     }
     case 'B': {
@@ -302,10 +301,10 @@ std::unique_ptr<AstNode> AstNode::deserialize(Deserializer& is) {
         auto size = is.read<size_t>();
         for (size_t i = 0; i < size; i++) {
             auto key = is.read<std::string>();
-            auto value = is.read<std::unique_ptr<AstNode>>();
+            auto value = is.read<AstPtr>();
             block->append(key, std::move(value));
         }
-        block->set_expression(is.read<std::unique_ptr<AstNode>>());
+        block->set_expression(is.read<AstPtr>());
         return block;
     }
     case 'F': {
@@ -313,25 +312,25 @@ std::unique_ptr<AstNode> AstNode::deserialize(Deserializer& is) {
         auto size = is.read<size_t>();
         for (size_t i = 0; i < size; i++)
             func->append(is.read<std::string>());
-        func->set_expression(is.read<std::unique_ptr<AstNode>>());
+        func->set_expression(is.read<AstPtr>());
         return func;
     }
     case 'C': {
-        auto cond = is.read<std::unique_ptr<AstNode>>();
-        auto yes = is.read<std::unique_ptr<AstNode>>();
-        auto no = is.read<std::unique_ptr<AstNode>>();
+        auto cond = is.read<AstPtr>();
+        auto yes = is.read<AstPtr>();
+        auto no = is.read<AstPtr>();
         return std::make_unique<Branch>(source, std::move(cond), std::move(yes), std::move(no));
     }
     case 'E': {
         auto call = std::make_unique<FunCall>(source, AstNode::deserialize(is));
         auto size = is.read<size_t>();
         for (size_t i = 0; i < size; i++)
-            call->append(is.read<std::unique_ptr<AstNode>>());
+            call->append(is.read<AstPtr>());
         return call;
     }
     case 'S': {
-        auto container = is.read<std::unique_ptr<AstNode>>();
-        auto index = is.read<std::unique_ptr<AstNode>>();
+        auto container = is.read<AstPtr>();
+        auto index = is.read<AstPtr>();
         return std::make_unique<Index>(source, std::move(container), std::move(index));
     }
     default:

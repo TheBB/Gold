@@ -351,7 +351,7 @@ void Gold::debug_parse_tree(std::string input) {
 
 
 template <typename I>
-static std::unique_ptr<AstNode> _parse(I& input) {
+static AstPtr _parse(I& input) {
     try {
         auto tree = p::parse_tree::parse<Grammar::file, Grammar::selector>(input);
         if (!tree)
@@ -364,13 +364,13 @@ static std::unique_ptr<AstNode> _parse(I& input) {
 }
 
 
-std::unique_ptr<AstNode> Gold::parse_string(std::string code) {
+AstPtr Gold::parse_string(std::string code) {
     p::string_input in(code, "code");
     return _parse(in);
 }
 
 
-std::unique_ptr<AstNode> Gold::parse_file(std::string path) {
+AstPtr Gold::parse_file(std::string path) {
     p::file_input in(path, "code");
     return _parse(in);
 }

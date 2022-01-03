@@ -424,7 +424,7 @@ static std::string nodetype(p::parse_tree::node& node) {
 }
 
 
-std::unique_ptr<AstNode> Gold::normalize(p::parse_tree::node& node) {
+AstPtr Gold::normalize(p::parse_tree::node& node) {
     if (node.is_root()) {
         if (node.children.size() != 1)
             throw ParseException();

@@ -40,6 +40,7 @@ struct Source {
 };
 
 
+
 class AstNode {
 private:
     Source src;
@@ -61,6 +62,8 @@ public:
 
     const Source source() const { return src; }
 };
+
+using AstPtr = std::unique_ptr<AstNode>;
 
 
 class Object {
@@ -204,6 +207,9 @@ public:
         is.read((char *) &val, sizeof val);
         return val;
     }
+
+    template<typename T>
+    Deserializer& operator>>(T& v) { v = read<T>(); return *this; }
 };
 
 template<> std::string Deserializer::read<std::string>();
