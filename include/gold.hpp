@@ -152,7 +152,6 @@ public:
     // Serialization
     std::string serialize() const;
     void serialize(std::ostream&) const;
-    void serialize(Serializer&) const;
 
     // Operators
     Object operator+(Object) const;

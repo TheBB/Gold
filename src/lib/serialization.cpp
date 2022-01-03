@@ -4,6 +4,10 @@
 using namespace Gold;
 
 
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
+
 template <typename T>
 static T read(std::istream& is) {
     T val;
@@ -32,7 +36,36 @@ std::string Deserializer::read<std::string>() {
 
 
 Serializer& Serializer::operator<<(const Object& obj) {
-    obj.serialize(*this);
+    Serializer& s = *this;
+    std::visit(overloaded {
+        [&s](Object::Null) { s << 'N'; },
+        [&s](Object::Integer v) { s << 'I' << v; },
+        [&s](Object::String v) { s << 'S' << v; },
+        [&s](Object::Boolean v) { s << 'B' << v; },
+        [&s](Object::Floating v) { s << 'F' << v; },
+        [&s](Object::Map v) {
+            s << 'M' << v->size();
+            for (auto& [key, value] : *v)
+                s << key << value;
+        },
+        [&s](Object::List v) {
+            s << 'L' << v->size();
+            for (auto& value : *v)
+                s << value;
+        },
+        [&s](Object::Closure v) {
+            s << 'C' << v->nonlocals.size();
+            for (auto& [key, value] : v->nonlocals)
+                s << key << value;
+            s << v->parameters.size();
+            for (auto& p : v->parameters)
+                s << p;
+            s << *v->expression;
+        },
+        [&s](Object::Builtin v) {
+            s << 'U' << v.name;
+        }
+    }, obj.data());
     return *this;
 }
 
@@ -64,51 +97,6 @@ std::string Object::serialize() const {
 
 void Object::serialize(std::ostream& os) const {
     Serializer(os) << *this;
-}
-
-
-void Object::serialize(Serializer& os) const {
-    switch (type()) {
-    case Type::integer:
-        os << 'I' << unsafe_integer();
-        break;
-    case Type::string:
-        os << 'S' << unsafe_string();
-        break;
-    case Type::boolean:
-        os << 'B' << unsafe_boolean();
-        break;
-    case Type::floating:
-        os << 'F' << unsafe_floating();
-        break;
-    case Type::null:
-        os << 'N';
-        break;
-    case Type::map:
-        os << 'M' << unsafe_map()->size();
-        for (auto& [key, value] : *unsafe_map())
-            os << key << value;
-        break;
-    case Type::list:
-        os << 'L' << unsafe_list()->size();
-        for (auto& value : *unsafe_list())
-            os << value;
-        break;
-    case Type::closure: {
-        auto closure = std::get<Closure>(_data);
-        os << 'C' << closure->nonlocals.size();
-        for (auto& [key, value] : closure->nonlocals)
-            os << key << value;
-        os << closure->parameters.size();
-        for (auto& p : closure->parameters)
-            os << p;
-        os << *closure->expression;
-        break;
-    }
-    case Type::builtin:
-        os << 'U' << std::get<Builtin>(_data).name;
-        break;
-    }
 }
 
 
