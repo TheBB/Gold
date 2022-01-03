@@ -16,6 +16,7 @@ namespace Gold {
 
 class EvaluationContext;
 class Object;
+class Serializer;
 class Namespace : public std::map<std::string, Object> {
 public:
     Namespace() : std::map<std::string, Object>() {}
@@ -49,7 +50,8 @@ public:
     virtual Object evaluate(EvaluationContext&) const = 0;
 
     std::string serialize() const;
-    virtual void serialize(std::ostream&) const = 0;
+    virtual void serialize(std::ostream&) const;
+    virtual void serialize(Serializer&) const = 0;
     static std::unique_ptr<AstNode> deserialize(std::string);
     static std::unique_ptr<AstNode> deserialize(std::istream&);
 
@@ -142,6 +144,7 @@ public:
     // Serialization
     std::string serialize() const;
     void serialize(std::ostream&) const;
+    void serialize(Serializer&) const;
 
     // Operators
     Object operator+(Object) const;
@@ -168,6 +171,19 @@ public:
     size_t size() const;
 
     void dump(std::ostream&) const;
+};
+
+
+class Serializer {
+private:
+    std::ostream& os;
+public:
+    Serializer(std::ostream& stream) : os(stream) {}
+    template<typename T>
+    Serializer& operator<<(T v) { os.write((const char*) &v, sizeof v); return *this; }
+    Serializer& operator<<(const std::string&);
+    Serializer& operator<<(const Object&);
+    Serializer& operator<<(const AstNode&);
 };
 
 

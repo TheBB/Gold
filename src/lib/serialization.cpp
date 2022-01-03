@@ -42,58 +42,69 @@ static std::string read_str(std::istream& is) {
 }
 
 
+Serializer& Serializer::operator<<(const std::string& str) {
+    write_str(os, str);
+    return *this;
+}
+
+
+Serializer& Serializer::operator<<(const Object& obj) {
+    obj.serialize(*this);
+    return *this;
+}
+
+
+Serializer& Serializer::operator<<(const AstNode& node) {
+    node.serialize(*this);
+    return *this;
+}
+
+
 void Object::serialize(std::ostream& os) const {
+    Serializer(os) << *this;
+}
+
+
+void Object::serialize(Serializer& os) const {
     switch (type()) {
     case Type::integer:
-        os << 'I';
-        write(os, unsafe_integer());
+        os << 'I' << unsafe_integer();
         break;
     case Type::string:
-        os << 'S';
-        write_str(os, unsafe_string());
+        os << 'S' << unsafe_string();
         break;
     case Type::boolean:
-        os << 'B';
-        write(os, unsafe_boolean());
+        os << 'B' << unsafe_boolean();
         break;
     case Type::floating:
-        os << 'F';
-        write(os, unsafe_floating());
+        os << 'F' << unsafe_floating();
         break;
     case Type::null:
         os << 'N';
         break;
     case Type::map:
-        os << 'M';
-        write(os, unsafe_map()->size());
-        for (auto& [key, value] : *unsafe_map()) {
-            write_str(os, key);
-            value.serialize(os);
-        }
+        os << 'M' << unsafe_map()->size();
+        for (auto& [key, value] : *unsafe_map())
+            os << key << value;
         break;
     case Type::list:
-        os << 'L';
-        write(os, unsafe_list()->size());
+        os << 'L' << unsafe_list()->size();
         for (auto& value : *unsafe_list())
-            value.serialize(os);
+            os << value;
         break;
     case Type::closure: {
         auto closure = std::get<Closure>(_data);
-        os << 'C';
-        write(os, closure->nonlocals.size());
-        for (auto& [key, value] : closure->nonlocals) {
-            write_str(os, key);
-            value.serialize(os);
-        }
-        write(os, closure->parameters.size());
+        os << 'C' << closure->nonlocals.size();
+        for (auto& [key, value] : closure->nonlocals)
+            os << key << value;
+        os << closure->parameters.size();
         for (auto& p : closure->parameters)
-            write_str(os, p);
-        closure->expression->serialize(os);
+            os << p;
+        os << *closure->expression;
         break;
     }
     case Type::builtin:
-        os << 'U';
-        write_str(os, std::get<Builtin>(_data).name);
+        os << 'U' << std::get<Builtin>(_data).name;
         break;
     }
 }
@@ -180,98 +191,70 @@ std::string AstNode::serialize() const {
 }
 
 
-void Literal::serialize(std::ostream& os) const {
-    os << 'T';
-    source().serialize(os);
-    object.serialize(os);
+void AstNode::serialize(std::ostream& os) const {
+    Serializer(os) << *this;
 }
 
 
-void Identifier::serialize(std::ostream& os) const {
-    os << 'I';
-    source().serialize(os);
-    write_str(os, name);
+void Literal::serialize(Serializer& os) const {
+    os << 'T' << source() << object;
 }
 
 
-void List::serialize(std::ostream& os) const {
-    os << 'L';
-    source().serialize(os);
-    write(os, elements.size());
-    for (auto& entry : elements) {
-        entry.node->serialize(os);
-        write(os, entry.splat);
-    }
+void Identifier::serialize(Serializer& os) const {
+    os << 'I' << source() << name;
 }
 
 
-void Map::serialize(std::ostream& os) const {
-    os << 'M';
-    source().serialize(os);
-    write(os, entries.size());
-    for (auto& entry : entries) {
-        write_str(os, entry.key);
-        entry.node->serialize(os);
-        write(os, entry.splat);
-    }
+void List::serialize(Serializer& os) const {
+    os << 'L' << source() << elements.size();
+    for (auto& entry : elements)
+        os << *entry.node << entry.splat;
 }
 
 
-void BinOp::serialize(std::ostream& os) const {
-    os << 'O';
-    source().serialize(os);
-    lhs->serialize(os);
-    write(os, op);
-    rhs->serialize(os);
+void Map::serialize(Serializer& os) const {
+    os << 'M' << source() << entries.size();
+    for (auto& entry : entries)
+        os << entry.key << *entry.node << entry.splat;
 }
 
 
-void Block::serialize(std::ostream& os) const {
-    os << 'B';
-    source().serialize(os);
-    write(os, bindings.size());
-    for (auto& [key, value] : bindings) {
-        write_str(os, key);
-        value->serialize(os);
-    }
-    expression->serialize(os);
+void BinOp::serialize(Serializer& os) const {
+    os << 'O' << source() << *lhs << op << *rhs;
 }
 
 
-void Function::serialize(std::ostream& os) const {
-    os << 'F';
-    source().serialize(os);
-    write(os, parameters.size());
+void Block::serialize(Serializer& os) const {
+    os << 'B' << source() << bindings.size();
+    for (auto& [key, value] : bindings)
+        os << key << *value;
+    os << *expression;
+}
+
+
+void Function::serialize(Serializer& os) const {
+    os << 'F' << source() << parameters.size();
     for (auto& p : parameters)
-        write_str(os, p);
-    expression->serialize(os);
+        os << p;
+    os << *expression;
 }
 
 
-void Branch::serialize(std::ostream& os) const {
-    os << 'C';
-    source().serialize(os);
-    condition->serialize(os);
-    if_value->serialize(os);
-    else_value->serialize(os);
+void Branch::serialize(Serializer& os) const {
+    os << 'C' << source() << *condition << *if_value << *else_value;
 }
 
 
-void FunCall::serialize(std::ostream& os) const {
-    os << 'E';
-    source().serialize(os);
-    function->serialize(os);
-    write(os, args.size());
+void FunCall::serialize(Serializer& os) const {
+    os << 'E' << source() << *function << args.size();
     for (auto& arg : args)
-        arg->serialize(os);
+        os << *arg;
 }
 
 
-void Index::serialize(std::ostream& os) const {
-    os << 'S';
-    source().serialize(os);
-    haystack->serialize(os);
-    needle->serialize(os);
+void Index::serialize(Serializer& os) const {
+    os << 'S' << source() << *haystack << *needle;
 }
 
 
