@@ -72,7 +72,54 @@ Serializer& Serializer::operator<<(const Object& obj) {
 
 template<>
 Object Deserializer::read<Object>() {
-    return Object::deserialize(*this);
+    char indicator = read<char>();
+    switch (indicator) {
+    case 'I':
+        return Object::integer(read<Object::Integer>());
+    case 'S':
+        return Object::string(read<Object::String>());
+    case 'B':
+        return Object::boolean(read<Object::Boolean>());
+    case 'F':
+        return Object::floating(read<Object::Floating>());
+    case 'N':
+        return Object::null();
+    case 'M': {
+        size_t size = read<size_t>();
+        Object::MapT map;
+        for (size_t i = 0; i < size; i++) {
+            auto key = read<std::string>();
+            auto val = read<Object>();
+            map[key] = val;
+        }
+        return Object::map(std::move(map));
+    }
+    case 'L': {
+        auto size = read<size_t>();
+        Object::ListT list;
+        for (size_t i = 0; i < size; i++)
+            list.push_back(read<Object>());
+        return Object::list(std::move(list));
+    }
+    case 'C': {
+        auto closure = std::make_shared<Object::ClosureT>();
+        auto size = read<size_t>();
+        for (size_t i = 0; i < size; i++) {
+            auto key = read<std::string>();
+            auto value = read<Object>();
+            closure->nonlocals[key] = value;
+        }
+        size = read<size_t>();
+        for (size_t i = 0; i < size; i++)
+            closure->parameters.push_back(read<std::string>());
+        closure->expression = read<AstPtr>();
+        return Object::closure(closure);
+    }
+    case 'U':
+        return builtins[read<std::string>()];
+    }
+
+    throw InternalException();
 }
 
 
@@ -107,60 +154,7 @@ Object Object::deserialize(std::string val) {
 
 
 Object Object::deserialize(std::istream& is) {
-    Deserializer d(is);
-    return Object::deserialize(d);
-}
-
-
-Object Object::deserialize(Deserializer& is) {
-    char indicator = is.read<char>();
-    switch (indicator) {
-    case 'I':
-        return Object::integer(is.read<Integer>());
-    case 'S':
-        return Object::string(is.read<std::string>());
-    case 'B':
-        return Object::boolean(is.read<bool>());
-    case 'F':
-        return Object::floating(is.read<double>());
-    case 'N':
-        return Object::null();
-    case 'M': {
-        size_t size = is.read<size_t>();
-        Object::MapT map;
-        for (size_t i = 0; i < size; i++) {
-            auto key = is.read<std::string>();
-            auto val = is.read<Object>();
-            map[key] = val;
-        }
-        return Object::map(std::move(map));
-    }
-    case 'L': {
-        auto size = is.read<size_t>();
-        Object::ListT list;
-        for (size_t i = 0; i < size; i++)
-            list.push_back(is.read<Object>());
-        return Object::list(std::move(list));
-    }
-    case 'C': {
-        auto closure = std::make_shared<ClosureT>();
-        auto size = is.read<size_t>();
-        for (size_t i = 0; i < size; i++) {
-            auto key = is.read<std::string>();
-            auto value = is.read<Object>();
-            closure->nonlocals[key] = value;
-        }
-        size = is.read<size_t>();
-        for (size_t i = 0; i < size; i++)
-            closure->parameters.push_back(is.read<std::string>());
-        closure->expression = is.read<AstPtr>();
-        return Object::closure(closure);
-    }
-    case 'U':
-        return builtins[is.read<std::string>()];
-    }
-
-    throw InternalException();
+    return Deserializer(is).read<Object>();
 }
 
 

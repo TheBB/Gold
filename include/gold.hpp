@@ -132,7 +132,6 @@ public:
 
     static Object deserialize(std::string);
     static Object deserialize(std::istream&);
-    static Object deserialize(Deserializer&);
 
     // Type inspection
     Type type() const;
