@@ -179,6 +179,11 @@ public:
     Serializer& operator<<(T v) { os.write((const char*) &v, sizeof v); return *this; }
 
     template<typename T>
+    Serializer& operator<<(const std::shared_ptr<T>& v) {
+        return *this << *v;
+    }
+
+    template<typename T>
     Serializer& operator<<(const std::vector<T>& v) {
         *this << v.size();
         for (auto& c : v)

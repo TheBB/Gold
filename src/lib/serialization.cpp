@@ -43,8 +43,8 @@ Serializer& Serializer::operator<<(const Object& obj) {
         [&s](Object::String v) { s << 'S' << v; },
         [&s](Object::Boolean v) { s << 'B' << v; },
         [&s](Object::Floating v) { s << 'F' << v; },
-        [&s](Object::Map v) { s << 'M' << *v; },
-        [&s](Object::List v) { s << 'L' << *v; },
+        [&s](Object::Map v) { s << 'M' << v; },
+        [&s](Object::List v) { s << 'L' << v; },
         [&s](Object::Closure v) { s << 'C' << v->nonlocals << v->parameters << *v->expression; },
         [&s](Object::Builtin v) { s << 'U' << v.name; }
     }, obj.data());
