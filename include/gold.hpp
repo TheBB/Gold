@@ -27,11 +27,7 @@ struct Source {
     size_t byte;
     size_t line;
     size_t column;
-
-    void serialize(std::ostream&) const;
-    static Source deserialize(std::istream&);
 };
-
 
 
 class AstNode {
