@@ -19,14 +19,7 @@ class Object;
 class Serializer;
 class Deserializer;
 
-
-class Namespace : public std::map<std::string, Object> {
-public:
-    Namespace() : std::map<std::string, Object>() {}
-    Namespace(std::initializer_list<value_type> list) : std::map<std::string, Object>(list) {}
-};
-
-
+using Namespace = std::map<std::string, Object>;
 extern Namespace builtins;
 
 
@@ -185,8 +178,26 @@ private:
     std::ostream& os;
 public:
     Serializer(std::ostream& stream) : os(stream) {}
+
     template<typename T>
     Serializer& operator<<(T v) { os.write((const char*) &v, sizeof v); return *this; }
+
+    template<typename T>
+    Serializer& operator<<(const std::vector<T>& v) {
+        *this << v.size();
+        for (auto& c : v)
+            *this << c;
+        return *this;
+    }
+
+    template<typename K, typename V>
+    Serializer& operator<<(const std::map<K,V>& m) {
+        *this << m.size();
+        for (auto& [k, v] : m)
+            *this << k << v;
+        return  *this;
+    }
+
     Serializer& operator<<(const std::string&);
     Serializer& operator<<(const Object&);
     Serializer& operator<<(const AstNode&);
@@ -204,6 +215,27 @@ public:
         T val;
         is.read((char *) &val, sizeof val);
         return val;
+    }
+
+    template<typename T>
+    std::vector<T> read_vec() {
+        auto size = read<size_t>();
+        std::vector<T> vec;
+        for (size_t i = 0; i < size; i++)
+            vec.push_back(read<T>());
+        return vec;
+    }
+
+    template<typename K, typename V>
+    std::map<K,V> read_map() {
+        auto size = read<size_t>();
+        std::map<K,V> map;
+        for (size_t i = 0; i < size; i++) {
+            auto key = read<K>();
+            auto val = read<V>();
+            map[key] = val;
+        }
+        return map;
     }
 
     template<typename T>
