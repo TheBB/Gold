@@ -30,10 +30,9 @@ struct Source {
 };
 
 
-class AstNode {
-private:
+struct AstNode {
     Source src;
-public:
+
     AstNode(Source source) : src(source) {}
     virtual ~AstNode() {};
     virtual void dump(std::ostream&) const = 0;
@@ -190,23 +189,33 @@ public:
 
     template<typename T>
     Serializer& operator<<(const std::vector<T>& v) {
-        *this << v.size();
-        for (auto& c : v)
-            *this << c;
+        write(v, [this](const T& c) { *this << c; });
         return *this;
     }
 
     template<typename K, typename V>
     Serializer& operator<<(const std::map<K,V>& m) {
-        *this << m.size();
-        for (auto& [k, v] : m)
-            *this << k << v;
+        write(m, [this](const K& k, const V& v) { *this << k << v; });
         return  *this;
     }
 
     Serializer& operator<<(const std::string&);
     Serializer& operator<<(const Object&);
     Serializer& operator<<(const AstNode&);
+
+    template<typename T, typename F>
+    void write(const std::vector<T>& v, F writer) {
+        *this << v.size();
+        for (auto& c : v)
+            writer(c);
+    }
+
+    template<typename K, typename V, typename F>
+    void write(const std::map<K,V>& m, F writer) {
+        *this << m.size();
+        for (auto& [k, v] : m)
+            writer(k, v);
+    }
 };
 
 
@@ -221,23 +230,33 @@ private:
     void readref(Object&);
     void readref(AstPtr&);
 
-    template<typename V>
-    void readref(std::vector<V>& v) {
+    template<typename V, typename F>
+    void readref(std::vector<V>& v, F f) {
         auto size = read<size_t>();
         v.resize(size);
         for (size_t i = 0; i < size; i++)
-            v[i] = read<V>();
+            v[i] = f();
+    }
+
+    template<typename V>
+    void readref(std::vector<V>& v) {
+        readref(v, [this](){ return read<V>(); });
+    }
+
+    template<typename K, typename V, typename F>
+    void readref(std::map<K,V>& m, F f) {
+        auto size = read<size_t>();
+        m.clear();
+        for (size_t i = 0; i < size; i++) {
+            K key; V val;
+            std::tie(key, val) = f();
+            m[key] = val;
+        }
     }
 
     template<typename K, typename V>
     void readref(std::map<K,V>& m) {
-        auto size = read<size_t>();
-        m.clear();
-        for (size_t i = 0; i < size; i++) {
-            auto key = read<K>();
-            auto val = read<V>();
-            m[key] = val;
-        }
+        readref(m, [this]() { return std::pair<K,V> { read<K>(), read<V>() }; });
     }
 
     template<typename T>
@@ -255,6 +274,9 @@ public:
 
     template<typename T>
     T read() { T val; readref(val); return val; }
+
+    template<typename T, typename F>
+    T read(F f) { T val; readref(val, f); return val; }
 
     template<typename T>
     Deserializer& operator>>(T& v) { readref(v); return *this; }

@@ -124,37 +124,37 @@ void Identifier::serialize(Serializer& os) const {
 
 
 void List::serialize(Serializer& os) const {
-    os << 'L' << source() << elements.size();
-    for (auto& entry : elements)
+    os << 'L' << source();
+    os.write(elements, [&os](const Entry& entry) {
         os << *entry.node << entry.splat;
+    });
 }
 
 
 void Map::serialize(Serializer& os) const {
-    os << 'M' << source() << entries.size();
-    for (auto& entry : entries)
+    os << 'M' << source();
+    os.write(entries, [&os](const Entry& entry) {
         os << entry.key << *entry.node << entry.splat;
+    });
 }
 
 
 void BinOp::serialize(Serializer& os) const {
-    os << 'O' << source() << *lhs << op << *rhs;
+    os << 'O' << source() << *lhs << *rhs << op;
 }
 
 
 void Block::serialize(Serializer& os) const {
-    os << 'B' << source() << bindings.size();
-    for (auto& [key, value] : bindings)
-        os << key << *value;
+    os << 'B' << source();
+    os.write(bindings, [&os](const std::pair<std::string, AstPtr>& entry) {
+        os << entry.first << *entry.second;
+    });
     os << *expression;
 }
 
 
 void Function::serialize(Serializer& os) const {
-    os << 'F' << source() << parameters->size();
-    for (auto& p : *parameters)
-        os << p;
-    os << *expression;
+    os << 'F' << source() << *parameters << *expression;
 }
 
 
@@ -164,9 +164,7 @@ void Branch::serialize(Serializer& os) const {
 
 
 void FunCall::serialize(Serializer& os) const {
-    os << 'E' << source() << *function << args.size();
-    for (auto& arg : args)
-        os << *arg;
+    os << 'E' << source() << *function << args;
 }
 
 
@@ -191,72 +189,90 @@ AstPtr AstNode::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     auto source = is.read<Source>();
     switch (indicator) {
-    case 'T':
-        return std::make_unique<Literal>(source, is.read<Object>());
-    case 'I':
-        return std::make_unique<Identifier>(source, is.read<std::string>());
+    case 'T': {
+        auto node = Literal {{source}, is.read<Object>()};
+        return std::make_unique<Literal>(node);
+    }
+    case 'I': {
+        auto node = Identifier {{source}, is.read<std::string>()};
+        return std::make_unique<Identifier>(node);
+    }
     case 'L': {
-        auto list = std::make_unique<List>(source);
-        auto size = is.read<size_t>();
-        for (size_t i = 0; i < size; i++) {
-            auto node = is.read<AstPtr>();
-            list->append(std::move(node), is.read<bool>());
-        }
-        return list;
+        auto elements = is.read<std::vector<List::Entry>>([&is]() {
+            return List::Entry {
+                is.read<AstPtr>(),
+                is.read<bool>()
+            };
+        });
+        auto node = List {{source}, std::move(elements)};
+        return std::make_unique<List>(std::move(node));
     }
     case 'M': {
-        auto map = std::make_unique<Map>(source);
-        auto size = is.read<size_t>();
-        for (size_t i = 0; i < size; i++) {
-            auto key = is.read<std::string>();
-            auto value = is.read<AstPtr>();
-            auto splat = is.read<bool>();
-            map->append(key, std::move(value), splat);
-        }
-        return map;
+        auto entries = is.read<std::vector<Map::Entry>>([&is]() {
+            return Map::Entry {
+                is.read<std::string>(),
+                is.read<AstPtr>(),
+                is.read<bool>()
+            };
+        });
+        auto node = Map {{source}, std::move(entries)};
+        return std::make_unique<Map>(std::move(node));
     }
     case 'O': {
-        auto lhs = AstNode::deserialize(is);
-        auto op = is.read<Operator>();
-        auto rhs = is.read<AstPtr>();
-        return std::make_unique<BinOp>(source, std::move(lhs), std::move(rhs), op);
+        auto node = BinOp {
+            {source},
+            is.read<AstPtr>(),
+            is.read<AstPtr>(),
+            is.read<Operator>()
+        };
+        return std::make_unique<BinOp>(std::move(node));
     }
     case 'B': {
-        auto block = std::make_unique<Block>(source);
-        auto size = is.read<size_t>();
-        for (size_t i = 0; i < size; i++) {
-            auto key = is.read<std::string>();
-            auto value = is.read<AstPtr>();
-            block->append(key, std::move(value));
-        }
-        block->set_expression(is.read<AstPtr>());
-        return block;
+        auto bindings = is.read<std::vector<std::pair<std::string, AstPtr>>>([&is]() {
+            return std::pair<std::string, AstPtr> {
+                is.read<std::string>(),
+                is.read<AstPtr>()
+            };
+        });
+        auto node = Block {
+            {source},
+            std::move(bindings),
+            is.read<AstPtr>()
+        };
+        return std::make_unique<Block>(std::move(node));
     }
     case 'F': {
-        auto func = std::make_unique<Function>(source);
-        auto size = is.read<size_t>();
-        for (size_t i = 0; i < size; i++)
-            func->append(is.read<std::string>());
-        func->set_expression(is.read<AstPtr>());
-        return func;
+        auto node = Function {
+            {source},
+            std::make_shared<std::vector<std::string>>(is.read<std::vector<std::string>>()),
+            is.read<AstPtr>()
+        };
+        return std::make_unique<Function>(std::move(node));
     }
     case 'C': {
-        auto cond = is.read<AstPtr>();
-        auto yes = is.read<AstPtr>();
-        auto no = is.read<AstPtr>();
-        return std::make_unique<Branch>(source, std::move(cond), std::move(yes), std::move(no));
+        auto node = Branch {
+            {source},
+            is.read<AstPtr>(),
+            is.read<AstPtr>(),
+            is.read<AstPtr>()
+        };
+        return std::make_unique<Branch>(std::move(node));
     }
     case 'E': {
-        auto call = std::make_unique<FunCall>(source, AstNode::deserialize(is));
-        auto size = is.read<size_t>();
-        for (size_t i = 0; i < size; i++)
-            call->append(is.read<AstPtr>());
-        return call;
+        auto node = FunCall {
+            {source},
+            is.read<AstPtr>(),
+            is.read<std::vector<AstPtr>>(),
+        };
+        return std::make_unique<FunCall>(std::move(node));
     }
     case 'S': {
-        auto container = is.read<AstPtr>();
-        auto index = is.read<AstPtr>();
-        return std::make_unique<Index>(source, std::move(container), std::move(index));
+        auto node = Index {
+            {source},
+            is.read<AstPtr>(),
+            is.read<AstPtr>()
+        };
+        return std::make_unique<Index>(std::move(node));
     }
     default:
         throw InternalException();
