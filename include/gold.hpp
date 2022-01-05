@@ -184,6 +184,11 @@ public:
     }
 
     template<typename T>
+    Serializer& operator<<(const std::unique_ptr<T>& v) {
+        return *this << *v;
+    }
+
+    template<typename T>
     Serializer& operator<<(const std::vector<T>& v) {
         *this << v.size();
         for (auto& c : v)
@@ -233,6 +238,16 @@ private:
             auto val = read<V>();
             m[key] = val;
         }
+    }
+
+    template<typename T>
+    void readref(std::shared_ptr<T>& p) {
+        p = std::make_shared<T>(read<T>());
+    }
+
+    template<typename T>
+    void readref(std::unique_ptr<T>& p) {
+        p = std::make_unique<T>(read<T>());
     }
 
 public:
