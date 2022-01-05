@@ -225,10 +225,10 @@ Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& arg
         throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));
     auto closure = std::get<Closure>(_data);
 
-    if (args.size() != closure->parameters.size())
+    if (args.size() != closure->parameters->size())
         throw EvalException(fmt::format(
             "wrong number of parameters: got {} but expected {}",
-            args.size(), closure->parameters.size()
+            args.size(), closure->parameters->size()
         ));
 
     ctx.push_namespace(closure->nonlocals);
@@ -237,9 +237,9 @@ Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& arg
     Object retval;
 
     try {
-        auto id_it = closure->parameters.begin();
+        auto id_it = closure->parameters->begin();
         auto arg_it = args.begin();
-        while (id_it != closure->parameters.end() && arg_it != args.end())
+        while (id_it != closure->parameters->end() && arg_it != args.end())
             ctx.assign(*id_it++, *arg_it++);
         retval = closure->expression->evaluate(ctx);
     }

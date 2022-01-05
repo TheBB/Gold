@@ -8,14 +8,6 @@ template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 
-template <typename T>
-static T read(std::istream& is) {
-    T val;
-    is.read((char *) &val, sizeof val);
-    return val;
-}
-
-
 Serializer& Serializer::operator<<(const std::string& str) {
     auto size = str.size();
     *this << size;
@@ -24,14 +16,12 @@ Serializer& Serializer::operator<<(const std::string& str) {
 }
 
 
-template<>
-std::string Deserializer::read<std::string>() {
+void Deserializer::readref(std::string& str) {
     size_t size = read<size_t>();
     char* data = new char[size];
     is.read(data, size);
-    std::string retval(data, size);
+    str.assign(data, size);
     delete[] data;
-    return retval;
 }
 
 
@@ -45,32 +35,32 @@ Serializer& Serializer::operator<<(const Object& obj) {
         [&s](Object::Floating v) { s << 'F' << v; },
         [&s](Object::Map v) { s << 'M' << v; },
         [&s](Object::List v) { s << 'L' << v; },
-        [&s](Object::Closure v) { s << 'C' << v->nonlocals << v->parameters << *v->expression; },
+        [&s](Object::Closure v) { s << 'C' << v->nonlocals << v->parameters << v->expression; },
         [&s](Object::Builtin v) { s << 'U' << v.name; }
     }, obj.data());
     return *this;
 }
 
 
-template<>
-Object Deserializer::read<Object>() {
+void Deserializer::readref(Object& obj) {
     char indicator = read<char>();
     switch (indicator) {
-    case 'N': return Object::null();
-    case 'I': return Object::integer(read<Object::Integer>());
-    case 'S': return Object::string(read<Object::String>());
-    case 'B': return Object::boolean(read<Object::Boolean>());
-    case 'F': return Object::floating(read<Object::Floating>());
-    case 'M': return Object::map(read_map<std::string, Object>());
-    case 'L': return Object::list(read_vec<Object>());
+    case 'N': obj = Object::null(); return;
+    case 'I': obj = Object::integer(read<Object::Integer>()); return;
+    case 'S': obj = Object::string(read<Object::String>()); return;
+    case 'B': obj = Object::boolean(read<Object::Boolean>()); return;
+    case 'F': obj = Object::floating(read<Object::Floating>()); return;
+    case 'M': obj = Object::map(read<std::map<std::string, Object>>()); return;
+    case 'L': obj = Object::list(read<std::vector<Object>>()); return;
     case 'C': {
         auto closure = std::make_shared<Object::ClosureT>();
-        closure->nonlocals = read_map<std::string, Object>();
-        closure->parameters = read_vec<std::string>();
+        closure->nonlocals = read<std::map<std::string, Object>>();
+        closure->parameters = std::make_shared<std::vector<std::string>>(read<std::vector<std::string>>());
         closure->expression = read<AstPtr>();
-        return Object::closure(closure);
+        obj = Object::closure(closure);
+        return;
     }
-    case 'U': return builtins[read<std::string>()];
+    case 'U': obj = builtins[read<std::string>()]; return;
     }
 
     throw InternalException();
@@ -83,9 +73,8 @@ Serializer& Serializer::operator<<(const AstNode& node) {
 }
 
 
-template<>
-AstPtr Deserializer::read<AstPtr>() {
-    return AstNode::deserialize(*this);
+void Deserializer::readref(AstPtr& node) {
+    node = AstNode::deserialize(*this);
 }
 
 
@@ -162,8 +151,8 @@ void Block::serialize(Serializer& os) const {
 
 
 void Function::serialize(Serializer& os) const {
-    os << 'F' << source() << parameters.size();
-    for (auto& p : parameters)
+    os << 'F' << source() << parameters->size();
+    for (auto& p : *parameters)
         os << p;
     os << *expression;
 }

@@ -126,11 +126,11 @@ public:
 
 class Function : public AstNode {
 private:
-    std::vector<std::string> parameters;
-    AstPtr expression;
+    std::shared_ptr<std::vector<std::string>> parameters;
+    std::shared_ptr<AstNode> expression;
 public:
-    Function(Source source) : AstNode(source) {}
-    void append(std::string key) { parameters.push_back(key); }
+    Function(Source source) : AstNode(source), parameters(new std::vector<std::string>()) {}
+    void append(std::string key) { parameters->push_back(key); }
     void set_expression(AstPtr expr) { expression = std::move(expr); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;

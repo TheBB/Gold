@@ -73,8 +73,8 @@ public:
 
     using ClosureT = struct {
         Namespace nonlocals;
-        std::vector<std::string> parameters;
-        std::unique_ptr<AstNode> expression;
+        std::shared_ptr<std::vector<std::string>> parameters;
+        std::shared_ptr<AstNode> expression;
     };
     using Closure = std::shared_ptr<ClosureT>;
 
@@ -208,44 +208,42 @@ public:
 class Deserializer {
 private:
     std::istream& is;
+
+    template<typename T>
+    void readref(T& val) { is.read((char *) &val, sizeof val); }
+
+    void readref(std::string&);
+    void readref(Object&);
+    void readref(AstPtr&);
+
+    template<typename V>
+    void readref(std::vector<V>& v) {
+        auto size = read<size_t>();
+        v.resize(size);
+        for (size_t i = 0; i < size; i++)
+            v[i] = read<V>();
+    }
+
+    template<typename K, typename V>
+    void readref(std::map<K,V>& m) {
+        auto size = read<size_t>();
+        m.clear();
+        for (size_t i = 0; i < size; i++) {
+            auto key = read<K>();
+            auto val = read<V>();
+            m[key] = val;
+        }
+    }
+
 public:
     Deserializer(std::istream& stream) : is(stream) {}
 
     template<typename T>
-    T read() {
-        T val;
-        is.read((char *) &val, sizeof val);
-        return val;
-    }
+    T read() { T val; readref(val); return val; }
 
     template<typename T>
-    std::vector<T> read_vec() {
-        auto size = read<size_t>();
-        std::vector<T> vec;
-        for (size_t i = 0; i < size; i++)
-            vec.push_back(read<T>());
-        return vec;
-    }
-
-    template<typename K, typename V>
-    std::map<K,V> read_map() {
-        auto size = read<size_t>();
-        std::map<K,V> map;
-        for (size_t i = 0; i < size; i++) {
-            auto key = read<K>();
-            auto val = read<V>();
-            map[key] = val;
-        }
-        return map;
-    }
-
-    template<typename T>
-    Deserializer& operator>>(T& v) { v = read<T>(); return *this; }
+    Deserializer& operator>>(T& v) { readref(v); return *this; }
 };
-
-template<> std::string Deserializer::read<std::string>();
-template<> Object Deserializer::read<Object>();
-template<> std::unique_ptr<AstNode> Deserializer::read<std::unique_ptr<AstNode>>();
 
 
 struct EvalException: public std::exception {

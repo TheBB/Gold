@@ -257,7 +257,7 @@ Object Block::evaluate(EvaluationContext& ctx) const {
 void Function::dump(std::ostream& os) const {
     os << "Function(";
     bool first = true;
-    for (auto& p : parameters) {
+    for (auto& p : *parameters) {
         if (!first)
             os << ", ";
         os << p;
@@ -271,7 +271,7 @@ void Function::dump(std::ostream& os) const {
 
 void Function::free_identifiers(std::set<std::string>& idents) const {
     auto candidates = expression->free_identifiers();
-    for (auto& p : parameters)
+    for (auto& p : *parameters)
         candidates.erase(p);
     for (auto& c : candidates)
         idents.insert(c);
@@ -292,7 +292,7 @@ Object Function::evaluate(EvaluationContext& ctx) const {
     }
 
     closure->parameters = parameters;
-    closure->expression = AstNode::deserialize(expression->serialize());
+    closure->expression = expression;
     return Object::closure(closure);
 }
 
