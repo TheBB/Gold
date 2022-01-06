@@ -126,7 +126,7 @@ void Identifier::serialize(Serializer& os) const {
 void List::serialize(Serializer& os) const {
     os << 'L' << source();
     os.write(elements, [&os](const Entry& entry) {
-        os << *entry.node << entry.splat;
+        os << entry.node << entry.splat;
     });
 }
 
@@ -134,42 +134,42 @@ void List::serialize(Serializer& os) const {
 void Map::serialize(Serializer& os) const {
     os << 'M' << source();
     os.write(entries, [&os](const Entry& entry) {
-        os << entry.key << *entry.node << entry.splat;
+        os << entry.key << entry.node << entry.splat;
     });
 }
 
 
 void BinOp::serialize(Serializer& os) const {
-    os << 'O' << source() << *lhs << *rhs << op;
+    os << 'O' << source() << lhs << rhs << op;
 }
 
 
 void Block::serialize(Serializer& os) const {
     os << 'B' << source();
     os.write(bindings, [&os](const Binding& binding) {
-        os << binding.name << *binding.expression;
+        os << binding.name << binding.expression;
     });
-    os << *expression;
+    os << expression;
 }
 
 
 void Function::serialize(Serializer& os) const {
-    os << 'F' << source() << *parameters << *expression;
+    os << 'F' << source() << parameters << *expression;
 }
 
 
 void Branch::serialize(Serializer& os) const {
-    os << 'C' << source() << *condition << *if_value << *else_value;
+    os << 'C' << source() << condition << if_value << else_value;
 }
 
 
 void FunCall::serialize(Serializer& os) const {
-    os << 'E' << source() << *function << args;
+    os << 'E' << source() << function << args;
 }
 
 
 void Index::serialize(Serializer& os) const {
-    os << 'S' << source() << *haystack << *needle;
+    os << 'S' << source() << haystack << needle;
 }
 
 
