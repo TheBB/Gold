@@ -31,166 +31,161 @@ enum class Operator {
 };
 
 
-class Literal : public AstNode {
-private:
+struct Literal : public AstNode {
     const Object object;
-public:
-    Literal(Source source, Object obj) : AstNode(source), object(obj) {}
+
+    Literal(Source src, Object object) : AstNode(src), object(object) {}
     virtual void dump(std::ostream& os) const { os << "Lit(" << object << ")"; }
     virtual void free_identifiers(std::set<std::string>&) const {}
     virtual Object evaluate(EvaluationContext&) const { return object; }
-    virtual void serialize(std::ostream&) const;
+    virtual void serialize(Serializer&) const;
 };
 
 
-class Identifier : public AstNode {
-private:
+struct Identifier : public AstNode {
     const std::string name;
-public:
-    Identifier(Source source, std::string name) : AstNode(source), name(name) {}
-    Identifier(Source source, std::string& name) : AstNode(source), name(name) {}
+
+    Identifier(Source src, std::string name) : AstNode(src), name(name) {}
     virtual void dump(std::ostream& os) const { os << "Id(" << name << ")"; }
     virtual void free_identifiers(std::set<std::string>& idents) const { idents.insert(name); }
     virtual Object evaluate(EvaluationContext& ctx) const;
-    virtual void serialize(std::ostream&) const;
+    virtual void serialize(Serializer&) const;
 };
 
 
-class List : public AstNode {
+struct List : public AstNode {
     using Entry = struct {
-        std::unique_ptr<AstNode> node;
+        AstPtr node;
         bool splat;
     };
-private:
+
     std::vector<Entry> elements;
-public:
-    List(Source source) : AstNode(source) {}
-    void append(std::unique_ptr<AstNode> node, bool splat) { elements.push_back({std::move(node), splat}); }
+
+    List(Source src) : AstNode(src) {}
+    List(Source src, std::vector<Entry> elements)
+        : AstNode(src), elements(std::move(elements)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(std::ostream&) const;
+    virtual void serialize(Serializer&) const;
 };
 
 
-class Map : public AstNode {
+struct Map : public AstNode {
     using Entry = struct {
         std::string key;
-        std::unique_ptr<AstNode> node;
+        AstPtr node;
         bool splat;
     };
-private:
+
     std::vector<Entry> entries;
-public:
-    Map(Source source) : AstNode(source) {}
-    void append(std::string key, std::unique_ptr<AstNode> value, bool splat) {
-        entries.push_back({key, std::move(value), splat});
-    }
+
+    Map(Source src) : AstNode(src) {}
+    Map(Source src, std::vector<Entry> entries)
+        : AstNode(src), entries(std::move(entries)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(std::ostream&) const;
+    virtual void serialize(Serializer&) const;
 };
 
 
-class BinOp : public AstNode {
-private:
-    std::unique_ptr<AstNode> lhs, rhs;
+struct BinOp : public AstNode {
+    AstPtr lhs, rhs;
     Operator op;
-public:
-    BinOp(Source source, std::unique_ptr<AstNode> l, std::unique_ptr<AstNode> r, Operator oper)
-        : AstNode(source), lhs(std::move(l)), rhs(std::move(r)), op(oper) {}
+
+    BinOp(Source src, AstPtr l, AstPtr r, Operator oper)
+        : AstNode(src), lhs(std::move(l)), rhs(std::move(r)), op(oper) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(std::ostream&) const;
+    virtual void serialize(Serializer&) const;
 };
 
 
-class Block : public AstNode {
-private:
-    std::vector<std::pair<std::string, std::unique_ptr<AstNode>>> bindings;
-    std::unique_ptr<AstNode> expression;
-public:
-    Block(Source source) : AstNode(source) {}
-    void append(std::string key, std::unique_ptr<AstNode> value) {
-        bindings.push_back(std::pair(key, std::move(value)));
-    }
-    void set_expression(std::unique_ptr<AstNode> expr) { expression = std::move(expr); }
+struct Block : public AstNode {
+    using Binding = struct {
+        std::string name;
+        AstPtr expression;
+    };
+
+    std::vector<Binding> bindings;
+    AstPtr expression;
+
+    Block(Source src) : AstNode(src) {}
+    Block(Source src, std::vector<Binding> bindings, AstPtr expression)
+        : AstNode(src), bindings(std::move(bindings)), expression(std::move(expression)) {}
+    void set_expression(AstPtr expr) { expression = std::move(expr); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(std::ostream&) const;
+    virtual void serialize(Serializer&) const;
 };
 
 
-class Function : public AstNode {
-private:
-    std::vector<std::string> parameters;
-    std::unique_ptr<AstNode> expression;
-public:
-    Function(Source source) : AstNode(source) {}
-    void append(std::string key) { parameters.push_back(key); }
-    void set_expression(std::unique_ptr<AstNode> expr) { expression = std::move(expr); }
+struct Function : public AstNode {
+    std::shared_ptr<std::vector<std::string>> parameters;
+    std::shared_ptr<AstNode> expression;
+
+    Function(Source src)
+        : AstNode(src), parameters(new std::vector<std::string>()), expression(nullptr) {}
+    Function(Source src, std::shared_ptr<std::vector<std::string>> parameters, std::shared_ptr<AstNode> expression)
+        : AstNode(src), parameters(parameters), expression(expression) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(std::ostream&) const;
+    virtual void serialize(Serializer&) const;
 };
 
 
-class Branch : public AstNode {
-private:
-    std::unique_ptr<AstNode> condition;
-    std::unique_ptr<AstNode> if_value;
-    std::unique_ptr<AstNode> else_value;
-public:
-    Branch(
-        Source source, std::unique_ptr<AstNode> cond,
-        std::unique_ptr<AstNode> yes, std::unique_ptr<AstNode> no
-    ) : AstNode(source), condition(std::move(cond)), if_value(std::move(yes)), else_value(std::move(no)) { }
+struct Branch : public AstNode {
+    AstPtr condition;
+    AstPtr if_value;
+    AstPtr else_value;
+
+    Branch(Source src, AstPtr cond, AstPtr yes, AstPtr no)
+        : AstNode(src), condition(std::move(cond)), if_value(std::move(yes)), else_value(std::move(no)) { }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(std::ostream&) const;
+    virtual void serialize(Serializer&) const;
 };
 
 
-class FunCall : public AstNode {
-private:
-    std::unique_ptr<AstNode> function;
-    std::vector<std::unique_ptr<AstNode>> args;
-public:
-    FunCall(Source source, std::unique_ptr<AstNode> func) : AstNode(source), function(std::move(func)) {}
-    void append(std::unique_ptr<AstNode> arg) { args.push_back(std::move(arg)); }
+struct FunCall : public AstNode {
+    AstPtr function;
+    std::vector<AstPtr> args;
+
+    FunCall(Source src, AstPtr function) : AstNode(src), function(std::move(function)) {}
+    FunCall(Source src, AstPtr function, std::vector<AstPtr> args)
+        : AstNode(src), function(std::move(function)), args(std::move(args)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(std::ostream&) const;
+    virtual void serialize(Serializer&) const;
 };
 
 
-class Index : public AstNode {
-private:
-    std::unique_ptr<AstNode> haystack;
-    std::unique_ptr<AstNode> needle;
-public:
-    Index(Source source, std::unique_ptr<AstNode> object, std::unique_ptr<AstNode> index)
-        : AstNode(source), haystack(std::move(object)), needle(std::move(index)) {}
+struct Index : public AstNode {
+    AstPtr haystack;
+    AstPtr needle;
+
+    Index(Source src, AstPtr haystack, AstPtr needle)
+        : AstNode(src), haystack(std::move(haystack)), needle(std::move(needle)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(std::ostream&) const;
+    virtual void serialize(Serializer&) const;
 };
 
 
 bool analyze_grammar();
-std::unique_ptr<AstNode> parse_string(std::string);
-std::unique_ptr<AstNode> parse_file(std::string);
+AstPtr parse_string(std::string);
+AstPtr parse_file(std::string);
 void debug_parse(std::string);
 void debug_parse_tree(std::string);
 
-std::unique_ptr<AstNode> normalize(tao::pegtl::parse_tree::node&);
+AstPtr normalize(tao::pegtl::parse_tree::node&);
 
 }
 

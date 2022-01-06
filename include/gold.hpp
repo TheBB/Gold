@@ -16,31 +16,31 @@ namespace Gold {
 
 class EvaluationContext;
 class Object;
-class Namespace : public std::map<std::string, Object> {
-public:
-    Namespace() : std::map<std::string, Object>() {}
-    Namespace(std::initializer_list<value_type> list) : std::map<std::string, Object>(list) {}
-};
+class Serializer;
+class Deserializer;
 
-
+using Namespace = std::map<std::string, Object>;
 extern Namespace builtins;
+
+
+struct InternalException: public std::exception {
+    const char* what() const noexcept {
+        return "an internal error happened - please report";
+    }
+};
 
 
 struct Source {
     size_t byte;
     size_t line;
     size_t column;
-
-    void serialize(std::ostream&) const;
-    static Source deserialize(std::istream&);
 };
 
 
-class AstNode {
-private:
+struct AstNode {
     Source src;
-public:
-    AstNode(Source source) : src(source) {}
+
+    AstNode(Source src) : src(src) {}
     virtual ~AstNode() {};
     virtual void dump(std::ostream&) const = 0;
     std::string dump() const;
@@ -49,12 +49,17 @@ public:
     virtual Object evaluate(EvaluationContext&) const = 0;
 
     std::string serialize() const;
-    virtual void serialize(std::ostream&) const = 0;
+    virtual void serialize(std::ostream&) const;
+    virtual void serialize(Serializer&) const = 0;
     static std::unique_ptr<AstNode> deserialize(std::string);
     static std::unique_ptr<AstNode> deserialize(std::istream&);
+    static std::unique_ptr<AstNode> deserialize(Deserializer&);
+    static AstNode* deserialize_raw(Deserializer&);
 
     const Source source() const { return src; }
 };
+
+using AstPtr = std::unique_ptr<AstNode>;
 
 
 class Object {
@@ -75,8 +80,8 @@ public:
 
     using ClosureT = struct {
         Namespace nonlocals;
-        std::vector<std::string> parameters;
-        std::unique_ptr<AstNode> expression;
+        std::shared_ptr<std::vector<std::string>> parameters;
+        std::shared_ptr<AstNode> expression;
     };
     using Closure = std::shared_ptr<ClosureT>;
 
@@ -171,6 +176,124 @@ public:
 };
 
 
+class Serializer {
+private:
+    std::ostream& os;
+public:
+    Serializer(std::ostream& stream) : os(stream) {}
+
+    template<typename T>
+    Serializer& operator<<(T v) { os.write((const char*) &v, sizeof v); return *this; }
+
+    template<typename T>
+    Serializer& operator<<(const std::shared_ptr<T>& v) {
+        return *this << *v;
+    }
+
+    template<typename T>
+    Serializer& operator<<(const std::unique_ptr<T>& v) {
+        return *this << *v;
+    }
+
+    template<typename T>
+    Serializer& operator<<(const std::vector<T>& v) {
+        write(v, [this](const T& c) { *this << c; });
+        return *this;
+    }
+
+    template<typename K, typename V>
+    Serializer& operator<<(const std::map<K,V>& m) {
+        write(m, [this](const K& k, const V& v) { *this << k << v; });
+        return  *this;
+    }
+
+    Serializer& operator<<(const std::string&);
+    Serializer& operator<<(const Object&);
+    Serializer& operator<<(const AstNode&);
+
+    template<typename T, typename F>
+    void write(const std::vector<T>& v, F writer) {
+        *this << v.size();
+        for (auto& c : v)
+            writer(c);
+    }
+
+    template<typename K, typename V, typename F>
+    void write(const std::map<K,V>& m, F writer) {
+        *this << m.size();
+        for (auto& [k, v] : m)
+            writer(k, v);
+    }
+};
+
+
+class Deserializer {
+private:
+    std::istream& is;
+
+    template<typename T>
+    void readref(T& val) { is.read((char *) &val, sizeof val); }
+
+    template<typename T>
+    void readref(T*& val) { val = new T; readref(*val); }
+
+    void readref(std::string&);
+    void readref(Object&);
+    void readref(AstNode*&);
+
+    template<typename V, typename F>
+    void readref(std::vector<V>& v, F f) {
+        auto size = read<size_t>();
+        v.resize(size);
+        for (size_t i = 0; i < size; i++)
+            v[i] = f();
+    }
+
+    template<typename V>
+    void readref(std::vector<V>& v) {
+        readref(v, [this](){ return read<V>(); });
+    }
+
+    template<typename K, typename V, typename F>
+    void readref(std::map<K,V>& m, F f) {
+        auto size = read<size_t>();
+        m.clear();
+        for (size_t i = 0; i < size; i++) {
+            K key; V val;
+            std::tie(key, val) = f();
+            m[key] = val;
+        }
+    }
+
+    template<typename K, typename V>
+    void readref(std::map<K,V>& m) {
+        readref(m, [this]() { return std::pair<K,V> { read<K>(), read<V>() }; });
+    }
+
+    template<typename T>
+    void readref(std::shared_ptr<T>& p) {
+        p = std::shared_ptr<T>(read<T*>());
+    }
+
+    template<typename T>
+    void readref(std::unique_ptr<T>& p) {
+        p = std::unique_ptr<T>(read<T*>());
+    }
+
+public:
+    Deserializer(std::istream& stream) : is(stream) {}
+
+    template<typename T>
+    T read() { T val; readref(val); return val; }
+
+    template<typename T, typename F>
+    T read(F f) { T val; readref(val, f); return val; }
+
+    template<typename T>
+    Deserializer& operator>>(T& v) { readref(v); return *this; }
+};
+
+
 struct EvalException: public std::exception {
     bool has_position;
     std::string reason;
@@ -179,13 +302,6 @@ struct EvalException: public std::exception {
     EvalException(Source src, std::string s) : EvalException(s) { position(src); }
     void position(Source source) noexcept;
     const char* what() const noexcept { return reason.c_str(); }
-};
-
-
-struct InternalException: public std::exception {
-    const char* what() const noexcept {
-        return "an internal error happened - please report";
-    }
 };
 
 
