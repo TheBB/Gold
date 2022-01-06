@@ -88,6 +88,18 @@ TEST_CASE("Serialization of lists", "[serialization]") {
 }
 
 
+TEST_CASE("Serialization of duplicate object", "[serialization]") {
+    auto val = Object::deserialize(evaluate_string("let a = [] in [a, a]").serialize());
+    REQUIRE(val.type() == Object::Type::list);
+    REQUIRE(val.unsafe_list()->size() == 2);
+    REQUIRE(val.unsafe_list()->at(0).type() == Object::Type::list);
+    REQUIRE(val.unsafe_list()->at(0).unsafe_list()->size() == 0);
+    REQUIRE(val.unsafe_list()->at(1).type() == Object::Type::list);
+    REQUIRE(val.unsafe_list()->at(1).unsafe_list()->size() == 0);
+    REQUIRE(val.unsafe_list()->at(0).unsafe_list().get() == val.unsafe_list()->at(1).unsafe_list().get());
+}
+
+
 TEST_CASE("Serialization of AST literals", "[serialization]") {
     auto ast = parse_string("1");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());

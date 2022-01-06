@@ -24,8 +24,12 @@ extern Namespace builtins;
 
 
 struct InternalException: public std::exception {
+    std::string msg;
+    InternalException() : msg("an internal error happend - please report") {}
+    InternalException(std::string s) : msg(s) {}
+
     const char* what() const noexcept {
-        return "an internal error happened - please report";
+        return msg.c_str();
     }
 };
 
@@ -179,6 +183,8 @@ public:
 class Serializer {
 private:
     std::ostream& os;
+    std::map<void*, intmax_t> pointers;
+
 public:
     Serializer(std::ostream& stream) : os(stream) {}
 
@@ -187,7 +193,15 @@ public:
 
     template<typename T>
     Serializer& operator<<(const std::shared_ptr<T>& v) {
-        return *this << *v;
+        void* ptr = v.get();
+        auto entry = pointers.find(ptr);
+        if (entry == pointers.end()) {
+            intmax_t id = pointers.size();
+            pointers[ptr] = id;
+            return *this << 'D' << id << *v;
+        }
+        else
+            return *this << 'R' << entry->second;
     }
 
     template<typename T>
@@ -230,6 +244,7 @@ public:
 class Deserializer {
 private:
     std::istream& is;
+    std::map<intmax_t, std::shared_ptr<void>> pointers;
 
     template<typename T>
     void readref(T& val) { is.read((char *) &val, sizeof val); }
@@ -272,7 +287,14 @@ private:
 
     template<typename T>
     void readref(std::shared_ptr<T>& p) {
-        p = std::shared_ptr<T>(read<T*>());
+        auto k = read<char>();
+        auto id = read<intmax_t>();
+        if (k == 'R')
+            p = std::static_pointer_cast<T>(pointers[id]);
+        else {
+            p = std::shared_ptr<T>(read<T*>());
+            pointers[id] = p;
+        }
     }
 
     template<typename T>
