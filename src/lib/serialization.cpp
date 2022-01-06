@@ -1,3 +1,5 @@
+#include <fmt/core.h>
+
 #include "gold.hpp"
 #include "parsing.hpp"
 
@@ -50,8 +52,8 @@ void Deserializer::readref(Object& obj) {
     case 'S': obj = Object::string(read<Object::String>()); return;
     case 'B': obj = Object::boolean(read<Object::Boolean>()); return;
     case 'F': obj = Object::floating(read<Object::Floating>()); return;
-    case 'M': obj = Object::map(read<std::map<std::string, Object>>()); return;
-    case 'L': obj = Object::list(read<std::vector<Object>>()); return;
+    case 'M': obj = Object::map(read<Object::Map>()); return;
+    case 'L': obj = Object::list(read<Object::List>()); return;
     case 'C': {
         auto closure = std::make_shared<Object::ClosureT>();
         closure->nonlocals = read<std::map<std::string, Object>>();
@@ -63,7 +65,7 @@ void Deserializer::readref(Object& obj) {
     case 'U': obj = builtins[read<std::string>()]; return;
     }
 
-    throw InternalException();
+    throw InternalException(fmt::format("unknown object indicator: {}", (int)indicator));
 }
 
 
@@ -255,6 +257,6 @@ AstNode* AstNode::deserialize_raw(Deserializer& is) {
         return new Index {{source}, std::move(haystack), std::move(needle)};
     }
     default:
-        throw InternalException();
+        throw InternalException(fmt::format("unknown AST indicator: {}", (int)indicator));
     }
 }
