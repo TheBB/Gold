@@ -199,79 +199,66 @@ AstPtr AstNode::deserialize(Deserializer& is) {
     }
     case 'L': {
         auto elements = is.read<std::vector<List::Entry>>([&is]() {
-            return List::Entry {
-                is.read<AstPtr>(),
-                is.read<bool>()
-            };
+            auto subnode = is.read<AstPtr>();
+            auto splat = is.read<bool>();
+            return List::Entry {std::move(subnode), splat};
         });
         auto node = List {{source}, std::move(elements)};
         return std::make_unique<List>(std::move(node));
     }
     case 'M': {
         auto entries = is.read<std::vector<Map::Entry>>([&is]() {
-            return Map::Entry {
-                is.read<std::string>(),
-                is.read<AstPtr>(),
-                is.read<bool>()
-            };
+            auto name = is.read<std::string>();
+            auto subnode = is.read<AstPtr>();
+            auto splat = is.read<bool>();
+            return Map::Entry {name, std::move(subnode), splat};
         });
         auto node = Map {{source}, std::move(entries)};
         return std::make_unique<Map>(std::move(node));
     }
     case 'O': {
-        auto node = BinOp {
-            {source},
-            is.read<AstPtr>(),
-            is.read<AstPtr>(),
-            is.read<Operator>()
-        };
+        auto lhs = is.read<AstPtr>();
+        auto rhs = is.read<AstPtr>();
+        auto op = is.read<Operator>();
+        auto node = BinOp {{source}, std::move(lhs), std::move(rhs), op};
         return std::make_unique<BinOp>(std::move(node));
     }
     case 'B': {
         auto bindings = is.read<std::vector<std::pair<std::string, AstPtr>>>([&is]() {
-            return std::pair<std::string, AstPtr> {
-                is.read<std::string>(),
-                is.read<AstPtr>()
-            };
+            auto name = is.read<std::string>();
+            auto subnode = is.read<AstPtr>();
+            return std::make_pair(name, std::move(subnode));
         });
-        auto node = Block {
-            {source},
-            std::move(bindings),
-            is.read<AstPtr>()
-        };
+        auto node = Block {{source}, std::move(bindings), is.read<AstPtr>()};
         return std::make_unique<Block>(std::move(node));
     }
     case 'F': {
+        auto parameters = is.read<std::vector<std::string>>();
+        auto expression = is.read<AstPtr>();
         auto node = Function {
             {source},
-            std::make_shared<std::vector<std::string>>(is.read<std::vector<std::string>>()),
-            is.read<AstPtr>()
+            std::make_shared<std::vector<std::string>>(parameters),
+            std::move(expression)
         };
         return std::make_unique<Function>(std::move(node));
     }
     case 'C': {
-        auto node = Branch {
-            {source},
-            is.read<AstPtr>(),
-            is.read<AstPtr>(),
-            is.read<AstPtr>()
-        };
+        auto cond = is.read<AstPtr>();
+        auto yes = is.read<AstPtr>();
+        auto no = is.read<AstPtr>();
+        auto node = Branch {{source}, std::move(cond), std::move(yes), std::move(no)};
         return std::make_unique<Branch>(std::move(node));
     }
     case 'E': {
-        auto node = FunCall {
-            {source},
-            is.read<AstPtr>(),
-            is.read<std::vector<AstPtr>>(),
-        };
+        auto func = is.read<AstPtr>();
+        auto args = is.read<std::vector<AstPtr>>();
+        auto node = FunCall {{source}, std::move(func), std::move(args)};
         return std::make_unique<FunCall>(std::move(node));
     }
     case 'S': {
-        auto node = Index {
-            {source},
-            is.read<AstPtr>(),
-            is.read<AstPtr>()
-        };
+        auto haystack = is.read<AstPtr>();
+        auto needle = is.read<AstPtr>();
+        auto node = Index {{source}, std::move(haystack), std::move(needle)};
         return std::make_unique<Index>(std::move(node));
     }
     default:
