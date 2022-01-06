@@ -23,6 +23,13 @@ using Namespace = std::map<std::string, Object>;
 extern Namespace builtins;
 
 
+struct InternalException: public std::exception {
+    const char* what() const noexcept {
+        return "an internal error happened - please report";
+    }
+};
+
+
 struct Source {
     size_t byte;
     size_t line;
@@ -47,6 +54,7 @@ struct AstNode {
     static std::unique_ptr<AstNode> deserialize(std::string);
     static std::unique_ptr<AstNode> deserialize(std::istream&);
     static std::unique_ptr<AstNode> deserialize(Deserializer&);
+    static AstNode* deserialize_raw(Deserializer&);
 
     const Source source() const { return src; }
 };
@@ -226,9 +234,12 @@ private:
     template<typename T>
     void readref(T& val) { is.read((char *) &val, sizeof val); }
 
+    template<typename T>
+    void readref(T*& val) { val = new T; readref(*val); }
+
     void readref(std::string&);
     void readref(Object&);
-    void readref(AstPtr&);
+    void readref(AstNode*&);
 
     template<typename V, typename F>
     void readref(std::vector<V>& v, F f) {
@@ -261,12 +272,12 @@ private:
 
     template<typename T>
     void readref(std::shared_ptr<T>& p) {
-        p = std::make_shared<T>(read<T>());
+        p = std::shared_ptr<T>(read<T*>());
     }
 
     template<typename T>
     void readref(std::unique_ptr<T>& p) {
-        p = std::make_unique<T>(read<T>());
+        p = std::unique_ptr<T>(read<T*>());
     }
 
 public:
@@ -291,13 +302,6 @@ struct EvalException: public std::exception {
     EvalException(Source src, std::string s) : EvalException(s) { position(src); }
     void position(Source source) noexcept;
     const char* what() const noexcept { return reason.c_str(); }
-};
-
-
-struct InternalException: public std::exception {
-    const char* what() const noexcept {
-        return "an internal error happened - please report";
-    }
 };
 
 

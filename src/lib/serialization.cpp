@@ -55,7 +55,7 @@ void Deserializer::readref(Object& obj) {
     case 'C': {
         auto closure = std::make_shared<Object::ClosureT>();
         closure->nonlocals = read<std::map<std::string, Object>>();
-        closure->parameters = std::make_shared<std::vector<std::string>>(read<std::vector<std::string>>());
+        closure->parameters = read<std::shared_ptr<std::vector<std::string>>>();
         closure->expression = read<AstPtr>();
         obj = Object::closure(closure);
         return;
@@ -73,8 +73,8 @@ Serializer& Serializer::operator<<(const AstNode& node) {
 }
 
 
-void Deserializer::readref(AstPtr& node) {
-    node = AstNode::deserialize(*this);
+void Deserializer::readref(AstNode*& node) {
+    node = AstNode::deserialize_raw(*this);
 }
 
 
@@ -186,25 +186,25 @@ AstPtr AstNode::deserialize(std::istream& is) {
 
 
 AstPtr AstNode::deserialize(Deserializer& is) {
+    return is.read<AstPtr>();
+}
+
+
+AstNode* AstNode::deserialize_raw(Deserializer& is) {
     auto indicator = is.read<char>();
     auto source = is.read<Source>();
     switch (indicator) {
-    case 'T': {
-        auto node = Literal {{source}, is.read<Object>()};
-        return std::make_unique<Literal>(node);
-    }
-    case 'I': {
-        auto node = Identifier {{source}, is.read<std::string>()};
-        return std::make_unique<Identifier>(node);
-    }
+    case 'T':
+        return new Literal {{source}, is.read<Object>()};
+    case 'I':
+        return new Identifier {{source}, is.read<std::string>()};
     case 'L': {
         auto elements = is.read<std::vector<List::Entry>>([&is]() {
             auto subnode = is.read<AstPtr>();
             auto splat = is.read<bool>();
             return List::Entry {std::move(subnode), splat};
         });
-        auto node = List {{source}, std::move(elements)};
-        return std::make_unique<List>(std::move(node));
+        return new List {{source}, std::move(elements)};
     }
     case 'M': {
         auto entries = is.read<std::vector<Map::Entry>>([&is]() {
@@ -213,15 +213,13 @@ AstPtr AstNode::deserialize(Deserializer& is) {
             auto splat = is.read<bool>();
             return Map::Entry {name, std::move(subnode), splat};
         });
-        auto node = Map {{source}, std::move(entries)};
-        return std::make_unique<Map>(std::move(node));
+        return new Map {{source}, std::move(entries)};
     }
     case 'O': {
         auto lhs = is.read<AstPtr>();
         auto rhs = is.read<AstPtr>();
         auto op = is.read<Operator>();
-        auto node = BinOp {{source}, std::move(lhs), std::move(rhs), op};
-        return std::make_unique<BinOp>(std::move(node));
+        return new BinOp {{source}, std::move(lhs), std::move(rhs), op};
     }
     case 'B': {
         auto bindings = is.read<std::vector<Block::Binding>>([&is]() {
@@ -229,37 +227,32 @@ AstPtr AstNode::deserialize(Deserializer& is) {
             auto subnode = is.read<AstPtr>();
             return Block::Binding {name, std::move(subnode)};
         });
-        auto node = Block {{source}, std::move(bindings), is.read<AstPtr>()};
-        return std::make_unique<Block>(std::move(node));
+        return new Block {{source}, std::move(bindings), is.read<AstPtr>()};
     }
     case 'F': {
-        auto parameters = is.read<std::vector<std::string>>();
+        auto parameters = is.read<std::shared_ptr<std::vector<std::string>>>();
         auto expression = is.read<AstPtr>();
-        auto node = Function {
+        return new Function {
             {source},
-            std::make_shared<std::vector<std::string>>(parameters),
+            parameters,
             std::move(expression)
         };
-        return std::make_unique<Function>(std::move(node));
     }
     case 'C': {
         auto cond = is.read<AstPtr>();
         auto yes = is.read<AstPtr>();
         auto no = is.read<AstPtr>();
-        auto node = Branch {{source}, std::move(cond), std::move(yes), std::move(no)};
-        return std::make_unique<Branch>(std::move(node));
+        return new Branch {{source}, std::move(cond), std::move(yes), std::move(no)};
     }
     case 'E': {
         auto func = is.read<AstPtr>();
         auto args = is.read<std::vector<AstPtr>>();
-        auto node = FunCall {{source}, std::move(func), std::move(args)};
-        return std::make_unique<FunCall>(std::move(node));
+        return new FunCall {{source}, std::move(func), std::move(args)};
     }
     case 'S': {
         auto haystack = is.read<AstPtr>();
         auto needle = is.read<AstPtr>();
-        auto node = Index {{source}, std::move(haystack), std::move(needle)};
-        return std::make_unique<Index>(std::move(node));
+        return new Index {{source}, std::move(haystack), std::move(needle)};
     }
     default:
         throw InternalException();
