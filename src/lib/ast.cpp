@@ -439,7 +439,7 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
 
     else if (type == "Grammar::boolean") {
         Object obj = Object::boolean(node.string_view() == "true");
-        return std::make_unique<Literal>(source(node), obj);
+        return std::make_unique<Literal>(Literal {{source(node)}, obj});
     }
 
     else if (type == "Grammar::number::rule") {
@@ -487,7 +487,7 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
     else if (type == "Grammar::string::interp") {
         auto func = std::make_unique<Identifier>(source(node), "str");
         auto call = std::make_unique<FunCall>(source(node), std::move(func));
-        call->append(normalize(*node.children[0]));
+        call->args.push_back(normalize(*node.children[0]));
         return call;
     }
 
@@ -515,9 +515,9 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         auto list = std::make_unique<List>(source(node));
         for (auto&& c : node.children) {
             if (nodetype(*c) == "Grammar::splatted")
-                list->append(normalize(*c->children[0]), true);
+                list->elements.push_back({normalize(*c->children[0]), true});
             else
-                list->append(normalize(*c), false);
+                list->elements.push_back({normalize(*c), false});
         }
         return list;
     }
@@ -527,12 +527,12 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         for (auto&& c : node.children) {
             if (nodetype(*c) == "Grammar::splatted") {
                 auto value = normalize(*c->children[0]);
-                map->append("", std::move(value), true);
+                map->entries.push_back({"", std::move(value), true});
             }
             else {
                 auto key = c->children[0]->string();
                 auto value = normalize(*c->children[1]);
-                map->append(key, std::move(value), false);
+                map->entries.push_back({key, std::move(value), false});
             }
         }
         return map;
@@ -570,19 +570,18 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         auto block = std::make_unique<Block>(source(node));
         for (auto&& c : node.children) {
             if (nodetype(*c) == "Grammar::block::binding")
-                block->append(c->children[0]->string(), normalize(*c->children[1]));
+                block->bindings.push_back({c->children[0]->string(), normalize(*c->children[1])});
             else
-                block->set_expression(normalize(*c));
+                block->expression = normalize(*c);
         }
         return block;
     }
 
     else if (type == "Grammar::func::rule") {
         auto function = std::make_unique<Function>(source(node));
-        for (auto&& c : node.children[0]->children) {
-            function->append(c->string());
-        }
-        function->set_expression(normalize(*node.children[1]));
+        for (auto&& c : node.children[0]->children)
+            function->parameters->push_back(c->string());
+        function->expression = normalize(*node.children[1]);
         return function;
     }
 
@@ -602,7 +601,7 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
             if (stype == "Grammar::postfix::funcall_operator") {
                 auto funcall = std::make_unique<FunCall>(source(**it), std::move(value));
                 for (auto&& c : (*it)->children)
-                    funcall->append(normalize(*c));
+                    funcall->args.push_back(normalize(*c));
                 value = std::move(funcall);
             }
             else if (stype == "Grammar::postfix::object_access") {

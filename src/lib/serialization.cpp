@@ -146,8 +146,8 @@ void BinOp::serialize(Serializer& os) const {
 
 void Block::serialize(Serializer& os) const {
     os << 'B' << source();
-    os.write(bindings, [&os](const std::pair<std::string, AstPtr>& entry) {
-        os << entry.first << *entry.second;
+    os.write(bindings, [&os](const Binding& binding) {
+        os << binding.name << *binding.expression;
     });
     os << *expression;
 }
@@ -224,10 +224,10 @@ AstPtr AstNode::deserialize(Deserializer& is) {
         return std::make_unique<BinOp>(std::move(node));
     }
     case 'B': {
-        auto bindings = is.read<std::vector<std::pair<std::string, AstPtr>>>([&is]() {
+        auto bindings = is.read<std::vector<Block::Binding>>([&is]() {
             auto name = is.read<std::string>();
             auto subnode = is.read<AstPtr>();
-            return std::make_pair(name, std::move(subnode));
+            return Block::Binding {name, std::move(subnode)};
         });
         auto node = Block {{source}, std::move(bindings), is.read<AstPtr>()};
         return std::make_unique<Block>(std::move(node));

@@ -34,7 +34,7 @@ enum class Operator {
 struct Literal : public AstNode {
     const Object object;
 
-    Literal(Source source, Object obj) : AstNode(source), object(obj) {}
+    Literal(Source src, Object object) : AstNode(src), object(object) {}
     virtual void dump(std::ostream& os) const { os << "Lit(" << object << ")"; }
     virtual void free_identifiers(std::set<std::string>&) const {}
     virtual Object evaluate(EvaluationContext&) const { return object; }
@@ -45,8 +45,7 @@ struct Literal : public AstNode {
 struct Identifier : public AstNode {
     const std::string name;
 
-    Identifier(Source source, std::string name) : AstNode(source), name(name) {}
-    Identifier(Source source, std::string& name) : AstNode(source), name(name) {}
+    Identifier(Source src, std::string name) : AstNode(src), name(name) {}
     virtual void dump(std::ostream& os) const { os << "Id(" << name << ")"; }
     virtual void free_identifiers(std::set<std::string>& idents) const { idents.insert(name); }
     virtual Object evaluate(EvaluationContext& ctx) const;
@@ -62,9 +61,9 @@ struct List : public AstNode {
 
     std::vector<Entry> elements;
 
-    List(Source source) : AstNode(source) {}
-    List(Source source, std::vector<Entry> entries) : AstNode(source), elements(std::move(entries)) {}
-    void append(AstPtr node, bool splat) { elements.push_back({std::move(node), splat}); }
+    List(Source src) : AstNode(src) {}
+    List(Source src, std::vector<Entry> elements)
+        : AstNode(src), elements(std::move(elements)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -81,11 +80,9 @@ struct Map : public AstNode {
 
     std::vector<Entry> entries;
 
-    Map(Source source) : AstNode(source) {}
-    Map(Source source, std::vector<Entry> elements) : AstNode(source), entries(std::move(elements)) {}
-    void append(std::string key, AstPtr value, bool splat) {
-        entries.push_back({key, std::move(value), splat});
-    }
+    Map(Source src) : AstNode(src) {}
+    Map(Source src, std::vector<Entry> entries)
+        : AstNode(src), entries(std::move(entries)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -97,8 +94,8 @@ struct BinOp : public AstNode {
     AstPtr lhs, rhs;
     Operator op;
 
-    BinOp(Source source, AstPtr l, AstPtr r, Operator oper)
-        : AstNode(source), lhs(std::move(l)), rhs(std::move(r)), op(oper) {}
+    BinOp(Source src, AstPtr l, AstPtr r, Operator oper)
+        : AstNode(src), lhs(std::move(l)), rhs(std::move(r)), op(oper) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -107,15 +104,17 @@ struct BinOp : public AstNode {
 
 
 struct Block : public AstNode {
-    std::vector<std::pair<std::string, AstPtr>> bindings;
+    using Binding = struct {
+        std::string name;
+        AstPtr expression;
+    };
+
+    std::vector<Binding> bindings;
     AstPtr expression;
 
-    Block(Source source) : AstNode(source) {}
-    Block(Source source, std::vector<std::pair<std::string, AstPtr>> entries, AstPtr expr) :
-        AstNode(source), bindings(std::move(entries)), expression(std::move(expr)) {}
-    void append(std::string key, AstPtr value) {
-        bindings.push_back(std::pair(key, std::move(value)));
-    }
+    Block(Source src) : AstNode(src) {}
+    Block(Source src, std::vector<Binding> bindings, AstPtr expression)
+        : AstNode(src), bindings(std::move(bindings)), expression(std::move(expression)) {}
     void set_expression(AstPtr expr) { expression = std::move(expr); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -128,11 +127,10 @@ struct Function : public AstNode {
     std::shared_ptr<std::vector<std::string>> parameters;
     std::shared_ptr<AstNode> expression;
 
-    Function(Source source) : AstNode(source), parameters(new std::vector<std::string>()) {}
-    Function(Source source, std::shared_ptr<std::vector<std::string>> p, std::shared_ptr<AstNode> x)
-        : AstNode(source), parameters(p), expression(std::move(x)) {}
-    void append(std::string key) { parameters->push_back(key); }
-    void set_expression(AstPtr expr) { expression = std::move(expr); }
+    Function(Source src)
+        : AstNode(src), parameters(new std::vector<std::string>()), expression(nullptr) {}
+    Function(Source src, std::shared_ptr<std::vector<std::string>> parameters, std::shared_ptr<AstNode> expression)
+        : AstNode(src), parameters(parameters), expression(expression) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -145,10 +143,8 @@ struct Branch : public AstNode {
     AstPtr if_value;
     AstPtr else_value;
 
-    Branch(
-        Source source, AstPtr cond,
-        AstPtr yes, AstPtr no
-    ) : AstNode(source), condition(std::move(cond)), if_value(std::move(yes)), else_value(std::move(no)) { }
+    Branch(Source src, AstPtr cond, AstPtr yes, AstPtr no)
+        : AstNode(src), condition(std::move(cond)), if_value(std::move(yes)), else_value(std::move(no)) { }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -160,9 +156,9 @@ struct FunCall : public AstNode {
     AstPtr function;
     std::vector<AstPtr> args;
 
-    FunCall(Source source, AstPtr func) : AstNode(source), function(std::move(func)) {}
-    FunCall(Source source, AstPtr func, std::vector<AstPtr> a) : AstNode(source), function(std::move(func)), args(std::move(a)) {}
-    void append(AstPtr arg) { args.push_back(std::move(arg)); }
+    FunCall(Source src, AstPtr function) : AstNode(src), function(std::move(function)) {}
+    FunCall(Source src, AstPtr function, std::vector<AstPtr> args)
+        : AstNode(src), function(std::move(function)), args(std::move(args)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -174,8 +170,8 @@ struct Index : public AstNode {
     AstPtr haystack;
     AstPtr needle;
 
-    Index(Source source, AstPtr object, AstPtr index)
-        : AstNode(source), haystack(std::move(object)), needle(std::move(index)) {}
+    Index(Source src, AstPtr haystack, AstPtr needle)
+        : AstNode(src), haystack(std::move(haystack)), needle(std::move(needle)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;

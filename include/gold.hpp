@@ -33,7 +33,7 @@ struct Source {
 struct AstNode {
     Source src;
 
-    AstNode(Source source) : src(source) {}
+    AstNode(Source src) : src(src) {}
     virtual ~AstNode() {};
     virtual void dump(std::ostream&) const = 0;
     std::string dump() const;
