@@ -41,7 +41,10 @@ namespace Grammar
     // Forward declarations
     struct expression;
     struct splatted;
-    struct identifier_char: p::alnum {};
+    struct identifier_char: p::sor<
+        p::alnum,
+        p::one<'_'>
+    > {};
 
     // Ignorables: whitespace and comments
     struct ignore {
@@ -170,7 +173,10 @@ namespace Grammar
 
     // Maps
     struct map {
-        struct identifier: p::plus<p::alnum> {};
+        struct identifier: p::plus<p::sor<
+            identifier_char,
+            p::one<'-'>
+        >> {};
         struct entry: p::seq<prepad<identifier>, token::colon, expression> {};
         struct element: p::sor<splatted, entry> {};
         struct seq: p::seq<listof<element>> {};

@@ -117,6 +117,9 @@ TEST_CASE("Parse identifiers", "[parsing]") {
     ast = parse_string("falset");
     REQUIRE(ast->dump() == "Id(falset)");
 
+    ast = parse_string("with_underscore");
+    REQUIRE(ast->dump() == "Id(with_underscore)");
+
     // Identifiers that begin with keywords are ok
     ast = parse_string("ift");
     REQUIRE(ast->dump() == "Id(ift)");
@@ -194,6 +197,9 @@ TEST_CASE("Parse map of atomics", "[parsing]") {
         "Map(Entry(a, Lit(1)), Entry(b, Lit(true)), "
         "Entry(c, Lit(20.0)), Entry(d, Lit(\"hoho\")), Entry(e, Id(lel)))"
     );
+
+    ast = parse_string("{ident-with-hyphen: 1}");
+    REQUIRE(ast->dump() == "Map(Entry(ident-with-hyphen, Lit(1)))");
 }
 
 
