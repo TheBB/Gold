@@ -118,6 +118,7 @@ public:
 
     static Object deserialize(std::string);
     static Object deserialize(std::istream&);
+    static Object deserialize(Deserializer&);
 
     // Type inspection
     Type type() const;
@@ -245,9 +246,10 @@ private:
     template<typename T>
     void readref(T*& val) { val = new T; readref(*val); }
 
+    template<typename T, typename F>
+    void readref(T*& val, F f) { val = new T; readref(*val, f); }
+
     void readref(std::string&);
-    void readref(Object&);
-    void readref(AstNode*&);
 
     template<typename V, typename F>
     void readref(std::vector<V>& v, F f) {
@@ -275,7 +277,11 @@ private:
 
     template<typename K, typename V>
     void readref(std::map<K,V>& m) {
-        readref(m, [this]() { return std::pair<K,V> { read<K>(), read<V>() }; });
+        readref(m, [this]() {
+            auto key = read<K>();
+            auto value = read<V>();
+            return std::pair<K,V> { key, value };
+        });
     }
 
     template<typename T>
@@ -290,9 +296,26 @@ private:
         }
     }
 
+    template<typename T, typename F>
+    void readref(std::shared_ptr<T>& p, F f) {
+        auto k = read<char>();
+        auto id = read<intmax_t>();
+        if (k == 'R')
+            p = std::static_pointer_cast<T>(pointers[id]);
+        else {
+            p = std::shared_ptr<T>(read<T*>(f));
+            pointers[id] = p;
+        }
+    }
+
     template<typename T>
     void readref(std::unique_ptr<T>& p) {
         p = std::unique_ptr<T>(read<T*>());
+    }
+
+    template<typename T, typename F>
+    void readref(std::unique_ptr<T>& p, F f) {
+        p = std::unique_ptr<T>(read<T*>(f));
     }
 
 public:

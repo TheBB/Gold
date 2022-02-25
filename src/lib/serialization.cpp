@@ -60,33 +60,37 @@ void Object::do_serialize(Serializer& s) const {
 }
 
 
-void Deserializer::readref(Object& obj) {
-    char indicator = read<char>();
+Object Object::deserialize(Deserializer& is) {
+    char indicator = is.read<char>();
     switch (indicator) {
-    case 'N': obj = Object::null(); return;
-    case 'I': obj = Object::integer(read<Object::Integer>()); return;
-    case 'S': obj = Object::string(read<Object::String>()); return;
-    case 'B': obj = Object::boolean(read<Object::Boolean>()); return;
-    case 'F': obj = Object::floating(read<Object::Floating>()); return;
-    case 'M': obj = Object::map(read<Object::Map>()); return;
-    case 'L': obj = Object::list(read<Object::List>()); return;
+    case 'N': return Object::null();
+    case 'I': return Object::integer(is.read<Object::Integer>());
+    case 'S': return Object::string(is.read<Object::String>());
+    case 'B': return Object::boolean(is.read<Object::Boolean>());
+    case 'F': return Object::floating(is.read<Object::Floating>());
+    case 'M': return Object::map(is.read<Object::Map>([&is]() {
+        auto key = is.read<std::string>();
+        auto value = Object::deserialize(is);
+        return std::pair<std::string, Object> { key, value };
+    }));
+    case 'L': return Object::list(is.read<Object::List>([&is]() {
+        return Object::deserialize(is);
+    }));
     case 'C': {
         auto closure = std::make_shared<Object::ClosureT>();
-        closure->nonlocals = read<std::map<std::string, Object>>();
-        closure->parameters = read<std::shared_ptr<std::vector<std::string>>>();
-        closure->expression = read<AstPtr>();
-        obj = Object::closure(closure);
-        return;
+        closure->nonlocals = is.read<std::map<std::string, Object>>([&is]() {
+            auto key = is.read<std::string>();
+            auto value = Object::deserialize(is);
+            return std::pair(key, value);
+        });
+        closure->parameters = is.read<std::shared_ptr<std::vector<std::string>>>();
+        closure->expression = AstNode::deserialize(is);
+        return Object::closure(closure);
     }
-    case 'U': obj = builtins[read<std::string>()]; return;
+    case 'U': return builtins[is.read<std::string>()];
     }
 
     throw InternalException(fmt::format("unknown object indicator: {}", (int)indicator));
-}
-
-
-void Deserializer::readref(AstNode*& node) {
-    node = AstNode::deserialize_raw(*this);
 }
 
 
@@ -97,7 +101,8 @@ Object Object::deserialize(std::string val) {
 
 
 Object Object::deserialize(std::istream& is) {
-    return Deserializer(is).read<Object>();
+    Deserializer d(is);
+    return deserialize(d);
 }
 
 
@@ -174,73 +179,66 @@ AstPtr AstNode::deserialize(std::istream& is) {
 
 
 AstPtr AstNode::deserialize(Deserializer& is) {
-    return is.read<AstPtr>();
-}
-
-
-AstNode* AstNode::deserialize_raw(Deserializer& is) {
     auto indicator = is.read<char>();
     auto source = is.read<Source>();
     switch (indicator) {
     case 'T':
-        return new Literal {{source}, is.read<Object>()};
+        return std::make_unique<Literal>(source, Object::deserialize(is));
     case 'I':
-        return new Identifier {{source}, is.read<std::string>()};
+        return std::make_unique<Identifier>(source, is.read<std::string>());
     case 'L': {
         auto elements = is.read<std::vector<List::Entry>>([&is]() {
-            auto subnode = is.read<AstPtr>();
+            auto subnode = AstNode::deserialize(is);
             auto splat = is.read<bool>();
             return List::Entry {std::move(subnode), splat};
         });
-        return new List {{source}, std::move(elements)};
+        return std::make_unique<List>(source, std::move(elements));
     }
     case 'M': {
         auto entries = is.read<std::vector<Map::Entry>>([&is]() {
             auto name = is.read<std::string>();
-            auto subnode = is.read<AstPtr>();
+            auto subnode = AstNode::deserialize(is);
             auto splat = is.read<bool>();
             return Map::Entry {name, std::move(subnode), splat};
         });
-        return new Map {{source}, std::move(entries)};
+        return std::make_unique<Map>(source, std::move(entries));
     }
     case 'O': {
-        auto lhs = is.read<AstPtr>();
-        auto rhs = is.read<AstPtr>();
+        auto lhs = AstNode::deserialize(is);
+        auto rhs = AstNode::deserialize(is);
         auto op = is.read<Operator>();
-        return new BinOp {{source}, std::move(lhs), std::move(rhs), op};
+        return std::make_unique<BinOp>(source, std::move(lhs), std::move(rhs), op);
     }
     case 'B': {
         auto bindings = is.read<std::vector<Block::Binding>>([&is]() {
             auto name = is.read<std::string>();
-            auto subnode = is.read<AstPtr>();
+            auto subnode = AstNode::deserialize(is);
             return Block::Binding {name, std::move(subnode)};
         });
-        return new Block {{source}, std::move(bindings), is.read<AstPtr>()};
+        return std::make_unique<Block>(source, std::move(bindings), AstNode::deserialize(is));
     }
     case 'F': {
         auto parameters = is.read<std::shared_ptr<std::vector<std::string>>>();
-        auto expression = is.read<AstPtr>();
-        return new Function {
-            {source},
-            parameters,
-            std::move(expression)
-        };
+        auto expression = AstNode::deserialize(is);
+        return std::make_unique<Function>(source, parameters, std::move(expression));
     }
     case 'C': {
-        auto cond = is.read<AstPtr>();
-        auto yes = is.read<AstPtr>();
-        auto no = is.read<AstPtr>();
-        return new Branch {{source}, std::move(cond), std::move(yes), std::move(no)};
+        auto cond = AstNode::deserialize(is);
+        auto yes = AstNode::deserialize(is);
+        auto no = AstNode::deserialize(is);
+        return std::make_unique<Branch>(source, std::move(cond), std::move(yes), std::move(no));
     }
     case 'E': {
-        auto func = is.read<AstPtr>();
-        auto args = is.read<std::vector<AstPtr>>();
-        return new FunCall {{source}, std::move(func), std::move(args)};
+        auto func = AstNode::deserialize(is);
+        auto args = is.read<std::vector<AstPtr>>([&is]() {
+            return AstNode::deserialize(is);
+        });
+        return std::make_unique<FunCall>(source, std::move(func), std::move(args));
     }
     case 'S': {
-        auto haystack = is.read<AstPtr>();
-        auto needle = is.read<AstPtr>();
-        return new Index {{source}, std::move(haystack), std::move(needle)};
+        auto haystack = AstNode::deserialize(is);
+        auto needle = AstNode::deserialize(is);
+        return std::make_unique<Index>(source, std::move(haystack), std::move(needle));
     }
     default:
         throw InternalException(fmt::format("unknown AST indicator: {}", (int)indicator));

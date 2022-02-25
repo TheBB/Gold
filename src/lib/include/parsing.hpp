@@ -45,7 +45,7 @@ struct AstNode : public Serializable {
     static std::unique_ptr<AstNode> deserialize(std::string);
     static std::unique_ptr<AstNode> deserialize(std::istream&);
     static std::unique_ptr<AstNode> deserialize(Deserializer&);
-    static AstNode* deserialize_raw(Deserializer&);
+    // static AstNode* deserialize_raw(Deserializer&);
 
     const Source source() const { return src; }
 };
