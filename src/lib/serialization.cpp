@@ -10,6 +10,24 @@ template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 
+std::string Serializable::serialize() const {
+    std::ostringstream os;
+    serialize(os);
+    return os.str();
+}
+
+
+void Serializable::serialize(std::ostream& os) const {
+    Serializer s(os);
+    serialize(s);
+}
+
+
+void Serializable::serialize(Serializer& s) const {
+    do_serialize(s);
+}
+
+
 Serializer& Serializer::operator<<(const std::string& str) {
     auto size = str.size();
     *this << size;
@@ -27,8 +45,7 @@ void Deserializer::readref(std::string& str) {
 }
 
 
-Serializer& Serializer::operator<<(const Object& obj) {
-    Serializer& s = *this;
+void Object::do_serialize(Serializer& s) const {
     std::visit(overloaded {
         [&s](Object::Null) { s << 'N'; },
         [&s](Object::Integer v) { s << 'I' << v; },
@@ -39,8 +56,7 @@ Serializer& Serializer::operator<<(const Object& obj) {
         [&s](Object::List v) { s << 'L' << v; },
         [&s](Object::Closure v) { s << 'C' << v->nonlocals << v->parameters << v->expression; },
         [&s](Object::Builtin v) { s << 'U' << v.name; }
-    }, obj.data());
-    return *this;
+    }, data());
 }
 
 
@@ -69,27 +85,21 @@ void Deserializer::readref(Object& obj) {
 }
 
 
-Serializer& Serializer::operator<<(const AstNode& node) {
-    node.serialize(*this);
-    return *this;
-}
-
-
 void Deserializer::readref(AstNode*& node) {
     node = AstNode::deserialize_raw(*this);
 }
 
 
-std::string Object::serialize() const {
-    std::ostringstream os;
-    serialize(os);
-    return os.str();
-}
+// std::string Object::serialize() const {
+//     std::ostringstream os;
+//     serialize(os);
+//     return os.str();
+// }
 
 
-void Object::serialize(std::ostream& os) const {
-    Serializer(os) << *this;
-}
+// void Object::serialize(std::ostream& os) const {
+//     Serializer(os) << *this;
+// }
 
 
 Object Object::deserialize(std::string val) {
@@ -103,29 +113,29 @@ Object Object::deserialize(std::istream& is) {
 }
 
 
-std::string AstNode::serialize() const {
-    std::ostringstream os;
-    serialize(os);
-    return os.str();
-}
+// std::string AstNode::serialize() const {
+//     std::ostringstream os;
+//     serialize(os);
+//     return os.str();
+// }
 
 
-void AstNode::serialize(std::ostream& os) const {
-    Serializer(os) << *this;
-}
+// void AstNode::serialize(std::ostream& os) const {
+//     Serializer(os) << *this;
+// }
 
 
-void Literal::serialize(Serializer& os) const {
+void Literal::do_serialize(Serializer& os) const {
     os << 'T' << source() << object;
 }
 
 
-void Identifier::serialize(Serializer& os) const {
+void Identifier::do_serialize(Serializer& os) const {
     os << 'I' << source() << name;
 }
 
 
-void List::serialize(Serializer& os) const {
+void List::do_serialize(Serializer& os) const {
     os << 'L' << source();
     os.write(elements, [&os](const Entry& entry) {
         os << entry.node << entry.splat;
@@ -133,7 +143,7 @@ void List::serialize(Serializer& os) const {
 }
 
 
-void Map::serialize(Serializer& os) const {
+void Map::do_serialize(Serializer& os) const {
     os << 'M' << source();
     os.write(entries, [&os](const Entry& entry) {
         os << entry.key << entry.node << entry.splat;
@@ -141,12 +151,12 @@ void Map::serialize(Serializer& os) const {
 }
 
 
-void BinOp::serialize(Serializer& os) const {
+void BinOp::do_serialize(Serializer& os) const {
     os << 'O' << source() << lhs << rhs << op;
 }
 
 
-void Block::serialize(Serializer& os) const {
+void Block::do_serialize(Serializer& os) const {
     os << 'B' << source();
     os.write(bindings, [&os](const Binding& binding) {
         os << binding.name << binding.expression;
@@ -155,22 +165,22 @@ void Block::serialize(Serializer& os) const {
 }
 
 
-void Function::serialize(Serializer& os) const {
+void Function::do_serialize(Serializer& os) const {
     os << 'F' << source() << parameters << *expression;
 }
 
 
-void Branch::serialize(Serializer& os) const {
+void Branch::do_serialize(Serializer& os) const {
     os << 'C' << source() << condition << if_value << else_value;
 }
 
 
-void FunCall::serialize(Serializer& os) const {
+void FunCall::do_serialize(Serializer& os) const {
     os << 'E' << source() << function << args;
 }
 
 
-void Index::serialize(Serializer& os) const {
+void Index::do_serialize(Serializer& os) const {
     os << 'S' << source() << haystack << needle;
 }
 

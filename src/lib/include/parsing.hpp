@@ -38,7 +38,7 @@ struct Literal : public AstNode {
     virtual void dump(std::ostream& os) const { os << "Lit(" << object << ")"; }
     virtual void free_identifiers(std::set<std::string>&) const {}
     virtual Object evaluate(EvaluationContext&) const { return object; }
-    virtual void serialize(Serializer&) const;
+    virtual void do_serialize(Serializer&) const;
 };
 
 
@@ -49,7 +49,7 @@ struct Identifier : public AstNode {
     virtual void dump(std::ostream& os) const { os << "Id(" << name << ")"; }
     virtual void free_identifiers(std::set<std::string>& idents) const { idents.insert(name); }
     virtual Object evaluate(EvaluationContext& ctx) const;
-    virtual void serialize(Serializer&) const;
+    virtual void do_serialize(Serializer&) const;
 };
 
 
@@ -67,7 +67,7 @@ struct List : public AstNode {
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(Serializer&) const;
+    virtual void do_serialize(Serializer&) const;
 };
 
 
@@ -86,7 +86,7 @@ struct Map : public AstNode {
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(Serializer&) const;
+    virtual void do_serialize(Serializer&) const;
 };
 
 
@@ -99,7 +99,7 @@ struct BinOp : public AstNode {
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(Serializer&) const;
+    virtual void do_serialize(Serializer&) const;
 };
 
 
@@ -119,7 +119,7 @@ struct Block : public AstNode {
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(Serializer&) const;
+    virtual void do_serialize(Serializer&) const;
 };
 
 
@@ -134,7 +134,7 @@ struct Function : public AstNode {
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(Serializer&) const;
+    virtual void do_serialize(Serializer&) const;
 };
 
 
@@ -148,7 +148,7 @@ struct Branch : public AstNode {
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(Serializer&) const;
+    virtual void do_serialize(Serializer&) const;
 };
 
 
@@ -162,7 +162,7 @@ struct FunCall : public AstNode {
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(Serializer&) const;
+    virtual void do_serialize(Serializer&) const;
 };
 
 
@@ -175,7 +175,7 @@ struct Index : public AstNode {
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
-    virtual void serialize(Serializer&) const;
+    virtual void do_serialize(Serializer&) const;
 };
 
 

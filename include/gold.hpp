@@ -18,9 +18,19 @@ class EvaluationContext;
 class Object;
 class Serializer;
 class Deserializer;
+class Serializable;
 
 using Namespace = std::map<std::string, Object>;
 extern Namespace builtins;
+
+
+class Serializable {
+public:
+    std::string serialize() const;
+    void serialize(std::ostream& os) const;
+    void serialize(Serializer& os) const;
+    virtual void do_serialize(Serializer&) const = 0;
+};
 
 
 struct InternalException: public std::exception {
@@ -41,7 +51,7 @@ struct Source {
 };
 
 
-struct AstNode {
+struct AstNode : public Serializable {
     Source src;
 
     AstNode(Source src) : src(src) {}
@@ -52,9 +62,6 @@ struct AstNode {
     std::set<std::string> free_identifiers() const;
     virtual Object evaluate(EvaluationContext&) const = 0;
 
-    std::string serialize() const;
-    virtual void serialize(std::ostream&) const;
-    virtual void serialize(Serializer&) const = 0;
     static std::unique_ptr<AstNode> deserialize(std::string);
     static std::unique_ptr<AstNode> deserialize(std::istream&);
     static std::unique_ptr<AstNode> deserialize(Deserializer&);
@@ -66,7 +73,7 @@ struct AstNode {
 using AstPtr = std::unique_ptr<AstNode>;
 
 
-class Object {
+class Object : public Serializable {
 public:
     enum class Type { integer, string, null, boolean, floating, map, list, closure, builtin };
 
@@ -149,8 +156,7 @@ public:
     const Variant& data() const { return _data; }
 
     // Serialization
-    std::string serialize() const;
-    void serialize(std::ostream&) const;
+    virtual void do_serialize(Serializer&) const;
 
     // Operators
     Object operator+(Object) const;
@@ -186,10 +192,15 @@ private:
     std::map<void*, intmax_t> pointers;
 
 public:
-    Serializer(std::ostream& stream) : os(stream) {}
+    explicit Serializer(std::ostream& stream) : os(stream) {}
 
-    template<typename T>
-    Serializer& operator<<(T v) { os.write((const char*) &v, sizeof v); return *this; }
+    template<
+        typename T,
+        std::enable_if_t<!std::is_base_of<Serializable, T>::value, bool> = true
+    >
+    Serializer& operator<<(T v) {
+        os.write((const char*) &v, sizeof v); return *this;
+    }
 
     template<typename T>
     Serializer& operator<<(const std::shared_ptr<T>& v) {
@@ -222,8 +233,11 @@ public:
     }
 
     Serializer& operator<<(const std::string&);
-    Serializer& operator<<(const Object&);
-    Serializer& operator<<(const AstNode&);
+
+    Serializer& operator<<(const Serializable& obj) {
+        obj.serialize(*this);
+        return *this;
+    }
 
     template<typename T, typename F>
     void write(const std::vector<T>& v, F writer) {
