@@ -7,6 +7,7 @@
 #include <fmt/core.h>
 
 #include "gold.hpp"
+#include "parsing.hpp"
 
 using namespace Gold;
 

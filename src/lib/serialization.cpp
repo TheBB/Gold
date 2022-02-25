@@ -90,18 +90,6 @@ void Deserializer::readref(AstNode*& node) {
 }
 
 
-// std::string Object::serialize() const {
-//     std::ostringstream os;
-//     serialize(os);
-//     return os.str();
-// }
-
-
-// void Object::serialize(std::ostream& os) const {
-//     Serializer(os) << *this;
-// }
-
-
 Object Object::deserialize(std::string val) {
     std::istringstream is(val);
     return deserialize(is);
@@ -111,18 +99,6 @@ Object Object::deserialize(std::string val) {
 Object Object::deserialize(std::istream& is) {
     return Deserializer(is).read<Object>();
 }
-
-
-// std::string AstNode::serialize() const {
-//     std::ostringstream os;
-//     serialize(os);
-//     return os.str();
-// }
-
-
-// void AstNode::serialize(std::ostream& os) const {
-//     Serializer(os) << *this;
-// }
 
 
 void Literal::do_serialize(Serializer& os) const {

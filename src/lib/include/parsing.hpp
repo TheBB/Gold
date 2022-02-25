@@ -31,6 +31,26 @@ enum class Operator {
 };
 
 
+struct AstNode : public Serializable {
+    Source src;
+
+    AstNode(Source src) : src(src) {}
+    virtual ~AstNode() {};
+    virtual void dump(std::ostream&) const = 0;
+    std::string dump() const;
+    virtual void free_identifiers(std::set<std::string>&) const = 0;
+    std::set<std::string> free_identifiers() const;
+    virtual Object evaluate(EvaluationContext&) const = 0;
+
+    static std::unique_ptr<AstNode> deserialize(std::string);
+    static std::unique_ptr<AstNode> deserialize(std::istream&);
+    static std::unique_ptr<AstNode> deserialize(Deserializer&);
+    static AstNode* deserialize_raw(Deserializer&);
+
+    const Source source() const { return src; }
+};
+
+
 struct Literal : public AstNode {
     const Object object;
 
