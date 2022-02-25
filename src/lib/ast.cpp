@@ -84,13 +84,10 @@ Object Identifier::evaluate(EvaluationContext& ctx) const {
 void List::dump(std::ostream& os) const {
     os << "List(";
     bool first = true;
-    for (auto& entry : elements) {
+    for (auto& element : elements) {
         if (!first)
             os << ", ";
-        if (entry.splat)
-            os << "Splat(" << *entry.node << ")";
-        else
-            os << *entry.node;
+        element->dump(os);
         first = false;
     }
     os << ")";
@@ -98,24 +95,39 @@ void List::dump(std::ostream& os) const {
 
 
 void List::free_identifiers(std::set<std::string>& idents) const {
-    for (auto& entry : elements)
-        entry.node->free_identifiers(idents);
+    for (auto& element : elements)
+        element->free_identifiers(idents);
+}
+
+
+void SingletonListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
+    list.push_back(node->evaluate(ctx));
+}
+
+
+void SingletonListElement::free_identifiers(std::set<std::string>& idents) const {
+    node->free_identifiers(idents);
+}
+
+
+void SplatListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
+    auto val = node->evaluate(ctx);
+    if (val.type() != Object::Type::list)
+        throw EvalException(node->source(), fmt::format("unable to splat non-list: `{}`", val.type_name()));
+    auto& inlist = val.unsafe_list();
+    std::copy(inlist->begin(), inlist->end(), std::back_inserter(list));
+}
+
+
+void SplatListElement::free_identifiers(std::set<std::string>& idents) const {
+    node->free_identifiers(idents);
 }
 
 
 Object List::evaluate(EvaluationContext& ctx) const {
     std::vector<Object> objs;
-    for (auto& entry : elements) {
-        auto val = entry.node->evaluate(ctx);
-        if (entry.splat) {
-            if (val.type() != Object::Type::list)
-                throw EvalException(entry.node->source(), fmt::format("unable to splat non-list: `{}`", val.type_name()));
-            auto& list = val.unsafe_list();
-            std::copy(list->begin(), list->end(), std::back_inserter(objs));
-        }
-        else
-            objs.push_back(entry.node->evaluate(ctx));
-    }
+    for (auto& entry : elements)
+        entry->fill(ctx, objs);
     return Object::list(std::move(objs));
 }
 
@@ -123,13 +135,10 @@ Object List::evaluate(EvaluationContext& ctx) const {
 void Map::dump(std::ostream& os) const {
     os << "Map(";
     bool first = true;
-    for (auto& entry : entries) {
+    for (auto& element : elements) {
         if (!first)
             os << ", ";
-        if (entry.splat)
-            os << "Splat(" << *entry.node << ")";
-        else
-            os << "Entry(" << entry.key << ", " << *entry.node << ")";
+        element->dump(os);
         first = false;
     }
     os << ")";
@@ -137,26 +146,40 @@ void Map::dump(std::ostream& os) const {
 
 
 void Map::free_identifiers(std::set<std::string>& idents) const {
-    for (auto& obj : entries)
-        obj.node->free_identifiers(idents);
+    for (auto& element : elements)
+        element->free_identifiers(idents);
 }
 
 
 Object Map::evaluate(EvaluationContext& ctx) const {
     ctx.push_object();
-    for (auto& entry : entries) {
-        auto value = entry.node->evaluate(ctx);
-        if (entry.splat) {
-            if (value.type() != Object::Type::map)
-                throw EvalException(entry.node->source(), fmt::format("unable to splat non-map: `{}`", value.type_name()));
-            auto& map = value.unsafe_map();
-            for (auto& [key, val] : *map)
-                ctx.assign_object(key, val);
-        }
-        else
-            ctx.assign_object(entry.key, value);
-    }
+    for (auto& element : elements)
+        element->fill(ctx);
     return ctx.finalize_object();
+}
+
+
+void SingletonMapElement::fill(EvaluationContext& ctx) const {
+    ctx.assign_object(key, node->evaluate(ctx));
+}
+
+
+void SingletonMapElement::free_identifiers(std::set<std::string>& idents) const {
+    node->free_identifiers(idents);
+}
+
+
+void SplatMapElement::fill(EvaluationContext& ctx) const {
+    auto val = node->evaluate(ctx);
+    if (val.type() != Object::Type::map)
+        throw EvalException(node->source(), fmt::format("unable to splat non-map: `{}`", val.type_name()));
+    for (auto& [key, val] : *val.unsafe_map())
+        ctx.assign_object(key, val);
+}
+
+
+void SplatMapElement::free_identifiers(std::set<std::string>& idents) const {
+    node->free_identifiers(idents);
 }
 
 
@@ -509,9 +532,13 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         auto list = std::make_unique<List>(source(node));
         for (auto&& c : node.children) {
             if (nodetype(*c) == "Grammar::splatted")
-                list->elements.push_back({normalize(*c->children[0]), true});
+                list->elements.push_back(std::make_unique<SplatListElement>(
+                    normalize(*c->children[0])
+                ));
             else
-                list->elements.push_back({normalize(*c), false});
+                list->elements.push_back(std::make_unique<SingletonListElement>(
+                    normalize(*c)
+                ));
         }
         return list;
     }
@@ -520,13 +547,15 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         auto map = std::make_unique<Map>(source(node));
         for (auto&& c : node.children) {
             if (nodetype(*c) == "Grammar::splatted") {
-                auto value = normalize(*c->children[0]);
-                map->entries.push_back({"", std::move(value), true});
+                map->elements.push_back(std::make_unique<SplatMapElement>(
+                    normalize(*c->children[0])
+                ));
             }
             else {
-                auto key = c->children[0]->string();
-                auto value = normalize(*c->children[1]);
-                map->entries.push_back({key, std::move(value), false});
+                map->elements.push_back(std::make_unique<SingletonMapElement>(
+                    c->children[0]->string(),
+                    normalize(*c->children[1])
+                ));
             }
         }
         return map;

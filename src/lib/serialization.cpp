@@ -117,18 +117,15 @@ void Identifier::do_serialize(Serializer& os) const {
 
 
 void List::do_serialize(Serializer& os) const {
-    os << 'L' << source();
-    os.write(elements, [&os](const Entry& entry) {
-        os << entry.node << entry.splat;
-    });
+    os << 'L' << source() << elements;
 }
 
 
 void Map::do_serialize(Serializer& os) const {
-    os << 'M' << source();
-    os.write(entries, [&os](const Entry& entry) {
-        os << entry.key << entry.node << entry.splat;
-    });
+    os << 'M' << source() << elements;
+    // os.write(entries, [&os](const Entry& entry) {
+    //     os << entry.key << entry.node << entry.splat;
+    // });
 }
 
 
@@ -187,19 +184,14 @@ AstPtr AstNode::deserialize(Deserializer& is) {
     case 'I':
         return std::make_unique<Identifier>(source, is.read<std::string>());
     case 'L': {
-        auto elements = is.read<std::vector<List::Entry>>([&is]() {
-            auto subnode = AstNode::deserialize(is);
-            auto splat = is.read<bool>();
-            return List::Entry {std::move(subnode), splat};
+        auto elements = is.read<std::vector<std::unique_ptr<ListElement>>>([&is]() {
+            return ListElement::deserialize(is);
         });
         return std::make_unique<List>(source, std::move(elements));
     }
     case 'M': {
-        auto entries = is.read<std::vector<Map::Entry>>([&is]() {
-            auto name = is.read<std::string>();
-            auto subnode = AstNode::deserialize(is);
-            auto splat = is.read<bool>();
-            return Map::Entry {name, std::move(subnode), splat};
+        auto entries = is.read<std::vector<std::unique_ptr<MapElement>>>([&is]() {
+            return MapElement::deserialize(is);
         });
         return std::make_unique<Map>(source, std::move(entries));
     }
@@ -243,4 +235,49 @@ AstPtr AstNode::deserialize(Deserializer& is) {
     default:
         throw InternalException(fmt::format("unknown AST indicator: {}", (int)indicator));
     }
+}
+
+
+std::unique_ptr<ListElement> ListElement::deserialize(Deserializer& is) {
+    auto indicator = is.read<char>();
+    switch (indicator) {
+    case 'E': return std::make_unique<SingletonListElement>(AstNode::deserialize(is));
+    case 'S': return std::make_unique<SplatListElement>(AstNode::deserialize(is));
+    default:
+        throw InternalException(fmt::format("unknown list element indicator: {}", (int)indicator));
+    }
+}
+
+
+void SingletonListElement::do_serialize(Serializer& os) const {
+    os << 'E' << node;
+}
+
+
+void SplatListElement::do_serialize(Serializer& os) const {
+    os << 'S' << node;
+}
+
+
+std::unique_ptr<MapElement> MapElement::deserialize(Deserializer& is) {
+    auto indicator = is.read<char>();
+    switch (indicator) {
+    case 'E': {
+        auto key = is.read<std::string>();
+        return std::make_unique<SingletonMapElement>(key, AstNode::deserialize(is));
+    }
+    case 'S': return std::make_unique<SplatMapElement>(AstNode::deserialize(is));
+    default:
+        throw InternalException(fmt::format("unknown map element indicator: {}", (int)indicator));
+    }
+}
+
+
+void SingletonMapElement::do_serialize(Serializer& os) const {
+    os << 'E' << key << node;
+}
+
+
+void SplatMapElement::do_serialize(Serializer& os) const {
+    os << 'S' << node;
 }

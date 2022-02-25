@@ -35,7 +35,7 @@ struct AstNode : public Serializable {
     Source src;
 
     AstNode(Source src) : src(src) {}
-    virtual ~AstNode() {};
+    virtual ~AstNode() {}
     virtual void dump(std::ostream&) const = 0;
     virtual void free_identifiers(std::set<std::string>&) const = 0;
     std::set<std::string> free_identifiers() const;
@@ -74,16 +74,45 @@ struct Identifier : public AstNode {
 };
 
 
+struct ListElement : public Serializable {
+    virtual ~ListElement() {}
+    virtual void fill(EvaluationContext&, Object::ListT&) const = 0;
+    static std::unique_ptr<ListElement> deserialize(Deserializer&);
+    virtual void dump(std::ostream& os) const = 0;
+    virtual void free_identifiers(std::set<std::string>&) const = 0;
+};
+
+
+struct SingletonListElement : public ListElement {
+    AstPtr node;
+    SingletonListElement(AstPtr node) : node(std::move(node)) {}
+    virtual void fill(EvaluationContext&, Object::ListT&) const;
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const { os << *node; }
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
+struct SplatListElement : public ListElement {
+    AstPtr node;
+    SplatListElement(AstPtr node) : node(std::move(node)) {}
+    virtual void fill(EvaluationContext&, Object::ListT&) const;
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const { os << "Splat(" << *node << ")"; }
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
 struct List : public AstNode {
     using Entry = struct {
         AstPtr node;
         bool splat;
     };
 
-    std::vector<Entry> elements;
+    std::vector<std::unique_ptr<ListElement>> elements;
 
     List(Source src) : AstNode(src) {}
-    List(Source src, std::vector<Entry> elements)
+    List(Source src, std::vector<std::unique_ptr<ListElement>> elements)
         : AstNode(src), elements(std::move(elements)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -92,18 +121,42 @@ struct List : public AstNode {
 };
 
 
-struct Map : public AstNode {
-    using Entry = struct {
-        std::string key;
-        AstPtr node;
-        bool splat;
-    };
+struct MapElement : public Serializable {
+    virtual ~MapElement() {}
+    virtual void fill(EvaluationContext&) const = 0;
+    static std::unique_ptr<MapElement> deserialize(Deserializer&);
+    virtual void dump(std::ostream& os) const = 0;
+    virtual void free_identifiers(std::set<std::string>&) const = 0;
+};
 
-    std::vector<Entry> entries;
+
+struct SingletonMapElement : public MapElement {
+    std::string key;
+    AstPtr node;
+    SingletonMapElement(std::string key, AstPtr node) : key(key), node(std::move(node)) {}
+    virtual void fill(EvaluationContext&) const;
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const { os << "Entry(" << key << ", " << *node << ")"; }
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
+struct SplatMapElement : public MapElement {
+    AstPtr node;
+    SplatMapElement(AstPtr node) : node(std::move(node)) {}
+    virtual void fill(EvaluationContext&) const;
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const { os << "Splat(" << *node << ")"; }
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
+struct Map : public AstNode {
+    std::vector<std::unique_ptr<MapElement>> elements;
 
     Map(Source src) : AstNode(src) {}
-    Map(Source src, std::vector<Entry> entries)
-        : AstNode(src), entries(std::move(entries)) {}
+    Map(Source src, std::vector<std::unique_ptr<MapElement>> elements)
+        : AstNode(src), elements(std::move(elements)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
