@@ -307,12 +307,6 @@ size_t Object::size() const {
 }
 
 
-std::ostream& operator<<(std::ostream& os, const Object& obj) {
-    obj.dump(os);
-    return os;
-}
-
-
 void Object::dump(std::ostream& os) const {
     std::visit(overloaded {
         [&os](Integer x) { os << x; },

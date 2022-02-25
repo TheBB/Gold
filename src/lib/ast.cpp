@@ -63,12 +63,6 @@ std::string Gold::AstNode::dump() const {
 }
 
 
-std::ostream& operator<<(std::ostream& os, const AstNode& obj) {
-    obj.dump(os);
-    return os;
-}
-
-
 std::set<std::string> AstNode::free_identifiers() const {
     std::set<std::string> idents;
     free_identifiers(idents);
@@ -167,7 +161,7 @@ Object Map::evaluate(EvaluationContext& ctx) const {
 
 
 void BinOp::dump(std::ostream& os) const {
-    os << "BinOp(" << *lhs << " " << op << " " <<  *rhs << ")";
+    os << "BinOp(" << *lhs << " " << operator_to_string(op) << " " <<  *rhs << ")";
 }
 
 

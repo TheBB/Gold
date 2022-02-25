@@ -162,6 +162,7 @@ public:
     // More convenient access
     size_t size() const;
 
+    friend std::ostream& operator<<(std::ostream& os, const Object& obj) { obj.dump(os); return os; }
     void dump(std::ostream&) const;
 };
 
@@ -381,8 +382,4 @@ Object evaluate_string(EvaluationContext&, std::string);
 Object evaluate_file(std::string);
 Object evaluate_file(EvaluationContext&, std::string);
 
-
 }
-
-std::ostream& operator<<(std::ostream&, const Gold::Object&);
-std::ostream& operator<<(std::ostream&, const Gold::AstNode&);

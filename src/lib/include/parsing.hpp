@@ -37,7 +37,6 @@ struct AstNode : public Serializable {
     AstNode(Source src) : src(src) {}
     virtual ~AstNode() {};
     virtual void dump(std::ostream&) const = 0;
-    std::string dump() const;
     virtual void free_identifiers(std::set<std::string>&) const = 0;
     std::set<std::string> free_identifiers() const;
     virtual Object evaluate(EvaluationContext&) const = 0;
@@ -45,9 +44,11 @@ struct AstNode : public Serializable {
     static std::unique_ptr<AstNode> deserialize(std::string);
     static std::unique_ptr<AstNode> deserialize(std::istream&);
     static std::unique_ptr<AstNode> deserialize(Deserializer&);
-    // static AstNode* deserialize_raw(Deserializer&);
 
     const Source source() const { return src; }
+
+    std::string dump() const;
+    friend std::ostream& operator<<(std::ostream& os, const AstNode& node) { node.dump(os); return os; };
 };
 
 
@@ -208,7 +209,3 @@ void debug_parse_tree(std::string);
 AstPtr normalize(tao::pegtl::parse_tree::node&);
 
 }
-
-std::ostream& operator<<(std::ostream&, const Gold::AstNode&);
-std::ostream& operator<<(std::ostream&, Gold::Operator);
-std::ostream& operator<<(std::ostream&, Gold::Operator);
