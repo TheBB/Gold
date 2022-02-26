@@ -56,7 +56,6 @@ TEST_CASE("Evaluating maps", "[evaluate]") {
 
 
 TEST_CASE("Blocks and bindings", "[evaluate]") {
-
     auto obj = evaluate_string(
         "let a = 1\n"
         "in a"
@@ -152,4 +151,26 @@ TEST_CASE("Subscripting", "[evaluate]") {
     REQUIRE(evaluate_string("[1,2,3][0]").unsafe_integer() == 1);
     REQUIRE(evaluate_string("{a: 1, b: 2}.a").unsafe_integer() == 1);
     REQUIRE(evaluate_string("{a: 1, b: 2}[\"a\"]").unsafe_integer() == 1);
+}
+
+
+TEST_CASE("Splatting", "[evaluate]") {
+    auto obj = evaluate_string("[1, [2, 3]..., 4]");
+    REQUIRE(obj.size() == 4);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 2);
+    REQUIRE(obj[2].unsafe_integer() == 3);
+    REQUIRE(obj[3].unsafe_integer() == 4);
+
+    obj = evaluate_string("{a: 1, {b: 2, c: 3}..., d: 4}");
+    REQUIRE(obj.size() == 4);
+    REQUIRE(obj["a"].unsafe_integer() == 1);
+    REQUIRE(obj["b"].unsafe_integer() == 2);
+    REQUIRE(obj["c"].unsafe_integer() == 3);
+    REQUIRE(obj["d"].unsafe_integer() == 4);
+
+    obj = evaluate_string("{a: 1, {a: 2, c: 3}..., c: 4}");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj["a"].unsafe_integer() == 2);
+    REQUIRE(obj["c"].unsafe_integer() == 4);
 }
