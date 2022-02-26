@@ -123,9 +123,6 @@ void List::do_serialize(Serializer& os) const {
 
 void Map::do_serialize(Serializer& os) const {
     os << 'M' << source() << elements;
-    // os.write(entries, [&os](const Entry& entry) {
-    //     os << entry.key << entry.node << entry.splat;
-    // });
 }
 
 
@@ -243,6 +240,11 @@ std::unique_ptr<ListElement> ListElement::deserialize(Deserializer& is) {
     switch (indicator) {
     case 'E': return std::make_unique<SingletonListElement>(AstNode::deserialize(is));
     case 'S': return std::make_unique<SplatListElement>(AstNode::deserialize(is));
+    case 'C': {
+        auto cond = AstNode::deserialize(is);
+        auto node = AstNode::deserialize(is);
+        return std::make_unique<CondListElement>(std::move(cond), std::move(node));
+    }
     default:
         throw InternalException(fmt::format("unknown list element indicator: {}", (int)indicator));
     }
@@ -259,14 +261,26 @@ void SplatListElement::do_serialize(Serializer& os) const {
 }
 
 
+void CondListElement::do_serialize(Serializer& os) const {
+    os << 'C' << cond << node;
+}
+
+
 std::unique_ptr<MapElement> MapElement::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     switch (indicator) {
     case 'E': {
         auto key = is.read<std::string>();
-        return std::make_unique<SingletonMapElement>(key, AstNode::deserialize(is));
+        auto node = AstNode::deserialize(is);
+        return std::make_unique<SingletonMapElement>(key, std::move(node));
     }
     case 'S': return std::make_unique<SplatMapElement>(AstNode::deserialize(is));
+    case 'C': {
+        auto key = is.read<std::string>();
+        auto cond = AstNode::deserialize(is);
+        auto node = AstNode::deserialize(is);
+        return std::make_unique<CondMapElement>(key, std::move(cond), std::move(node));
+    }
     default:
         throw InternalException(fmt::format("unknown map element indicator: {}", (int)indicator));
     }
@@ -280,4 +294,9 @@ void SingletonMapElement::do_serialize(Serializer& os) const {
 
 void SplatMapElement::do_serialize(Serializer& os) const {
     os << 'S' << node;
+}
+
+
+void CondMapElement::do_serialize(Serializer& os) const {
+    os << 'C' << key << cond << node;
 }

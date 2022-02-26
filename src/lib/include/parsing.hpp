@@ -103,6 +103,16 @@ struct SplatListElement : public ListElement {
 };
 
 
+struct CondListElement : public ListElement {
+    AstPtr cond, node;
+    CondListElement(AstPtr cond, AstPtr node) : cond(std::move(cond)), node(std::move(node)) {}
+    virtual void fill(EvaluationContext&, Object::ListT&) const;
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const { os << "Cond(" << *cond << ", " << *node << ")"; }
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
 struct List : public AstNode {
     using Entry = struct {
         AstPtr node;
@@ -147,6 +157,20 @@ struct SplatMapElement : public MapElement {
     virtual void fill(EvaluationContext&) const;
     virtual void do_serialize(Serializer&) const;
     virtual void dump(std::ostream& os) const { os << "Splat(" << *node << ")"; }
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
+struct CondMapElement : public MapElement {
+    std::string key;
+    AstPtr cond, node;
+    CondMapElement(std::string key, AstPtr cond, AstPtr node)
+        : key(key), cond(std::move(cond)), node(std::move(node)) {}
+    virtual void fill(EvaluationContext&) const;
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const {
+        os << "Cond(" << key << ", " << *cond << ", " << *node << ")";
+    }
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 

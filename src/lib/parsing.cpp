@@ -166,7 +166,8 @@ namespace Grammar
 
     // Lists
     struct list {
-        struct element: p::sor<splatted, expression> {};
+        struct cond: p::seq<prepad<keyword::If>, expression, token::colon, expression> {};
+        struct element: p::sor<cond, splatted, expression> {};
         struct seq: p::seq<listof<element>> {};
         struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
     };
@@ -178,7 +179,8 @@ namespace Grammar
             p::one<'-'>
         >> {};
         struct entry: p::seq<prepad<identifier>, token::colon, expression> {};
-        struct element: p::sor<splatted, entry> {};
+        struct cond: p::seq<prepad<keyword::If>, expression, token::colon, entry> {};
+        struct element: p::sor<cond, splatted, entry> {};
         struct seq: p::seq<listof<element>> {};
         struct rule: p::seq<token::op_brace, seq, token::cl_brace> {};
     };
@@ -299,10 +301,12 @@ namespace Grammar
             string::interp,
             keyword::Null,
             boolean,
+            list::cond,
             list::seq,
             splatted,
             map::identifier,
             map::entry,
+            map::cond,
             map::seq,
             block::rule,
             block::binding,

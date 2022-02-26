@@ -81,25 +81,6 @@ Object Identifier::evaluate(EvaluationContext& ctx) const {
 }
 
 
-void List::dump(std::ostream& os) const {
-    os << "List(";
-    bool first = true;
-    for (auto& element : elements) {
-        if (!first)
-            os << ", ";
-        element->dump(os);
-        first = false;
-    }
-    os << ")";
-}
-
-
-void List::free_identifiers(std::set<std::string>& idents) const {
-    for (auto& element : elements)
-        element->free_identifiers(idents);
-}
-
-
 void SingletonListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
     list.push_back(node->evaluate(ctx));
 }
@@ -124,6 +105,43 @@ void SplatListElement::free_identifiers(std::set<std::string>& idents) const {
 }
 
 
+void CondListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
+    auto c = cond->evaluate(ctx);
+    if (c.type() != Object::Type::boolean)
+        throw EvalException(
+            cond->source(),
+            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
+        );
+    if (c.unsafe_boolean())
+        list.push_back(node->evaluate(ctx));
+}
+
+
+void CondListElement::free_identifiers(std::set<std::string>& idents) const {
+    cond->free_identifiers(idents);
+    node->free_identifiers(idents);
+}
+
+
+void List::dump(std::ostream& os) const {
+    os << "List(";
+    bool first = true;
+    for (auto& element : elements) {
+        if (!first)
+            os << ", ";
+        element->dump(os);
+        first = false;
+    }
+    os << ")";
+}
+
+
+void List::free_identifiers(std::set<std::string>& idents) const {
+    for (auto& element : elements)
+        element->free_identifiers(idents);
+}
+
+
 Object List::evaluate(EvaluationContext& ctx) const {
     std::vector<Object> objs;
     for (auto& entry : elements)
@@ -142,20 +160,6 @@ void Map::dump(std::ostream& os) const {
         first = false;
     }
     os << ")";
-}
-
-
-void Map::free_identifiers(std::set<std::string>& idents) const {
-    for (auto& element : elements)
-        element->free_identifiers(idents);
-}
-
-
-Object Map::evaluate(EvaluationContext& ctx) const {
-    ctx.push_object();
-    for (auto& element : elements)
-        element->fill(ctx);
-    return ctx.finalize_object();
 }
 
 
@@ -180,6 +184,38 @@ void SplatMapElement::fill(EvaluationContext& ctx) const {
 
 void SplatMapElement::free_identifiers(std::set<std::string>& idents) const {
     node->free_identifiers(idents);
+}
+
+
+void CondMapElement::fill(EvaluationContext& ctx) const {
+    auto c = cond->evaluate(ctx);
+    if (c.type() != Object::Type::boolean)
+        throw EvalException(
+            cond->source(),
+            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
+        );
+    if (c.unsafe_boolean())
+        ctx.assign_object(key, node->evaluate(ctx));
+}
+
+
+void CondMapElement::free_identifiers(std::set<std::string>& idents) const {
+    cond->free_identifiers(idents);
+    node->free_identifiers(idents);
+}
+
+
+void Map::free_identifiers(std::set<std::string>& idents) const {
+    for (auto& element : elements)
+        element->free_identifiers(idents);
+}
+
+
+Object Map::evaluate(EvaluationContext& ctx) const {
+    ctx.push_object();
+    for (auto& element : elements)
+        element->fill(ctx);
+    return ctx.finalize_object();
 }
 
 
@@ -535,6 +571,11 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
                 list->elements.push_back(std::make_unique<SplatListElement>(
                     normalize(*c->children[0])
                 ));
+            else if (nodetype(*c) == "Grammar::list::cond")
+                list->elements.push_back(std::make_unique<CondListElement>(
+                    normalize(*c->children[0]),
+                    normalize(*c->children[1])
+                ));
             else
                 list->elements.push_back(std::make_unique<SingletonListElement>(
                     normalize(*c)
@@ -551,6 +592,12 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
                     normalize(*c->children[0])
                 ));
             }
+            else if (nodetype(*c) == "Grammar::map::cond")
+                map->elements.push_back(std::make_unique<CondMapElement>(
+                    c->children[1]->children[0]->string(),
+                    normalize(*c->children[0]),
+                    normalize(*c->children[1]->children[1])
+                ));
             else {
                 map->elements.push_back(std::make_unique<SingletonMapElement>(
                     c->children[0]->string(),

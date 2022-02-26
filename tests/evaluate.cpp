@@ -174,3 +174,25 @@ TEST_CASE("Splatting", "[evaluate]") {
     REQUIRE(obj["a"].unsafe_integer() == 2);
     REQUIRE(obj["c"].unsafe_integer() == 4);
 }
+
+
+TEST_CASE("Branching in collections", "[evaluate]") {
+    auto obj = evaluate_string("[if true then 1 else 2, 3]");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 3);
+}
+
+
+TEST_CASE("Conditional collection elements", "[evaluate]") {
+    auto obj = evaluate_string("[if true: 1, if false: 2, if true then 3 else 4, 5]");
+    REQUIRE(obj.size() == 3);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 3);
+    REQUIRE(obj[2].unsafe_integer() == 5);
+
+    obj = evaluate_string("{a: if true then 1 else 2, if true: b: 3, if false: c: 4}");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj["a"].unsafe_integer() == 1);
+    REQUIRE(obj["b"].unsafe_integer() == 3);
+}
