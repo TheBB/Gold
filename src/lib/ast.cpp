@@ -532,6 +532,18 @@ static AstPtr normalize_map_identifier(p::parse_tree::node& node) {
 }
 
 
+static std::unique_ptr<Binding> normalize_binding(p::parse_tree::node& node) {
+    auto type = nodetype(node);
+    auto src = source(node);
+
+    if (type == "Grammar::pattern::ident")
+        return std::make_unique<IdentifierBinding>(src, node.string());
+
+    std::cerr << type << std::endl;
+    throw ParseException();
+}
+
+
 AstPtr Gold::normalize(p::parse_tree::node& node) {
     if (node.is_root()) {
         if (node.children.size() != 1)
@@ -696,10 +708,7 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         for (auto&& c : node.children) {
             if (nodetype(*c) == "Grammar::block::binding")
                 block->bindings.push_back({
-                    std::make_unique<IdentifierBinding>(
-                       source(*c->children[0]),
-                        c->children[0]->string()
-                    ),
+                    normalize_binding(*c->children[0]),
                     normalize(*c->children[1])
                 });
             else

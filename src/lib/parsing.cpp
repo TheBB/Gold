@@ -185,12 +185,17 @@ namespace Grammar
         struct rule: p::seq<token::op_brace, seq, token::cl_brace> {};
     };
 
+    // Destructuring patterns
+    struct pattern {
+        struct ident: p::seq<identifier> {};
+        struct rule: p::sor<ident> {};
+    };
+
     // Blocks
     struct block {
-        struct let_identifier: p::seq<identifier> {};
         struct binding: p::seq<
             prepad<keyword::Let>,
-            prepad<let_identifier>,
+            prepad<pattern::rule>,
             token::equals,
             expression
         > {};
@@ -309,9 +314,9 @@ namespace Grammar
             map::entry,
             map::cond,
             map::seq,
+            pattern::ident,
             block::rule,
             block::binding,
-            block::let_identifier,
             identifier,
             func::param_identifier,
             func::param_list,
