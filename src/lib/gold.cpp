@@ -419,6 +419,14 @@ void EvaluationContext::assign(const std::string& key, Object value) {
 }
 
 
+void EvaluationContext::collapse_namespace() {
+    auto& next_ns = *std::next(namespaces.begin());
+    for (auto const& [key, val] : namespaces.front())
+        next_ns[key] = val;
+    namespaces.pop_front();
+}
+
+
 void EvaluationContext::assign_object(const std::string& key, Object value) {
     objects.back()[key] = value;
 }

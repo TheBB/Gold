@@ -366,6 +366,7 @@ public:
     void push_namespace(Namespace ns) { namespaces.push_front(ns); }
     void push_namespace() { namespaces.emplace_front(); }
     void pop_namespace(int num = 1) { for (int i = 0; i < num; i++ ) namespaces.pop_front(); }
+    void collapse_namespace();
 
     void push_object() { objects.emplace_back(); }
     void assign_object(const std::string& key, Object value);

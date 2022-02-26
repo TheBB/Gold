@@ -31,6 +31,35 @@ enum class Operator {
 };
 
 
+struct Binding : public Serializable {
+    Source src;
+
+    Binding(Source src) : src(src) {}
+    virtual ~Binding() {}
+    bool bind(EvaluationContext&, Object, bool = true) const;
+    virtual bool do_bind(EvaluationContext&, Object) const = 0;
+
+    std::set<std::string> binds_identifiers() const;
+    virtual void binds_identifiers(std::set<std::string>&) const = 0;
+
+    static std::unique_ptr<Binding> deserialize(Deserializer&);
+
+    virtual void dump(std::ostream&) const = 0;
+    friend std::ostream& operator<<(std::ostream& os, const Binding& binding) { binding.dump(os); return os; }
+};
+
+
+struct IdentifierBinding : public Binding {
+    std::string name;
+
+    IdentifierBinding(Source src, std::string name) : Binding(src), name(name) {}
+    virtual void dump(std::ostream&) const;
+    virtual void binds_identifiers(std::set<std::string>&) const;
+    virtual bool do_bind(EvaluationContext&, Object) const;
+    virtual void do_serialize(Serializer&) const;
+};
+
+
 struct AstNode : public Serializable {
     Source src;
 
@@ -201,18 +230,17 @@ struct BinOp : public AstNode {
 
 
 struct Block : public AstNode {
-    using Binding = struct {
-        std::string name;
+    using BindingElement = struct {
+        std::unique_ptr<Binding> binding;
         AstPtr expression;
     };
 
-    std::vector<Binding> bindings;
+    std::vector<BindingElement> bindings;
     AstPtr expression;
 
     Block(Source src) : AstNode(src) {}
-    Block(Source src, std::vector<Binding> bindings, AstPtr expression)
+    Block(Source src, std::vector<BindingElement> bindings, AstPtr expression)
         : AstNode(src), bindings(std::move(bindings)), expression(std::move(expression)) {}
-    void set_expression(AstPtr expr) { expression = std::move(expr); }
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
