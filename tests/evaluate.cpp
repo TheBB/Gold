@@ -55,6 +55,17 @@ TEST_CASE("Evaluating maps", "[evaluate]") {
 }
 
 
+TEST_CASE("Maps with evaluated keys", "[evaluate]") {
+    auto obj = evaluate_string("let a = \"hi\" in {$a: 1}");
+    REQUIRE(obj.size() == 1);
+    REQUIRE(obj["hi"].unsafe_integer() == 1);
+
+    obj = evaluate_string("let f = (x) => \"${x}${x}\" in {$f(\"yo\"): 1}");
+    REQUIRE(obj.size() == 1);
+    REQUIRE(obj["yoyo"].unsafe_integer() == 1);
+}
+
+
 TEST_CASE("Blocks and bindings", "[evaluate]") {
     auto obj = evaluate_string(
         "let a = 1\n"

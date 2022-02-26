@@ -488,6 +488,16 @@ static std::string nodetype(p::parse_tree::node& node) {
 }
 
 
+static AstPtr normalize_map_identifier(p::parse_tree::node& node) {
+    auto type = nodetype(node);
+
+    if (type == "Grammar::map::const_identifier")
+        return std::make_unique<Literal>(source(node), Object::string(node.string()));
+    else
+        return normalize(*node.children[0]);
+}
+
+
 AstPtr Gold::normalize(p::parse_tree::node& node) {
     if (node.is_root()) {
         if (node.children.size() != 1)
@@ -611,10 +621,7 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
                 ));
             else {
                 map->elements.push_back(std::make_unique<SingletonMapElement>(
-                    std::make_unique<Literal>(
-                        source(*c->children[0]),
-                        Object::string(c->children[0]->string())
-                    ),
+                    normalize_map_identifier(*c->children[0]),
                     normalize(*c->children[1])
                 ));
             }
