@@ -270,9 +270,9 @@ std::unique_ptr<MapElement> MapElement::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     switch (indicator) {
     case 'E': {
-        auto key = is.read<std::string>();
+        auto key = AstNode::deserialize(is);
         auto node = AstNode::deserialize(is);
-        return std::make_unique<SingletonMapElement>(key, std::move(node));
+        return std::make_unique<SingletonMapElement>(std::move(key), std::move(node));
     }
     case 'S': return std::make_unique<SplatMapElement>(AstNode::deserialize(is));
     case 'C': {

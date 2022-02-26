@@ -13,6 +13,10 @@ using namespace Gold;
 namespace p = tao::pegtl;
 
 
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
+
 static std::string operator_to_string(Operator op) {
     switch (op) {
     case Operator::plus: return "+";
@@ -150,25 +154,19 @@ Object List::evaluate(EvaluationContext& ctx) const {
 }
 
 
-void Map::dump(std::ostream& os) const {
-    os << "Map(";
-    bool first = true;
-    for (auto& element : elements) {
-        if (!first)
-            os << ", ";
-        element->dump(os);
-        first = false;
-    }
-    os << ")";
-}
-
-
 void SingletonMapElement::fill(EvaluationContext& ctx) const {
-    ctx.assign_object(key, node->evaluate(ctx));
+    auto k = key->evaluate(ctx);
+    if (k.type() != Object::Type::string)
+        throw EvalException(
+            key->source(),
+            fmt::format("attempted using non-string type `{}` as object key", k.type_name())
+        );
+    ctx.assign_object(k.unsafe_string(), node->evaluate(ctx));
 }
 
 
 void SingletonMapElement::free_identifiers(std::set<std::string>& idents) const {
+    key->free_identifiers(idents);
     node->free_identifiers(idents);
 }
 
@@ -202,6 +200,19 @@ void CondMapElement::fill(EvaluationContext& ctx) const {
 void CondMapElement::free_identifiers(std::set<std::string>& idents) const {
     cond->free_identifiers(idents);
     node->free_identifiers(idents);
+}
+
+
+void Map::dump(std::ostream& os) const {
+    os << "Map(";
+    bool first = true;
+    for (auto& element : elements) {
+        if (!first)
+            os << ", ";
+        element->dump(os);
+        first = false;
+    }
+    os << ")";
 }
 
 
@@ -600,7 +611,10 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
                 ));
             else {
                 map->elements.push_back(std::make_unique<SingletonMapElement>(
-                    c->children[0]->string(),
+                    std::make_unique<Literal>(
+                        source(*c->children[0]),
+                        Object::string(c->children[0]->string())
+                    ),
                     normalize(*c->children[1])
                 ));
             }

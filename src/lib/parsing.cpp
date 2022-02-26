@@ -88,6 +88,7 @@ namespace Grammar
         struct cl_brace: prepad<p::one<'}'>> {};
         struct op_bracket: prepad<p::one<'['>> {};
         struct cl_bracket: prepad<p::one<']'>> {};
+        struct dollar: prepad<p::one<'$'>> {};
         struct implies: prepad<p::string<'=','>'>> {};
         struct splat: prepad<p::string<'.','.','.'>> {};
     };
@@ -174,11 +175,18 @@ namespace Grammar
 
     // Maps
     struct map {
-        struct identifier: p::plus<p::sor<
-            identifier_char,
-            p::one<'-'>
-        >> {};
+        struct const_identifier: p::plus<p::sor<identifier_char, p::one<'-'>>> {};
+        struct var_identifier: p::seq<token::dollar, token::op_paren, expression, token::cl_paren> {};
+        struct identifier: p::sor<var_identifier, const_identifier> {};
         struct entry: p::seq<prepad<identifier>, token::colon, expression> {};
+        // struct evaluated_entry: p::seq<
+        //     token::dollar,
+        //     token::op_paren,
+        //     expression,
+        //     token::cl_paren,
+        //     token::colon,
+        //     expression
+        // > {};
         struct cond: p::seq<prepad<keyword::If>, expression, token::colon, entry> {};
         struct element: p::sor<cond, splatted, entry> {};
         struct seq: p::seq<listof<element>> {};
@@ -304,6 +312,8 @@ namespace Grammar
             list::cond,
             list::seq,
             splatted,
+            map::const_identifier,
+            map::var_identifier,
             map::identifier,
             map::entry,
             map::cond,

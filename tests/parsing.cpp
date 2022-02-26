@@ -184,22 +184,22 @@ TEST_CASE("Parse map of atomics", "[parsing]") {
     REQUIRE(ast->dump() == "Map()");
 
     ast = parse_string("{a: 1}");
-    REQUIRE(ast->dump() == "Map(Entry(a, Lit(1)))");
+    REQUIRE(ast->dump() == "Map(Entry(Lit(\"a\"), Lit(1)))");
 
     ast = parse_string("{che9: false}");
-    REQUIRE(ast->dump() == "Map(Entry(che9, Lit(false)))");
+    REQUIRE(ast->dump() == "Map(Entry(Lit(\"che9\"), Lit(false)))");
 
     ast = parse_string("{fable: \"fable\"}");
-    REQUIRE(ast->dump() == "Map(Entry(fable, Lit(\"fable\")))");
+    REQUIRE(ast->dump() == "Map(Entry(Lit(\"fable\"), Lit(\"fable\")))");
 
     ast = parse_string("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: lel}");
     REQUIRE(ast->dump() ==
-        "Map(Entry(a, Lit(1)), Entry(b, Lit(true)), "
-        "Entry(c, Lit(20.0)), Entry(d, Lit(\"hoho\")), Entry(e, Id(lel)))"
+        "Map(Entry(Lit(\"a\"), Lit(1)), Entry(Lit(\"b\"), Lit(true)), "
+        "Entry(Lit(\"c\"), Lit(20.0)), Entry(Lit(\"d\"), Lit(\"hoho\")), Entry(Lit(\"e\"), Id(lel)))"
     );
 
     ast = parse_string("{ident-with-hyphen: 1}");
-    REQUIRE(ast->dump() == "Map(Entry(ident-with-hyphen, Lit(1)))");
+    REQUIRE(ast->dump() == "Map(Entry(Lit(\"ident-with-hyphen\"), Lit(1)))");
 }
 
 
@@ -208,22 +208,22 @@ TEST_CASE("Flexible map parsing", "[parsing]") {
     REQUIRE(ast->dump() == "Map()");
 
     ast = parse_string("{a:1,}");
-    REQUIRE(ast->dump() == "Map(Entry(a, Lit(1)))");
+    REQUIRE(ast->dump() == "Map(Entry(Lit(\"a\"), Lit(1)))");
 
     ast = parse_string("{  a : 1, }");
-    REQUIRE(ast->dump() == "Map(Entry(a, Lit(1)))");
+    REQUIRE(ast->dump() == "Map(Entry(Lit(\"a\"), Lit(1)))");
 
     ast = parse_string("{a : 1  ,b:2 }");
-    REQUIRE(ast->dump() == "Map(Entry(a, Lit(1)), Entry(b, Lit(2)))");
+    REQUIRE(ast->dump() == "Map(Entry(Lit(\"a\"), Lit(1)), Entry(Lit(\"b\"), Lit(2)))");
 }
 
 
 TEST_CASE("Nested maps", "[parsing]") {
     auto ast = parse_string("{a:{}}");
-    REQUIRE(ast->dump() == "Map(Entry(a, Map()))");
+    REQUIRE(ast->dump() == "Map(Entry(Lit(\"a\"), Map()))");
 
     ast = parse_string("{a: {b: 1}, c: 2}");
-    REQUIRE(ast->dump() == "Map(Entry(a, Map(Entry(b, Lit(1)))), Entry(c, Lit(2)))");
+    REQUIRE(ast->dump() == "Map(Entry(Lit(\"a\"), Map(Entry(Lit(\"b\"), Lit(1)))), Entry(Lit(\"c\"), Lit(2)))");
 }
 
 

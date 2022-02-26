@@ -141,12 +141,11 @@ struct MapElement : public Serializable {
 
 
 struct SingletonMapElement : public MapElement {
-    std::string key;
-    AstPtr node;
-    SingletonMapElement(std::string key, AstPtr node) : key(key), node(std::move(node)) {}
+    AstPtr key, node;
+    SingletonMapElement(AstPtr key, AstPtr node) : key(std::move(key)), node(std::move(node)) {}
     virtual void fill(EvaluationContext&) const;
     virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const { os << "Entry(" << key << ", " << *node << ")"; }
+    virtual void dump(std::ostream& os) const { os << "Entry(" << *key << ", " << *node << ")"; }
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 
