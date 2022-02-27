@@ -92,6 +92,45 @@ bool IdentifierBinding::do_bind(EvaluationContext& ctx, Object obj) const {
 }
 
 
+void ListBinding::dump(std::ostream& os) const {
+    os << "List(";
+    bool first = true;
+    for (auto& binding : bindings) {
+        if (!first)
+            os << ", ";
+        binding->dump(os);
+        first = false;
+    }
+    os << ")";
+}
+
+
+void ListBinding::binds_identifiers(std::set<std::string>& idents) const {
+    for (auto& binding : bindings)
+        binding->binds_identifiers(idents);
+}
+
+
+bool ListBinding::do_bind(EvaluationContext& ctx, Object obj) const {
+    if (obj.type() != Object::Type::list)
+        return false;
+    auto& list = obj.unsafe_list();
+    if (list->size() != bindings.size())
+        return false;
+
+    for (size_t i = 0; i < list->size(); i++)
+        if (!bindings[i]->do_bind(ctx, list->at(i)))
+            return false;
+
+    return true;
+    //     if (!(*b_it)->do_bind())
+    // for (auto b = bindings.begin(), e = list->begin(); )
+    // for (auto& binding : bindings) {
+    //     if (!binding->do_bind(ctx, ))
+    // }
+}
+
+
 std::string Gold::AstNode::dump() const {
     std::stringstream ss;
     ss << *this;
@@ -538,6 +577,13 @@ static std::unique_ptr<Binding> normalize_binding(p::parse_tree::node& node) {
 
     if (type == "Grammar::pattern::ident")
         return std::make_unique<IdentifierBinding>(src, node.string());
+
+    else if (type == "Grammar::pattern::list::seq") {
+        auto list = std::make_unique<ListBinding>(src);
+        for (auto& c : node.children)
+            list->bindings.push_back(normalize_binding(*c));
+        return list;
+    }
 
     std::cerr << type << std::endl;
     throw ParseException();

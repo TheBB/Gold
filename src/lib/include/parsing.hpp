@@ -60,6 +60,19 @@ struct IdentifierBinding : public Binding {
 };
 
 
+struct ListBinding : public Binding {
+    std::vector<std::unique_ptr<Binding>> bindings;
+
+    ListBinding(Source src) : Binding(src) {}
+    ListBinding(Source src, std::vector<std::unique_ptr<Binding>> bindings)
+        : Binding(src), bindings(std::move(bindings)) {}
+    virtual void dump(std::ostream&) const;
+    virtual void binds_identifiers(std::set<std::string>&) const;
+    virtual bool do_bind(EvaluationContext&, Object) const;
+    virtual void do_serialize(Serializer&) const;
+};
+
+
 struct AstNode : public Serializable {
     Source src;
 

@@ -112,6 +112,12 @@ std::unique_ptr<Binding> Binding::deserialize(Deserializer& is) {
     switch (indicator) {
     case 'I':
         return std::make_unique<IdentifierBinding>(src, is.read<std::string>());
+    case 'L': {
+        auto bindings = is.read<std::vector<std::unique_ptr<Binding>>>([&is]() {
+            return Binding::deserialize(is);
+        });
+        return std::make_unique<ListBinding>(src, std::move(bindings));
+    }
     default:
         throw InternalException(fmt::format("unknown binding indicator: {}", (int)indicator));
     }
@@ -120,6 +126,11 @@ std::unique_ptr<Binding> Binding::deserialize(Deserializer& is) {
 
 void IdentifierBinding::do_serialize(Serializer& os) const {
     os << 'I' << src << name;
+}
+
+
+void ListBinding::do_serialize(Serializer& os) const {
+    os << 'L' << bindings;
 }
 
 

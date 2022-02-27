@@ -187,8 +187,13 @@ namespace Grammar
 
     // Destructuring patterns
     struct pattern {
+        struct rule;
         struct ident: p::seq<identifier> {};
-        struct rule: p::sor<ident> {};
+        struct list {
+            struct seq: listof<rule> {};
+            struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
+        };
+        struct rule: p::sor<ident, list::rule> {};
     };
 
     // Blocks
@@ -315,6 +320,7 @@ namespace Grammar
             map::cond,
             map::seq,
             pattern::ident,
+            pattern::list::seq,
             block::rule,
             block::binding,
             identifier,
