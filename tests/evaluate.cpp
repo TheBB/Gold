@@ -215,6 +215,11 @@ TEST_CASE("Looped collection elements", "[evaluate]") {
     REQUIRE(obj[0].unsafe_integer() == 2);
     REQUIRE(obj[1].unsafe_integer() == 3);
     REQUIRE(obj[2].unsafe_integer() == 4);
+
+    obj = evaluate_string("{for [x,y] in [[\"a\",1], [\"b\",2]]: $x: y}");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj["a"].unsafe_integer() == 1);
+    REQUIRE(obj["b"].unsafe_integer() == 2);
 }
 
 
@@ -237,6 +242,14 @@ TEST_CASE("Complex collection elements", "[evaluate]") {
     REQUIRE(obj[2].unsafe_integer() == 4);
     REQUIRE(obj[3].unsafe_integer() == 5);
     REQUIRE(obj[4].unsafe_integer() == 6);
+
+    obj = evaluate_string(
+        "let a = [[\"x\",1], [\"y\",2], [\"z\",3]]\n"
+        "in {for [x,y] in a: if y != 2: $x: y}"
+    );
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj["x"].unsafe_integer() == 1);
+    REQUIRE(obj["z"].unsafe_integer() == 3);
 }
 
 

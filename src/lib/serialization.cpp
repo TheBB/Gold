@@ -315,10 +315,15 @@ std::unique_ptr<MapElement> MapElement::deserialize(Deserializer& is) {
     }
     case 'S': return std::make_unique<SplatMapElement>(AstNode::deserialize(is));
     case 'C': {
-        auto key = is.read<std::string>();
         auto cond = AstNode::deserialize(is);
-        auto node = AstNode::deserialize(is);
-        return std::make_unique<CondMapElement>(key, std::move(cond), std::move(node));
+        auto element = MapElement::deserialize(is);
+        return std::make_unique<CondMapElement>(std::move(cond), std::move(element));
+    }
+    case 'L': {
+        auto binding = Binding::deserialize(is);
+        auto iter = AstNode::deserialize(is);
+        auto element = MapElement::deserialize(is);
+        return std::make_unique<LoopMapElement>(std::move(binding), std::move(iter), std::move(element));
     }
     default:
         throw InternalException(fmt::format("unknown map element indicator: {}", (int)indicator));
@@ -337,5 +342,10 @@ void SplatMapElement::do_serialize(Serializer& os) const {
 
 
 void CondMapElement::do_serialize(Serializer& os) const {
-    os << 'C' << key << cond << node;
+    os << 'C' << cond << element;
+}
+
+
+void LoopMapElement::do_serialize(Serializer& os) const {
+    os << 'L' << binding << iter << element;
 }

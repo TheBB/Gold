@@ -181,12 +181,8 @@ namespace Grammar
     struct list {
         struct element;
         struct loop: p::seq<
-            prepad<keyword::For>,
-            prepad<pattern::rule>,
-            prepad<keyword::In>,
-            expression,
-            token::colon,
-            element
+            prepad<keyword::For>, prepad<pattern::rule>, prepad<keyword::In>,
+            expression, token::colon, element
         > {};
         struct cond: p::seq<prepad<keyword::If>, expression, token::colon, element> {};
         struct element: p::sor<loop, cond, splatted, expression> {};
@@ -196,12 +192,17 @@ namespace Grammar
 
     // Maps
     struct map {
+        struct element;
         struct const_identifier: p::plus<p::sor<identifier_char, p::one<'-'>>> {};
         struct var_identifier: p::seq<token::dollar, expression> {};
         struct identifier: p::sor<var_identifier, const_identifier> {};
         struct entry: p::seq<prepad<identifier>, token::colon, expression> {};
+        struct loop: p::seq<
+            prepad<keyword::For>, prepad<pattern::rule>, prepad<keyword::In>,
+            expression, token::colon, element
+        > {};
         struct cond: p::seq<prepad<keyword::If>, expression, token::colon, entry> {};
-        struct element: p::sor<cond, splatted, entry> {};
+        struct element: p::sor<loop, cond, splatted, entry> {};
         struct seq: p::seq<listof<element>> {};
         struct rule: p::seq<token::op_brace, seq, token::cl_brace> {};
     };
@@ -328,6 +329,7 @@ namespace Grammar
             map::const_identifier,
             map::var_identifier,
             map::entry,
+            map::loop,
             map::cond,
             map::seq,
             pattern::ident,

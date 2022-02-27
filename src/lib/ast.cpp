@@ -158,7 +158,6 @@ std::set<std::string> ListElement::free_identifiers() const {
 }
 
 
-
 void SingletonListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
     list.push_back(node->evaluate(ctx));
 }
@@ -256,6 +255,13 @@ Object List::evaluate(EvaluationContext& ctx) const {
 }
 
 
+std::set<std::string> MapElement::free_identifiers() const {
+    std::set<std::string> idents;
+    free_identifiers(idents);
+    return idents;
+}
+
+
 void SingletonMapElement::fill(EvaluationContext& ctx) const {
     auto k = key->evaluate(ctx);
     if (k.type() != Object::Type::string)
@@ -295,13 +301,41 @@ void CondMapElement::fill(EvaluationContext& ctx) const {
             fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
         );
     if (c.unsafe_boolean())
-        ctx.assign_object(key, node->evaluate(ctx));
+        element->fill(ctx);
 }
 
 
 void CondMapElement::free_identifiers(std::set<std::string>& idents) const {
     cond->free_identifiers(idents);
-    node->free_identifiers(idents);
+    element->free_identifiers(idents);
+}
+
+
+void LoopMapElement::fill(EvaluationContext& ctx) const {
+    auto val = iter->evaluate(ctx);
+    if (val.type() != Object::Type::list)
+        throw EvalException(
+            iter->source(),
+            fmt::format("unable to iterate over non-list `{}`", val.type_name())
+        );
+    ctx.push_namespace();
+    for (auto& v : *val.unsafe_list()) {
+        if (!binding->bind(ctx, v))
+            throw EvalException(binding->src, "failed to bind pattern");
+        element->fill(ctx);
+    }
+    ctx.pop_namespace();
+}
+
+
+void LoopMapElement::free_identifiers(std::set<std::string>& idents) const {
+    iter->free_identifiers(idents);
+    auto newly_bound = binding->binds_identifiers();
+    auto candidates = element->free_identifiers();
+    for (auto& p : newly_bound)
+        candidates.erase(p);
+    for (auto& c : candidates)
+        idents.insert(c);
 }
 
 
@@ -646,6 +680,33 @@ static std::unique_ptr<ListElement> normalize_list_element(p::parse_tree::node& 
 }
 
 
+static std::unique_ptr<MapElement> normalize_map_element(p::parse_tree::node& node) {
+    auto type = nodetype(node);
+
+    if (type == "Grammar::splatted")
+        return std::make_unique<SplatMapElement>(normalize(*node.children[0]));
+
+    else if (type == "Grammar::map::loop")
+        return std::make_unique<LoopMapElement>(
+            normalize_binding(*node.children[0]),
+            normalize(*node.children[1]),
+            normalize_map_element(*node.children[2])
+        );
+
+    else if (type == "Grammar::map::cond")
+        return std::make_unique<CondMapElement>(
+            normalize(*node.children[0]),
+            normalize_map_element(*node.children[1])
+        );
+
+    else
+        return std::make_unique<SingletonMapElement>(
+            normalize_map_identifier(*node.children[0]),
+            normalize(*node.children[1])
+        );
+}
+
+
 AstPtr Gold::normalize(p::parse_tree::node& node) {
     if (node.is_root()) {
         if (node.children.size() != 1)
@@ -742,25 +803,8 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
 
     else if (type == "Grammar::map::seq") {
         auto map = std::make_unique<Map>(source(node));
-        for (auto&& c : node.children) {
-            if (nodetype(*c) == "Grammar::splatted") {
-                map->elements.push_back(std::make_unique<SplatMapElement>(
-                    normalize(*c->children[0])
-                ));
-            }
-            else if (nodetype(*c) == "Grammar::map::cond")
-                map->elements.push_back(std::make_unique<CondMapElement>(
-                    c->children[1]->children[0]->string(),
-                    normalize(*c->children[0]),
-                    normalize(*c->children[1]->children[1])
-                ));
-            else {
-                map->elements.push_back(std::make_unique<SingletonMapElement>(
-                    normalize_map_identifier(*c->children[0]),
-                    normalize(*c->children[1])
-                ));
-            }
-        }
+        for (auto&& c : node.children)
+            map->elements.push_back(normalize_map_element(*c));
         return map;
     }
 

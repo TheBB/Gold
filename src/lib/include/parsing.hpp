@@ -196,6 +196,8 @@ struct MapElement : public Serializable {
     static std::unique_ptr<MapElement> deserialize(Deserializer&);
     virtual void dump(std::ostream& os) const = 0;
     virtual void free_identifiers(std::set<std::string>&) const = 0;
+    std::set<std::string> free_identifiers() const;
+    friend std::ostream& operator<<(std::ostream& os, const MapElement& node) { node.dump(os); return os; };
 };
 
 
@@ -220,15 +222,28 @@ struct SplatMapElement : public MapElement {
 
 
 struct CondMapElement : public MapElement {
-    std::string key;
-    AstPtr cond, node;
-    CondMapElement(std::string key, AstPtr cond, AstPtr node)
-        : key(key), cond(std::move(cond)), node(std::move(node)) {}
+    AstPtr cond;
+    std::unique_ptr<MapElement> element;
+    CondMapElement(AstPtr cond, std::unique_ptr<MapElement> element)
+        : cond(std::move(cond)), element(std::move(element)) {}
     virtual void fill(EvaluationContext&) const;
     virtual void do_serialize(Serializer&) const;
     virtual void dump(std::ostream& os) const {
-        os << "Cond(" << key << ", " << *cond << ", " << *node << ")";
+        os << "Cond(" << *cond << ", " << *element << ")";
     }
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
+struct LoopMapElement : public MapElement {
+    std::unique_ptr<Binding> binding;
+    AstPtr iter;
+    std::unique_ptr<MapElement> element;
+    LoopMapElement(std::unique_ptr<Binding> binding, AstPtr iter, std::unique_ptr<MapElement> element)
+        : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
+    virtual void fill(EvaluationContext&) const;
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const { os << "For(" << *binding << ", " << *iter << ", " << *element << ")"; }
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 
