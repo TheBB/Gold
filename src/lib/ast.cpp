@@ -60,6 +60,77 @@ std::ostream& operator<<(std::ostream& os, Operator op) {
 }
 
 
+bool Binding::bind(EvaluationContext& ctx, Object obj, bool autocollapse) const {
+    ctx.push_namespace();
+    auto retval = do_bind(ctx, obj);
+    if (autocollapse)
+        ctx.collapse_namespace();
+    return retval;
+}
+
+
+std::set<std::string> Binding::binds_identifiers() const {
+    std::set<std::string> retval;
+    binds_identifiers(retval);
+    return retval;
+}
+
+
+void IdentifierBinding::dump(std::ostream& os) const {
+    os << "Id(" << name << ")";
+}
+
+
+void IdentifierBinding::binds_identifiers(std::set<std::string>& idents) const {
+    idents.insert(name);
+}
+
+
+bool IdentifierBinding::do_bind(EvaluationContext& ctx, Object obj) const {
+    ctx.assign(name, obj);
+    return true;
+}
+
+
+void ListBinding::dump(std::ostream& os) const {
+    os << "List(";
+    bool first = true;
+    for (auto& binding : bindings) {
+        if (!first)
+            os << ", ";
+        binding->dump(os);
+        first = false;
+    }
+    os << ")";
+}
+
+
+void ListBinding::binds_identifiers(std::set<std::string>& idents) const {
+    for (auto& binding : bindings)
+        binding->binds_identifiers(idents);
+}
+
+
+bool ListBinding::do_bind(EvaluationContext& ctx, Object obj) const {
+    if (obj.type() != Object::Type::list)
+        return false;
+    auto& list = obj.unsafe_list();
+    if (list->size() != bindings.size())
+        return false;
+
+    for (size_t i = 0; i < list->size(); i++)
+        if (!bindings[i]->do_bind(ctx, list->at(i)))
+            return false;
+
+    return true;
+    //     if (!(*b_it)->do_bind())
+    // for (auto b = bindings.begin(), e = list->begin(); )
+    // for (auto& binding : bindings) {
+    //     if (!binding->do_bind(ctx, ))
+    // }
+}
+
+
 std::string Gold::AstNode::dump() const {
     std::stringstream ss;
     ss << *this;
@@ -277,10 +348,10 @@ Object BinOp::evaluate(EvaluationContext& ctx) const {
 void Block::dump(std::ostream& os) const {
     os << "Block(";
     bool first = true;
-    for (auto& [name, value] : bindings) {
+    for (auto& [binding, value] : bindings) {
         if (!first)
             os << ", ";
-        os << "Entry(" << name << ", " << *value << ")";
+        os << "Entry(" << *binding << ", " << *value << ")";
         first = false;
     }
     if (!first)
@@ -291,26 +362,28 @@ void Block::dump(std::ostream& os) const {
 
 void Block::free_identifiers(std::set<std::string>& idents) const {
     std::set<std::string> bound;
-    for (auto& [key, val] : bindings) {
-        auto candidates = val->free_identifiers();
-        for (auto& c : candidates) {
+    for (auto& [binding, val] : bindings) {
+        for (auto& c : val->free_identifiers()) {
             if (bound.find(c) == bound.end())
                 idents.insert(c);
         }
-        bound.insert(key);
+        for (auto& name : binding->binds_identifiers())
+            bound.insert(name);
     }
-    auto candidates = expression->free_identifiers();
-        for (auto& c : candidates) {
-            if (bound.find(c) == bound.end())
-                idents.insert(c);
-        }
+    for (auto& c : expression->free_identifiers()) {
+        if (bound.find(c) == bound.end())
+            idents.insert(c);
+    }
 }
 
 
 Object Block::evaluate(EvaluationContext& ctx) const {
     ctx.push_namespace();
-    for (auto& [key, value] : bindings) {
-        ctx.assign(key, value->evaluate(ctx));
+    for (auto& [binding, value] : bindings) {
+        if (!binding->bind(ctx, value->evaluate(ctx))) {
+            ctx.pop_namespace();
+            throw EvalException(binding->src, "failed to bind pattern");
+        }
     }
     auto retval = expression->evaluate(ctx);
     ctx.pop_namespace();
@@ -498,6 +571,25 @@ static AstPtr normalize_map_identifier(p::parse_tree::node& node) {
 }
 
 
+static std::unique_ptr<Binding> normalize_binding(p::parse_tree::node& node) {
+    auto type = nodetype(node);
+    auto src = source(node);
+
+    if (type == "Grammar::pattern::ident")
+        return std::make_unique<IdentifierBinding>(src, node.string());
+
+    else if (type == "Grammar::pattern::list::seq") {
+        auto list = std::make_unique<ListBinding>(src);
+        for (auto& c : node.children)
+            list->bindings.push_back(normalize_binding(*c));
+        return list;
+    }
+
+    std::cerr << type << std::endl;
+    throw ParseException();
+}
+
+
 AstPtr Gold::normalize(p::parse_tree::node& node) {
     if (node.is_root()) {
         if (node.children.size() != 1)
@@ -661,7 +753,10 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         auto block = std::make_unique<Block>(source(node));
         for (auto&& c : node.children) {
             if (nodetype(*c) == "Grammar::block::binding")
-                block->bindings.push_back({c->children[0]->string(), normalize(*c->children[1])});
+                block->bindings.push_back({
+                    normalize_binding(*c->children[0]),
+                    normalize(*c->children[1])
+                });
             else
                 block->expression = normalize(*c);
         }

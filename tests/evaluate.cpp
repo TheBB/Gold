@@ -207,3 +207,16 @@ TEST_CASE("Conditional collection elements", "[evaluate]") {
     REQUIRE(obj["a"].unsafe_integer() == 1);
     REQUIRE(obj["b"].unsafe_integer() == 3);
 }
+
+
+TEST_CASE("List bindings", "[evaluate]") {
+    auto obj = evaluate_string("let [a,b] = [1,2] in {a: a, b: b}");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj["a"].unsafe_integer() == 1);
+    REQUIRE(obj["b"].unsafe_integer() == 2);
+
+    obj = evaluate_string("let [a,[b]] = [1,[2]] in {a: a, b: b}");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj["a"].unsafe_integer() == 1);
+    REQUIRE(obj["b"].unsafe_integer() == 2);
+}

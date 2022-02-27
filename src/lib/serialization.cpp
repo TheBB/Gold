@@ -106,6 +106,34 @@ Object Object::deserialize(std::istream& is) {
 }
 
 
+std::unique_ptr<Binding> Binding::deserialize(Deserializer& is) {
+    auto indicator = is.read<char>();
+    auto src = is.read<Source>();
+    switch (indicator) {
+    case 'I':
+        return std::make_unique<IdentifierBinding>(src, is.read<std::string>());
+    case 'L': {
+        auto bindings = is.read<std::vector<std::unique_ptr<Binding>>>([&is]() {
+            return Binding::deserialize(is);
+        });
+        return std::make_unique<ListBinding>(src, std::move(bindings));
+    }
+    default:
+        throw InternalException(fmt::format("unknown binding indicator: {}", (int)indicator));
+    }
+}
+
+
+void IdentifierBinding::do_serialize(Serializer& os) const {
+    os << 'I' << src << name;
+}
+
+
+void ListBinding::do_serialize(Serializer& os) const {
+    os << 'L' << bindings;
+}
+
+
 void Literal::do_serialize(Serializer& os) const {
     os << 'T' << source() << object;
 }
@@ -133,8 +161,8 @@ void BinOp::do_serialize(Serializer& os) const {
 
 void Block::do_serialize(Serializer& os) const {
     os << 'B' << source();
-    os.write(bindings, [&os](const Binding& binding) {
-        os << binding.name << binding.expression;
+    os.write(bindings, [&os](const BindingElement& binding) {
+        os << binding.binding << binding.expression;
     });
     os << expression;
 }
@@ -199,10 +227,10 @@ AstPtr AstNode::deserialize(Deserializer& is) {
         return std::make_unique<BinOp>(source, std::move(lhs), std::move(rhs), op);
     }
     case 'B': {
-        auto bindings = is.read<std::vector<Block::Binding>>([&is]() {
-            auto name = is.read<std::string>();
+        auto bindings = is.read<std::vector<Block::BindingElement>>([&is]() {
+            auto binding = Binding::deserialize(is);
             auto subnode = AstNode::deserialize(is);
-            return Block::Binding {name, std::move(subnode)};
+            return Block::BindingElement {std::move(binding), std::move(subnode)};
         });
         return std::make_unique<Block>(source, std::move(bindings), AstNode::deserialize(is));
     }
