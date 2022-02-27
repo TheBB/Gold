@@ -57,6 +57,7 @@ namespace Grammar
 
     // Keywords - these rules do not consume leading whitespace
     struct keyword {
+        struct For: p::string<'f','o','r'> {};
         struct If: p::string<'i','f'> {};
         struct Then: p::string<'t','h','e','n'> {};
         struct Else: p::string<'e','l','s','e'> {};
@@ -119,6 +120,17 @@ namespace Grammar
         p::plus<identifier_char>
     > {};
 
+    // Destructuring patterns
+    struct pattern {
+        struct rule;
+        struct ident: p::seq<identifier> {};
+        struct list {
+            struct seq: listof<rule> {};
+            struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
+        };
+        struct rule: p::sor<ident, list::rule> {};
+    };
+
     // Numbers
     struct number {
         struct decimal: p::one<'.'> {};
@@ -167,8 +179,9 @@ namespace Grammar
 
     // Lists
     struct list {
+        struct loop: p::seq<prepad<keyword::For>, prepad<pattern::rule>, prepad<keyword::In>, expression, token::colon, expression> {};
         struct cond: p::seq<prepad<keyword::If>, expression, token::colon, expression> {};
-        struct element: p::sor<cond, splatted, expression> {};
+        struct element: p::sor<loop, cond, splatted, expression> {};
         struct seq: p::seq<listof<element>> {};
         struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
     };
@@ -183,17 +196,6 @@ namespace Grammar
         struct element: p::sor<cond, splatted, entry> {};
         struct seq: p::seq<listof<element>> {};
         struct rule: p::seq<token::op_brace, seq, token::cl_brace> {};
-    };
-
-    // Destructuring patterns
-    struct pattern {
-        struct rule;
-        struct ident: p::seq<identifier> {};
-        struct list {
-            struct seq: listof<rule> {};
-            struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
-        };
-        struct rule: p::sor<ident, list::rule> {};
     };
 
     // Blocks
@@ -311,6 +313,7 @@ namespace Grammar
             string::interp,
             keyword::Null,
             boolean,
+            list::loop,
             list::cond,
             list::seq,
             splatted,

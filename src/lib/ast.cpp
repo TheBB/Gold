@@ -123,11 +123,6 @@ bool ListBinding::do_bind(EvaluationContext& ctx, Object obj) const {
             return false;
 
     return true;
-    //     if (!(*b_it)->do_bind())
-    // for (auto b = bindings.begin(), e = list->begin(); )
-    // for (auto& binding : bindings) {
-    //     if (!binding->do_bind(ctx, ))
-    // }
 }
 
 
@@ -195,6 +190,34 @@ void CondListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
 void CondListElement::free_identifiers(std::set<std::string>& idents) const {
     cond->free_identifiers(idents);
     node->free_identifiers(idents);
+}
+
+
+void LoopListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
+    auto val = iter->evaluate(ctx);
+    if (val.type() != Object::Type::list)
+        throw EvalException(
+            iter->source(),
+            fmt::format("unable to iterate over non-list `{}`", val.type_name())
+        );
+    ctx.push_namespace();
+    for (auto& v : *val.unsafe_list()) {
+        if (!binding->bind(ctx, v))
+            throw EvalException(binding->src, "failed to bind pattern");
+        list.push_back(node->evaluate(ctx));
+    }
+    ctx.pop_namespace();
+}
+
+
+void LoopListElement::free_identifiers(std::set<std::string>& idents) const {
+    iter->free_identifiers(idents);
+    auto newly_bound = binding->binds_identifiers();
+    auto candidates = node->free_identifiers();
+    for (auto& p : newly_bound)
+        candidates.erase(p);
+    for (auto& c : candidates)
+        idents.insert(c);
 }
 
 
@@ -684,6 +707,12 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
             if (nodetype(*c) == "Grammar::splatted")
                 list->elements.push_back(std::make_unique<SplatListElement>(
                     normalize(*c->children[0])
+                ));
+            else if (nodetype(*c) == "Grammar::list::loop")
+                list->elements.push_back(std::make_unique<LoopListElement>(
+                    normalize_binding(*c->children[0]),
+                    normalize(*c->children[1]),
+                    normalize(*c->children[2])
                 ));
             else if (nodetype(*c) == "Grammar::list::cond")
                 list->elements.push_back(std::make_unique<CondListElement>(

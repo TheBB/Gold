@@ -155,6 +155,18 @@ struct CondListElement : public ListElement {
 };
 
 
+struct LoopListElement : public ListElement {
+    std::unique_ptr<Binding> binding;
+    AstPtr iter, node;
+    LoopListElement(std::unique_ptr<Binding> binding, AstPtr iter, AstPtr node)
+        : binding(std::move(binding)), iter(std::move(iter)), node(std::move(node)) {}
+    virtual void fill(EvaluationContext&, Object::ListT&) const;
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const { os << "For(" << *binding << ", " << *iter << ", " << *node << ")"; }
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
 struct List : public AstNode {
     using Entry = struct {
         AstPtr node;
