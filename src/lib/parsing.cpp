@@ -179,8 +179,16 @@ namespace Grammar
 
     // Lists
     struct list {
-        struct loop: p::seq<prepad<keyword::For>, prepad<pattern::rule>, prepad<keyword::In>, expression, token::colon, expression> {};
-        struct cond: p::seq<prepad<keyword::If>, expression, token::colon, expression> {};
+        struct element;
+        struct loop: p::seq<
+            prepad<keyword::For>,
+            prepad<pattern::rule>,
+            prepad<keyword::In>,
+            expression,
+            token::colon,
+            element
+        > {};
+        struct cond: p::seq<prepad<keyword::If>, expression, token::colon, element> {};
         struct element: p::sor<loop, cond, splatted, expression> {};
         struct seq: p::seq<listof<element>> {};
         struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};

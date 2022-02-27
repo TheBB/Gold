@@ -270,14 +270,14 @@ std::unique_ptr<ListElement> ListElement::deserialize(Deserializer& is) {
     case 'S': return std::make_unique<SplatListElement>(AstNode::deserialize(is));
     case 'C': {
         auto cond = AstNode::deserialize(is);
-        auto node = AstNode::deserialize(is);
-        return std::make_unique<CondListElement>(std::move(cond), std::move(node));
+        auto element = ListElement::deserialize(is);
+        return std::make_unique<CondListElement>(std::move(cond), std::move(element));
     }
     case 'L': {
         auto binding = Binding::deserialize(is);
         auto iter = AstNode::deserialize(is);
-        auto node = AstNode::deserialize(is);
-        return std::make_unique<LoopListElement>(std::move(binding), std::move(iter), std::move(node));
+        auto element = ListElement::deserialize(is);
+        return std::make_unique<LoopListElement>(std::move(binding), std::move(iter), std::move(element));
     }
     default:
         throw InternalException(fmt::format("unknown list element indicator: {}", (int)indicator));
@@ -296,12 +296,12 @@ void SplatListElement::do_serialize(Serializer& os) const {
 
 
 void CondListElement::do_serialize(Serializer& os) const {
-    os << 'C' << cond << node;
+    os << 'C' << cond << element;
 }
 
 
 void LoopListElement::do_serialize(Serializer& os) const {
-    os << 'L' << binding << iter << node;
+    os << 'L' << binding << iter << element;
 }
 
 

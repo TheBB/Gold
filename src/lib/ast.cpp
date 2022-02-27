@@ -151,6 +151,14 @@ Object Identifier::evaluate(EvaluationContext& ctx) const {
 }
 
 
+std::set<std::string> ListElement::free_identifiers() const {
+    std::set<std::string> idents;
+    free_identifiers(idents);
+    return idents;
+}
+
+
+
 void SingletonListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
     list.push_back(node->evaluate(ctx));
 }
@@ -183,13 +191,13 @@ void CondListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
             fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
         );
     if (c.unsafe_boolean())
-        list.push_back(node->evaluate(ctx));
+        element->fill(ctx, list);
 }
 
 
 void CondListElement::free_identifiers(std::set<std::string>& idents) const {
     cond->free_identifiers(idents);
-    node->free_identifiers(idents);
+    element->free_identifiers(idents);
 }
 
 
@@ -204,7 +212,7 @@ void LoopListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
     for (auto& v : *val.unsafe_list()) {
         if (!binding->bind(ctx, v))
             throw EvalException(binding->src, "failed to bind pattern");
-        list.push_back(node->evaluate(ctx));
+        element->fill(ctx, list);
     }
     ctx.pop_namespace();
 }
@@ -213,7 +221,7 @@ void LoopListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
 void LoopListElement::free_identifiers(std::set<std::string>& idents) const {
     iter->free_identifiers(idents);
     auto newly_bound = binding->binds_identifiers();
-    auto candidates = node->free_identifiers();
+    auto candidates = element->free_identifiers();
     for (auto& p : newly_bound)
         candidates.erase(p);
     for (auto& c : candidates)
@@ -614,6 +622,30 @@ static std::unique_ptr<Binding> normalize_binding(p::parse_tree::node& node) {
 }
 
 
+static std::unique_ptr<ListElement> normalize_list_element(p::parse_tree::node& node) {
+    auto type = nodetype(node);
+
+    if (type == "Grammar::splatted")
+        return std::make_unique<SplatListElement>(normalize(*node.children[0]));
+
+    else if (type == "Grammar::list::loop")
+        return std::make_unique<LoopListElement>(
+            normalize_binding(*node.children[0]),
+            normalize(*node.children[1]),
+            normalize_list_element(*node.children[2])
+        );
+
+    else if (type == "Grammar::list::cond")
+        return std::make_unique<CondListElement>(
+            normalize(*node.children[0]),
+            normalize_list_element(*node.children[1])
+        );
+
+    else
+        return std::make_unique<SingletonListElement>(normalize(node));
+}
+
+
 AstPtr Gold::normalize(p::parse_tree::node& node) {
     if (node.is_root()) {
         if (node.children.size() != 1)
@@ -703,27 +735,8 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
 
     else if (type == "Grammar::list::seq") {
         auto list = std::make_unique<List>(source(node));
-        for (auto&& c : node.children) {
-            if (nodetype(*c) == "Grammar::splatted")
-                list->elements.push_back(std::make_unique<SplatListElement>(
-                    normalize(*c->children[0])
-                ));
-            else if (nodetype(*c) == "Grammar::list::loop")
-                list->elements.push_back(std::make_unique<LoopListElement>(
-                    normalize_binding(*c->children[0]),
-                    normalize(*c->children[1]),
-                    normalize(*c->children[2])
-                ));
-            else if (nodetype(*c) == "Grammar::list::cond")
-                list->elements.push_back(std::make_unique<CondListElement>(
-                    normalize(*c->children[0]),
-                    normalize(*c->children[1])
-                ));
-            else
-                list->elements.push_back(std::make_unique<SingletonListElement>(
-                    normalize(*c)
-                ));
-        }
+        for (auto&& c : node.children)
+            list->elements.push_back(normalize_list_element(*c));
         return list;
     }
 

@@ -122,6 +122,8 @@ struct ListElement : public Serializable {
     static std::unique_ptr<ListElement> deserialize(Deserializer&);
     virtual void dump(std::ostream& os) const = 0;
     virtual void free_identifiers(std::set<std::string>&) const = 0;
+    std::set<std::string> free_identifiers() const;
+    friend std::ostream& operator<<(std::ostream& os, const ListElement& node) { node.dump(os); return os; };
 };
 
 
@@ -146,23 +148,26 @@ struct SplatListElement : public ListElement {
 
 
 struct CondListElement : public ListElement {
-    AstPtr cond, node;
-    CondListElement(AstPtr cond, AstPtr node) : cond(std::move(cond)), node(std::move(node)) {}
+    AstPtr cond;
+    std::unique_ptr<ListElement> element;
+    CondListElement(AstPtr cond, std::unique_ptr<ListElement> element)
+        : cond(std::move(cond)), element(std::move(element)) {}
     virtual void fill(EvaluationContext&, Object::ListT&) const;
     virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const { os << "Cond(" << *cond << ", " << *node << ")"; }
+    virtual void dump(std::ostream& os) const { os << "Cond(" << *cond << ", " << *element << ")"; }
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 
 
 struct LoopListElement : public ListElement {
     std::unique_ptr<Binding> binding;
-    AstPtr iter, node;
-    LoopListElement(std::unique_ptr<Binding> binding, AstPtr iter, AstPtr node)
-        : binding(std::move(binding)), iter(std::move(iter)), node(std::move(node)) {}
+    AstPtr iter;
+    std::unique_ptr<ListElement> element;
+    LoopListElement(std::unique_ptr<Binding> binding, AstPtr iter, std::unique_ptr<ListElement> element)
+        : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
     virtual void fill(EvaluationContext&, Object::ListT&) const;
     virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const { os << "For(" << *binding << ", " << *iter << ", " << *node << ")"; }
+    virtual void dump(std::ostream& os) const { os << "For(" << *binding << ", " << *iter << ", " << *element << ")"; }
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 

@@ -218,6 +218,28 @@ TEST_CASE("Looped collection elements", "[evaluate]") {
 }
 
 
+TEST_CASE("Complex collection elements", "[evaluate]") {
+    auto obj = evaluate_string(
+        "let a = [1, 2, 3, 4, 5]\n"
+        "in [for x in a: if x < 3: x]"
+    );
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 2);
+
+    obj = evaluate_string(
+        "let a = [[1], [2, 3], [4, 5, 6]]\n"
+        "in [for x in a: if len(x) > 1: x...]"
+    );
+    REQUIRE(obj.size() == 5);
+    REQUIRE(obj[0].unsafe_integer() == 2);
+    REQUIRE(obj[1].unsafe_integer() == 3);
+    REQUIRE(obj[2].unsafe_integer() == 4);
+    REQUIRE(obj[3].unsafe_integer() == 5);
+    REQUIRE(obj[4].unsafe_integer() == 6);
+}
+
+
 TEST_CASE("List bindings", "[evaluate]") {
     auto obj = evaluate_string("let [a,b] = [1,2] in {a: a, b: b}");
     REQUIRE(obj.size() == 2);
