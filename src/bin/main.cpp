@@ -32,13 +32,13 @@ static json from_object(Object obj) {
         [](Object::Boolean x) { return json(x); },
         [](Object::Floating x) { return json(x); },
         [](Object::Map x) {
-            json r;
+            json r = json::object();
             for (auto& [key, value] : *x)
                 r[key] = from_object(value);
             return r;
         },
         [](Object::List x) {
-            json r;
+            json r = json::array();
             for (auto& value : *x)
                 r.push_back(from_object(value));
             return r;

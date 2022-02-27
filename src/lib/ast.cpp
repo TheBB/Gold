@@ -480,7 +480,8 @@ Object FunCall::evaluate(EvaluationContext& ctx) const {
     for (auto& arg : args)
         arglist.push_back(arg->evaluate(ctx));
     try {
-        return func(ctx, arglist);
+        auto rval = func(ctx, arglist);
+        return rval;
     }
     catch (EvalException& e) {
         e.position(source());
