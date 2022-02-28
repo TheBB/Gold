@@ -290,7 +290,7 @@ namespace Grammar
     };
 
     // Special case: splat expressions
-    struct splatted: p::seq<postfix::rule, token::splat> {};
+    struct splatted: p::seq<token::splat, postfix::rule> {};
 
     // Composite expressions (can't have postfix operators)
     struct composite: p::sor<
