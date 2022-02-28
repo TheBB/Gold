@@ -132,13 +132,20 @@ namespace Grammar
     // Destructuring patterns
     struct pattern {
         struct rule;
-        struct ident: p::seq<identifier> {};
+        struct ident: p::seq<prepad<identifier>> {};
         struct slurp: p::seq<token::splat, p::opt<identifier>> {};
         struct list {
             struct seq: p::seq<listof_term<rule, slurp>> {};
             struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
         };
-        struct rule: prepad<p::sor<ident, list::rule>> {};
+        struct map {
+            struct single_entry: p::seq<prepad<identifier>> {};
+            struct entry: p::seq<prepad<identifier>, token::colon, rule> {};
+            struct element: p::sor<entry, single_entry> {};
+            struct seq: p::seq<listof_term<element, slurp>> {};
+            struct rule: p::seq<token::op_brace, seq, token::cl_brace> {};
+        };
+        struct rule: prepad<p::sor<ident, list::rule, map::rule>> {};
     };
 
     // Numbers
@@ -343,6 +350,9 @@ namespace Grammar
             map::seq,
             pattern::ident,
             pattern::slurp,
+            pattern::map::single_entry,
+            pattern::map::entry,
+            pattern::map::seq,
             pattern::list::seq,
             block::rule,
             block::binding,

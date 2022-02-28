@@ -122,6 +122,16 @@ BindingPtr Binding::deserialize(Deserializer& is) {
         auto slurp_target = is.read<opt<std::string>>();
         return std::make_unique<ListBinding>(src, std::move(bindings), slurp, slurp_target);
     }
+    case 'M': {
+        auto entries = is.read<std::vector<MapBinding::Entry>>([&is]() {
+            auto name = is.read<std::string>();
+            auto binding = Binding::deserialize(is);
+            return MapBinding::Entry { name, std::move(binding) };
+        });
+        auto slurp = is.read<bool>();
+        auto slurp_target = is.read<opt<std::string>>();
+        return std::make_unique<MapBinding>(src, std::move(entries), slurp, slurp_target);
+    }
     default:
         throw InternalException(fmt::format("unknown binding indicator: {}", (int)indicator));
     }
@@ -135,6 +145,15 @@ void IdentifierBinding::do_serialize(Serializer& os) const {
 
 void ListBinding::do_serialize(Serializer& os) const {
     os << 'L' << bindings << slurp << slurp_target;
+}
+
+
+void MapBinding::do_serialize(Serializer& os) const {
+    os << 'M';
+    os.write(entries, [&os](const Entry& entry) {
+        os << entry.name << entry.binding;
+    });
+    os << slurp << slurp_target;
 }
 
 

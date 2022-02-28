@@ -115,6 +115,8 @@ void ListBinding::dump(std::ostream& os) const {
 void ListBinding::binds_identifiers(std::set<std::string>& idents) const {
     for (auto& binding : bindings)
         binding->binds_identifiers(idents);
+    if (slurp_target.has_value())
+        idents.insert(slurp_target.value());
 }
 
 
@@ -136,10 +138,66 @@ bool ListBinding::do_bind(EvaluationContext& ctx, Object obj) const {
     if (!slurp || !slurp_target.has_value())
         return true;
 
-    std::vector<Object> objs;
+    Object::ListT objs;
     for (; i < list->size(); i++)
         objs.push_back(list->at(i));
     ctx.assign(slurp_target.value(), Object::list(std::move(objs)));
+
+    return true;
+}
+
+
+void MapBinding::dump(std::ostream& os) const {
+    os << "Map(";
+    bool first = true;
+    for (auto& entry : entries) {
+        if (!first)
+            os << ", ";
+        std::cout << "Entry(" << entry.name << ", " << *entry.binding << ")";
+        first = false;
+    }
+    if (slurp) {
+        if (!first)
+            os << ", ";
+        os << "...";
+        if (slurp_target.has_value())
+            os << slurp_target.value();
+    }
+    os << ")";
+}
+
+
+void MapBinding::binds_identifiers(std::set<std::string>& idents) const {
+    for (auto& entry : entries)
+        entry.binding->binds_identifiers(idents);
+    if (slurp_target.has_value())
+        idents.insert(slurp_target.value());
+}
+
+
+bool MapBinding::do_bind(EvaluationContext& ctx, Object obj) const {
+    if (obj.type() != Object::Type::map)
+        return false;
+    const auto& map = obj.unsafe_map();
+
+    if (!slurp && map->size() != entries.size())
+        return false;
+
+    for (auto& entry : entries) {
+        auto it = map->find(entry.name);
+        if (it == map->end())
+            return false;
+        if (!entry.binding->do_bind(ctx, it->second))
+            return false;
+    }
+
+    if (!slurp || !slurp_target.has_value())
+        return true;
+
+    Object::MapT newmap(*map);
+    for (auto& entry : entries)
+        newmap.erase(entry.name);
+    ctx.assign(slurp_target.value(), Object::map(std::move(newmap)));
 
     return true;
 }
@@ -680,7 +738,31 @@ static BindingPtr normalize_binding(p::parse_tree::node& node) {
         return list;
     }
 
-    std::cerr << type << std::endl;
+    else if (type == "Grammar::pattern::map::seq") {
+        auto map = std::make_unique<MapBinding>(src);
+        for (auto& c : node.children) {
+            if (nodetype(*c) == "Grammar::pattern::slurp") {
+                map->slurp = true;
+                if (c->children.size() > 0)
+                    map->slurp_target = c->children[0]->string();
+            }
+
+            else if (nodetype(*c) == "Grammar::pattern::map::entry")
+                map->entries.push_back(MapBinding::Entry {
+                    c->children[0]->string(),
+                    normalize_binding(*c->children[1])
+                });
+
+            else if (nodetype(*c) == "Grammar::pattern::map::single_entry")
+                map->entries.push_back(MapBinding::Entry {
+                    c->children[0]->string(),
+                    std::make_unique<IdentifierBinding>(source(*c->children[0]), c->children[0]->string())
+                });
+        }
+        return map;
+    }
+
+    std::cerr << "Binding: " << type << std::endl;
     throw ParseException();
 }
 
@@ -928,6 +1010,6 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         return value;
     }
 
-    std::cerr << type << std::endl;
+    std::cerr << "Node: " << type << std::endl;
     throw ParseException();
 }
