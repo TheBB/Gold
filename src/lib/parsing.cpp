@@ -99,6 +99,15 @@ namespace Grammar
     template <typename T>
     struct listof: p::opt<p::seq<p::list<T, token::comma>, p::opt<token::comma>>> {};
 
+    // List of elements separated by commas with optional terminating element and trailing comma
+    // This rule does not consume surrounding delimiters
+    template <typename T, typename X>
+    struct listof_term: p::opt<
+        p::seq<p::list<T, token::comma>>,
+        p::opt<p::seq<token::comma, X>>,
+        p::opt<token::comma>
+    > {};
+
     // Operators - these rules do not consume leading whitespace
     struct op {
         struct divide: p::one<'/'> {};
@@ -124,8 +133,9 @@ namespace Grammar
     struct pattern {
         struct rule;
         struct ident: p::seq<identifier> {};
+        struct slurp: p::seq<token::splat, p::opt<identifier>> {};
         struct list {
-            struct seq: listof<rule> {};
+            struct seq: p::seq<listof_term<rule, slurp>> {};
             struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
         };
         struct rule: prepad<p::sor<ident, list::rule>> {};
@@ -332,6 +342,7 @@ namespace Grammar
             map::cond,
             map::seq,
             pattern::ident,
+            pattern::slurp,
             pattern::list::seq,
             block::rule,
             block::binding,

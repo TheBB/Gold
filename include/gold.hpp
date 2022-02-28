@@ -20,6 +20,9 @@ using sptr = std::shared_ptr<T>;
 template<typename T>
 using uptr = std::unique_ptr<T>;
 
+template<typename T>
+using opt = std::optional<T>;
+
 
 class EvaluationContext;
 class Object;
@@ -241,6 +244,13 @@ public:
         return  *this;
     }
 
+    template<typename T>
+    Serializer& operator<<(const opt<T>& v) {
+        if (!v.has_value())
+            return *this << 'N';
+        return *this << 'Y' << v.value();
+    }
+
     Serializer& operator<<(const std::string&);
 
     Serializer& operator<<(const Serializable& obj) {
@@ -277,6 +287,12 @@ private:
 
     template<typename T, typename F>
     void readref(T*& val, F f) { val = new T; readref(*val, f); }
+
+    template<typename T>
+    void readref(opt<T>& val) {
+        if (read<char>() == 'Y')
+            val = read<T>();
+    }
 
     void readref(std::string&);
 
@@ -375,7 +391,7 @@ struct EvalException: public std::exception {
 class LibFinder {
 public:
     virtual ~LibFinder() {};
-    virtual std::optional<Object> find(const std::string&) const = 0;
+    virtual opt<Object> find(const std::string&) const = 0;
 };
 
 

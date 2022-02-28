@@ -101,6 +101,13 @@ void ListBinding::dump(std::ostream& os) const {
         binding->dump(os);
         first = false;
     }
+    if (slurp) {
+        if (!first)
+            os << ", ";
+        os << "...";
+        if (slurp_target.has_value())
+            os << slurp_target.value();
+    }
     os << ")";
 }
 
@@ -115,12 +122,24 @@ bool ListBinding::do_bind(EvaluationContext& ctx, Object obj) const {
     if (obj.type() != Object::Type::list)
         return false;
     auto& list = obj.unsafe_list();
-    if (list->size() != bindings.size())
+
+    if (list->size() < bindings.size())
+        return false;
+    if (list->size() > bindings.size() && !slurp)
         return false;
 
-    for (size_t i = 0; i < list->size(); i++)
+    size_t i = 0;
+    for (; i < bindings.size(); i++)
         if (!bindings[i]->do_bind(ctx, list->at(i)))
             return false;
+
+    if (!slurp || !slurp_target.has_value())
+        return true;
+
+    std::vector<Object> objs;
+    for (; i < list->size(); i++)
+        objs.push_back(list->at(i));
+    ctx.assign(slurp_target.value(), Object::list(std::move(objs)));
 
     return true;
 }
@@ -649,8 +668,15 @@ static BindingPtr normalize_binding(p::parse_tree::node& node) {
 
     else if (type == "Grammar::pattern::list::seq") {
         auto list = std::make_unique<ListBinding>(src);
-        for (auto& c : node.children)
-            list->bindings.push_back(normalize_binding(*c));
+        for (auto& c : node.children) {
+            if (nodetype(*c) == "Grammar::pattern::slurp") {
+                list->slurp = true;
+                if (c->children.size() > 0)
+                    list->slurp_target = c->children[0]->string();
+            }
+            else
+                list->bindings.push_back(normalize_binding(*c));
+        }
         return list;
     }
 

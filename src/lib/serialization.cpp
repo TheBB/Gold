@@ -118,7 +118,9 @@ BindingPtr Binding::deserialize(Deserializer& is) {
         auto bindings = is.read<std::vector<BindingPtr>>([&is]() {
             return Binding::deserialize(is);
         });
-        return std::make_unique<ListBinding>(src, std::move(bindings));
+        auto slurp = is.read<bool>();
+        auto slurp_target = is.read<opt<std::string>>();
+        return std::make_unique<ListBinding>(src, std::move(bindings), slurp, slurp_target);
     }
     default:
         throw InternalException(fmt::format("unknown binding indicator: {}", (int)indicator));
@@ -132,7 +134,7 @@ void IdentifierBinding::do_serialize(Serializer& os) const {
 
 
 void ListBinding::do_serialize(Serializer& os) const {
-    os << 'L' << bindings;
+    os << 'L' << bindings << slurp << slurp_target;
 }
 
 

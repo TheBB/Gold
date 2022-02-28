@@ -263,6 +263,18 @@ TEST_CASE("List bindings", "[evaluate]") {
     REQUIRE(obj.size() == 2);
     REQUIRE(obj["a"].unsafe_integer() == 1);
     REQUIRE(obj["b"].unsafe_integer() == 2);
+
+    obj = evaluate_string("let [a, ...] = [1] in a");
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string("let [a, ...] = [1, 2, 3] in a");
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string("let [a, ...b] = [1, 2, 3] in b[0]");
+    REQUIRE(obj.unsafe_integer() == 2);
+
+    obj = evaluate_string("let [a, ...b] = [1] in b");
+    REQUIRE(obj.size() == 0);
 }
 
 
