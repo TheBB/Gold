@@ -640,7 +640,7 @@ static AstPtr normalize_map_identifier(p::parse_tree::node& node) {
 }
 
 
-static std::unique_ptr<Binding> normalize_binding(p::parse_tree::node& node) {
+static BindingPtr normalize_binding(p::parse_tree::node& node) {
     auto type = nodetype(node);
     auto src = source(node);
 
@@ -659,7 +659,7 @@ static std::unique_ptr<Binding> normalize_binding(p::parse_tree::node& node) {
 }
 
 
-static std::unique_ptr<ListElement> normalize_list_element(p::parse_tree::node& node) {
+static uptr<ListElement> normalize_list_element(p::parse_tree::node& node) {
     auto type = nodetype(node);
 
     if (type == "Grammar::splatted")
@@ -683,7 +683,7 @@ static std::unique_ptr<ListElement> normalize_list_element(p::parse_tree::node& 
 }
 
 
-static std::unique_ptr<MapElement> normalize_map_element(p::parse_tree::node& node) {
+static uptr<MapElement> normalize_map_element(p::parse_tree::node& node) {
     auto type = nodetype(node);
 
     if (type == "Grammar::splatted")

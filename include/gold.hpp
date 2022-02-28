@@ -14,13 +14,23 @@
 namespace Gold {
 
 
+template<typename T>
+using sptr = std::shared_ptr<T>;
+
+template<typename T>
+using uptr = std::unique_ptr<T>;
+
+
 class EvaluationContext;
 class Object;
 class Serializer;
 class Deserializer;
 class AstNode;
+class Binding;
 
-using AstPtr = std::unique_ptr<AstNode>;
+
+using AstPtr = uptr<AstNode>;
+using BindingPtr = uptr<Binding>;
 using Namespace = std::map<std::string, Object>;
 extern Namespace builtins;
 
@@ -63,7 +73,7 @@ struct Binding : public Serializable {
     std::set<std::string> binds_identifiers() const;
     virtual void binds_identifiers(std::set<std::string>&) const = 0;
 
-    static std::unique_ptr<Binding> deserialize(Deserializer&);
+    static BindingPtr deserialize(Deserializer&);
 
     virtual void dump(std::ostream&) const = 0;
     friend std::ostream& operator<<(std::ostream& os, const Binding& binding) { binding.dump(os); return os; }
@@ -82,16 +92,16 @@ public:
     using Floating = double;
 
     using MapT = std::map<std::string, Object>;
-    using Map = std::shared_ptr<MapT>;
+    using Map = sptr<MapT>;
     using ListT = std::vector<Object>;
-    using List = std::shared_ptr<ListT>;
+    using List = sptr<ListT>;
 
     using ClosureT = struct {
         Namespace nonlocals;
-        std::shared_ptr<std::vector<std::unique_ptr<Binding>>> parameters;
-        std::shared_ptr<AstNode> expression;
+        sptr<std::vector<BindingPtr>> parameters;
+        sptr<AstNode> expression;
     };
-    using Closure = std::shared_ptr<ClosureT>;
+    using Closure = sptr<ClosureT>;
 
     using Builtin = struct {
         std::string name;
@@ -202,7 +212,7 @@ public:
     }
 
     template<typename T>
-    Serializer& operator<<(const std::shared_ptr<T>& v) {
+    Serializer& operator<<(const sptr<T>& v) {
         void* ptr = v.get();
         auto entry = pointers.find(ptr);
         if (entry == pointers.end()) {
@@ -215,7 +225,7 @@ public:
     }
 
     template<typename T>
-    Serializer& operator<<(const std::unique_ptr<T>& v) {
+    Serializer& operator<<(const uptr<T>& v) {
         return *this << *v;
     }
 
@@ -257,7 +267,7 @@ public:
 class Deserializer {
 private:
     std::istream& is;
-    std::map<intmax_t, std::shared_ptr<void>> pointers;
+    std::map<intmax_t, sptr<void>> pointers;
 
     template<typename T>
     void readref(T& val) { is.read((char *) &val, sizeof val); }
@@ -304,37 +314,37 @@ private:
     }
 
     template<typename T>
-    void readref(std::shared_ptr<T>& p) {
+    void readref(sptr<T>& p) {
         auto k = read<char>();
         auto id = read<intmax_t>();
         if (k == 'R')
             p = std::static_pointer_cast<T>(pointers[id]);
         else {
-            p = std::shared_ptr<T>(read<T*>());
+            p = sptr<T>(read<T*>());
             pointers[id] = p;
         }
     }
 
     template<typename T, typename F>
-    void readref(std::shared_ptr<T>& p, F f) {
+    void readref(sptr<T>& p, F f) {
         auto k = read<char>();
         auto id = read<intmax_t>();
         if (k == 'R')
             p = std::static_pointer_cast<T>(pointers[id]);
         else {
-            p = std::shared_ptr<T>(read<T*>(f));
+            p = sptr<T>(read<T*>(f));
             pointers[id] = p;
         }
     }
 
     template<typename T>
-    void readref(std::unique_ptr<T>& p) {
-        p = std::unique_ptr<T>(read<T*>());
+    void readref(uptr<T>& p) {
+        p = uptr<T>(read<T*>());
     }
 
     template<typename T, typename F>
-    void readref(std::unique_ptr<T>& p, F f) {
-        p = std::unique_ptr<T>(read<T*>(f));
+    void readref(uptr<T>& p, F f) {
+        p = uptr<T>(read<T*>(f));
     }
 
 public:
@@ -373,7 +383,7 @@ class EvaluationContext {
 private:
     std::list<Namespace> namespaces;
     std::vector<Namespace> objects;
-    std::vector<std::shared_ptr<LibFinder>> libfinders;
+    std::vector<sptr<LibFinder>> libfinders;
 public:
     EvaluationContext() { push_namespace(builtins); }
 
@@ -390,12 +400,12 @@ public:
     void assign_object(const std::string& key, Object value);
     Object finalize_object();
 
-    void append_libfinder(std::shared_ptr<LibFinder> finder) { libfinders.push_back(std::move(finder)); }
+    void append_libfinder(sptr<LibFinder> finder) { libfinders.push_back(std::move(finder)); }
     Object import(const std::string& path) const;
 };
 
 
-void register_stdlib(std::unique_ptr<LibFinder>);
+void register_stdlib(uptr<LibFinder>);
 Object evaluate_string(std::string);
 Object evaluate_string(EvaluationContext&, std::string);
 Object evaluate_file(std::string);
