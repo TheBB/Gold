@@ -31,24 +31,6 @@ enum class Operator {
 };
 
 
-struct Binding : public Serializable {
-    Source src;
-
-    Binding(Source src) : src(src) {}
-    virtual ~Binding() {}
-    bool bind(EvaluationContext&, Object, bool = true) const;
-    virtual bool do_bind(EvaluationContext&, Object) const = 0;
-
-    std::set<std::string> binds_identifiers() const;
-    virtual void binds_identifiers(std::set<std::string>&) const = 0;
-
-    static std::unique_ptr<Binding> deserialize(Deserializer&);
-
-    virtual void dump(std::ostream&) const = 0;
-    friend std::ostream& operator<<(std::ostream& os, const Binding& binding) { binding.dump(os); return os; }
-};
-
-
 struct IdentifierBinding : public Binding {
     std::string name;
 
@@ -294,13 +276,13 @@ struct Block : public AstNode {
 
 
 struct Function : public AstNode {
-    std::shared_ptr<std::vector<std::string>> parameters;
+    std::shared_ptr<std::vector<std::unique_ptr<Binding>>> parameters;
     std::shared_ptr<AstNode> expression;
 
     Function(Source src)
-        : AstNode(src), parameters(new std::vector<std::string>()), expression(nullptr) {}
-    Function(Source src, std::shared_ptr<std::vector<std::string>> parameters, std::shared_ptr<AstNode> expression)
-        : AstNode(src), parameters(parameters), expression(expression) {}
+        : AstNode(src), parameters(new std::vector<std::unique_ptr<Binding>>()), expression(nullptr) {}
+    Function(Source src, std::shared_ptr<std::vector<std::unique_ptr<Binding>>> parameters, std::shared_ptr<AstNode> expression)
+        : AstNode(src), parameters(std::move(parameters)), expression(expression) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;

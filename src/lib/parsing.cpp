@@ -225,8 +225,7 @@ namespace Grammar
 
     // Functions
     struct func {
-        struct param_identifier: p::seq<identifier> {};
-        struct param_list: listof<prepad<param_identifier>> {};
+        struct param_list: listof<prepad<pattern::rule>> {};
         struct bracketed_param_list: p::seq<token::op_paren, param_list, token::cl_paren> {};
         struct rule: p::seq<
             bracketed_param_list,
@@ -337,7 +336,6 @@ namespace Grammar
             block::rule,
             block::binding,
             identifier,
-            func::param_identifier,
             func::param_list,
             func::rule,
             branch,

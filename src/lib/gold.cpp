@@ -241,7 +241,7 @@ Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& arg
         auto id_it = closure->parameters->begin();
         auto arg_it = args.begin();
         while (id_it != closure->parameters->end() && arg_it != args.end())
-            ctx.assign(*id_it++, *arg_it++);
+            (*id_it++)->bind(ctx, *arg_it++);
         retval = closure->expression->evaluate(ctx);
     }
     catch (const std::exception&) {

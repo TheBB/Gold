@@ -462,7 +462,7 @@ void Function::dump(std::ostream& os) const {
     for (auto& p : *parameters) {
         if (!first)
             os << ", ";
-        os << p;
+        os << *p;
         first = false;
     }
     if (!first)
@@ -473,8 +473,11 @@ void Function::dump(std::ostream& os) const {
 
 void Function::free_identifiers(std::set<std::string>& idents) const {
     auto candidates = expression->free_identifiers();
-    for (auto& p : *parameters)
-        candidates.erase(p);
+    for (auto& p : *parameters) {
+        auto bound = p->binds_identifiers();
+        for (auto& c : bound)
+            candidates.erase(c);
+    }
     for (auto& c : candidates)
         idents.insert(c);
 }
@@ -853,7 +856,7 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
     else if (type == "Grammar::func::rule") {
         auto function = std::make_unique<Function>(source(node));
         for (auto&& c : node.children[0]->children)
-            function->parameters->push_back(c->string());
+            function->parameters->push_back(normalize_binding(*c));
         function->expression = normalize(*node.children[1]);
         return function;
     }
