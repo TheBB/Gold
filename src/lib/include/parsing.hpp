@@ -31,24 +31,6 @@ enum class Operator {
 };
 
 
-struct Binding : public Serializable {
-    Source src;
-
-    Binding(Source src) : src(src) {}
-    virtual ~Binding() {}
-    bool bind(EvaluationContext&, Object, bool = true) const;
-    virtual bool do_bind(EvaluationContext&, Object) const = 0;
-
-    std::set<std::string> binds_identifiers() const;
-    virtual void binds_identifiers(std::set<std::string>&) const = 0;
-
-    static std::unique_ptr<Binding> deserialize(Deserializer&);
-
-    virtual void dump(std::ostream&) const = 0;
-    friend std::ostream& operator<<(std::ostream& os, const Binding& binding) { binding.dump(os); return os; }
-};
-
-
 struct IdentifierBinding : public Binding {
     std::string name;
 
@@ -61,11 +43,33 @@ struct IdentifierBinding : public Binding {
 
 
 struct ListBinding : public Binding {
-    std::vector<std::unique_ptr<Binding>> bindings;
+    std::vector<BindingPtr> bindings;
+    bool slurp = false;
+    opt<std::string> slurp_target;
 
     ListBinding(Source src) : Binding(src) {}
-    ListBinding(Source src, std::vector<std::unique_ptr<Binding>> bindings)
-        : Binding(src), bindings(std::move(bindings)) {}
+    ListBinding(Source src, std::vector<BindingPtr> bindings, bool slurp, opt<std::string> slurp_target)
+        : Binding(src), bindings(std::move(bindings)), slurp(slurp), slurp_target(slurp_target) {}
+    virtual void dump(std::ostream&) const;
+    virtual void binds_identifiers(std::set<std::string>&) const;
+    virtual bool do_bind(EvaluationContext&, Object) const;
+    virtual void do_serialize(Serializer&) const;
+};
+
+
+struct MapBinding : public Binding {
+    using Entry = struct {
+        std::string name;
+        BindingPtr binding;
+    };
+
+    std::vector<Entry> entries;
+    bool slurp = false;
+    opt<std::string> slurp_target;
+
+    MapBinding(Source src) : Binding(src) {}
+    MapBinding(Source src, std::vector<Entry> entries, bool slurp, opt<std::string> slurp_target)
+        : Binding(src), entries(std::move(entries)), slurp(slurp), slurp_target(slurp_target) {}
     virtual void dump(std::ostream&) const;
     virtual void binds_identifiers(std::set<std::string>&) const;
     virtual bool do_bind(EvaluationContext&, Object) const;
@@ -83,9 +87,9 @@ struct AstNode : public Serializable {
     std::set<std::string> free_identifiers() const;
     virtual Object evaluate(EvaluationContext&) const = 0;
 
-    static std::unique_ptr<AstNode> deserialize(std::string);
-    static std::unique_ptr<AstNode> deserialize(std::istream&);
-    static std::unique_ptr<AstNode> deserialize(Deserializer&);
+    static uptr<AstNode> deserialize(std::string);
+    static uptr<AstNode> deserialize(std::istream&);
+    static uptr<AstNode> deserialize(Deserializer&);
 
     const Source source() const { return src; }
 
@@ -119,7 +123,7 @@ struct Identifier : public AstNode {
 struct ListElement : public Serializable {
     virtual ~ListElement() {}
     virtual void fill(EvaluationContext&, Object::ListT&) const = 0;
-    static std::unique_ptr<ListElement> deserialize(Deserializer&);
+    static uptr<ListElement> deserialize(Deserializer&);
     virtual void dump(std::ostream& os) const = 0;
     virtual void free_identifiers(std::set<std::string>&) const = 0;
     std::set<std::string> free_identifiers() const;
@@ -149,8 +153,8 @@ struct SplatListElement : public ListElement {
 
 struct CondListElement : public ListElement {
     AstPtr cond;
-    std::unique_ptr<ListElement> element;
-    CondListElement(AstPtr cond, std::unique_ptr<ListElement> element)
+    uptr<ListElement> element;
+    CondListElement(AstPtr cond, uptr<ListElement> element)
         : cond(std::move(cond)), element(std::move(element)) {}
     virtual void fill(EvaluationContext&, Object::ListT&) const;
     virtual void do_serialize(Serializer&) const;
@@ -160,10 +164,10 @@ struct CondListElement : public ListElement {
 
 
 struct LoopListElement : public ListElement {
-    std::unique_ptr<Binding> binding;
+    BindingPtr binding;
     AstPtr iter;
-    std::unique_ptr<ListElement> element;
-    LoopListElement(std::unique_ptr<Binding> binding, AstPtr iter, std::unique_ptr<ListElement> element)
+    uptr<ListElement> element;
+    LoopListElement(BindingPtr binding, AstPtr iter, uptr<ListElement> element)
         : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
     virtual void fill(EvaluationContext&, Object::ListT&) const;
     virtual void do_serialize(Serializer&) const;
@@ -178,10 +182,10 @@ struct List : public AstNode {
         bool splat;
     };
 
-    std::vector<std::unique_ptr<ListElement>> elements;
+    std::vector<uptr<ListElement>> elements;
 
     List(Source src) : AstNode(src) {}
-    List(Source src, std::vector<std::unique_ptr<ListElement>> elements)
+    List(Source src, std::vector<uptr<ListElement>> elements)
         : AstNode(src), elements(std::move(elements)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -193,7 +197,7 @@ struct List : public AstNode {
 struct MapElement : public Serializable {
     virtual ~MapElement() {}
     virtual void fill(EvaluationContext&) const = 0;
-    static std::unique_ptr<MapElement> deserialize(Deserializer&);
+    static uptr<MapElement> deserialize(Deserializer&);
     virtual void dump(std::ostream& os) const = 0;
     virtual void free_identifiers(std::set<std::string>&) const = 0;
     std::set<std::string> free_identifiers() const;
@@ -223,8 +227,8 @@ struct SplatMapElement : public MapElement {
 
 struct CondMapElement : public MapElement {
     AstPtr cond;
-    std::unique_ptr<MapElement> element;
-    CondMapElement(AstPtr cond, std::unique_ptr<MapElement> element)
+    uptr<MapElement> element;
+    CondMapElement(AstPtr cond, uptr<MapElement> element)
         : cond(std::move(cond)), element(std::move(element)) {}
     virtual void fill(EvaluationContext&) const;
     virtual void do_serialize(Serializer&) const;
@@ -236,10 +240,10 @@ struct CondMapElement : public MapElement {
 
 
 struct LoopMapElement : public MapElement {
-    std::unique_ptr<Binding> binding;
+    BindingPtr binding;
     AstPtr iter;
-    std::unique_ptr<MapElement> element;
-    LoopMapElement(std::unique_ptr<Binding> binding, AstPtr iter, std::unique_ptr<MapElement> element)
+    uptr<MapElement> element;
+    LoopMapElement(BindingPtr binding, AstPtr iter, uptr<MapElement> element)
         : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
     virtual void fill(EvaluationContext&) const;
     virtual void do_serialize(Serializer&) const;
@@ -249,10 +253,10 @@ struct LoopMapElement : public MapElement {
 
 
 struct Map : public AstNode {
-    std::vector<std::unique_ptr<MapElement>> elements;
+    std::vector<uptr<MapElement>> elements;
 
     Map(Source src) : AstNode(src) {}
-    Map(Source src, std::vector<std::unique_ptr<MapElement>> elements)
+    Map(Source src, std::vector<uptr<MapElement>> elements)
         : AstNode(src), elements(std::move(elements)) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -276,7 +280,7 @@ struct BinOp : public AstNode {
 
 struct Block : public AstNode {
     using BindingElement = struct {
-        std::unique_ptr<Binding> binding;
+        BindingPtr binding;
         AstPtr expression;
     };
 
@@ -294,13 +298,13 @@ struct Block : public AstNode {
 
 
 struct Function : public AstNode {
-    std::shared_ptr<std::vector<std::string>> parameters;
-    std::shared_ptr<AstNode> expression;
+    sptr<std::vector<BindingPtr>> parameters;
+    sptr<AstNode> expression;
 
     Function(Source src)
-        : AstNode(src), parameters(new std::vector<std::string>()), expression(nullptr) {}
-    Function(Source src, std::shared_ptr<std::vector<std::string>> parameters, std::shared_ptr<AstNode> expression)
-        : AstNode(src), parameters(parameters), expression(expression) {}
+        : AstNode(src), parameters(new std::vector<BindingPtr>()), expression(nullptr) {}
+    Function(Source src, sptr<std::vector<BindingPtr>> parameters, sptr<AstNode> expression)
+        : AstNode(src), parameters(std::move(parameters)), expression(expression) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;

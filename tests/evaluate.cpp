@@ -166,21 +166,21 @@ TEST_CASE("Subscripting", "[evaluate]") {
 
 
 TEST_CASE("Splatting", "[evaluate]") {
-    auto obj = evaluate_string("[1, [2, 3]..., 4]");
+    auto obj = evaluate_string("[1, ...[2, 3], 4]");
     REQUIRE(obj.size() == 4);
     REQUIRE(obj[0].unsafe_integer() == 1);
     REQUIRE(obj[1].unsafe_integer() == 2);
     REQUIRE(obj[2].unsafe_integer() == 3);
     REQUIRE(obj[3].unsafe_integer() == 4);
 
-    obj = evaluate_string("{a: 1, {b: 2, c: 3}..., d: 4}");
+    obj = evaluate_string("{a: 1, ...{b: 2, c: 3}, d: 4}");
     REQUIRE(obj.size() == 4);
     REQUIRE(obj["a"].unsafe_integer() == 1);
     REQUIRE(obj["b"].unsafe_integer() == 2);
     REQUIRE(obj["c"].unsafe_integer() == 3);
     REQUIRE(obj["d"].unsafe_integer() == 4);
 
-    obj = evaluate_string("{a: 1, {a: 2, c: 3}..., c: 4}");
+    obj = evaluate_string("{a: 1, ...{a: 2, c: 3}, c: 4}");
     REQUIRE(obj.size() == 2);
     REQUIRE(obj["a"].unsafe_integer() == 2);
     REQUIRE(obj["c"].unsafe_integer() == 4);
@@ -234,7 +234,7 @@ TEST_CASE("Complex collection elements", "[evaluate]") {
 
     obj = evaluate_string(
         "let a = [[1], [2, 3], [4, 5, 6]]\n"
-        "in [for x in a: if len(x) > 1: x...]"
+        "in [for x in a: if len(x) > 1: ...x]"
     );
     REQUIRE(obj.size() == 5);
     REQUIRE(obj[0].unsafe_integer() == 2);
@@ -263,4 +263,60 @@ TEST_CASE("List bindings", "[evaluate]") {
     REQUIRE(obj.size() == 2);
     REQUIRE(obj["a"].unsafe_integer() == 1);
     REQUIRE(obj["b"].unsafe_integer() == 2);
+
+    obj = evaluate_string("let [a, ...] = [1] in a");
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string("let [a, ...] = [1, 2, 3] in a");
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string("let [a, ...b] = [1, 2, 3] in b[0]");
+    REQUIRE(obj.unsafe_integer() == 2);
+
+    obj = evaluate_string("let [a, ...b] = [1] in b");
+    REQUIRE(obj.size() == 0);
+}
+
+
+TEST_CASE("Map bindings", "[evaluate]") {
+    auto obj = evaluate_string("let {a: a, b: b} = {a: 1, b: 2} in {a: a, b: b}");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj["a"].unsafe_integer() == 1);
+    REQUIRE(obj["b"].unsafe_integer() == 2);
+
+    obj = evaluate_string("let {a: {b: b}} = {a: {b: 1}} in b");
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string("let {a: a, ...} = {a: 1} in a");
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string("let {a: a, ...} = {a: 1, b: 2, c: 3} in a");
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string("let {a: a, ...b} = {a: 1, b: 2, c: 3} in b");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj["b"].unsafe_integer() == 2);
+    REQUIRE(obj["c"].unsafe_integer() == 3);
+
+    obj = evaluate_string("let {a: a, ...b} = {a: 1} in b");
+    REQUIRE(obj.size() == 0);
+
+    obj = evaluate_string("let {a, b} = {a: 1, b: 2} in [a, b]");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 2);
+
+    obj = evaluate_string("let {a, b, ...} = {a: 1, b: 2, c: 3} in [a, b]");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 2);
+}
+
+
+TEST_CASE("Function bindings", "[evaluate]") {
+    auto obj = evaluate_string(
+        "let a = (x, [y, z]) => x + y + z\n"
+        "in a(1, [2, 3])"
+    );
+    REQUIRE(obj.unsafe_integer() == 6);
 }

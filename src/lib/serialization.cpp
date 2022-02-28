@@ -83,7 +83,9 @@ Object Object::deserialize(Deserializer& is) {
             auto value = Object::deserialize(is);
             return std::pair(key, value);
         });
-        closure->parameters = is.read<std::shared_ptr<std::vector<std::string>>>();
+        closure->parameters = is.read<sptr<std::vector<BindingPtr>>>([&is]() {
+            return Binding::deserialize(is);
+        });
         closure->expression = AstNode::deserialize(is);
         return Object::closure(closure);
     }
@@ -106,17 +108,29 @@ Object Object::deserialize(std::istream& is) {
 }
 
 
-std::unique_ptr<Binding> Binding::deserialize(Deserializer& is) {
+BindingPtr Binding::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     auto src = is.read<Source>();
     switch (indicator) {
     case 'I':
         return std::make_unique<IdentifierBinding>(src, is.read<std::string>());
     case 'L': {
-        auto bindings = is.read<std::vector<std::unique_ptr<Binding>>>([&is]() {
+        auto bindings = is.read<std::vector<BindingPtr>>([&is]() {
             return Binding::deserialize(is);
         });
-        return std::make_unique<ListBinding>(src, std::move(bindings));
+        auto slurp = is.read<bool>();
+        auto slurp_target = is.read<opt<std::string>>();
+        return std::make_unique<ListBinding>(src, std::move(bindings), slurp, slurp_target);
+    }
+    case 'M': {
+        auto entries = is.read<std::vector<MapBinding::Entry>>([&is]() {
+            auto name = is.read<std::string>();
+            auto binding = Binding::deserialize(is);
+            return MapBinding::Entry { name, std::move(binding) };
+        });
+        auto slurp = is.read<bool>();
+        auto slurp_target = is.read<opt<std::string>>();
+        return std::make_unique<MapBinding>(src, std::move(entries), slurp, slurp_target);
     }
     default:
         throw InternalException(fmt::format("unknown binding indicator: {}", (int)indicator));
@@ -130,7 +144,16 @@ void IdentifierBinding::do_serialize(Serializer& os) const {
 
 
 void ListBinding::do_serialize(Serializer& os) const {
-    os << 'L' << bindings;
+    os << 'L' << bindings << slurp << slurp_target;
+}
+
+
+void MapBinding::do_serialize(Serializer& os) const {
+    os << 'M';
+    os.write(entries, [&os](const Entry& entry) {
+        os << entry.name << entry.binding;
+    });
+    os << slurp << slurp_target;
 }
 
 
@@ -209,13 +232,13 @@ AstPtr AstNode::deserialize(Deserializer& is) {
     case 'I':
         return std::make_unique<Identifier>(source, is.read<std::string>());
     case 'L': {
-        auto elements = is.read<std::vector<std::unique_ptr<ListElement>>>([&is]() {
+        auto elements = is.read<std::vector<uptr<ListElement>>>([&is]() {
             return ListElement::deserialize(is);
         });
         return std::make_unique<List>(source, std::move(elements));
     }
     case 'M': {
-        auto entries = is.read<std::vector<std::unique_ptr<MapElement>>>([&is]() {
+        auto entries = is.read<std::vector<uptr<MapElement>>>([&is]() {
             return MapElement::deserialize(is);
         });
         return std::make_unique<Map>(source, std::move(entries));
@@ -235,7 +258,9 @@ AstPtr AstNode::deserialize(Deserializer& is) {
         return std::make_unique<Block>(source, std::move(bindings), AstNode::deserialize(is));
     }
     case 'F': {
-        auto parameters = is.read<std::shared_ptr<std::vector<std::string>>>();
+        auto parameters = is.read<sptr<std::vector<BindingPtr>>>([&is]() {
+            return Binding::deserialize(is);
+        });
         auto expression = AstNode::deserialize(is);
         return std::make_unique<Function>(source, parameters, std::move(expression));
     }
@@ -263,7 +288,7 @@ AstPtr AstNode::deserialize(Deserializer& is) {
 }
 
 
-std::unique_ptr<ListElement> ListElement::deserialize(Deserializer& is) {
+uptr<ListElement> ListElement::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     switch (indicator) {
     case 'E': return std::make_unique<SingletonListElement>(AstNode::deserialize(is));
@@ -305,7 +330,7 @@ void LoopListElement::do_serialize(Serializer& os) const {
 }
 
 
-std::unique_ptr<MapElement> MapElement::deserialize(Deserializer& is) {
+uptr<MapElement> MapElement::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     switch (indicator) {
     case 'E': {

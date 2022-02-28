@@ -241,7 +241,7 @@ Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& arg
         auto id_it = closure->parameters->begin();
         auto arg_it = args.begin();
         while (id_it != closure->parameters->end() && arg_it != args.end())
-            ctx.assign(*id_it++, *arg_it++);
+            (*id_it++)->bind(ctx, *arg_it++);
         retval = closure->expression->evaluate(ctx);
     }
     catch (const std::exception&) {
@@ -364,15 +364,15 @@ void EvalException::position(Source source) noexcept {
 }
 
 
-static std::unique_ptr<std::vector<std::unique_ptr<LibFinder>>> _stdlibs = nullptr;
+static uptr<std::vector<uptr<LibFinder>>> _stdlibs = nullptr;
 
-std::vector<std::unique_ptr<LibFinder>>& stdlibs() {
+std::vector<uptr<LibFinder>>& stdlibs() {
     if (!_stdlibs)
-        _stdlibs = std::make_unique<std::vector<std::unique_ptr<LibFinder>>>();
+        _stdlibs = std::make_unique<std::vector<uptr<LibFinder>>>();
     return *_stdlibs;
 }
 
-void Gold::register_stdlib(std::unique_ptr<LibFinder> finder) {
+void Gold::register_stdlib(uptr<LibFinder> finder) {
     stdlibs().push_back(std::move(finder));
 }
 

@@ -17,9 +17,9 @@ static std::map<std::string, std::string> stdlibs = {
 
 class StdlibFinder: public LibFinder {
 public:
-    virtual std::optional<Object> find(const std::string& path) const {
+    virtual opt<Object> find(const std::string& path) const {
         if (stdlibs.find(path) == stdlibs.end())
-            return std::optional<Object>();
+            return opt<Object>();
         return Object::deserialize(stdlibs[path]);
     }
 };
