@@ -6,9 +6,28 @@ set(
     CACHE STRING "Vcpkg toolchain file"
 )
 
+set(CMAKE_MODULE_PATH x${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
 project(gold)
 
 option(GOLD_BUILD_UTILS "Build utilities" ON)
+option(GOLD_COVERAGE "Build utilities" ON)
+
+if (NOT (CMAKE_BUILD_TYPE STREQUAL "Debug"))
+    message("Disabling coverage: not debug build")
+    set(GOLD_COVERAGE OFF)
+endif()
+
+if (NOT CMAKE_COMPILER_IS_GNUCXX)
+    message("Disabling coverage: compiler is not GNU")
+    set(GOLD_COVERAGE OFF)
+endif()
+
+find_program(LCOV "lcov")
+if(NOT LCOV)
+    message("Disabling coverage: lcov not found")
+    set(GOLD_COVERAGE OFF)
+endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 17)
@@ -19,6 +38,11 @@ set(GOLD_BINARY_ROOT_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 if(CMAKE_COMPILER_IS_GNUCXX)
     add_compile_options(-Wall -Wextra -Wno-unused-parameter -pedantic)
+endif()
+
+if (GOLD_COVERAGE)
+    include(CodeCoverage)
+    append_coverage_compiler_flags()
 endif()
 
 if(MSVC)
