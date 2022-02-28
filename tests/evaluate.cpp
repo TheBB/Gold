@@ -264,3 +264,12 @@ TEST_CASE("List bindings", "[evaluate]") {
     REQUIRE(obj["a"].unsafe_integer() == 1);
     REQUIRE(obj["b"].unsafe_integer() == 2);
 }
+
+
+TEST_CASE("Function bindings", "[evaluate]") {
+    auto obj = evaluate_string(
+        "let a = (x, [y, z]) => x + y + z\n"
+        "in a(1, [2, 3])"
+    );
+    REQUIRE(obj.unsafe_integer() == 6);
+}

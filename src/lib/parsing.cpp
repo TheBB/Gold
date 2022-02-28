@@ -128,7 +128,7 @@ namespace Grammar
             struct seq: listof<rule> {};
             struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
         };
-        struct rule: p::sor<ident, list::rule> {};
+        struct rule: prepad<p::sor<ident, list::rule>> {};
     };
 
     // Numbers
@@ -181,7 +181,7 @@ namespace Grammar
     struct list {
         struct element;
         struct loop: p::seq<
-            prepad<keyword::For>, prepad<pattern::rule>, prepad<keyword::In>,
+            prepad<keyword::For>, pattern::rule, prepad<keyword::In>,
             expression, token::colon, element
         > {};
         struct cond: p::seq<prepad<keyword::If>, expression, token::colon, element> {};
@@ -198,7 +198,7 @@ namespace Grammar
         struct identifier: p::sor<var_identifier, const_identifier> {};
         struct entry: p::seq<prepad<identifier>, token::colon, expression> {};
         struct loop: p::seq<
-            prepad<keyword::For>, prepad<pattern::rule>, prepad<keyword::In>,
+            prepad<keyword::For>, pattern::rule, prepad<keyword::In>,
             expression, token::colon, element
         > {};
         struct cond: p::seq<prepad<keyword::If>, expression, token::colon, entry> {};
@@ -211,7 +211,7 @@ namespace Grammar
     struct block {
         struct binding: p::seq<
             prepad<keyword::Let>,
-            prepad<pattern::rule>,
+            pattern::rule,
             token::equals,
             expression
         > {};
@@ -225,7 +225,7 @@ namespace Grammar
 
     // Functions
     struct func {
-        struct param_list: listof<prepad<pattern::rule>> {};
+        struct param_list: listof<pattern::rule> {};
         struct bracketed_param_list: p::seq<token::op_paren, param_list, token::cl_paren> {};
         struct rule: p::seq<
             bracketed_param_list,
