@@ -275,6 +275,12 @@ TEST_CASE("List bindings", "[evaluate]") {
 
     obj = evaluate_string("let [a, ...b] = [1] in b");
     REQUIRE(obj.size() == 0);
+
+    obj = evaluate_string("let [a, b = 1, ...c] = [2] in [a, b, c]");
+    REQUIRE(obj.size() == 3);
+    REQUIRE(obj[0].unsafe_integer() == 2);
+    REQUIRE(obj[1].unsafe_integer() == 1);
+    REQUIRE(obj[2].size() == 0);
 }
 
 
@@ -287,10 +293,10 @@ TEST_CASE("Map bindings", "[evaluate]") {
     obj = evaluate_string("let {a: {b: b}} = {a: {b: 1}} in b");
     REQUIRE(obj.unsafe_integer() == 1);
 
-    obj = evaluate_string("let {a: a, ...} = {a: 1} in a");
+    obj = evaluate_string("let {a: a} = {a: 1} in a");
     REQUIRE(obj.unsafe_integer() == 1);
 
-    obj = evaluate_string("let {a: a, ...} = {a: 1, b: 2, c: 3} in a");
+    obj = evaluate_string("let {a: a} = {a: 1, b: 2, c: 3} in a");
     REQUIRE(obj.unsafe_integer() == 1);
 
     obj = evaluate_string("let {a: a, ...b} = {a: 1, b: 2, c: 3} in b");
@@ -306,10 +312,19 @@ TEST_CASE("Map bindings", "[evaluate]") {
     REQUIRE(obj[0].unsafe_integer() == 1);
     REQUIRE(obj[1].unsafe_integer() == 2);
 
-    obj = evaluate_string("let {a, b, ...} = {a: 1, b: 2, c: 3} in [a, b]");
+    obj = evaluate_string("let {a, b} = {a: 1, b: 2, c: 3} in [a, b]");
     REQUIRE(obj.size() == 2);
     REQUIRE(obj[0].unsafe_integer() == 1);
     REQUIRE(obj[1].unsafe_integer() == 2);
+
+    obj = evaluate_string("let {a = 1} = {} in a");
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string("let {a: q = 1} = {} in q");
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string("let {a = let {b = 2} = {} in b} = {} in a");
+    REQUIRE(obj.unsafe_integer() == 2);
 }
 
 

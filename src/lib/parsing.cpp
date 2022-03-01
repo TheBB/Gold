@@ -133,16 +133,21 @@ namespace Grammar
     struct pattern {
         struct rule;
         struct ident: p::seq<prepad<identifier>> {};
-        struct slurp: p::seq<token::splat, p::opt<identifier>> {};
+        struct opt_slurp: p::seq<token::splat, p::opt<identifier>> {};
+        struct def_slurp: p::seq<token::splat, identifier> {};
         struct list {
-            struct seq: p::seq<listof_term<rule, slurp>> {};
+            struct element: p::seq<rule, p::opt<p::seq<token::equals, expression>>> {};
+            struct seq: p::seq<listof_term<element, opt_slurp>> {};
             struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
         };
         struct map {
             struct single_entry: p::seq<prepad<identifier>> {};
             struct entry: p::seq<prepad<identifier>, token::colon, rule> {};
-            struct element: p::sor<entry, single_entry> {};
-            struct seq: p::seq<listof_term<element, slurp>> {};
+            struct element: p::seq<
+                p::sor<entry, single_entry>,
+                p::opt<p::seq<token::equals, expression>>
+            > {};
+            struct seq: p::seq<listof_term<element, def_slurp>> {};
             struct rule: p::seq<token::op_brace, seq, token::cl_brace> {};
         };
         struct rule: prepad<p::sor<ident, list::rule, map::rule>> {};
@@ -349,10 +354,13 @@ namespace Grammar
             map::cond,
             map::seq,
             pattern::ident,
-            pattern::slurp,
+            pattern::opt_slurp,
+            pattern::def_slurp,
             pattern::map::single_entry,
             pattern::map::entry,
+            pattern::map::element,
             pattern::map::seq,
+            pattern::list::element,
             pattern::list::seq,
             block::rule,
             block::binding,
