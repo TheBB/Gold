@@ -153,15 +153,16 @@ void MapBinding::dump(std::ostream& os) const {
     for (auto& entry : entries) {
         if (!first)
             os << ", ";
-        std::cout << "Entry(" << entry.name << ", " << *entry.binding << ")";
+        os << "Entry(" << entry.name << ", " << *entry.binding;
+        if (entry.fallback.has_value())
+            os << ", " << *entry.fallback.value();
+        os << ")";
         first = false;
     }
-    if (slurp) {
+    if (slurp_target) {
         if (!first)
             os << ", ";
-        os << "...";
-        if (slurp_target.has_value())
-            os << slurp_target.value();
+        os << "..." << slurp_target.value();
     }
     os << ")";
 }
@@ -180,18 +181,24 @@ bool MapBinding::do_bind(EvaluationContext& ctx, Object obj) const {
         return false;
     const auto& map = obj.unsafe_map();
 
-    if (!slurp && map->size() != entries.size())
-        return false;
-
     for (auto& entry : entries) {
         auto it = map->find(entry.name);
-        if (it == map->end())
-            return false;
-        if (!entry.binding->do_bind(ctx, it->second))
+        Object value;
+
+        if (it == map->end()) {
+            if (entry.fallback.has_value())
+                value = entry.fallback.value()->evaluate(ctx);
+            else
+                return false;
+        }
+        else
+            value = it->second;
+
+        if (!entry.binding->do_bind(ctx, value))
             return false;
     }
 
-    if (!slurp || !slurp_target.has_value())
+    if (!slurp_target.has_value())
         return true;
 
     Object::MapT newmap(*map);
@@ -717,6 +724,25 @@ static AstPtr normalize_map_identifier(p::parse_tree::node& node) {
 }
 
 
+static BindingPtr normalize_binding(p::parse_tree::node& node);
+
+
+static MapBinding::Entry normalize_map_binding_element(p::parse_tree::node& node) {
+    if (nodetype(node) == "Grammar::pattern::map::entry")
+       return MapBinding::Entry {
+            node.children[0]->string(),
+            normalize_binding(*node.children[1]),
+            opt<AstPtr>()
+        };
+
+    return MapBinding::Entry {
+        node.children[0]->string(),
+        std::make_unique<IdentifierBinding>(source(*node.children[0]), node.children[0]->string()),
+        opt<AstPtr>()
+    };
+}
+
+
 static BindingPtr normalize_binding(p::parse_tree::node& node) {
     auto type = nodetype(node);
     auto src = source(node);
@@ -727,7 +753,7 @@ static BindingPtr normalize_binding(p::parse_tree::node& node) {
     else if (type == "Grammar::pattern::list::seq") {
         auto list = std::make_unique<ListBinding>(src);
         for (auto& c : node.children) {
-            if (nodetype(*c) == "Grammar::pattern::slurp") {
+            if (nodetype(*c) == "Grammar::pattern::opt_slurp") {
                 list->slurp = true;
                 if (c->children.size() > 0)
                     list->slurp_target = c->children[0]->string();
@@ -741,23 +767,14 @@ static BindingPtr normalize_binding(p::parse_tree::node& node) {
     else if (type == "Grammar::pattern::map::seq") {
         auto map = std::make_unique<MapBinding>(src);
         for (auto& c : node.children) {
-            if (nodetype(*c) == "Grammar::pattern::slurp") {
-                map->slurp = true;
-                if (c->children.size() > 0)
-                    map->slurp_target = c->children[0]->string();
+            if (nodetype(*c) == "Grammar::pattern::def_slurp")
+                map->slurp_target = c->children[0]->string();
+            else {
+                auto element = normalize_map_binding_element(*c->children[0]);
+                if (c->children.size() > 1)
+                    element.fallback = normalize(*c->children[1]);
+                map->entries.push_back(std::move(element));
             }
-
-            else if (nodetype(*c) == "Grammar::pattern::map::entry")
-                map->entries.push_back(MapBinding::Entry {
-                    c->children[0]->string(),
-                    normalize_binding(*c->children[1])
-                });
-
-            else if (nodetype(*c) == "Grammar::pattern::map::single_entry")
-                map->entries.push_back(MapBinding::Entry {
-                    c->children[0]->string(),
-                    std::make_unique<IdentifierBinding>(source(*c->children[0]), c->children[0]->string())
-                });
         }
         return map;
     }

@@ -61,15 +61,15 @@ struct MapBinding : public Binding {
     using Entry = struct {
         std::string name;
         BindingPtr binding;
+        opt<AstPtr> fallback;
     };
 
     std::vector<Entry> entries;
-    bool slurp = false;
     opt<std::string> slurp_target;
 
     MapBinding(Source src) : Binding(src) {}
-    MapBinding(Source src, std::vector<Entry> entries, bool slurp, opt<std::string> slurp_target)
-        : Binding(src), entries(std::move(entries)), slurp(slurp), slurp_target(slurp_target) {}
+    MapBinding(Source src, std::vector<Entry> entries, opt<std::string> slurp_target)
+        : Binding(src), entries(std::move(entries)), slurp_target(slurp_target) {}
     virtual void dump(std::ostream&) const;
     virtual void binds_identifiers(std::set<std::string>&) const;
     virtual bool do_bind(EvaluationContext&, Object) const;

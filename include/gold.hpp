@@ -294,6 +294,12 @@ private:
             val = read<T>();
     }
 
+    template<typename T, typename F>
+    void readref(opt<T>& val, F f) {
+        if (read<char>() == 'Y')
+            val = f();
+    }
+
     void readref(std::string&);
 
     template<typename V, typename F>
