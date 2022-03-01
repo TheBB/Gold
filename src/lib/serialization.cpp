@@ -115,8 +115,10 @@ BindingPtr Binding::deserialize(Deserializer& is) {
     case 'I':
         return std::make_unique<IdentifierBinding>(src, is.read<std::string>());
     case 'L': {
-        auto bindings = is.read<std::vector<BindingPtr>>([&is]() {
-            return Binding::deserialize(is);
+        auto bindings = is.read<std::vector<ListBinding::Entry>>([&is]() {
+            auto binding = Binding::deserialize(is);
+            auto fallback = is.read<opt<AstPtr>>([&is]() { return AstNode::deserialize(is); });
+            return ListBinding::Entry { std::move(binding), std::move(fallback) };
         });
         auto slurp = is.read<bool>();
         auto slurp_target = is.read<opt<std::string>>();
@@ -144,7 +146,11 @@ void IdentifierBinding::do_serialize(Serializer& os) const {
 
 
 void ListBinding::do_serialize(Serializer& os) const {
-    os << 'L' << bindings << slurp << slurp_target;
+    os << 'L';
+    os.write(bindings, [&os](const Entry& entry) {
+        os << entry.binding << entry.fallback;
+    });
+    os << slurp << slurp_target;
 }
 
 

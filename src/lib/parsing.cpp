@@ -136,7 +136,8 @@ namespace Grammar
         struct opt_slurp: p::seq<token::splat, p::opt<identifier>> {};
         struct def_slurp: p::seq<token::splat, identifier> {};
         struct list {
-            struct seq: p::seq<listof_term<rule, opt_slurp>> {};
+            struct element: p::seq<rule, p::opt<p::seq<token::equals, expression>>> {};
+            struct seq: p::seq<listof_term<element, opt_slurp>> {};
             struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
         };
         struct map {
@@ -359,6 +360,7 @@ namespace Grammar
             pattern::map::entry,
             pattern::map::element,
             pattern::map::seq,
+            pattern::list::element,
             pattern::list::seq,
             block::rule,
             block::binding,

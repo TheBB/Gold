@@ -98,7 +98,11 @@ void ListBinding::dump(std::ostream& os) const {
     for (auto& binding : bindings) {
         if (!first)
             os << ", ";
-        binding->dump(os);
+        os << "Entry(";
+        binding.binding->dump(os);
+        if (binding.fallback.has_value())
+            os << ", " << *binding.fallback.value();
+        os << ")";
         first = false;
     }
     if (slurp) {
@@ -114,7 +118,7 @@ void ListBinding::dump(std::ostream& os) const {
 
 void ListBinding::binds_identifiers(std::set<std::string>& idents) const {
     for (auto& binding : bindings)
-        binding->binds_identifiers(idents);
+        binding.binding->binds_identifiers(idents);
     if (slurp_target.has_value())
         idents.insert(slurp_target.value());
 }
@@ -125,15 +129,24 @@ bool ListBinding::do_bind(EvaluationContext& ctx, Object obj) const {
         return false;
     auto& list = obj.unsafe_list();
 
-    if (list->size() < bindings.size())
-        return false;
     if (list->size() > bindings.size() && !slurp)
         return false;
 
     size_t i = 0;
-    for (; i < bindings.size(); i++)
-        if (!bindings[i]->do_bind(ctx, list->at(i)))
+    for (; i < bindings.size(); i++) {
+        Object value;
+        if (i >= list->size()) {
+            if (bindings[i].fallback.has_value())
+                value = bindings[i].fallback.value()->evaluate(ctx);
+            else
+                return false;
+        }
+        else
+            value = list->at(i);
+
+        if (!bindings[i].binding->do_bind(ctx, value))
             return false;
+    }
 
     if (!slurp || !slurp_target.has_value())
         return true;
@@ -731,14 +744,12 @@ static MapBinding::Entry normalize_map_binding_element(p::parse_tree::node& node
     if (nodetype(node) == "Grammar::pattern::map::entry")
        return MapBinding::Entry {
             node.children[0]->string(),
-            normalize_binding(*node.children[1]),
-            opt<AstPtr>()
+            normalize_binding(*node.children[1])
         };
 
     return MapBinding::Entry {
         node.children[0]->string(),
-        std::make_unique<IdentifierBinding>(source(*node.children[0]), node.children[0]->string()),
-        opt<AstPtr>()
+        std::make_unique<IdentifierBinding>(source(*node.children[0]), node.children[0]->string())
     };
 }
 
@@ -758,8 +769,12 @@ static BindingPtr normalize_binding(p::parse_tree::node& node) {
                 if (c->children.size() > 0)
                     list->slurp_target = c->children[0]->string();
             }
-            else
-                list->bindings.push_back(normalize_binding(*c));
+            else {
+                auto element = ListBinding::Entry { normalize_binding(*c->children[0]) };
+                if (c->children.size() > 1)
+                    element.fallback = normalize(*c->children[1]);
+                list->bindings.push_back(std::move(element));
+            }
         }
         return list;
     }
