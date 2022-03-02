@@ -553,16 +553,13 @@ Object BinOp::evaluate(EvaluationContext& ctx) const {
         case Operator::greater_than: return Object::boolean(l > r); break;
         case Operator::greater_than_or_eq: return Object::boolean(l >= r); break;
         case Operator::equal: return Object::boolean(l == r); break;
-        case Operator::not_equal: return Object::boolean(l != r); break;
-        default: throw InternalException();
+        default: return Object::boolean(l != r); break;
         }
     }
     catch (EvalException& e) {
         e.position(source());
         throw;
     }
-
-    throw InternalException();
 }
 
 
@@ -775,14 +772,11 @@ static std::string codepoint_as_string(T it, int nchars) {
         char b = ((codepoint & 0b0000'0000'0011'1111) >> 0) | 0b1000'0000;
         return std::string{a,b};
     }
-    else {
-        char a = ((codepoint & 0b1111'0000'0000'0000) >> 12) | 0b1110'0000;
-        char b = ((codepoint & 0b0000'1111'1100'0000) >>  6) | 0b1000'0000;
-        char c = ((codepoint & 0b0000'0000'0011'1111) >>  0) | 0b1000'0000;
-        return std::string{a,b,c};
-    }
 
-    return "";
+    char a = ((codepoint & 0b1111'0000'0000'0000) >> 12) | 0b1110'0000;
+    char b = ((codepoint & 0b0000'1111'1100'0000) >>  6) | 0b1000'0000;
+    char c = ((codepoint & 0b0000'0000'0011'1111) >>  0) | 0b1000'0000;
+    return std::string{a,b,c};
 }
 
 
@@ -828,7 +822,7 @@ static BindingPtr normalize_binding(p::parse_tree::node& node) {
     if (type == "Grammar::pattern::ident")
         return std::make_unique<IdentifierBinding>(src, node.string());
 
-    else if (type == "Grammar::pattern::list::seq") {
+    else if (type == "Grammar::pattern::list::rule") {
         auto list = std::make_unique<ListBinding>(src);
         for (auto& c : node.children) {
             if (nodetype(*c) == "Grammar::pattern::opt_slurp") {
@@ -846,7 +840,7 @@ static BindingPtr normalize_binding(p::parse_tree::node& node) {
         return list;
     }
 
-    else if (type == "Grammar::pattern::map::seq") {
+    else if (type == "Grammar::pattern::map::rule") {
         auto map = std::make_unique<MapBinding>(src);
         for (auto& c : node.children) {
             if (nodetype(*c) == "Grammar::pattern::def_slurp")
@@ -918,11 +912,8 @@ static uptr<MapElement> normalize_map_element(p::parse_tree::node& node) {
 
 
 AstPtr Gold::normalize(p::parse_tree::node& node) {
-    if (node.is_root()) {
-        if (node.children.size() != 1)
-            throw ParseException();
+    if (node.is_root())
         return normalize(*node.children[0]);
-    }
 
     auto type = nodetype(node);
 
@@ -1004,14 +995,14 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         return std::make_unique<Identifier>(source(node), node.string());
     }
 
-    else if (type == "Grammar::list::seq") {
+    else if (type == "Grammar::list::rule") {
         auto list = std::make_unique<List>(source(node));
         for (auto&& c : node.children)
             list->elements.push_back(normalize_list_element(*c));
         return list;
     }
 
-    else if (type == "Grammar::map::seq") {
+    else if (type == "Grammar::map::rule") {
         auto map = std::make_unique<Map>(source(node));
         for (auto&& c : node.children)
             map->elements.push_back(normalize_map_element(*c));
@@ -1022,7 +1013,7 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         if (node.children.size() == 1)
             return normalize(*node.children[0]);
         return std::make_unique<BinOp>(
-            source(node),
+            source(*node.children[1]),
             normalize(*node.children[0]),
             normalize(*node.children[2]),
             operator_from_string(node.children[1]->string())
@@ -1033,13 +1024,9 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         auto it = node.children.begin();
         auto ast = normalize(**it++);
         while (it != node.children.end()) {
+            auto src = source(**it);
             auto op = operator_from_string((*it++)->string());
-            ast = std::make_unique<BinOp>(
-                source(node),
-                std::move(ast),
-                normalize(**it++),
-                op
-            );
+            ast = std::make_unique<BinOp>(src, std::move(ast), normalize(**it++), op);
         }
         return ast;
     }
