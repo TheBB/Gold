@@ -2,6 +2,7 @@
 
 #include "gold.hpp"
 
+using Catch::Matchers::Contains;
 using namespace Gold;
 
 
@@ -334,4 +335,35 @@ TEST_CASE("Function bindings", "[evaluate]") {
         "in a(1, [2, 3])"
     );
     REQUIRE(obj.unsafe_integer() == 6);
+
+    obj = evaluate_string(
+        "let f = ([y = 1]) => y\n"
+        "in f([])"
+    );
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string(
+        "let q = 1\n"
+        "let f = ([y = q]) => y\n"
+        "in f([])"
+    );
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string(
+        "let f = (q) => ([y = q]) => q\n"
+        "let q = 1\n"
+        "in f(2)([])"
+    );
+    REQUIRE(obj.unsafe_integer() == 2);
+
+    obj = evaluate_string(
+        "let f = (x, {y, z}) => x + y + z\n"
+        "in f(1, {y: 2, z: 3})"
+    );
+    REQUIRE(obj.unsafe_integer() == 6);
+}
+
+
+TEST_CASE("Errors", "[evaluate]") {
+    REQUIRE_THROWS_WITH(evaluate_string("q"), Contains("1:1"));
 }
