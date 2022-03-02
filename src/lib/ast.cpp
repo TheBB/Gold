@@ -69,8 +69,20 @@ std::set<std::string> Binding::binds_identifiers() const {
 }
 
 
+std::set<std::string> Binding::free_identifiers() const {
+    std::set<std::string> retval;
+    free_identifiers(retval);
+    return retval;
+}
+
+
 void IdentifierBinding::dump(std::ostream& os) const {
     os << "Id(" << name << ")";
+}
+
+
+BindingPtr IdentifierBinding::freeze(EvaluationContext&) const {
+    return std::make_unique<IdentifierBinding>(src, name);
 }
 
 
@@ -109,11 +121,37 @@ void ListBinding::dump(std::ostream& os) const {
 }
 
 
+BindingPtr ListBinding::freeze(EvaluationContext& ctx) const {
+    auto retval = std::make_unique<ListBinding>(src);
+    retval->slurp = slurp;
+    retval->slurp_target = slurp_target;
+    for (auto& entry : bindings)
+        retval->bindings.push_back(ListBinding::Entry {
+            entry.binding->freeze(ctx),
+            entry.fallback.has_value() ?
+                std::make_unique<Literal>(
+                    entry.fallback.value()->source(),
+                    entry.fallback.value()->evaluate(ctx)
+                ) : opt<AstPtr>()
+        });
+    return retval;
+}
+
+
 void ListBinding::binds_identifiers(std::set<std::string>& idents) const {
     for (auto& binding : bindings)
         binding.binding->binds_identifiers(idents);
     if (slurp_target.has_value())
         idents.insert(slurp_target.value());
+}
+
+
+void ListBinding::free_identifiers(std::set<std::string>& idents) const {
+    for (auto& binding : bindings) {
+        if (binding.fallback.has_value())
+            binding.fallback.value()->free_identifiers(idents);
+        binding.binding->free_identifiers(idents);
+    }
 }
 
 
@@ -174,11 +212,37 @@ void MapBinding::dump(std::ostream& os) const {
 }
 
 
+BindingPtr MapBinding::freeze(EvaluationContext& ctx) const {
+    auto retval = std::make_unique<MapBinding>(src);
+    retval->slurp_target = slurp_target;
+    for (auto& entry : entries)
+        retval->entries.push_back(MapBinding::Entry {
+            entry.name,
+            entry.binding->freeze(ctx),
+            entry.fallback.has_value() ?
+                std::make_unique<Literal>(
+                    entry.fallback.value()->source(),
+                    entry.fallback.value()->evaluate(ctx)
+                ) : opt<AstPtr>()
+        });
+    return retval;
+}
+
+
 void MapBinding::binds_identifiers(std::set<std::string>& idents) const {
     for (auto& entry : entries)
         entry.binding->binds_identifiers(idents);
     if (slurp_target.has_value())
         idents.insert(slurp_target.value());
+}
+
+
+void MapBinding::free_identifiers(std::set<std::string>& idents) const {
+    for (auto& entry : entries) {
+        if (entry.fallback.has_value())
+            entry.fallback.value()->free_identifiers(idents);
+        entry.binding->free_identifiers(idents);
+    }
 }
 
 
@@ -309,6 +373,7 @@ void LoopListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
 
 void LoopListElement::free_identifiers(std::set<std::string>& idents) const {
     iter->free_identifiers(idents);
+    binding->free_identifiers(idents);
     auto newly_bound = binding->binds_identifiers();
     auto candidates = element->free_identifiers();
     for (auto& p : newly_bound)
@@ -420,6 +485,7 @@ void LoopMapElement::fill(EvaluationContext& ctx) const {
 
 void LoopMapElement::free_identifiers(std::set<std::string>& idents) const {
     iter->free_identifiers(idents);
+    binding->free_identifiers(idents);
     auto newly_bound = binding->binds_identifiers();
     auto candidates = element->free_identifiers();
     for (auto& p : newly_bound)
@@ -522,6 +588,10 @@ void Block::free_identifiers(std::set<std::string>& idents) const {
             if (bound.find(c) == bound.end())
                 idents.insert(c);
         }
+        for (auto& c : binding->free_identifiers()) {
+            if (bound.find(c) == bound.end())
+                idents.insert(c);
+        }
         for (auto& name : binding->binds_identifiers())
             bound.insert(name);
     }
@@ -549,7 +619,7 @@ Object Block::evaluate(EvaluationContext& ctx) const {
 void Function::dump(std::ostream& os) const {
     os << "Function(";
     bool first = true;
-    for (auto& p : *parameters) {
+    for (auto& p : parameters) {
         if (!first)
             os << ", ";
         os << *p;
@@ -563,7 +633,8 @@ void Function::dump(std::ostream& os) const {
 
 void Function::free_identifiers(std::set<std::string>& idents) const {
     auto candidates = expression->free_identifiers();
-    for (auto& p : *parameters) {
+    for (auto& p : parameters) {
+        p->free_identifiers(idents);
         auto bound = p->binds_identifiers();
         for (auto& c : bound)
             candidates.erase(c);
@@ -586,7 +657,10 @@ Object Function::evaluate(EvaluationContext& ctx) const {
         throw;
     }
 
-    closure->parameters = parameters;
+    closure->parameters = std::make_shared<std::vector<BindingPtr>>();
+    for (auto& parameter : parameters)
+        closure->parameters->push_back(parameter->freeze(ctx));
+
     closure->expression = expression;
     return Object::closure(closure);
 }
@@ -989,7 +1063,7 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
     else if (type == "Grammar::func::rule") {
         auto function = std::make_unique<Function>(source(node));
         for (auto&& c : node.children[0]->children)
-            function->parameters->push_back(normalize_binding(*c));
+            function->parameters.push_back(normalize_binding(*c));
         function->expression = normalize(*node.children[1]);
         return function;
     }

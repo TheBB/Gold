@@ -73,8 +73,13 @@ struct Binding : public Serializable {
     bool bind(EvaluationContext&, Object, bool = true) const;
     virtual bool do_bind(EvaluationContext&, Object) const = 0;
 
+    virtual BindingPtr freeze(EvaluationContext& ctx) const = 0;
+
     std::set<std::string> binds_identifiers() const;
     virtual void binds_identifiers(std::set<std::string>&) const = 0;
+
+    std::set<std::string> free_identifiers() const;
+    virtual void free_identifiers(std::set<std::string>&) const = 0;
 
     static BindingPtr deserialize(Deserializer&);
 
