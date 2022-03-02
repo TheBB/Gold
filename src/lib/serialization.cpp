@@ -264,11 +264,11 @@ AstPtr AstNode::deserialize(Deserializer& is) {
         return std::make_unique<Block>(source, std::move(bindings), AstNode::deserialize(is));
     }
     case 'F': {
-        auto parameters = is.read<sptr<std::vector<BindingPtr>>>([&is]() {
+        auto parameters = is.read<std::vector<BindingPtr>>([&is]() {
             return Binding::deserialize(is);
         });
         auto expression = AstNode::deserialize(is);
-        return std::make_unique<Function>(source, parameters, std::move(expression));
+        return std::make_unique<Function>(source, std::move(parameters), std::move(expression));
     }
     case 'C': {
         auto cond = AstNode::deserialize(is);

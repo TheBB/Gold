@@ -36,7 +36,9 @@ struct IdentifierBinding : public Binding {
 
     IdentifierBinding(Source src, std::string name) : Binding(src), name(name) {}
     virtual void dump(std::ostream&) const;
+    virtual BindingPtr freeze(EvaluationContext& ctx) const;
     virtual void binds_identifiers(std::set<std::string>&) const;
+    virtual void free_identifiers(std::set<std::string>&) const {}
     virtual bool do_bind(EvaluationContext&, Object) const;
     virtual void do_serialize(Serializer&) const;
 };
@@ -56,7 +58,9 @@ struct ListBinding : public Binding {
     ListBinding(Source src, std::vector<Entry> entries, bool slurp, opt<std::string> slurp_target)
         : Binding(src), bindings(std::move(entries)), slurp(slurp), slurp_target(slurp_target) {}
     virtual void dump(std::ostream&) const;
+    virtual BindingPtr freeze(EvaluationContext& ctx) const;
     virtual void binds_identifiers(std::set<std::string>&) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
     virtual bool do_bind(EvaluationContext&, Object) const;
     virtual void do_serialize(Serializer&) const;
 };
@@ -76,7 +80,9 @@ struct MapBinding : public Binding {
     MapBinding(Source src, std::vector<Entry> entries, opt<std::string> slurp_target)
         : Binding(src), entries(std::move(entries)), slurp_target(slurp_target) {}
     virtual void dump(std::ostream&) const;
+    virtual BindingPtr freeze(EvaluationContext& ctx) const;
     virtual void binds_identifiers(std::set<std::string>&) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
     virtual bool do_bind(EvaluationContext&, Object) const;
     virtual void do_serialize(Serializer&) const;
 };
@@ -303,12 +309,11 @@ struct Block : public AstNode {
 
 
 struct Function : public AstNode {
-    sptr<std::vector<BindingPtr>> parameters;
+    std::vector<BindingPtr> parameters;
     sptr<AstNode> expression;
 
-    Function(Source src)
-        : AstNode(src), parameters(new std::vector<BindingPtr>()), expression(nullptr) {}
-    Function(Source src, sptr<std::vector<BindingPtr>> parameters, sptr<AstNode> expression)
+    Function(Source src) : AstNode(src) {}
+    Function(Source src, std::vector<BindingPtr> parameters, sptr<AstNode> expression)
         : AstNode(src), parameters(std::move(parameters)), expression(expression) {}
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
