@@ -366,4 +366,6 @@ TEST_CASE("Function bindings", "[evaluate]") {
 
 TEST_CASE("Errors", "[evaluate]") {
     REQUIRE_THROWS_WITH(evaluate_string("q"), Contains("1:1"));
+    REQUIRE_THROWS_WITH(evaluate_string("let [a] = 1 in a"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("let {a} = 1 in a"), Contains("1:5"));
 }

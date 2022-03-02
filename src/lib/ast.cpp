@@ -828,7 +828,7 @@ static BindingPtr normalize_binding(p::parse_tree::node& node) {
     if (type == "Grammar::pattern::ident")
         return std::make_unique<IdentifierBinding>(src, node.string());
 
-    else if (type == "Grammar::pattern::list::seq") {
+    else if (type == "Grammar::pattern::list::rule") {
         auto list = std::make_unique<ListBinding>(src);
         for (auto& c : node.children) {
             if (nodetype(*c) == "Grammar::pattern::opt_slurp") {
@@ -846,7 +846,7 @@ static BindingPtr normalize_binding(p::parse_tree::node& node) {
         return list;
     }
 
-    else if (type == "Grammar::pattern::map::seq") {
+    else if (type == "Grammar::pattern::map::rule") {
         auto map = std::make_unique<MapBinding>(src);
         for (auto& c : node.children) {
             if (nodetype(*c) == "Grammar::pattern::def_slurp")
@@ -1004,14 +1004,14 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         return std::make_unique<Identifier>(source(node), node.string());
     }
 
-    else if (type == "Grammar::list::seq") {
+    else if (type == "Grammar::list::rule") {
         auto list = std::make_unique<List>(source(node));
         for (auto&& c : node.children)
             list->elements.push_back(normalize_list_element(*c));
         return list;
     }
 
-    else if (type == "Grammar::map::seq") {
+    else if (type == "Grammar::map::rule") {
         auto map = std::make_unique<Map>(source(node));
         for (auto&& c : node.children)
             map->elements.push_back(normalize_map_element(*c));
