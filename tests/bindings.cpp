@@ -54,6 +54,33 @@ TEST_CASE("Identifier resolution: blocks", "[bindings]") {
 
     ast = parse_string("let a = b\nin c");
     REQUIRE(ast->free_identifiers() == std::set<std::string> {"b", "c"});
+
+    ast = parse_string("let [a] = b in a");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"b"});
+
+    ast = parse_string("let [a, ...] = b in a");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"b"});
+
+    ast = parse_string("let [a, ...x] = b in a");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"b"});
+
+    ast = parse_string("let [a, ...x] = b in x");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"b"});
+
+    ast = parse_string("let {a} = b in a");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"b"});
+
+    ast = parse_string("let {a: b} = b in a");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"a", "b"});
+
+    ast = parse_string("let {a: a} = b in a");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"b"});
+
+    ast = parse_string("let {a, ...x} = b in a");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"b"});
+
+    // ast = parse_string("let {a = q, ...x} = b in a");
+    // REQUIRE(ast->free_identifiers() == std::set<std::string> {"b", "q"});
 }
 
 

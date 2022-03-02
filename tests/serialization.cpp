@@ -178,6 +178,48 @@ TEST_CASE("Serialization of opseq ASTs", "[serialization]") {
 TEST_CASE("Serialization of block ASTs", "[serialization]") {
     auto ast = parse_string("let a = 1\nlet b = 2\nin a + b");
     REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let [a] = [1] in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let [a, b] = [1, 2] in [a, b]");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let [a = 1] = [] in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let [a, ...] = [1] in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let [a, ...x] = [1] in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let {a: b} = c in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let {a} = c in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let {a = 1} = c in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let {a: b = 1} = c in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let {b, a = 1} = c in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let {a: b, ...x} = c in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let {a, ...x} = c in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let {a = 1, ...x} = c in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+
+    ast = parse_string("let {a: b = 1, ...x} = c in a");
+    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 

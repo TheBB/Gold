@@ -239,6 +239,18 @@ TEST_CASE("Operator expressions", "[parsing]") {
         "BinOp(BinOp(Lit(1) + Lit(2)) - "
         "BinOp(BinOp(BinOp(Lit(3) * Lit(4)) // Lit(5)) / Lit(6)))"
     );
+
+    ast = parse_string("1 < 2");
+    REQUIRE(ast->dump() == "BinOp(Lit(1) < Lit(2))");
+
+    ast = parse_string("1 > 2 <= 3 >= 4 == 5 != 6");
+    REQUIRE(ast->dump() ==
+        "BinOp(BinOp(BinOp(BinOp(BinOp(Lit(1) > Lit(2)) "
+        "<= Lit(3)) >= Lit(4)) == Lit(5)) != Lit(6))"
+    );
+
+    ast = parse_string("1 and 2 or 3");
+    REQUIRE(ast->dump() == "BinOp(BinOp(Lit(1) and Lit(2)) or Lit(3))");
 }
 
 

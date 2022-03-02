@@ -31,9 +31,8 @@ static std::string operator_to_string(Operator op) {
     case Operator::equal: return "==";
     case Operator::not_equal: return "!=";
     case Operator::conjunction: return "and";
-    case Operator::disjunction: return "or";
+    default: return "or";
     }
-    return "?";
 }
 
 
@@ -51,12 +50,6 @@ static Operator operator_from_string(std::string value) {
     if (value == "!=") return Operator::not_equal;
     if (value == "and") return Operator::conjunction;
     return Operator::disjunction;
-}
-
-
-std::ostream& operator<<(std::ostream& os, Operator op) {
-    os << operator_to_string(op);
-    return os;
 }
 
 
