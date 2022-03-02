@@ -146,7 +146,7 @@ void IdentifierBinding::do_serialize(Serializer& os) const {
 
 
 void ListBinding::do_serialize(Serializer& os) const {
-    os << 'L';
+    os << 'L' << src;
     os.write(bindings, [&os](const Entry& entry) {
         os << entry.binding << entry.fallback;
     });
@@ -155,7 +155,7 @@ void ListBinding::do_serialize(Serializer& os) const {
 
 
 void MapBinding::do_serialize(Serializer& os) const {
-    os << 'M';
+    os << 'M' << src;
     os.write(entries, [&os](const Entry& entry) {
         os << entry.name << entry.binding << entry.fallback;
     });
