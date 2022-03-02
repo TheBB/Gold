@@ -329,7 +329,7 @@ namespace Grammar
     struct disj: lbinop<conj::operation, keyword::Or> {};
 
     // Finalize
-    struct expression: p::seq<p::sor<eq::operation, composite>> {};
+    struct expression: p::seq<p::sor<disj::operation, composite>> {};
     struct file: p::seq<p::bof, expression, prepad<p::eof>> {};
 
     template<typename Rule>
