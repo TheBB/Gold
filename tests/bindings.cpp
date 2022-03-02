@@ -27,12 +27,30 @@ TEST_CASE("Indentifier resolution: Identifiers", "[bindings]") {
 TEST_CASE("Indentifier resolution: Lists", "[bindings]") {
     auto ast = parse_string("[a, b, 1, c, 2.1e3]");
     REQUIRE(ast->free_identifiers() == std::set<std::string> {"a", "b", "c"});
+
+    ast = parse_string("[if x: y]");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"x", "y"});
+
+    ast = parse_string("[for x in y: f(x)]");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"y", "f"});
+
+    ast = parse_string("[...x]");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"x"});
 }
 
 
 TEST_CASE("Indentifier resolution: Maps", "[bindings]") {
     auto ast = parse_string("{a: 1, b: a, c: dingbob}");
     REQUIRE(ast->free_identifiers() == std::set<std::string> {"a", "dingbob"});
+
+    ast = parse_string("{if x: a: y}");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"x", "y"});
+
+    ast = parse_string("{for x in y: a: x}");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"y"});
+
+    ast = parse_string("{...z}");
+    REQUIRE(ast->free_identifiers() == std::set<std::string> {"z"});
 }
 
 

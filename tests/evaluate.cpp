@@ -23,6 +23,10 @@ TEST_CASE("Evaluating literals", "[evaluate]") {
     REQUIRE(evaluate_string("\"dingbob\"").unsafe_string() == "dingbob");
     REQUIRE(evaluate_string("\"ding\\\"bob\"").unsafe_string() == "ding\"bob");
     REQUIRE(evaluate_string("\"ding\\\\bob\"").unsafe_string() == "ding\\bob");
+
+    REQUIRE(evaluate_string("\"\\u0021\"").unsafe_string() == "!");
+    REQUIRE(evaluate_string("\"\\u004c\"").unsafe_string() == "L");
+    REQUIRE(evaluate_string("\"\\u006D\"").unsafe_string() == "m");
 }
 
 
@@ -128,6 +132,26 @@ TEST_CASE("Arithmetic", "[evaluate]") {
 }
 
 
+TEST_CASE("Comparison", "[evaluate]") {
+    REQUIRE(evaluate_string("1 < 2").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("1 > 2").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("2 <= 2").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("1 >= 2").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("1 == 2").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("2 == 2").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("1 != 2").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("2 != 2").unsafe_boolean() == false);
+}
+
+
+TEST_CASE("Logic", "[evaluate]") {
+    REQUIRE(evaluate_string("true and 1").unsafe_integer() == 1);
+    REQUIRE(evaluate_string("false and 1").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("true or 1").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("false or 1").unsafe_integer() == 1);
+}
+
+
 TEST_CASE("List concatenation", "[evaluate]") {
     auto obj = evaluate_string("[1, 2] + [3]");
     REQUIRE(obj.size() == 3);
@@ -192,6 +216,11 @@ TEST_CASE("Branching in collections", "[evaluate]") {
     auto obj = evaluate_string("[if true then 1 else 2, 3]");
     REQUIRE(obj.size() == 2);
     REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 3);
+
+    obj = evaluate_string("[if false then 1 else 2, 3]");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].unsafe_integer() == 2);
     REQUIRE(obj[1].unsafe_integer() == 3);
 }
 
@@ -350,7 +379,7 @@ TEST_CASE("Function bindings", "[evaluate]") {
     REQUIRE(obj.unsafe_integer() == 1);
 
     obj = evaluate_string(
-        "let f = (q) => ([y = q]) => q\n"
+        "let f = (q) => ([y = q]) => y\n"
         "let q = 1\n"
         "in f(2)([])"
     );
@@ -361,11 +390,64 @@ TEST_CASE("Function bindings", "[evaluate]") {
         "in f(1, {y: 2, z: 3})"
     );
     REQUIRE(obj.unsafe_integer() == 6);
+
+    obj = evaluate_string(
+        "let f = ({y = 1}) => y\n"
+        "in f({})"
+    );
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string(
+        "let q = 1\n"
+        "let f = ({y = q}) => y\n"
+        "in f({})"
+    );
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string(
+        "let f = (q) => ({y = q}) => y\n"
+        "let q = 1\n"
+        "in f(2)({})"
+    );
+    REQUIRE(obj.unsafe_integer() == 2);
 }
 
 
 TEST_CASE("Errors", "[evaluate]") {
+    // Look-up non-existing binding
     REQUIRE_THROWS_WITH(evaluate_string("q"), Contains("1:1"));
+    REQUIRE_THROWS_WITH(evaluate_string("() => q"), Contains("1:1"));
+
+    // Binding fails to match
     REQUIRE_THROWS_WITH(evaluate_string("let [a] = 1 in a"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("let [] = [1] in 1"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("let [a, ...] = [] in a"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("let [[a]] = [1] in a"), Contains("1:5"));
     REQUIRE_THROWS_WITH(evaluate_string("let {a} = 1 in a"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("let {a} = {} in a"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("let {a: [q]} = {a: 1} in q"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("[for [[a]] in [1]: a]"), Contains("1:6"));
+    REQUIRE_THROWS_WITH(evaluate_string("{for [[a]] in [1]: b: a}"), Contains("1:6"));
+
+    // Splatting wrong type
+    REQUIRE_THROWS_WITH(evaluate_string("[...1]"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("[for x in 1: x]"), Contains("1:11"));
+    REQUIRE_THROWS_WITH(evaluate_string("{...1}"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("{for x in 1: a: x}"), Contains("1:11"));
+
+    // Branching on non-boolean
+    REQUIRE_THROWS_WITH(evaluate_string("[if 1: 1]"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("{if 1: a: 1}"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("if 1 then 2 else 3"), Contains("1:4"));
+
+    // Maps without strings as keys
+    REQUIRE_THROWS_WITH(evaluate_string("{$1: 1}"), Contains("1:3"));
+
+    // Binary operations
+    REQUIRE_THROWS_WITH(evaluate_string("1 + f"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("1 + []"), Contains("1:3"));
+
+    // Postfix operators on wrong types
+    REQUIRE_THROWS_WITH(evaluate_string("1()"), Contains("1:2"));
+    REQUIRE_THROWS_WITH(evaluate_string("1[1]"), Contains("1:2"));
 }
