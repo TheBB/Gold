@@ -83,20 +83,48 @@ TEST_CASE("Serialization of lists", "[serialization]") {
         Object::boolean(false),
     }).serialize());
     REQUIRE(val.type() == Object::Type::list);
-    REQUIRE(val.unsafe_list()->size() == 4);
-    REQUIRE((*val.unsafe_list())[0].unsafe_integer() == 1);
+    REQUIRE(val.size() == 4);
+    REQUIRE(val[0].unsafe_integer() == 1);
+}
+
+
+TEST_CASE("Serialization of closures", "[serialization]") {
+    auto val = Object::deserialize(evaluate_string("(x, y) => x + y").serialize());
+    REQUIRE(val.type() == Object::Type::closure);
+    REQUIRE(val({Object::integer(1), Object::integer(2)}).unsafe_integer() == 3);
+
+    val = Object::deserialize(evaluate_string("let a = 1 in () => a").serialize());
+    REQUIRE(val.type() == Object::Type::closure);
+    REQUIRE(val({}).unsafe_integer() == 1);
+
+    val = Object::deserialize(evaluate_string("(x) => [1, if x: 1, for t in [x]: t, ...[x]]").serialize());
+    REQUIRE(val({Object::boolean(true)}).size() == 4);
+    REQUIRE(val({Object::boolean(false)}).size() == 3);
+
+    val = Object::deserialize(evaluate_string(
+        "(x) => {a: 1, if x: b: 1, for [k,v] in items({c: 1}): $k: v, ...{d: 1}}"
+    ).serialize());
+    REQUIRE(val({Object::boolean(true)}).size() == 4);
+    REQUIRE(val({Object::boolean(false)}).size() == 3);
+}
+
+
+TEST_CASE("Serialization of builtins", "[serialization]") {
+    auto val = Object::deserialize(evaluate_string("int").serialize());
+    REQUIRE(val.type() == Object::Type::builtin);
+    REQUIRE(val({Object::string("12")}).unsafe_integer() == 12);
 }
 
 
 TEST_CASE("Serialization of duplicate object", "[serialization]") {
     auto val = Object::deserialize(evaluate_string("let a = [] in [a, a]").serialize());
     REQUIRE(val.type() == Object::Type::list);
-    REQUIRE(val.unsafe_list()->size() == 2);
-    REQUIRE(val.unsafe_list()->at(0).type() == Object::Type::list);
-    REQUIRE(val.unsafe_list()->at(0).unsafe_list()->size() == 0);
-    REQUIRE(val.unsafe_list()->at(1).type() == Object::Type::list);
-    REQUIRE(val.unsafe_list()->at(1).unsafe_list()->size() == 0);
-    REQUIRE(val.unsafe_list()->at(0).unsafe_list().get() == val.unsafe_list()->at(1).unsafe_list().get());
+    REQUIRE(val.size() == 2);
+    REQUIRE(val[0].type() == Object::Type::list);
+    REQUIRE(val[0].size() == 0);
+    REQUIRE(val[1].type() == Object::Type::list);
+    REQUIRE(val[1].size() == 0);
+    REQUIRE(val[0].unsafe_list().get() == val[1].unsafe_list().get());
 }
 
 

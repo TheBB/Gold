@@ -1032,8 +1032,6 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
     }
 
     else if (type == "Grammar::block::rule") {
-        if (node.children.size() == 1)
-            return normalize(*node.children[0]);
         auto block = std::make_unique<Block>(source(node));
         for (auto&& c : node.children) {
             if (nodetype(*c) == "Grammar::block::binding")

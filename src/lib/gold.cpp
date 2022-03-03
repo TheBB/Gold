@@ -219,6 +219,12 @@ bool Object::operator!=(Object other) const {
 }
 
 
+Object Object::operator()(const std::vector<Object>& args) const {
+    EvaluationContext ctx;
+    return (*this)(ctx, args);
+}
+
+
 Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& args) const {
     if (type() == Type::builtin)
         return std::get<Builtin>(_data).callable(ctx, args);
@@ -244,8 +250,8 @@ Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& arg
             (*id_it++)->bind(ctx, *arg_it++);
         retval = closure->expression->evaluate(ctx);
     }
-    catch (const std::exception&) {
-        ctx.pop_namespace();
+    catch (const EvalException&) {
+        ctx.pop_namespace(2);
         throw;
     }
 
@@ -304,6 +310,13 @@ size_t Object::size() const {
             throw EvalException(fmt::format("unsuppurted type for size(): `{}`", type_name()));
         }
     }, _data);
+}
+
+
+std::string Object::dump()const {
+    std::ostringstream os;
+    dump(os);
+    return os.str();
 }
 
 
@@ -584,7 +597,7 @@ static Object builtin_items(EvaluationContext& ctx, const std::vector<Object>& a
             return Object::list(result);
         },
         [&map](auto&&) -> Object {
-            throw EvalException(fmt::format("unsupported type for `keys()`: `{}`", map.type_name()));
+            throw EvalException(fmt::format("unsupported type for `items()`: `{}`", map.type_name()));
         }
     }, map.data());
 }

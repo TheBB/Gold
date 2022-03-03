@@ -113,7 +113,7 @@ public:
 
     using Builtin = struct {
         std::string name;
-        std::function<Object(EvaluationContext& ctx, const std::vector<Object>&)> callable;
+        std::function<Object(EvaluationContext&, const std::vector<Object>&)> callable;
     };
 
     using Variant = std::variant<Null, Integer, String, Boolean, Floating, Map, List, Closure, Builtin>;
@@ -143,11 +143,9 @@ public:
 
     static Object map(Map value) { return Object(value); }
     static Object map(MapT value) { return Object(std::make_shared<MapT>(value)); }
-    static Object map(MapT& value) { return Object(std::make_shared<MapT>(value)); }
 
     static Object list(List value) { return Object(value); }
     static Object list(ListT value) { return Object(std::make_shared<ListT>(value)); }
-    static Object list(ListT& value) { return Object(std::make_shared<ListT>(value)); }
 
     static Object closure(Closure value) { return Object(value); }
     static Object builtin(Builtin value) { return Object(value); }
@@ -187,6 +185,7 @@ public:
     bool operator==(Object) const;
     bool operator!=(Object) const;
 
+    Object operator()(const std::vector<Object>&) const;
     Object operator()(EvaluationContext&, const std::vector<Object>&) const;
 
     Object operator[](Object) const;
@@ -200,6 +199,7 @@ public:
 
     friend std::ostream& operator<<(std::ostream& os, const Object& obj) { obj.dump(os); return os; }
     void dump(std::ostream&) const;
+    std::string dump() const;
 };
 
 
@@ -221,15 +221,8 @@ public:
 
     template<typename T>
     Serializer& operator<<(const sptr<T>& v) {
-        void* ptr = v.get();
-        auto entry = pointers.find(ptr);
-        if (entry == pointers.end()) {
-            intmax_t id = pointers.size();
-            pointers[ptr] = id;
-            return *this << 'D' << id << *v;
-        }
-        else
-            return *this << 'R' << entry->second;
+        write(v, [this](const T& v) { *this << v; });
+        return *this;
     }
 
     template<typename T>
@@ -246,7 +239,7 @@ public:
     template<typename K, typename V>
     Serializer& operator<<(const std::map<K,V>& m) {
         write(m, [this](const K& k, const V& v) { *this << k << v; });
-        return  *this;
+        return *this;
     }
 
     template<typename T>
@@ -261,6 +254,20 @@ public:
     Serializer& operator<<(const Serializable& obj) {
         obj.serialize(*this);
         return *this;
+    }
+
+    template<typename T, typename F>
+    void write(const sptr<T>& v, F writer) {
+        void* ptr = v.get();
+        auto entry = pointers.find(ptr);
+        if (entry == pointers.end()) {
+            intmax_t id = pointers.size();
+            pointers[ptr] = id;
+            *this << 'D' << id;
+            writer(*v);
+        }
+        else
+            *this << 'R' << entry->second;
     }
 
     template<typename T, typename F>
@@ -359,7 +366,8 @@ private:
         if (k == 'R')
             p = std::static_pointer_cast<T>(pointers[id]);
         else {
-            p = sptr<T>(read<T*>(f));
+            // p = sptr<T>(read<T*>(f));
+            p = sptr<T>(f());
             pointers[id] = p;
         }
     }

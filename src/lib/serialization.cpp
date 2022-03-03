@@ -54,7 +54,12 @@ void Object::do_serialize(Serializer& s) const {
         [&s](Object::Floating v) { s << 'F' << v; },
         [&s](Object::Map v) { s << 'M' << v; },
         [&s](Object::List v) { s << 'L' << v; },
-        [&s](Object::Closure v) { s << 'C' << v->nonlocals << v->parameters << v->expression; },
+        [&s](Object::Closure v) {
+            s << 'C';
+            s.write(v, [&s](Object::ClosureT& c) {
+                s << c.nonlocals << c.parameters << c.expression;
+            });
+        },
         [&s](Object::Builtin v) { s << 'U' << v.name; }
     }, data());
 }
@@ -69,25 +74,35 @@ Object Object::deserialize(Deserializer& is) {
     case 'B': return Object::boolean(is.read<Object::Boolean>());
     case 'F': return Object::floating(is.read<Object::Floating>());
     case 'M': return Object::map(is.read<Object::Map>([&is]() {
-        auto key = is.read<std::string>();
-        auto value = Object::deserialize(is);
-        return std::pair<std::string, Object> { key, value };
-    }));
-    case 'L': return Object::list(is.read<Object::List>([&is]() {
-        return Object::deserialize(is);
-    }));
-    case 'C': {
-        auto closure = std::make_shared<Object::ClosureT>();
-        closure->nonlocals = is.read<std::map<std::string, Object>>([&is]() {
+        return is.read<Object::MapT*>([&is]() {
             auto key = is.read<std::string>();
             auto value = Object::deserialize(is);
-            return std::pair(key, value);
+            return std::pair<std::string, Object> { key, value };
         });
-        closure->parameters = is.read<sptr<std::vector<BindingPtr>>>([&is]() {
-            return Binding::deserialize(is);
+    }));
+    case 'L': return Object::list(is.read<Object::List>([&is]() {
+        return is.read<Object::ListT*>([&is]() {
+            return Object::deserialize(is);
         });
-        closure->expression = AstNode::deserialize(is);
-        return Object::closure(closure);
+    }));
+    case 'C': {
+        return Object::closure(is.read<Object::Closure>([&is]() {
+            auto closure = new Object::ClosureT;
+            closure->nonlocals = is.read<std::map<std::string, Object>>([&is]() {
+                auto key = is.read<std::string>();
+                auto value = Object::deserialize(is);
+                return std::pair(key, value);
+            });
+            closure->parameters = is.read<sptr<std::vector<BindingPtr>>>([&is]() {
+                return is.read<std::vector<BindingPtr>*>([&is]() {
+                    return Binding::deserialize(is);
+                });
+            });
+            closure->expression = is.read<sptr<AstNode>>([&is]() {
+                return AstNode::deserialize(is).release();
+            });
+            return closure;
+        }));
     }
     case 'U': return builtins[is.read<std::string>()];
     }

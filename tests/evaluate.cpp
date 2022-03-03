@@ -27,6 +27,8 @@ TEST_CASE("Evaluating literals", "[evaluate]") {
     REQUIRE(evaluate_string("\"\\u0021\"").unsafe_string() == "!");
     REQUIRE(evaluate_string("\"\\u004c\"").unsafe_string() == "L");
     REQUIRE(evaluate_string("\"\\u006D\"").unsafe_string() == "m");
+
+    REQUIRE(evaluate_string("\"\\b\\f\\n\\r\\t\"").unsafe_string() == "\b\f\n\r\t");
 }
 
 
@@ -121,12 +123,22 @@ TEST_CASE("Arithmetic", "[evaluate]") {
     REQUIRE(evaluate_string("3 + 2 - 5").unsafe_integer() == 0);
     REQUIRE(evaluate_string("3 - -5").unsafe_integer() == 8);
     REQUIRE(evaluate_string("2 * 4").unsafe_integer() == 8);
+    REQUIRE(evaluate_string("2.0 * 4").unsafe_floating() == 8.0);
+    REQUIRE(evaluate_string("2 * 4.0").unsafe_floating() == 8.0);
+    REQUIRE(evaluate_string("2.0 * 4.0").unsafe_floating() == 8.0);
     REQUIRE(evaluate_string("2 * 4 + 1").unsafe_integer() == 9);
     REQUIRE(evaluate_string("2 * (4 + 1)").unsafe_integer() == 10);
     REQUIRE(evaluate_string("3 / 2").unsafe_floating() == 1.5);
+    REQUIRE(evaluate_string("3.0 / 2").unsafe_floating() == 1.5);
+    REQUIRE(evaluate_string("3 / 2.0").unsafe_floating() == 1.5);
+    REQUIRE(evaluate_string("3.0 / 2.0").unsafe_floating() == 1.5);
     REQUIRE(evaluate_string("3 // 2").unsafe_integer() == 1);
     REQUIRE(evaluate_string("1 + 2.0").unsafe_floating() == 3.0);
+    REQUIRE(evaluate_string("1.0 + 2").unsafe_floating() == 3.0);
+    REQUIRE(evaluate_string("1.0 + 2.0").unsafe_floating() == 3.0);
     REQUIRE(evaluate_string("1.0 - 2.0").unsafe_floating() == -1.0);
+    REQUIRE(evaluate_string("1.0 - 2").unsafe_floating() == -1.0);
+    REQUIRE(evaluate_string("1 - 2.0").unsafe_floating() == -1.0);
     REQUIRE(evaluate_string("1 - 2 + 3").unsafe_integer() == 2);
     REQUIRE(evaluate_string("2 // 2 * 2").unsafe_integer() == 2);
 }
@@ -134,11 +146,43 @@ TEST_CASE("Arithmetic", "[evaluate]") {
 
 TEST_CASE("Comparison", "[evaluate]") {
     REQUIRE(evaluate_string("1 < 2").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("1 < 2.0").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("1.0 < 2").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("1.0 < 2.0").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("\"a\" < \"b\"").unsafe_boolean() == true);
     REQUIRE(evaluate_string("1 > 2").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("1.0 > 2").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("1 > 2.0").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("1.0 > 2.0").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("\"a\" > \"b\"").unsafe_boolean() == false);
     REQUIRE(evaluate_string("2 <= 2").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("2.0 <= 2").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("2 <= 2.0").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("2.0 <= 2.0").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("\"a\" <= \"b\"").unsafe_boolean() == true);
     REQUIRE(evaluate_string("1 >= 2").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("1.0 >= 2").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("1 >= 2.0").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("1.0 >= 2.0").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("\"a\" >= \"b\"").unsafe_boolean() == false);
     REQUIRE(evaluate_string("1 == 2").unsafe_boolean() == false);
     REQUIRE(evaluate_string("2 == 2").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("2.0 == 2.0").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("2 == 2.0").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("2.0 == 2").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("\"a\" == \"b\"").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("true == false").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("null == null").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("{} == {}").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("{a: 1} == {a: 1}").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("{a: 2} == {a: 1}").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("{a: 1} == {a: 1, b: 1}").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("{a: 1} == {a: 1, a: 1}").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("[] == []").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("[1] == []").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("[1] == [2]").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("[1] == [1]").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("[] == {}").unsafe_boolean() == false);
     REQUIRE(evaluate_string("1 != 2").unsafe_boolean() == true);
     REQUIRE(evaluate_string("2 != 2").unsafe_boolean() == false);
 }
@@ -149,6 +193,8 @@ TEST_CASE("Logic", "[evaluate]") {
     REQUIRE(evaluate_string("false and 1").unsafe_boolean() == false);
     REQUIRE(evaluate_string("true or 1").unsafe_boolean() == true);
     REQUIRE(evaluate_string("false or 1").unsafe_integer() == 1);
+    REQUIRE(evaluate_string("null or 1").unsafe_integer() == 1);
+    REQUIRE(evaluate_string("1 or 1").unsafe_integer() == 1);
 }
 
 
@@ -413,6 +459,81 @@ TEST_CASE("Function bindings", "[evaluate]") {
 }
 
 
+TEST_CASE("Builtins", "[evalute]") {
+    REQUIRE(evaluate_string("len([])").unsafe_integer() == 0);
+    REQUIRE(evaluate_string("len([1,2,3])").unsafe_integer() == 3);
+    REQUIRE(evaluate_string("len({})").unsafe_integer() == 0);
+    REQUIRE(evaluate_string("len({a: 1, b: 2})").unsafe_integer() == 2);
+
+    auto obj = evaluate_string("range(3)");
+    REQUIRE(obj.size() == 3);
+    REQUIRE(obj[0].unsafe_integer() == 0);
+    REQUIRE(obj[1].unsafe_integer() == 1);
+    REQUIRE(obj[2].unsafe_integer() == 2);
+
+    obj = evaluate_string("range(1, 3)");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 2);
+
+    obj = evaluate_string("map((x) => x+1, range(3))");
+    REQUIRE(obj.size() == 3);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 2);
+    REQUIRE(obj[2].unsafe_integer() == 3);
+
+    obj = evaluate_string("filter((x) => x<=3, range(5))");
+    REQUIRE(obj.size() == 4);
+    REQUIRE(obj[0].unsafe_integer() == 0);
+    REQUIRE(obj[1].unsafe_integer() == 1);
+    REQUIRE(obj[2].unsafe_integer() == 2);
+    REQUIRE(obj[3].unsafe_integer() == 3);
+
+    obj = evaluate_string("items({a: 1, b: 2})");
+    REQUIRE(obj.size() == 2);
+    REQUIRE(obj[0].size() == 2);
+    REQUIRE(obj[0][0].unsafe_string() == "a");
+    REQUIRE(obj[0][1].unsafe_integer() == 1);
+    REQUIRE(obj[1].size() == 2);
+    REQUIRE(obj[1][0].unsafe_string() == "b");
+    REQUIRE(obj[1][1].unsafe_integer() == 2);
+}
+
+
+TEST_CASE("Type conversion", "[evaluate]") {
+    REQUIRE(evaluate_string("int(1)").unsafe_integer() == 1);
+    REQUIRE(evaluate_string("int(true)").unsafe_integer() == 1);
+    REQUIRE(evaluate_string("int(false)").unsafe_integer() == 0);
+    REQUIRE(evaluate_string("int(1.2)").unsafe_integer() == 1);
+    REQUIRE(evaluate_string("int(-1.2)").unsafe_integer() == -1);
+    REQUIRE(evaluate_string("int(\"-3\")").unsafe_integer() == -3);
+    REQUIRE(evaluate_string("bool(1)").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("bool(0)").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("bool(1.5)").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("bool(0.0)").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("bool(true)").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("bool(false)").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("bool(null)").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("bool([])").unsafe_boolean() == true);
+    REQUIRE(evaluate_string("str(1)").unsafe_string() == "1");
+    REQUIRE(evaluate_string("str(1.2)").unsafe_string() == "1.2");
+    REQUIRE(evaluate_string("str(\"delta\")").unsafe_string() == "delta");
+    REQUIRE(evaluate_string("str(true)").unsafe_string() == "true");
+    REQUIRE(evaluate_string("str(false)").unsafe_string() == "false");
+    REQUIRE(evaluate_string("str(null)").unsafe_string() == "null");
+    REQUIRE(evaluate_string("float(1)").unsafe_floating() == 1.0);
+    REQUIRE(evaluate_string("float(1.0)").unsafe_floating() == 1.0);
+    REQUIRE(evaluate_string("float(true)").unsafe_floating() == 1.0);
+    REQUIRE(evaluate_string("float(false)").unsafe_floating() == 0.0);
+    REQUIRE(evaluate_string("float(\"1.2\")").unsafe_floating() == 1.2);
+}
+
+
+TEST_CASE("Import", "[evaluate]") {
+    REQUIRE(evaluate_string("import(\"std\").version").unsafe_string() == "0.1.0");
+}
+
+
 TEST_CASE("Errors", "[evaluate]") {
     // Look-up non-existing binding
     REQUIRE_THROWS_WITH(evaluate_string("q"), Contains("1:1"));
@@ -446,8 +567,44 @@ TEST_CASE("Errors", "[evaluate]") {
     // Binary operations
     REQUIRE_THROWS_WITH(evaluate_string("1 + f"), Contains("1:5"));
     REQUIRE_THROWS_WITH(evaluate_string("1 + []"), Contains("1:3"));
+    REQUIRE_THROWS_WITH(evaluate_string("1 - []"), Contains("1:3"));
+    REQUIRE_THROWS_WITH(evaluate_string("true * 1.2"), Contains("1:6"));
+    REQUIRE_THROWS_WITH(evaluate_string("{} / []"), Contains("1:4"));
+    REQUIRE_THROWS_WITH(evaluate_string("{} // []"), Contains("1:4"));
+    REQUIRE_THROWS_WITH(evaluate_string("{} < []"), Contains("1:4"));
+    REQUIRE_THROWS_WITH(evaluate_string("{} > []"), Contains("1:4"));
+    REQUIRE_THROWS_WITH(evaluate_string("{} <= []"), Contains("1:4"));
+    REQUIRE_THROWS_WITH(evaluate_string("{} >= []"), Contains("1:4"));
 
     // Postfix operators on wrong types
     REQUIRE_THROWS_WITH(evaluate_string("1()"), Contains("1:2"));
     REQUIRE_THROWS_WITH(evaluate_string("1[1]"), Contains("1:2"));
+    REQUIRE_THROWS_WITH(evaluate_string("1[true]"), Contains("1:2"));
+    REQUIRE_THROWS_WITH(evaluate_string("(() => 1[1])()"), Contains("1:9"));
+
+    // Indexing errors
+    REQUIRE_THROWS_WITH(evaluate_string("[][1]"), Contains("1:3"));
+    REQUIRE_THROWS_WITH(evaluate_string("[][-1]"), Contains("1:3"));
+    REQUIRE_THROWS_WITH(evaluate_string("{}[null]"), Contains("1:3"));
+    REQUIRE_THROWS_WITH(evaluate_string("null.a"), Contains("1:5"));
+    REQUIRE_THROWS_WITH(evaluate_string("{}.a"), Contains("1:3"));
+
+    // Calling with wrong number of arguments
+    REQUIRE_THROWS_WITH(evaluate_string("(() => 1)(1)"), Contains("1:10"));
+    REQUIRE_THROWS_WITH(evaluate_string("((a) => 1)()"), Contains("1:11"));
+
+    // Builtins
+    REQUIRE_THROWS_WITH(evaluate_string("len(null)"), Contains("1:4"));
+    REQUIRE_THROWS_WITH(evaluate_string("range(true)"), Contains("1:6"));
+    REQUIRE_THROWS_WITH(evaluate_string("import(\"at\")"), Contains("1:7"));
+    REQUIRE_THROWS_WITH(evaluate_string("import(true)"), Contains("1:7"));
+
+    // Illegal type conversions
+    REQUIRE_THROWS_WITH(evaluate_string("int([])"), Contains("1:4"));
+    REQUIRE_THROWS_WITH(evaluate_string("float([])"), Contains("1:6"));
+    REQUIRE_THROWS_WITH(evaluate_string("str([])"), Contains("1:4"));
+    REQUIRE_THROWS_WITH(evaluate_string("map((x) => 1, true)"), Contains("1:4"));
+    REQUIRE_THROWS_WITH(evaluate_string("filter((x) => x > 1, null)"), Contains("1:7"));
+    REQUIRE_THROWS_WITH(evaluate_string("items([])"), Contains("1:6"));
+    REQUIRE_THROWS_WITH(evaluate_string("import([])"), Contains("1:7"));
 }
