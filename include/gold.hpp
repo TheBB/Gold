@@ -29,7 +29,7 @@ class Object;
 class Serializer;
 class Deserializer;
 class AstNode;
-class Binding;
+struct Binding;
 
 
 using AstPtr = uptr<AstNode>;

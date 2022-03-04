@@ -45,7 +45,7 @@ struct IdentifierBinding : public Binding {
 
 
 struct ListBinding : public Binding {
-    using Entry = struct {
+    using Entry = struct Entry {
         BindingPtr binding;
         opt<AstPtr> fallback = opt<AstPtr>();
     };
@@ -67,7 +67,7 @@ struct ListBinding : public Binding {
 
 
 struct MapBinding : public Binding {
-    using Entry = struct {
+    using Entry = struct Entry {
         std::string name;
         BindingPtr binding;
         opt<AstPtr> fallback = opt<AstPtr>();
@@ -188,7 +188,7 @@ struct LoopListElement : public ListElement {
 
 
 struct List : public AstNode {
-    using Entry = struct {
+    using Entry = struct Entry {
         AstPtr node;
         bool splat;
     };
@@ -290,7 +290,7 @@ struct BinOp : public AstNode {
 
 
 struct Block : public AstNode {
-    using BindingElement = struct {
+    using BindingElement = struct Entry {
         BindingPtr binding;
         AstPtr expression;
     };
