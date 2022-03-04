@@ -294,6 +294,29 @@ std::set<std::string> AstNode::free_identifiers() const {
 }
 
 
+void Literal::dump(std::ostream& os) const {
+    os << "Lit(" << object << ")";
+}
+
+
+void Literal::free_identifiers(std::set<std::string>&) const {}
+
+
+Object Literal::evaluate(EvaluationContext&) const {
+    return object;
+}
+
+
+void Identifier::dump(std::ostream& os) const {
+    os << "Id(" << name << ")";
+}
+
+
+void Identifier::free_identifiers(std::set<std::string>& idents) const {
+    idents.insert(name);
+}
+
+
 Object Identifier::evaluate(EvaluationContext& ctx) const {
     try {
         return ctx.lookup(name);
@@ -322,6 +345,11 @@ void SingletonListElement::free_identifiers(std::set<std::string>& idents) const
 }
 
 
+void SingletonListElement::dump(std::ostream& os) const {
+    os << *node;
+}
+
+
 void SplatListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
     auto val = node->evaluate(ctx);
     if (val.type() != Object::Type::list)
@@ -333,6 +361,11 @@ void SplatListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
 
 void SplatListElement::free_identifiers(std::set<std::string>& idents) const {
     node->free_identifiers(idents);
+}
+
+
+void SplatListElement::dump(std::ostream& os) const {
+    os << "Splat(" << *node << ")";
 }
 
 
@@ -351,6 +384,11 @@ void CondListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
 void CondListElement::free_identifiers(std::set<std::string>& idents) const {
     cond->free_identifiers(idents);
     element->free_identifiers(idents);
+}
+
+
+void CondListElement::dump(std::ostream& os) const {
+    os << "Cond(" << *cond << ", " << *element << ")";
 }
 
 
@@ -380,6 +418,11 @@ void LoopListElement::free_identifiers(std::set<std::string>& idents) const {
         candidates.erase(p);
     for (auto& c : candidates)
         idents.insert(c);
+}
+
+
+void LoopListElement::dump(std::ostream& os) const {
+    os << "For(" << *binding << ", " << *iter << ", " << *element << ")";
 }
 
 
@@ -434,6 +477,11 @@ void SingletonMapElement::free_identifiers(std::set<std::string>& idents) const 
 }
 
 
+void SingletonMapElement::dump(std::ostream& os) const {
+    os << "Entry(" << *key << ", " << *node << ")";
+}
+
+
 void SplatMapElement::fill(EvaluationContext& ctx) const {
     auto val = node->evaluate(ctx);
     if (val.type() != Object::Type::map)
@@ -445,6 +493,11 @@ void SplatMapElement::fill(EvaluationContext& ctx) const {
 
 void SplatMapElement::free_identifiers(std::set<std::string>& idents) const {
     node->free_identifiers(idents);
+}
+
+
+void SplatMapElement::dump(std::ostream& os) const {
+    os << "Splat(" << *node << ")";
 }
 
 
@@ -463,6 +516,11 @@ void CondMapElement::fill(EvaluationContext& ctx) const {
 void CondMapElement::free_identifiers(std::set<std::string>& idents) const {
     cond->free_identifiers(idents);
     element->free_identifiers(idents);
+}
+
+
+void CondMapElement::dump(std::ostream& os) const {
+    os << "Cond(" << *cond << ", " << *element << ")";
 }
 
 
@@ -492,6 +550,11 @@ void LoopMapElement::free_identifiers(std::set<std::string>& idents) const {
         candidates.erase(p);
     for (auto& c : candidates)
         idents.insert(c);
+}
+
+
+void LoopMapElement::dump(std::ostream& os) const {
+    os << "For(" << *binding << ", " << *iter << ", " << *element << ")";
 }
 
 

@@ -11,6 +11,7 @@
 namespace Gold
 {
 
+
 struct ParseException: public std::exception {};
 
 
@@ -57,6 +58,7 @@ struct ListBinding : public Binding {
     ListBinding(Source src) : Binding(src) {}
     ListBinding(Source src, std::vector<Entry> entries, bool slurp, opt<std::string> slurp_target)
         : Binding(src), bindings(std::move(entries)), slurp(slurp), slurp_target(slurp_target) {}
+
     virtual void dump(std::ostream&) const;
     virtual BindingPtr freeze(EvaluationContext& ctx) const;
     virtual void binds_identifiers(std::set<std::string>&) const;
@@ -79,6 +81,7 @@ struct MapBinding : public Binding {
     MapBinding(Source src) : Binding(src) {}
     MapBinding(Source src, std::vector<Entry> entries, opt<std::string> slurp_target)
         : Binding(src), entries(std::move(entries)), slurp_target(slurp_target) {}
+
     virtual void dump(std::ostream&) const;
     virtual BindingPtr freeze(EvaluationContext& ctx) const;
     virtual void binds_identifiers(std::set<std::string>&) const;
@@ -93,19 +96,20 @@ struct AstNode : public Serializable {
 
     AstNode(Source src) : src(src) {}
     virtual ~AstNode() {}
-    virtual void dump(std::ostream&) const = 0;
-    virtual void free_identifiers(std::set<std::string>&) const = 0;
-    std::set<std::string> free_identifiers() const;
-    virtual Object evaluate(EvaluationContext&) const = 0;
 
     static uptr<AstNode> deserialize(std::string);
     static uptr<AstNode> deserialize(std::istream&);
     static uptr<AstNode> deserialize(Deserializer&);
 
+    virtual void dump(std::ostream&) const = 0;
+    virtual void free_identifiers(std::set<std::string>&) const = 0;
+    std::set<std::string> free_identifiers() const;
+    virtual Object evaluate(EvaluationContext&) const = 0;
+
     const Source source() const { return src; }
 
     std::string dump() const;
-    friend std::ostream& operator<<(std::ostream& os, const AstNode& node) { node.dump(os); return os; };
+    friend std::ostream& operator<<(std::ostream& os, const AstNode& node) { node.dump(os); return os; }
 };
 
 
@@ -113,9 +117,10 @@ struct Literal : public AstNode {
     const Object object;
 
     Literal(Source src, Object object) : AstNode(src), object(object) {}
-    virtual void dump(std::ostream& os) const { os << "Lit(" << object << ")"; }
-    virtual void free_identifiers(std::set<std::string>&) const {}
-    virtual Object evaluate(EvaluationContext&) const { return object; }
+
+    virtual void dump(std::ostream& os) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
+    virtual Object evaluate(EvaluationContext&) const;
     virtual void do_serialize(Serializer&) const;
 };
 
@@ -124,8 +129,9 @@ struct Identifier : public AstNode {
     const std::string name;
 
     Identifier(Source src, std::string name) : AstNode(src), name(name) {}
-    virtual void dump(std::ostream& os) const { os << "Id(" << name << ")"; }
-    virtual void free_identifiers(std::set<std::string>& idents) const { idents.insert(name); }
+
+    virtual void dump(std::ostream& os) const;
+    virtual void free_identifiers(std::set<std::string>& idents) const;
     virtual Object evaluate(EvaluationContext& ctx) const;
     virtual void do_serialize(Serializer&) const;
 };
@@ -133,31 +139,37 @@ struct Identifier : public AstNode {
 
 struct ListElement : public Serializable {
     virtual ~ListElement() {}
-    virtual void fill(EvaluationContext&, Object::ListT&) const = 0;
     static uptr<ListElement> deserialize(Deserializer&);
-    virtual void dump(std::ostream& os) const = 0;
+
+    virtual void fill(EvaluationContext&, Object::ListT&) const = 0;
     virtual void free_identifiers(std::set<std::string>&) const = 0;
     std::set<std::string> free_identifiers() const;
+
+    virtual void dump(std::ostream& os) const = 0;
     friend std::ostream& operator<<(std::ostream& os, const ListElement& node) { node.dump(os); return os; };
 };
 
 
 struct SingletonListElement : public ListElement {
     AstPtr node;
+
     SingletonListElement(AstPtr node) : node(std::move(node)) {}
+
     virtual void fill(EvaluationContext&, Object::ListT&) const;
     virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const { os << *node; }
+    virtual void dump(std::ostream& os) const;
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 
 
 struct SplatListElement : public ListElement {
     AstPtr node;
+
     SplatListElement(AstPtr node) : node(std::move(node)) {}
+
     virtual void fill(EvaluationContext&, Object::ListT&) const;
     virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const { os << "Splat(" << *node << ")"; }
+    virtual void dump(std::ostream& os) const;
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 
@@ -165,11 +177,13 @@ struct SplatListElement : public ListElement {
 struct CondListElement : public ListElement {
     AstPtr cond;
     uptr<ListElement> element;
+
     CondListElement(AstPtr cond, uptr<ListElement> element)
         : cond(std::move(cond)), element(std::move(element)) {}
+
     virtual void fill(EvaluationContext&, Object::ListT&) const;
     virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const { os << "Cond(" << *cond << ", " << *element << ")"; }
+    virtual void dump(std::ostream& os) const;
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 
@@ -178,11 +192,13 @@ struct LoopListElement : public ListElement {
     BindingPtr binding;
     AstPtr iter;
     uptr<ListElement> element;
+
     LoopListElement(BindingPtr binding, AstPtr iter, uptr<ListElement> element)
         : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
+
     virtual void fill(EvaluationContext&, Object::ListT&) const;
     virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const { os << "For(" << *binding << ", " << *iter << ", " << *element << ")"; }
+    virtual void dump(std::ostream& os) const;
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 
@@ -198,6 +214,7 @@ struct List : public AstNode {
     List(Source src) : AstNode(src) {}
     List(Source src, std::vector<uptr<ListElement>> elements)
         : AstNode(src), elements(std::move(elements)) {}
+
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -207,31 +224,37 @@ struct List : public AstNode {
 
 struct MapElement : public Serializable {
     virtual ~MapElement() {}
+
     virtual void fill(EvaluationContext&) const = 0;
     static uptr<MapElement> deserialize(Deserializer&);
-    virtual void dump(std::ostream& os) const = 0;
     virtual void free_identifiers(std::set<std::string>&) const = 0;
     std::set<std::string> free_identifiers() const;
+
+    virtual void dump(std::ostream& os) const = 0;
     friend std::ostream& operator<<(std::ostream& os, const MapElement& node) { node.dump(os); return os; };
 };
 
 
 struct SingletonMapElement : public MapElement {
     AstPtr key, node;
+
     SingletonMapElement(AstPtr key, AstPtr node) : key(std::move(key)), node(std::move(node)) {}
+
     virtual void fill(EvaluationContext&) const;
     virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const { os << "Entry(" << *key << ", " << *node << ")"; }
+    virtual void dump(std::ostream& os) const;
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 
 
 struct SplatMapElement : public MapElement {
     AstPtr node;
+
     SplatMapElement(AstPtr node) : node(std::move(node)) {}
+
     virtual void fill(EvaluationContext&) const;
     virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const { os << "Splat(" << *node << ")"; }
+    virtual void dump(std::ostream& os) const;
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 
@@ -239,13 +262,13 @@ struct SplatMapElement : public MapElement {
 struct CondMapElement : public MapElement {
     AstPtr cond;
     uptr<MapElement> element;
+
     CondMapElement(AstPtr cond, uptr<MapElement> element)
         : cond(std::move(cond)), element(std::move(element)) {}
+
     virtual void fill(EvaluationContext&) const;
     virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const {
-        os << "Cond(" << *cond << ", " << *element << ")";
-    }
+    virtual void dump(std::ostream& os) const;
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 
@@ -254,11 +277,13 @@ struct LoopMapElement : public MapElement {
     BindingPtr binding;
     AstPtr iter;
     uptr<MapElement> element;
+
     LoopMapElement(BindingPtr binding, AstPtr iter, uptr<MapElement> element)
         : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
+
     virtual void fill(EvaluationContext&) const;
     virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const { os << "For(" << *binding << ", " << *iter << ", " << *element << ")"; }
+    virtual void dump(std::ostream& os) const;
     virtual void free_identifiers(std::set<std::string>&) const;
 };
 
@@ -269,6 +294,7 @@ struct Map : public AstNode {
     Map(Source src) : AstNode(src) {}
     Map(Source src, std::vector<uptr<MapElement>> elements)
         : AstNode(src), elements(std::move(elements)) {}
+
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -282,6 +308,7 @@ struct BinOp : public AstNode {
 
     BinOp(Source src, AstPtr l, AstPtr r, Operator oper)
         : AstNode(src), lhs(std::move(l)), rhs(std::move(r)), op(oper) {}
+
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -301,6 +328,7 @@ struct Block : public AstNode {
     Block(Source src) : AstNode(src) {}
     Block(Source src, std::vector<BindingElement> bindings, AstPtr expression)
         : AstNode(src), bindings(std::move(bindings)), expression(std::move(expression)) {}
+
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -315,6 +343,7 @@ struct Function : public AstNode {
     Function(Source src) : AstNode(src) {}
     Function(Source src, std::vector<BindingPtr> parameters, sptr<AstNode> expression)
         : AstNode(src), parameters(std::move(parameters)), expression(expression) {}
+
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -328,7 +357,8 @@ struct Branch : public AstNode {
     AstPtr else_value;
 
     Branch(Source src, AstPtr cond, AstPtr yes, AstPtr no)
-        : AstNode(src), condition(std::move(cond)), if_value(std::move(yes)), else_value(std::move(no)) { }
+        : AstNode(src), condition(std::move(cond)), if_value(std::move(yes)), else_value(std::move(no)) {}
+
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -343,6 +373,7 @@ struct FunCall : public AstNode {
     FunCall(Source src, AstPtr function) : AstNode(src), function(std::move(function)) {}
     FunCall(Source src, AstPtr function, std::vector<AstPtr> args)
         : AstNode(src), function(std::move(function)), args(std::move(args)) {}
+
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -356,6 +387,7 @@ struct Index : public AstNode {
 
     Index(Source src, AstPtr haystack, AstPtr needle)
         : AstNode(src), haystack(std::move(haystack)), needle(std::move(needle)) {}
+
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
     virtual Object evaluate(EvaluationContext&) const;
@@ -371,4 +403,5 @@ void debug_parse_tree(std::string);
 
 AstPtr normalize(tao::pegtl::parse_tree::node&);
 
-}
+
+} // Namespace Gold

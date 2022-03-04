@@ -43,6 +43,7 @@ public:
     std::string serialize() const;
     void serialize(std::ostream& os) const;
     void serialize(Serializer& os) const;
+private:
     virtual void do_serialize(Serializer&) const = 0;
 };
 
@@ -70,6 +71,7 @@ struct Binding : public Serializable {
 
     Binding(Source src) : src(src) {}
     virtual ~Binding() {}
+
     bool bind(EvaluationContext&, Object, bool = true) const;
     virtual bool do_bind(EvaluationContext&, Object) const = 0;
 
@@ -399,9 +401,11 @@ public:
 struct EvalException: public std::exception {
     bool has_position;
     std::string reason;
+
     EvalException() : has_position(false), reason("") {}
     EvalException(std::string s) : has_position(false), reason(s) {}
     EvalException(Source src, std::string s) : EvalException(s) { position(src); }
+
     void position(Source source) noexcept;
     const char* what() const noexcept { return reason.c_str(); }
 };
@@ -419,6 +423,7 @@ private:
     std::list<Namespace> namespaces;
     std::vector<Namespace> objects;
     std::vector<sptr<LibFinder>> libfinders;
+
 public:
     EvaluationContext() { push_namespace(builtins); }
 
@@ -446,4 +451,5 @@ Object evaluate_string(EvaluationContext&, std::string);
 Object evaluate_file(std::string);
 Object evaluate_file(EvaluationContext&, std::string);
 
-}
+
+} // Namespace Gold
