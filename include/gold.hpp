@@ -28,7 +28,7 @@ class EvaluationContext;
 class Object;
 class Serializer;
 class Deserializer;
-class AstNode;
+struct AstNode;
 struct Binding;
 
 
