@@ -57,20 +57,22 @@ namespace Grammar
 
     // Keywords - these rules do not consume leading whitespace
     struct keyword {
-        struct For: p::string<'f','o','r'> {};
-        struct If: p::string<'i','f'> {};
-        struct Then: p::string<'t','h','e','n'> {};
-        struct Else: p::string<'e','l','s','e'> {};
-        struct Let: p::string<'l','e','t'> {};
-        struct In: p::string<'i','n'> {};
-        struct True: p::string<'t','r','u','e'> {};
-        struct False: p::string<'f','a','l','s','e'> {};
-        struct Null: p::string<'n','u','l','l'> {};
-        struct And: p::string<'a','n','d'> {};
-        struct Or: p::string<'o','r'> {};
+        template <typename T>
+        struct isolate: p::seq<T, p::not_at<identifier_char>> {};
 
-        struct any: p::sor<If, Then, Else, Let, In, True, False, Null, And, Or> {};
-        struct rule: p::seq<any, p::not_at<identifier_char>> {};
+        struct For: isolate<p::string<'f','o','r'>> {};
+        struct If: isolate<p::string<'i','f'>> {};
+        struct Then: isolate<p::string<'t','h','e','n'>> {};
+        struct Else: isolate<p::string<'e','l','s','e'>> {};
+        struct Let: isolate<p::string<'l','e','t'>> {};
+        struct In: isolate<p::string<'i','n'>> {};
+        struct True: isolate<p::string<'t','r','u','e'>> {};
+        struct False: isolate<p::string<'f','a','l','s','e'>> {};
+        struct Null: isolate<p::string<'n','u','l','l'>> {};
+        struct And: isolate<p::string<'a','n','d'>> {};
+        struct Or: isolate<p::string<'o','r'>> {};
+
+        struct rule: p::sor<If, Then, Else, Let, In, True, False, Null, And, Or> {};
     };
 
     // Prepad: consume whitespace before a rule but not after
@@ -134,21 +136,21 @@ namespace Grammar
         struct rule;
         struct ident: p::seq<prepad<identifier>> {};
         struct opt_slurp: p::seq<token::splat, p::opt<identifier>> {};
-        struct def_slurp: p::seq<token::splat, identifier> {};
+        struct def_slurp: p::if_must<token::splat, identifier> {};
         struct list {
-            struct element: p::seq<rule, p::opt<p::seq<token::equals, expression>>> {};
+            struct element: p::seq<rule, p::opt<p::if_must<token::equals, expression>>> {};
             struct seq: p::seq<listof_term<element, opt_slurp>> {};
-            struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
+            struct rule: p::if_must<token::op_bracket, seq, token::cl_bracket> {};
         };
         struct map {
             struct single_entry: p::seq<prepad<identifier>> {};
-            struct entry: p::seq<prepad<identifier>, token::colon, rule> {};
+            struct entry: p::if_must<p::seq<prepad<identifier>, token::colon>, rule> {};
             struct element: p::seq<
                 p::sor<entry, single_entry>,
-                p::opt<p::seq<token::equals, expression>>
+                p::opt<p::if_must<token::equals, expression>>
             > {};
             struct seq: p::seq<listof_term<element, def_slurp>> {};
-            struct rule: p::seq<token::op_brace, seq, token::cl_brace> {};
+            struct rule: p::if_must<token::op_brace, seq, token::cl_brace> {};
         };
         struct rule: prepad<p::sor<ident, list::rule, map::rule>> {};
     };
@@ -202,36 +204,36 @@ namespace Grammar
     // Lists
     struct list {
         struct element;
-        struct loop: p::seq<
+        struct loop: p::if_must<
             prepad<keyword::For>, pattern::rule, prepad<keyword::In>,
             expression, token::colon, element
         > {};
-        struct cond: p::seq<prepad<keyword::If>, expression, token::colon, element> {};
+        struct cond: p::if_must<p::seq<prepad<keyword::If>, expression, token::colon>, element> {};
         struct element: p::sor<loop, cond, splatted, expression> {};
         struct seq: p::seq<listof<element>> {};
-        struct rule: p::seq<token::op_bracket, seq, token::cl_bracket> {};
+        struct rule: p::if_must<token::op_bracket, seq, token::cl_bracket> {};
     };
 
     // Maps
     struct map {
         struct element;
         struct const_identifier: p::plus<p::sor<identifier_char, p::one<'-'>>> {};
-        struct var_identifier: p::seq<token::dollar, expression> {};
+        struct var_identifier: p::if_must<token::dollar, expression> {};
         struct identifier: p::sor<var_identifier, const_identifier> {};
-        struct entry: p::seq<prepad<identifier>, token::colon, expression> {};
-        struct loop: p::seq<
+        struct entry: p::if_must<prepad<identifier>, token::colon, expression> {};
+        struct loop: p::if_must<
             prepad<keyword::For>, pattern::rule, prepad<keyword::In>,
             expression, token::colon, element
         > {};
-        struct cond: p::seq<prepad<keyword::If>, expression, token::colon, entry> {};
+        struct cond: p::if_must<prepad<keyword::If>, expression, token::colon, element> {};
         struct element: p::sor<loop, cond, splatted, entry> {};
         struct seq: p::seq<listof<element>> {};
-        struct rule: p::seq<token::op_brace, seq, token::cl_brace> {};
+        struct rule: p::if_must<token::op_brace, seq, token::cl_brace> {};
     };
 
     // Blocks
     struct block {
-        struct binding: p::seq<
+        struct binding: p::if_must<
             prepad<keyword::Let>,
             pattern::rule,
             token::equals,
@@ -240,8 +242,8 @@ namespace Grammar
         struct rule: p::seq<
             binding,
             p::star<binding>,
-            prepad<keyword::In>,
-            expression
+            p::must<prepad<keyword::In>>,
+            p::must<expression>
         > {};
     };
 
@@ -249,15 +251,14 @@ namespace Grammar
     struct func {
         struct param_list: listof<pattern::rule> {};
         struct bracketed_param_list: p::seq<token::op_paren, param_list, token::cl_paren> {};
-        struct rule: p::seq<
-            bracketed_param_list,
-            token::implies,
+        struct rule: p::if_must<
+            p::seq<bracketed_param_list, token::implies>,
             expression
         > {};
     };
 
     // Conditionals
-    struct branch: p::seq<
+    struct branch: p::if_must<
         prepad<keyword::If>,
         expression,
         prepad<keyword::Then>,
@@ -267,7 +268,7 @@ namespace Grammar
     > {};
 
     // Parenthesised expressions
-    struct paren: p::seq<
+    struct paren: p::if_must<
         token::op_paren,
         expression,
         token::cl_paren,
@@ -302,11 +303,10 @@ namespace Grammar
     };
 
     // Special case: splat expressions
-    struct splatted: p::seq<token::splat, postfix::rule> {};
+    struct splatted: p::if_must<token::splat, postfix::rule> {};
 
     // Composite expressions (can't have postfix operators)
     struct composite: p::sor<
-        postfix::rule,
         func::rule,
         block::rule,
         branch
@@ -329,8 +329,8 @@ namespace Grammar
     struct disj: lbinop<conj::operation, keyword::Or> {};
 
     // Finalize
-    struct expression: p::seq<p::sor<disj::operation, composite>> {};
-    struct file: p::seq<p::bof, expression, prepad<p::eof>> {};
+    struct expression: p::seq<p::sor<composite, disj::operation>> {};
+    struct file: p::seq<p::bof, p::must<expression>, prepad<p::eof>> {};
 
     template<typename Rule>
     using selector = p::parse_tree::selector<Rule,
@@ -421,7 +421,8 @@ static AstPtr _parse(I& input) {
         return normalize(*tree);
     }
     catch (const p::parse_error&) {
-        throw ParseException();
+        // throw ParseException();
+        throw;
     }
 }
 

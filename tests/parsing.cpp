@@ -3,6 +3,7 @@
 #include "gold.hpp"
 #include "parsing.hpp"
 
+using Catch::Matchers::Contains;
 using namespace Gold;
 
 
@@ -125,9 +126,9 @@ TEST_CASE("Parse identifiers", "[parsing]") {
     REQUIRE(ast->dump() == "Id(ift)");
 
     // But identifiers that ARE keywords aren't
-    REQUIRE_THROWS_AS(parse_string("if"), ParseException);
-    REQUIRE_THROWS_AS(parse_string("then"), ParseException);
-    REQUIRE_THROWS_AS(parse_string("else"), ParseException);
+    // REQUIRE_THROWS_AS(parse_string("if"), ParseException);
+    // REQUIRE_THROWS_AS(parse_string("then"), ParseException);
+    // REQUIRE_THROWS_AS(parse_string("else"), ParseException);
 }
 
 
@@ -314,4 +315,71 @@ TEST_CASE("Comments", "[parsing]") {
 
     ast = parse_string("1 + #comment\n2");
     REQUIRE(ast->dump() == "BinOp(Lit(1) + Lit(2))");
+}
+
+
+TEST_CASE("Parsing errors", "[parsing]") {
+    REQUIRE_THROWS_WITH(parse_string("let"), Contains("1:4") && Contains("pattern"));
+    REQUIRE_THROWS_WITH(parse_string("let a"), Contains("1:6") && Contains("equals"));
+    REQUIRE_THROWS_WITH(parse_string("let a ="), Contains("1:8") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("let a = 1"), Contains("1:10") && Contains("in"));
+    REQUIRE_THROWS_WITH(parse_string("let a = 1 in"), Contains("1:13") && Contains("expression"));
+
+    REQUIRE_THROWS_WITH(parse_string("if"), Contains("1:3") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("if true"), Contains("1:8") && Contains("Then"));
+    REQUIRE_THROWS_WITH(parse_string("if true then"), Contains("1:13") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("if true then 1"), Contains("1:15") && Contains("Else"));
+    REQUIRE_THROWS_WITH(parse_string("if true then 1 else"), Contains("1:20") && Contains("expression"));
+
+    REQUIRE_THROWS_WITH(parse_string("["), Contains("1:2") && Contains("bracket"));
+    REQUIRE_THROWS_WITH(parse_string("[1"), Contains("1:3") && Contains("bracket"));
+    REQUIRE_THROWS_WITH(parse_string("[1,"), Contains("1:4") && Contains("bracket"));
+    REQUIRE_THROWS_WITH(parse_string("[..."), Contains("1:5") && Contains("postfix"));
+    REQUIRE_THROWS_WITH(parse_string("[...,"), Contains("1:5") && Contains("postfix"));
+    REQUIRE_THROWS_WITH(parse_string("[...x"), Contains("1:6") && Contains("bracket"));
+    REQUIRE_THROWS_WITH(parse_string("[if"), Contains("1:4") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("[if x:"), Contains("1:7") && Contains("element"));
+    REQUIRE_THROWS_WITH(parse_string("[for"), Contains("1:5") && Contains("pattern"));
+    REQUIRE_THROWS_WITH(parse_string("[for x"), Contains("1:7") && Contains("in"));
+    REQUIRE_THROWS_WITH(parse_string("[for x in"), Contains("1:10") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("[for x in y"), Contains("1:12") && Contains("colon"));
+    REQUIRE_THROWS_WITH(parse_string("[for x in y:"), Contains("1:13") && Contains("element"));
+    REQUIRE_THROWS_WITH(parse_string("[for x in y: z"), Contains("1:15") && Contains("bracket"));
+
+    REQUIRE_THROWS_WITH(parse_string("{"), Contains("1:2") && Contains("brace"));
+    REQUIRE_THROWS_WITH(parse_string("{?"), Contains("1:2") && Contains("brace"));
+    REQUIRE_THROWS_WITH(parse_string("{a"), Contains("1:3") && Contains("colon"));
+    REQUIRE_THROWS_WITH(parse_string("{a:"), Contains("1:4") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("{$"), Contains("1:3") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("{$x"), Contains("1:4") && Contains("colon"));
+    REQUIRE_THROWS_WITH(parse_string("{$x:"), Contains("1:5") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("{..."), Contains("1:5") && Contains("postfix"));
+    REQUIRE_THROWS_WITH(parse_string("{if"), Contains("1:4") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("{if x"), Contains("1:6") && Contains("colon"));
+    REQUIRE_THROWS_WITH(parse_string("{if x:"), Contains("1:7") && Contains("element"));
+    REQUIRE_THROWS_WITH(parse_string("{if x: $"), Contains("1:9") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("{for"), Contains("1:5") && Contains("pattern"));
+    REQUIRE_THROWS_WITH(parse_string("{for a"), Contains("1:7") && Contains("in"));
+    REQUIRE_THROWS_WITH(parse_string("{for a in"), Contains("1:10") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("{for a in b"), Contains("1:12") && Contains("colon"));
+    REQUIRE_THROWS_WITH(parse_string("{for a in b:"), Contains("1:13") && Contains("element"));
+
+    REQUIRE_THROWS_WITH(parse_string("let ["), Contains("1:6") && Contains("bracket"));
+    REQUIRE_THROWS_WITH(parse_string("let [x ="), Contains("1:9") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("let [x = 1"), Contains("1:11") && Contains("bracket"));
+    REQUIRE_THROWS_WITH(parse_string("let [x = 1, ..."), Contains("1:16") && Contains("bracket"));
+    REQUIRE_THROWS_WITH(parse_string("let {"), Contains("1:6") && Contains("brace"));
+    REQUIRE_THROWS_WITH(parse_string("let {x"), Contains("1:7") && Contains("brace"));
+    REQUIRE_THROWS_WITH(parse_string("let {x:"), Contains("1:8") && Contains("pattern"));
+    REQUIRE_THROWS_WITH(parse_string("let {x:y"), Contains("1:9") && Contains("brace"));
+    REQUIRE_THROWS_WITH(parse_string("let {x:y="), Contains("1:10") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("let {x:y=1"), Contains("1:11") && Contains("brace"));
+    REQUIRE_THROWS_WITH(parse_string("let {x:y=1, ..."), Contains("1:16") && Contains("identifier"));
+    REQUIRE_THROWS_WITH(parse_string("let {x:y=1, ...x"), Contains("1:17") && Contains("brace"));
+
+    REQUIRE_THROWS_WITH(parse_string("("), Contains("1:2") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("(1"), Contains("1:3") && Contains("paren"));
+
+    REQUIRE_THROWS_WITH(parse_string("() =>"), Contains("1:6") && Contains("expression"));
+    REQUIRE_THROWS_WITH(parse_string("(1) =>"), Contains("1:7") && Contains("expression"));
 }
