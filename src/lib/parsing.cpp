@@ -463,6 +463,29 @@ static AstPtr _parse(I& input) {
 }
 
 
+template <typename I>
+static Object _evaluate(EvaluationContext& ctx, I& input) {
+    auto ast = _parse(input);
+
+    try {
+        return ast->evaluate(ctx);
+    }
+    catch (EvalException& e) {
+        e.tag_lines([&input](Source& src) {
+            return input.line_at(p::position(src.byte, src.line, src.column, ""));
+        });
+        throw;
+    }
+}
+
+
+template <typename I>
+static Object _evaluate(I& input) {
+    EvaluationContext ctx;
+    return _evaluate(ctx, input);
+}
+
+
 AstPtr Gold::parse_string(std::string code) {
     p::string_input in(code, "code");
     return _parse(in);
@@ -476,26 +499,24 @@ AstPtr Gold::parse_file(std::string path) {
 
 
 Object Gold::evaluate_string(std::string code) {
-    EvaluationContext ctx;
-    return evaluate_string(ctx, code);
+    p::string_input in(code, "code");
+    return _evaluate(in);
 }
 
 
 Object Gold::evaluate_string(EvaluationContext& ctx, std::string code) {
-    auto ast = parse_string(code);
-    auto value = ast->evaluate(ctx);
-    return value;
+    p::string_input in(code, "code");
+    return _evaluate(ctx, in);
 }
 
 
-Object Gold::evaluate_file(std::string code) {
-    EvaluationContext ctx;
-    return evaluate_file(ctx, code);
+Object Gold::evaluate_file(std::string path) {
+    p::file_input in(path, "code");
+    return _evaluate(in);
 }
 
 
 Object Gold::evaluate_file(EvaluationContext& ctx, std::string path) {
-    auto ast = parse_file(path);
-    auto value = ast->evaluate(ctx);
-    return value;
+    p::file_input in(path, "code");
+    return _evaluate(ctx, in);
 }
