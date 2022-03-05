@@ -125,7 +125,7 @@ public:
 
     using ClosureT = struct {
         Namespace nonlocals;
-        sptr<std::vector<BindingPtr>> parameters;
+        sptr<Binding> parameters;
         sptr<AstNode> expression;
     };
     using Closure = sptr<ClosureT>;

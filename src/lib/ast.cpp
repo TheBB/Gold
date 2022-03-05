@@ -160,6 +160,7 @@ bool ListBinding::do_bind(EvaluationContext& ctx, Object obj) const {
         return false;
     auto& list = obj.unsafe_list();
 
+    std::cout << list->size() << " " << bindings.size() << " " << (slurp ? "y" : "n") << std::endl;
     if (list->size() > bindings.size() && !slurp)
         return false;
 
@@ -677,28 +678,16 @@ Object Block::evaluate(EvaluationContext& ctx) const {
 
 
 void Function::dump(std::ostream& os) const {
-    os << "Function(";
-    bool first = true;
-    for (auto& p : *parameters) {
-        if (!first)
-            os << ", ";
-        os << *p;
-        first = false;
-    }
-    if (!first)
-        os << ", ";
-    os << *expression << ")";
+    os << "Function(" << *parameters << ", " << *expression << ")";
 }
 
 
 void Function::free_identifiers(std::set<std::string>& idents) const {
     auto candidates = expression->free_identifiers();
-    for (auto& p : *parameters) {
-        p->free_identifiers(idents);
-        auto bound = p->binds_identifiers();
-        for (auto& c : bound)
-            candidates.erase(c);
-    }
+    parameters->free_identifiers(idents);
+    auto bound = parameters->binds_identifiers();
+    for (auto& c : bound)
+        candidates.erase(c);
     for (auto& c : candidates)
         idents.insert(c);
 }
@@ -882,7 +871,7 @@ static BindingPtr normalize_binding(p::parse_tree::node& node) {
     if (type == "Grammar::pattern::ident")
         return std::make_unique<IdentifierBinding>(src, node.string());
 
-    else if (type == "Grammar::pattern::list::rule") {
+    else if (type == "Grammar::pattern::list::rule" || type == "Grammar::func::bracketed_param_list") {
         auto list = std::make_unique<ListBinding>(src);
         for (auto& c : node.children) {
             if (nodetype(*c) == "Grammar::pattern::opt_slurp") {
@@ -1106,8 +1095,7 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
 
     else if (type == "Grammar::func::rule") {
         auto function = std::make_unique<Function>(source(node));
-        for (auto&& c : node.children[0]->children)
-            function->parameters->push_back(normalize_binding(*c));
+        function->parameters = std::shared_ptr<Binding>(normalize_binding(*node.children[0]).release());
         function->expression = normalize(*node.children[1]);
         return function;
     }
