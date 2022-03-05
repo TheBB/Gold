@@ -48,6 +48,13 @@ private:
 };
 
 
+struct Source {
+    size_t byte;
+    size_t line;
+    size_t column;
+};
+
+
 struct InternalException: public std::exception {
     std::string msg;
     InternalException() : msg("an internal error happend - please report") {}
@@ -59,10 +66,20 @@ struct InternalException: public std::exception {
 };
 
 
-struct Source {
-    size_t byte;
-    size_t line;
-    size_t column;
+struct EvalException: public std::exception {
+    std::vector<Source> positions;
+    std::vector<std::string> lines;
+    std::string reason;
+    opt<std::string> message;
+
+    EvalException() : reason("") {}
+    EvalException(std::string_view reason) : reason(reason) {}
+    EvalException(Source src, std::string reason) : positions({src}), reason(reason) {}
+
+    void tag_position(Source, bool = false) noexcept;
+    void tag_lines(std::function<std::string_view(Source&)>) noexcept;
+
+    const char* what() const noexcept;
 };
 
 
@@ -395,19 +412,6 @@ public:
 
     template<typename T>
     Deserializer& operator>>(T& v) { readref(v); return *this; }
-};
-
-
-struct EvalException: public std::exception {
-    bool has_position;
-    std::string reason;
-
-    EvalException() : has_position(false), reason("") {}
-    EvalException(std::string s) : has_position(false), reason(s) {}
-    EvalException(Source src, std::string s) : EvalException(s) { position(src); }
-
-    void position(Source source) noexcept;
-    const char* what() const noexcept { return reason.c_str(); }
 };
 
 

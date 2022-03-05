@@ -322,7 +322,7 @@ Object Identifier::evaluate(EvaluationContext& ctx) const {
         return ctx.lookup(name);
     }
     catch (EvalException& e) {
-        e.position(source());
+        e.tag_position(source());
         throw;
     }
 }
@@ -620,7 +620,7 @@ Object BinOp::evaluate(EvaluationContext& ctx) const {
         }
     }
     catch (EvalException& e) {
-        e.position(source());
+        e.tag_position(source());
         throw;
     }
 }
@@ -711,15 +711,14 @@ Object Function::evaluate(EvaluationContext& ctx) const {
     try {
         for (auto& id : free)
             closure->nonlocals[id] = ctx.lookup(id);
+        closure->parameters = std::make_shared<std::vector<BindingPtr>>();
+        for (auto& parameter : parameters)
+            closure->parameters->push_back(parameter->freeze(ctx));
     }
     catch (EvalException& e) {
-        e.position(source());
+        e.tag_position(source());
         throw;
     }
-
-    closure->parameters = std::make_shared<std::vector<BindingPtr>>();
-    for (auto& parameter : parameters)
-        closure->parameters->push_back(parameter->freeze(ctx));
 
     closure->expression = expression;
     return Object::closure(closure);
@@ -776,7 +775,7 @@ Object FunCall::evaluate(EvaluationContext& ctx) const {
         return rval;
     }
     catch (EvalException& e) {
-        e.position(source());
+        e.tag_position(source(), true);
         throw;
     }
 }
@@ -800,7 +799,7 @@ Object Index::evaluate(EvaluationContext& ctx) const {
         return container[index];
     }
     catch (EvalException& e) {
-        e.position(source());
+        e.tag_position(source());
         throw;
     }
 }
@@ -918,8 +917,7 @@ static BindingPtr normalize_binding(p::parse_tree::node& node) {
         return map;
     }
 
-    std::cerr << "Binding: " << type << std::endl;
-    throw ParseException();
+    throw EvalException(fmt::format("normalize_binding: unknown binding: {}", type));
 }
 
 
@@ -1157,6 +1155,5 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
         return value;
     }
 
-    std::cerr << "Node: " << type << std::endl;
-    throw ParseException();
+    throw EvalException(fmt::format("normalize: unknown node: {}", type));
 }

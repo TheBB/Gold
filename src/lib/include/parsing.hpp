@@ -12,9 +12,6 @@ namespace Gold
 {
 
 
-struct ParseException: public std::exception {};
-
-
 enum class Operator {
     plus,
     minus,

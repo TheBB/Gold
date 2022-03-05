@@ -332,8 +332,37 @@ namespace Grammar
     struct expression: p::seq<p::sor<composite, disj::operation>> {};
     struct file: p::seq<p::bof, p::must<expression>, prepad<p::eof>> {};
 
+    // Error messages
+    template<typename> inline constexpr const char* error_message = "unspecified parsing error";
+    template<> inline constexpr auto error_message<expression> = "expected expression";
+    template<> inline constexpr auto error_message<postfix::rule> = "expected expression";
+    template<> inline constexpr auto error_message<pattern::rule> = "expected binding pattern";
+    template<> inline constexpr auto error_message<token::cl_brace> = "expected '}'";
+    template<> inline constexpr auto error_message<token::cl_bracket> = "expected ']'";
+    template<> inline constexpr auto error_message<token::cl_paren> = "expected ')'";
+    template<> inline constexpr auto error_message<token::equals> = "expected '='";
+    template<> inline constexpr auto error_message<token::colon> = "expected ':'";
+    template<> inline constexpr auto error_message<list::element> = "expected list element";
+    template<> inline constexpr auto error_message<map::element> = "expected object element";
+    template<> inline constexpr auto error_message<identifier> = "expected identifier";
+    template<> inline constexpr auto error_message<prepad<keyword::In>> = "expected 'in'";
+    template<> inline constexpr auto error_message<prepad<keyword::Then>> = "expected 'then'";
+    template<> inline constexpr auto error_message<prepad<keyword::Else>> = "expected 'else'";
+
+    struct error {
+        template <typename Rule>
+        static constexpr auto message = error_message<Rule>;
+
+        template <typename Rule>
+        static constexpr bool raise_on_failure = false;
+    };
+
+    template <typename Rule>
+    using control = p::must_if<error>::control<Rule>;
+
     template<typename Rule>
-    using selector = p::parse_tree::selector<Rule,
+    using selector = p::parse_tree::selector<
+        Rule,
         p::parse_tree::store_content::on<
             number::rule,
             number::integer,
@@ -415,14 +444,21 @@ void Gold::debug_parse_tree(std::string input) {
 template <typename I>
 static AstPtr _parse(I& input) {
     try {
-        auto tree = p::parse_tree::parse<Grammar::file, Grammar::selector>(input);
+        auto tree = p::parse_tree::parse<Grammar::file, Grammar::selector, p::nothing, Grammar::control>(input);
         if (!tree)
-            throw ParseException();
+            throw EvalException("unknown parsing error");
         return normalize(*tree);
     }
-    catch (const p::parse_error&) {
-        // throw ParseException();
-        throw;
+    catch (const p::parse_error& e) {
+        EvalException exc(e.message());
+        if (!e.positions().empty()) {
+            auto pos = e.positions()[0];
+            exc.tag_position(Source { pos.byte, pos.line, pos.column });
+        }
+        exc.tag_lines([&input](Source& src) {
+            return input.line_at(p::position(src.byte, src.line, src.column, ""));
+        });
+        throw exc;
     }
 }
 
