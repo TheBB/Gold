@@ -711,15 +711,13 @@ Object Function::evaluate(EvaluationContext& ctx) const {
     try {
         for (auto& id : free)
             closure->nonlocals[id] = ctx.lookup(id);
-        closure->parameters = std::make_shared<std::vector<BindingPtr>>();
-        for (auto& parameter : *parameters)
-            closure->parameters->push_back(parameter->freeze(ctx));
     }
     catch (EvalException& e) {
         e.tag_position(source());
         throw;
     }
 
+    closure->parameters = parameters;
     closure->expression = expression;
     return Object::closure(closure);
 }
