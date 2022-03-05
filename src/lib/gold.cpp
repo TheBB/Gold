@@ -370,10 +370,39 @@ void Object::dump(std::ostream& os) const {
 }
 
 
-void EvalException::position(Source source) noexcept {
-    if (!has_position)
-        reason = fmt::format("at {}:{}: {}", source.line, source.column, reason);
-    has_position = true;
+const char* EvalException::what() const noexcept {
+    if (message.has_value())
+        return message.value().c_str();
+
+    std::ostringstream msg;
+    msg << reason;
+    for (size_t i = 0; i < positions.size(); i++) {
+        std::string src = fmt::format("at {}:{}", positions[i].line, positions[i].column);
+        msg << std::endl << src;
+        if (i >= lines.size())
+            continue;
+        msg << ": " << lines[i] << std::endl;
+        for (std::size_t j = 1; j < src.size() + positions[i].column + 2; j++)
+            msg << "-";
+        msg << "^";
+    }
+    const_cast<EvalException*>(this)->message = msg.str();
+    return message.value().c_str();
+}
+
+
+void EvalException::tag_position(Source source, bool always_add) noexcept {
+    if (always_add)
+        positions.push_back(source);
+    else if (positions.empty())
+        positions.push_back(source);
+}
+
+
+void EvalException::tag_lines(std::function<std::string_view(Source&)> func) noexcept {
+    lines.clear();
+    for (auto& pos : positions)
+        lines.emplace_back(func(pos));
 }
 
 

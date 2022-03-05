@@ -28,8 +28,8 @@ class EvaluationContext;
 class Object;
 class Serializer;
 class Deserializer;
-class AstNode;
-class Binding;
+struct AstNode;
+struct Binding;
 
 
 using AstPtr = uptr<AstNode>;
@@ -43,7 +43,15 @@ public:
     std::string serialize() const;
     void serialize(std::ostream& os) const;
     void serialize(Serializer& os) const;
+private:
     virtual void do_serialize(Serializer&) const = 0;
+};
+
+
+struct Source {
+    size_t byte;
+    size_t line;
+    size_t column;
 };
 
 
@@ -58,10 +66,20 @@ struct InternalException: public std::exception {
 };
 
 
-struct Source {
-    size_t byte;
-    size_t line;
-    size_t column;
+struct EvalException: public std::exception {
+    std::vector<Source> positions;
+    std::vector<std::string> lines;
+    std::string reason;
+    opt<std::string> message;
+
+    EvalException() : reason("") {}
+    EvalException(std::string_view reason) : reason(reason) {}
+    EvalException(Source src, std::string reason) : positions({src}), reason(reason) {}
+
+    void tag_position(Source, bool = false) noexcept;
+    void tag_lines(std::function<std::string_view(Source&)>) noexcept;
+
+    const char* what() const noexcept;
 };
 
 
@@ -70,6 +88,7 @@ struct Binding : public Serializable {
 
     Binding(Source src) : src(src) {}
     virtual ~Binding() {}
+
     bool bind(EvaluationContext&, Object, bool = true) const;
     virtual bool do_bind(EvaluationContext&, Object) const = 0;
 
@@ -396,17 +415,6 @@ public:
 };
 
 
-struct EvalException: public std::exception {
-    bool has_position;
-    std::string reason;
-    EvalException() : has_position(false), reason("") {}
-    EvalException(std::string s) : has_position(false), reason(s) {}
-    EvalException(Source src, std::string s) : EvalException(s) { position(src); }
-    void position(Source source) noexcept;
-    const char* what() const noexcept { return reason.c_str(); }
-};
-
-
 class LibFinder {
 public:
     virtual ~LibFinder() {};
@@ -419,6 +427,7 @@ private:
     std::list<Namespace> namespaces;
     std::vector<Namespace> objects;
     std::vector<sptr<LibFinder>> libfinders;
+
 public:
     EvaluationContext() { push_namespace(builtins); }
 
@@ -446,4 +455,5 @@ Object evaluate_string(EvaluationContext&, std::string);
 Object evaluate_file(std::string);
 Object evaluate_file(EvaluationContext&, std::string);
 
-}
+
+} // Namespace Gold
