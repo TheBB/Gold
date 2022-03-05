@@ -334,12 +334,12 @@ struct Block : public AstNode {
 
 
 struct Function : public AstNode {
-    std::vector<BindingPtr> parameters;
+    sptr<std::vector<BindingPtr>> parameters;
     sptr<AstNode> expression;
 
-    Function(Source src) : AstNode(src) {}
-    Function(Source src, std::vector<BindingPtr> parameters, sptr<AstNode> expression)
-        : AstNode(src), parameters(std::move(parameters)), expression(expression) {}
+    Function(Source src) : AstNode(src), parameters(new std::vector<BindingPtr>) {}
+    Function(Source src, sptr<std::vector<BindingPtr>> parameters, sptr<AstNode> expression)
+        : AstNode(src), parameters(parameters), expression(expression) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;

@@ -279,8 +279,10 @@ AstPtr AstNode::deserialize(Deserializer& is) {
         return std::make_unique<Block>(source, std::move(bindings), AstNode::deserialize(is));
     }
     case 'F': {
-        auto parameters = is.read<std::vector<BindingPtr>>([&is]() {
-            return Binding::deserialize(is);
+        auto parameters = is.read<sptr<std::vector<BindingPtr>>>([&is]() {
+            return is.read<std::vector<BindingPtr>*>([&is]() {
+                return Binding::deserialize(is);
+            });
         });
         auto expression = AstNode::deserialize(is);
         return std::make_unique<Function>(source, std::move(parameters), std::move(expression));

@@ -679,7 +679,7 @@ Object Block::evaluate(EvaluationContext& ctx) const {
 void Function::dump(std::ostream& os) const {
     os << "Function(";
     bool first = true;
-    for (auto& p : parameters) {
+    for (auto& p : *parameters) {
         if (!first)
             os << ", ";
         os << *p;
@@ -693,7 +693,7 @@ void Function::dump(std::ostream& os) const {
 
 void Function::free_identifiers(std::set<std::string>& idents) const {
     auto candidates = expression->free_identifiers();
-    for (auto& p : parameters) {
+    for (auto& p : *parameters) {
         p->free_identifiers(idents);
         auto bound = p->binds_identifiers();
         for (auto& c : bound)
@@ -712,7 +712,7 @@ Object Function::evaluate(EvaluationContext& ctx) const {
         for (auto& id : free)
             closure->nonlocals[id] = ctx.lookup(id);
         closure->parameters = std::make_shared<std::vector<BindingPtr>>();
-        for (auto& parameter : parameters)
+        for (auto& parameter : *parameters)
             closure->parameters->push_back(parameter->freeze(ctx));
     }
     catch (EvalException& e) {
@@ -1109,7 +1109,7 @@ AstPtr Gold::normalize(p::parse_tree::node& node) {
     else if (type == "Grammar::func::rule") {
         auto function = std::make_unique<Function>(source(node));
         for (auto&& c : node.children[0]->children)
-            function->parameters.push_back(normalize_binding(*c));
+            function->parameters->push_back(normalize_binding(*c));
         function->expression = normalize(*node.children[1]);
         return function;
     }
