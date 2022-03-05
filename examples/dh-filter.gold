@@ -18,4 +18,8 @@ let carlo = {
 
 let isAdmin = (person) => person.admin
 
+let filter = (pred, list) => [
+    for x in list: if pred(x): x
+]
+
 in filter(isAdmin, [alice, bob, carlo])
