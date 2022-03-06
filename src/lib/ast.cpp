@@ -153,7 +153,6 @@ bool ListBinding::do_bind(EvaluationContext& ctx, Object obj) const {
         return false;
     auto& list = obj.unsafe_list();
 
-    std::cout << list->size() << " " << bindings.size() << " " << (slurp ? "y" : "n") << std::endl;
     if (list->size() > bindings.size() && !slurp)
         return false;
 

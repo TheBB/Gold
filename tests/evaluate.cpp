@@ -226,6 +226,54 @@ TEST_CASE("Evaluation of functions", "[evaluate]") {
         "in b()"
     );
     REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string(
+        "let a = 1\n"
+        "let b = (q = a) => q\n"
+        "in b()"
+    );
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string(
+        "let a = 1\n"
+        "let b = (q = a) => q\n"
+        "in b(2)"
+    );
+    REQUIRE(obj.unsafe_integer() == 2);
+
+    obj = evaluate_string(
+        "let b = () => let a = 1 in (q = a) => q\n"
+        "let c = b()\n"
+        "in c()"
+    );
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string(
+        "let a = (q, ...) => q\n"
+        "in a(1, 2, 3)"
+    );
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string(
+        "let a = (q, ...x) => [q, ...x]\n"
+        "in a(1, 2, 3)"
+    );
+    REQUIRE(obj.size() == 3);
+    REQUIRE(obj[0].unsafe_integer() == 1);
+    REQUIRE(obj[1].unsafe_integer() == 2);
+    REQUIRE(obj[2].unsafe_integer() == 3);
+
+    obj = evaluate_string(
+        "let a = (q, p = q) => p\n"
+        "in a(1, 2)"
+    );
+    REQUIRE(obj.unsafe_integer() == 2);
+
+    obj = evaluate_string(
+        "let a = (q, p = q) => p\n"
+        "in a(1)"
+    );
+    REQUIRE(obj.unsafe_integer() == 1);
 }
 
 
