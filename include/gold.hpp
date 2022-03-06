@@ -429,6 +429,7 @@ public:
     EvaluationContext() { push_namespace(builtins); }
 
     Object lookup(const std::string& key);
+    opt<Object> weak_lookup(const std::string& key);
     Object lookup_object(const std::string& key, int index);
     void assign(const std::string& key, Object value);
 
@@ -442,7 +443,16 @@ public:
     Object finalize_object();
 
     void append_libfinder(sptr<LibFinder> finder) { libfinders.push_back(std::move(finder)); }
-    Object import(const std::string& path) const;
+    virtual Object import(const std::string& path) const;
+};
+
+
+class ForwardContext : public EvaluationContext {
+private:
+    EvaluationContext& ctx;
+public:
+    ForwardContext(EvaluationContext& ctx) : EvaluationContext(), ctx(ctx) {}
+    virtual Object import(const std::string& path) const { return ctx.import(path); }
 };
 
 
