@@ -62,17 +62,10 @@ bool Binding::bind(EvaluationContext& ctx, Object obj, bool autocollapse) const 
 }
 
 
-std::set<std::string> Binding::binds_identifiers() const {
-    std::set<std::string> retval;
-    binds_identifiers(retval);
-    return retval;
-}
-
-
-std::set<std::string> Binding::free_identifiers() const {
-    std::set<std::string> retval;
-    free_identifiers(retval);
-    return retval;
+std::pair<std::set<std::string>, std::set<std::string>> Binding::free_and_bound() const {
+    std::set<std::string> free, bound;
+    free_and_bound(free, bound);
+    return std::pair(free, bound);
 }
 
 
@@ -86,8 +79,8 @@ BindingPtr IdentifierBinding::freeze(EvaluationContext&) const {
 }
 
 
-void IdentifierBinding::binds_identifiers(std::set<std::string>& idents) const {
-    idents.insert(name);
+void IdentifierBinding::free_and_bound(std::set<std::string>&, std::set<std::string>& bound) const {
+    bound.insert(name);
 }
 
 
@@ -138,20 +131,20 @@ BindingPtr ListBinding::freeze(EvaluationContext& ctx) const {
 }
 
 
-void ListBinding::binds_identifiers(std::set<std::string>& idents) const {
-    for (auto& binding : bindings)
-        binding.binding->binds_identifiers(idents);
-    if (slurp_target.has_value())
-        idents.insert(slurp_target.value());
-}
-
-
-void ListBinding::free_identifiers(std::set<std::string>& idents) const {
+void ListBinding::free_and_bound(std::set<std::string>& free, std::set<std::string>& bound) const {
     for (auto& binding : bindings) {
-        if (binding.fallback.has_value())
-            binding.fallback.value()->free_identifiers(idents);
-        binding.binding->free_identifiers(idents);
+        if (binding.fallback.has_value()) {
+            auto sub_free = binding.fallback.value()->free_identifiers();
+            for (auto& n : sub_free) {
+                if (bound.find(n) == bound.end())
+                    free.insert(n);
+            }
+        }
+        binding.binding->free_and_bound(free, bound);
     }
+
+    if (slurp_target.has_value())
+        bound.insert(slurp_target.value());
 }
 
 
@@ -230,20 +223,20 @@ BindingPtr MapBinding::freeze(EvaluationContext& ctx) const {
 }
 
 
-void MapBinding::binds_identifiers(std::set<std::string>& idents) const {
-    for (auto& entry : entries)
-        entry.binding->binds_identifiers(idents);
-    if (slurp_target.has_value())
-        idents.insert(slurp_target.value());
-}
-
-
-void MapBinding::free_identifiers(std::set<std::string>& idents) const {
+void MapBinding::free_and_bound(std::set<std::string>& free, std::set<std::string>& bound) const {
     for (auto& entry : entries) {
-        if (entry.fallback.has_value())
-            entry.fallback.value()->free_identifiers(idents);
-        entry.binding->free_identifiers(idents);
+        if (entry.fallback.has_value()) {
+            auto sub_free = entry.fallback.value()->free_identifiers();
+            for (auto& n : sub_free) {
+                if (bound.find(n) == bound.end())
+                    free.insert(n);
+            }
+        }
+        entry.binding->free_and_bound(free, bound);
     }
+
+    if (slurp_target.has_value())
+        bound.insert(slurp_target.value());
 }
 
 
@@ -412,10 +405,12 @@ void LoopListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
 
 void LoopListElement::free_identifiers(std::set<std::string>& idents) const {
     iter->free_identifiers(idents);
-    binding->free_identifiers(idents);
-    auto newly_bound = binding->binds_identifiers();
+
+    std::set<std::string> bound;
+    binding->free_and_bound(idents, bound);
+
     auto candidates = element->free_identifiers();
-    for (auto& p : newly_bound)
+    for (auto& p : bound)
         candidates.erase(p);
     for (auto& c : candidates)
         idents.insert(c);
@@ -544,10 +539,12 @@ void LoopMapElement::fill(EvaluationContext& ctx) const {
 
 void LoopMapElement::free_identifiers(std::set<std::string>& idents) const {
     iter->free_identifiers(idents);
-    binding->free_identifiers(idents);
-    auto newly_bound = binding->binds_identifiers();
+
+    std::set<std::string> bound;
+    binding->free_and_bound(idents, bound);
+
     auto candidates = element->free_identifiers();
-    for (auto& p : newly_bound)
+    for (auto& p : bound)
         candidates.erase(p);
     for (auto& c : candidates)
         idents.insert(c);
@@ -649,12 +646,7 @@ void Block::free_identifiers(std::set<std::string>& idents) const {
             if (bound.find(c) == bound.end())
                 idents.insert(c);
         }
-        for (auto& c : binding->free_identifiers()) {
-            if (bound.find(c) == bound.end())
-                idents.insert(c);
-        }
-        for (auto& name : binding->binds_identifiers())
-            bound.insert(name);
+        binding->free_and_bound(idents, bound);
     }
     for (auto& c : expression->free_identifiers()) {
         if (bound.find(c) == bound.end())
@@ -684,8 +676,10 @@ void Function::dump(std::ostream& os) const {
 
 void Function::free_identifiers(std::set<std::string>& idents) const {
     auto candidates = expression->free_identifiers();
-    parameters->free_identifiers(idents);
-    auto bound = parameters->binds_identifiers();
+
+    std::set<std::string> bound;
+    parameters->free_and_bound(idents, bound);
+
     for (auto& c : bound)
         candidates.erase(c);
     for (auto& c : candidates)
