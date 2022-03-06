@@ -232,24 +232,14 @@ Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& arg
         throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));
     auto closure = std::get<Closure>(_data);
 
-    ctx.push_namespace(closure->nonlocals);
-    ctx.push_namespace();
-
-    Object retval;
-
-    try {
-        if (!closure->parameters->bind(ctx, Object::list(args))) {
-            throw EvalException(closure->parameters->src, "failed to bind pattern");
-        }
-        retval = closure->expression->evaluate(ctx);
-    }
-    catch (const EvalException&) {
-        ctx.pop_namespace(2);
-        throw;
+    ForwardContext newctx(ctx);
+    newctx.push_namespace(closure->nonlocals);
+    newctx.push_namespace();
+    if (!closure->parameters->bind(newctx, Object::list(args))) {
+        throw EvalException(closure->parameters->src, "failed to bind pattern");
     }
 
-    ctx.pop_namespace(2);
-    return retval;
+    return closure->expression->evaluate(newctx);
 }
 
 
@@ -428,12 +418,20 @@ Object EvaluationContext::import(const std::string& path) const {
 
 
 Object EvaluationContext::lookup(const std::string& key) {
+    auto val = weak_lookup(key);
+    if (!val.has_value())
+        throw EvalException(fmt::format("unbound name: `{}`", key));
+    return val.value();
+}
+
+
+opt<Object> EvaluationContext::weak_lookup(const std::string& key) {
     for (auto& ns : namespaces) {
         if (ns.find(key) == ns.end())
             continue;
         return ns[key];
     }
-    throw EvalException(fmt::format("unbound name: `{}`", key));
+    return opt<Object>();
 }
 
 

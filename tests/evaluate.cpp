@@ -274,6 +274,9 @@ TEST_CASE("Evaluation of functions", "[evaluate]") {
         "in a(1)"
     );
     REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string("() => q");
+    REQUIRE(obj.type() == Object::Type::closure);
 }
 
 
@@ -585,7 +588,7 @@ TEST_CASE("Import", "[evaluate]") {
 TEST_CASE("Errors", "[evaluate]") {
     // Look-up non-existing binding
     REQUIRE_THROWS_WITH(evaluate_string("q"), Contains("1:1"));
-    REQUIRE_THROWS_WITH(evaluate_string("() => q"), Contains("1:1"));
+    REQUIRE_THROWS_WITH(evaluate_string("(() => q)()"), Contains("1:8") && Contains("1:10"));
 
     // Binding fails to match
     REQUIRE_THROWS_WITH(evaluate_string("let [a] = 1 in a"), Contains("1:5"));

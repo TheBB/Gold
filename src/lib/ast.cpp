@@ -690,13 +690,10 @@ Object Function::evaluate(EvaluationContext& ctx) const {
     auto free = AstNode::free_identifiers();
     auto closure = std::make_shared<Object::ClosureT>();
 
-    try {
-        for (auto& id : free)
-            closure->nonlocals[id] = ctx.lookup(id);
-    }
-    catch (EvalException& e) {
-        e.tag_position(source());
-        throw;
+    for (auto& id : free) {
+        auto val = ctx.weak_lookup(id);
+        if (val.has_value())
+            closure->nonlocals[id] = val.value();
     }
 
     closure->parameters = parameters;
