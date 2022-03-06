@@ -232,22 +232,15 @@ Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& arg
         throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));
     auto closure = std::get<Closure>(_data);
 
-    if (args.size() != closure->parameters->size())
-        throw EvalException(fmt::format(
-            "wrong number of parameters: got {} but expected {}",
-            args.size(), closure->parameters->size()
-        ));
-
     ctx.push_namespace(closure->nonlocals);
     ctx.push_namespace();
 
     Object retval;
 
     try {
-        auto id_it = closure->parameters->begin();
-        auto arg_it = args.begin();
-        while (id_it != closure->parameters->end() && arg_it != args.end())
-            (*id_it++)->bind(ctx, *arg_it++);
+        if (!closure->parameters->bind(ctx, Object::list(args))) {
+            throw EvalException(closure->parameters->src, "failed to bind pattern");
+        }
         retval = closure->expression->evaluate(ctx);
     }
     catch (const EvalException&) {

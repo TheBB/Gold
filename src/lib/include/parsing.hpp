@@ -35,8 +35,7 @@ struct IdentifierBinding : public Binding {
     IdentifierBinding(Source src, std::string name) : Binding(src), name(name) {}
     virtual void dump(std::ostream&) const;
     virtual BindingPtr freeze(EvaluationContext& ctx) const;
-    virtual void binds_identifiers(std::set<std::string>&) const;
-    virtual void free_identifiers(std::set<std::string>&) const {}
+    virtual void free_and_bound(std::set<std::string>&, std::set<std::string>&) const;
     virtual bool do_bind(EvaluationContext&, Object) const;
     virtual void do_serialize(Serializer&) const;
 };
@@ -58,8 +57,7 @@ struct ListBinding : public Binding {
 
     virtual void dump(std::ostream&) const;
     virtual BindingPtr freeze(EvaluationContext& ctx) const;
-    virtual void binds_identifiers(std::set<std::string>&) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
+    virtual void free_and_bound(std::set<std::string>&, std::set<std::string>&) const;
     virtual bool do_bind(EvaluationContext&, Object) const;
     virtual void do_serialize(Serializer&) const;
 };
@@ -81,8 +79,7 @@ struct MapBinding : public Binding {
 
     virtual void dump(std::ostream&) const;
     virtual BindingPtr freeze(EvaluationContext& ctx) const;
-    virtual void binds_identifiers(std::set<std::string>&) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
+    virtual void free_and_bound(std::set<std::string>&, std::set<std::string>&) const;
     virtual bool do_bind(EvaluationContext&, Object) const;
     virtual void do_serialize(Serializer&) const;
 };
@@ -334,12 +331,12 @@ struct Block : public AstNode {
 
 
 struct Function : public AstNode {
-    std::vector<BindingPtr> parameters;
+    sptr<Binding> parameters;
     sptr<AstNode> expression;
 
     Function(Source src) : AstNode(src) {}
-    Function(Source src, std::vector<BindingPtr> parameters, sptr<AstNode> expression)
-        : AstNode(src), parameters(std::move(parameters)), expression(expression) {}
+    Function(Source src, sptr<Binding> parameters, sptr<AstNode> expression)
+        : AstNode(src), parameters(parameters), expression(expression) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;

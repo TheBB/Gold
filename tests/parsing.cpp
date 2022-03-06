@@ -269,10 +269,10 @@ TEST_CASE("Block expressions", "[parsing]") {
 
 TEST_CASE("Functions", "[parsing]") {
     auto ast = parse_string("() => 1");
-    REQUIRE(ast->dump() == "Function(Lit(1))");
+    REQUIRE(ast->dump() == "Function(List(), Lit(1))");
 
     ast = parse_string("(a) => let b = a\nin b");
-    REQUIRE(ast->dump() == "Function(Id(a), Block(Entry(Id(b), Id(a)), Id(b)))");
+    REQUIRE(ast->dump() == "Function(List(Entry(Id(a))), Block(Entry(Id(b), Id(a)), Id(b)))");
 }
 
 
@@ -287,7 +287,7 @@ TEST_CASE("Postfix operators", "[parsing]") {
     REQUIRE(ast->dump() == "FunCall(Id(func), Lit(1), Lit(2), Lit(3))");
 
     ast = parse_string("((x,y) => x+y)(1,2)");
-    REQUIRE(ast->dump() == "FunCall(Function(Id(x), Id(y), BinOp(Id(x) + Id(y))), Lit(1), Lit(2))");
+    REQUIRE(ast->dump() == "FunCall(Function(List(Entry(Id(x)), Entry(Id(y))), BinOp(Id(x) + Id(y))), Lit(1), Lit(2))");
 
     ast = parse_string("abc.def");
     REQUIRE(ast->dump() == "Index(Id(abc), Lit(\"def\"))");

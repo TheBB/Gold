@@ -249,8 +249,8 @@ namespace Grammar
 
     // Functions
     struct func {
-        struct param_list: listof<pattern::rule> {};
-        struct bracketed_param_list: p::seq<token::op_paren, param_list, token::cl_paren> {};
+        // struct param_list: listof<pattern::rule> {};
+        struct bracketed_param_list: p::seq<token::op_paren, pattern::list::seq, token::cl_paren> {};
         struct rule: p::if_must<
             p::seq<bracketed_param_list, token::implies>,
             expression
@@ -394,7 +394,7 @@ namespace Grammar
             block::rule,
             block::binding,
             identifier,
-            func::param_list,
+            func::bracketed_param_list,
             func::rule,
             branch,
             product::operation,

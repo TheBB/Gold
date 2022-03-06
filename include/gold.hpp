@@ -94,11 +94,8 @@ struct Binding : public Serializable {
 
     virtual BindingPtr freeze(EvaluationContext& ctx) const = 0;
 
-    std::set<std::string> binds_identifiers() const;
-    virtual void binds_identifiers(std::set<std::string>&) const = 0;
-
-    std::set<std::string> free_identifiers() const;
-    virtual void free_identifiers(std::set<std::string>&) const = 0;
+    std::pair<std::set<std::string>, std::set<std::string>> free_and_bound() const;
+    virtual void free_and_bound(std::set<std::string>&, std::set<std::string>&) const = 0;
 
     static BindingPtr deserialize(Deserializer&);
 
@@ -125,7 +122,7 @@ public:
 
     using ClosureT = struct {
         Namespace nonlocals;
-        sptr<std::vector<BindingPtr>> parameters;
+        sptr<Binding> parameters;
         sptr<AstNode> expression;
     };
     using Closure = sptr<ClosureT>;

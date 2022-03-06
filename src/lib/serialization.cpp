@@ -93,10 +93,8 @@ Object Object::deserialize(Deserializer& is) {
                 auto value = Object::deserialize(is);
                 return std::pair(key, value);
             });
-            closure->parameters = is.read<sptr<std::vector<BindingPtr>>>([&is]() {
-                return is.read<std::vector<BindingPtr>*>([&is]() {
-                    return Binding::deserialize(is);
-                });
+            closure->parameters = is.read<sptr<Binding>>([&is]() {
+                return Binding::deserialize(is).release();
             });
             closure->expression = is.read<sptr<AstNode>>([&is]() {
                 return AstNode::deserialize(is).release();
@@ -213,7 +211,7 @@ void Block::do_serialize(Serializer& os) const {
 
 
 void Function::do_serialize(Serializer& os) const {
-    os << 'F' << source() << parameters << *expression;
+    os << 'F' << source() << *parameters << *expression;
 }
 
 
@@ -279,9 +277,7 @@ AstPtr AstNode::deserialize(Deserializer& is) {
         return std::make_unique<Block>(source, std::move(bindings), AstNode::deserialize(is));
     }
     case 'F': {
-        auto parameters = is.read<std::vector<BindingPtr>>([&is]() {
-            return Binding::deserialize(is);
-        });
+        auto parameters = Binding::deserialize(is);
         auto expression = AstNode::deserialize(is);
         return std::make_unique<Function>(source, std::move(parameters), std::move(expression));
     }
