@@ -105,7 +105,7 @@ BindingPtr ListBinding::freeze(EvaluationContext& ctx) const {
                 std::make_unique<Literal>(
                     entry.fallback.value()->source(),
                     entry.fallback.value()->evaluate(ctx)
-                ) : opt<AstPtr>()
+                ) : opt<ExprPtr>()
         });
     return retval;
 }
@@ -196,7 +196,7 @@ BindingPtr MapBinding::freeze(EvaluationContext& ctx) const {
                 std::make_unique<Literal>(
                     entry.fallback.value()->source(),
                     entry.fallback.value()->evaluate(ctx)
-                ) : opt<AstPtr>()
+                ) : opt<ExprPtr>()
         });
     return retval;
 }
@@ -253,14 +253,14 @@ bool MapBinding::do_bind(EvaluationContext& ctx, Object obj) const {
 }
 
 
-std::string Gold::AstNode::dump() const {
+std::string Gold::Expr::dump() const {
     std::stringstream ss;
     ss << *this;
     return ss.str();
 }
 
 
-std::set<std::string> AstNode::free_identifiers() const {
+std::set<std::string> Expr::free_identifiers() const {
     std::set<std::string> idents;
     free_identifiers(idents);
     return idents;
@@ -667,7 +667,7 @@ void Function::free_identifiers(std::set<std::string>& idents) const {
 
 
 Object Function::evaluate(EvaluationContext& ctx) const {
-    auto free = AstNode::free_identifiers();
+    auto free = Expr::free_identifiers();
     auto closure = std::make_shared<Object::ClosureT>();
 
     for (auto& id : free) {

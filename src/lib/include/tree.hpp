@@ -17,8 +17,8 @@ namespace Gold
 struct Ast
 {
     // Normalization functions
-    using ExprN = std::function<AstPtr(const Ast&)>;
-    using ModExprN = std::function<AstPtr(const Ast&, AstPtr)>;
+    using ExprN = std::function<ExprPtr(const Ast&)>;
+    using ModExprN = std::function<ExprPtr(const Ast&, ExprPtr)>;
     using BindingN = std::function<BindingPtr(const Ast&)>;
     using ListEltN =std::function<uptr<ListElement>(const Ast&)>;
     using MapEltN = std::function<uptr<MapElement>(const Ast&)>;
@@ -86,8 +86,8 @@ struct Ast
     Source source() const;
     std::string_view string_view() const noexcept;
     std::string string() const;
-    AstPtr expr() const;
-    AstPtr postfix(AstPtr expr) const;
+    ExprPtr expr() const;
+    ExprPtr postfix(ExprPtr expr) const;
     uptr<ListElement> list_element() const;
     uptr<MapElement> map_element() const;
     Operator oper() const;

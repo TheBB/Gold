@@ -23,14 +23,14 @@ std::string Ast::string() const {
 }
 
 
-AstPtr Ast::expr() const {
+ExprPtr Ast::expr() const {
     if (is_root())
         return children[0]->expr();
     return std::get<ExprN>(normalizer)(*this);
 }
 
 
-AstPtr Ast::postfix(AstPtr expr) const {
+ExprPtr Ast::postfix(ExprPtr expr) const {
     return std::get<ModExprN>(normalizer)(*this, std::move(expr));
 }
 
@@ -191,14 +191,14 @@ template<> void Ast::set_normalizer<Grammar::pattern::map::rule>() {
 
 
 template<> void Ast::set_normalizer<Grammar::file>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         return ast.children[0]->expr();
     };
 }
 
 
 template<> void Ast::set_normalizer<Grammar::boolean>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         return std::make_unique<Literal>(
             ast.source(),
             Object::boolean(ast.string_view() == "true")
@@ -208,14 +208,14 @@ template<> void Ast::set_normalizer<Grammar::boolean>() {
 
 
 template<> void Ast::set_normalizer<Grammar::keyword::Null>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         return std::make_unique<Literal>(ast.source(), Object::null());
     };
 }
 
 
 template<> void Ast::set_normalizer<Grammar::number::integer>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         auto str = ast.string();
         auto value = std::strtoimax(str.c_str(), nullptr, 10);
         return std::make_unique<Literal>(ast.source(), Object::integer(value));
@@ -224,7 +224,7 @@ template<> void Ast::set_normalizer<Grammar::number::integer>() {
 
 
 template<> void Ast::set_normalizer<Grammar::number::floating>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         auto value = std::stod(ast.string());
         return std::make_unique<Literal>(ast.source(), Object::floating(value));
     };
@@ -232,7 +232,7 @@ template<> void Ast::set_normalizer<Grammar::number::floating>() {
 
 
 template<> void Ast::set_normalizer<Grammar::string::data>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         auto data = ast.string_view();
         std::stringstream builder;
         for (auto it = data.begin(); it != data.end(); it++) {
@@ -261,7 +261,7 @@ template<> void Ast::set_normalizer<Grammar::string::data>() {
 
 
 template<> void Ast::set_normalizer<Grammar::string::interp>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         auto func = std::make_unique<Identifier>(ast.source(), "str");
         auto call = std::make_unique<FunCall>(ast.source(), std::move(func));
         call->args.push_back(ast.children[0]->expr());
@@ -271,7 +271,7 @@ template<> void Ast::set_normalizer<Grammar::string::interp>() {
 
 
 template<> void Ast::set_normalizer<Grammar::string::post>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         if (ast.children.empty())
             return std::make_unique<Literal>(ast.source(), Object::string(""));
         auto it = ast.children.begin();
@@ -286,7 +286,7 @@ template<> void Ast::set_normalizer<Grammar::string::post>() {
 
 
 template<> void Ast::set_normalizer<Grammar::identifier>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         return std::make_unique<Identifier>(ast.source(), ast.string());
     };
 }
@@ -325,7 +325,7 @@ template<> void Ast::set_normalizer<Grammar::list::loop>() {
 
 
 template<> void Ast::set_normalizer<Grammar::list::rule>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         auto list = std::make_unique<List>(ast.source());
         for (auto& c : ast.children)
             list->elements.push_back(c->list_element());
@@ -335,7 +335,7 @@ template<> void Ast::set_normalizer<Grammar::list::rule>() {
 
 
 template<> void Ast::set_normalizer<Grammar::map::const_identifier>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         return std::make_unique<Literal>(ast.source(), Object::string(ast.string()));
     };
 }
@@ -374,7 +374,7 @@ template<> void Ast::set_normalizer<Grammar::map::loop>() {
 
 
 template<> void Ast::set_normalizer<Grammar::map::rule>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         auto map = std::make_unique<Map>(ast.source());
         for (auto& c : ast.children)
             map->elements.push_back(c->map_element());
@@ -394,7 +394,7 @@ template<> void Ast::set_normalizer<Grammar::block::binding>() {
 
 
 template<> void Ast::set_normalizer<Grammar::block::rule>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         auto block = std::make_unique<Block>(ast.source());
         auto it = ast.children.begin();
         for (; it != ast.children.end() - 1; it++)
@@ -406,7 +406,7 @@ template<> void Ast::set_normalizer<Grammar::block::rule>() {
 
 
 template<> void Ast::set_normalizer<Grammar::branch>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         return std::make_unique<Branch>(
             ast.source(),
             ast.children[0]->expr(),
@@ -418,7 +418,7 @@ template<> void Ast::set_normalizer<Grammar::branch>() {
 
 
 template<> void Ast::set_normalizer<Grammar::func::rule>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
          return std::make_unique<Function>(
             ast.source(),
             ast.children[0]->binding(),
@@ -429,7 +429,7 @@ template<> void Ast::set_normalizer<Grammar::func::rule>() {
 
 
 template<> void Ast::set_normalizer<Grammar::postfix::funcall_operator>() {
-    normalizer = [](const Ast& ast, AstPtr expr) -> AstPtr {
+    normalizer = [](const Ast& ast, ExprPtr expr) -> ExprPtr {
         auto call = std::make_unique<FunCall>(ast.source(), std::move(expr));
         for (auto& c : ast.children)
             call->args.push_back(c->expr());
@@ -439,7 +439,7 @@ template<> void Ast::set_normalizer<Grammar::postfix::funcall_operator>() {
 
 
 template<> void Ast::set_normalizer<Grammar::postfix::object_access>() {
-    normalizer = [](const Ast& ast, AstPtr expr) -> AstPtr {
+    normalizer = [](const Ast& ast, ExprPtr expr) -> ExprPtr {
         auto name = Object::string(ast.children[0]->string());
         auto index = std::make_unique<Literal>(ast.children[0]->source(), name);
         return std::make_unique<Index>(ast.source(), std::move(expr), std::move(index));
@@ -448,7 +448,7 @@ template<> void Ast::set_normalizer<Grammar::postfix::object_access>() {
 
 
 template<> void Ast::set_normalizer<Grammar::postfix::subscript_operator>() {
-    normalizer = [](const Ast& ast, AstPtr expr) -> AstPtr {
+    normalizer = [](const Ast& ast, ExprPtr expr) -> ExprPtr {
         auto index = ast.children[0]->expr();
         return std::make_unique<Index>(ast.source(), std::move(expr), std::move(index));
     };
@@ -456,7 +456,7 @@ template<> void Ast::set_normalizer<Grammar::postfix::subscript_operator>() {
 
 
 template<> void Ast::set_normalizer<Grammar::postfix::rule>() {
-    normalizer = [](const Ast& ast) -> AstPtr {
+    normalizer = [](const Ast& ast) -> ExprPtr {
         auto expr = ast.children[0]->expr();
         for (auto it = ast.children.begin() + 1; it != ast.children.end(); it++)
             expr = (*it)->postfix(std::move(expr));
@@ -465,7 +465,7 @@ template<> void Ast::set_normalizer<Grammar::postfix::rule>() {
 }
 
 
-static AstPtr _lbinop(const Ast& ast) {
+static ExprPtr _lbinop(const Ast& ast) {
     auto expr = ast.children[0]->expr();
     for (auto it = ast.children.begin() + 1; it != ast.children.end(); it++) {
         auto src = (*it)->source();

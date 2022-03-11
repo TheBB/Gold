@@ -96,8 +96,8 @@ Object Object::deserialize(Deserializer& is) {
             closure->parameters = is.read<sptr<Binding>>([&is]() {
                 return Binding::deserialize(is).release();
             });
-            closure->expression = is.read<sptr<AstNode>>([&is]() {
-                return AstNode::deserialize(is).release();
+            closure->expression = is.read<sptr<Expr>>([&is]() {
+                return Expr::deserialize(is).release();
             });
             return closure;
         }));
@@ -130,7 +130,7 @@ BindingPtr Binding::deserialize(Deserializer& is) {
     case 'L': {
         auto bindings = is.read<std::vector<ListBinding::Entry>>([&is]() {
             auto binding = Binding::deserialize(is);
-            auto fallback = is.read<opt<AstPtr>>([&is]() { return AstNode::deserialize(is); });
+            auto fallback = is.read<opt<ExprPtr>>([&is]() { return Expr::deserialize(is); });
             return ListBinding::Entry { std::move(binding), std::move(fallback) };
         });
         auto slurp = is.read<bool>();
@@ -141,7 +141,7 @@ BindingPtr Binding::deserialize(Deserializer& is) {
         auto entries = is.read<std::vector<MapBinding::Entry>>([&is]() {
             auto name = is.read<std::string>();
             auto binding = Binding::deserialize(is);
-            auto fallback = is.read<opt<AstPtr>>([&is]() { return AstNode::deserialize(is); });
+            auto fallback = is.read<opt<ExprPtr>>([&is]() { return Expr::deserialize(is); });
             return MapBinding::Entry { name, std::move(binding), std::move(fallback) };
         });
         auto slurp_target = is.read<opt<std::string>>();
@@ -230,19 +230,19 @@ void Index::do_serialize(Serializer& os) const {
 }
 
 
-AstPtr AstNode::deserialize(std::string val) {
+ExprPtr Expr::deserialize(std::string val) {
     std::istringstream is(val);
     return deserialize(is);
 }
 
 
-AstPtr AstNode::deserialize(std::istream& is) {
+ExprPtr Expr::deserialize(std::istream& is) {
     Deserializer d(is);
     return deserialize(d);
 }
 
 
-AstPtr AstNode::deserialize(Deserializer& is) {
+ExprPtr Expr::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     auto source = is.read<Source>();
     switch (indicator) {
@@ -263,40 +263,40 @@ AstPtr AstNode::deserialize(Deserializer& is) {
         return std::make_unique<Map>(source, std::move(entries));
     }
     case 'O': {
-        auto lhs = AstNode::deserialize(is);
-        auto rhs = AstNode::deserialize(is);
+        auto lhs = Expr::deserialize(is);
+        auto rhs = Expr::deserialize(is);
         auto op = is.read<Operator>();
         return std::make_unique<BinOp>(source, std::move(lhs), std::move(rhs), op);
     }
     case 'B': {
         auto bindings = is.read<std::vector<Block::BindingElement>>([&is]() {
             auto binding = Binding::deserialize(is);
-            auto subnode = AstNode::deserialize(is);
+            auto subnode = Expr::deserialize(is);
             return Block::BindingElement {std::move(binding), std::move(subnode)};
         });
-        return std::make_unique<Block>(source, std::move(bindings), AstNode::deserialize(is));
+        return std::make_unique<Block>(source, std::move(bindings), Expr::deserialize(is));
     }
     case 'F': {
         auto parameters = Binding::deserialize(is);
-        auto expression = AstNode::deserialize(is);
+        auto expression = Expr::deserialize(is);
         return std::make_unique<Function>(source, std::move(parameters), std::move(expression));
     }
     case 'C': {
-        auto cond = AstNode::deserialize(is);
-        auto yes = AstNode::deserialize(is);
-        auto no = AstNode::deserialize(is);
+        auto cond = Expr::deserialize(is);
+        auto yes = Expr::deserialize(is);
+        auto no = Expr::deserialize(is);
         return std::make_unique<Branch>(source, std::move(cond), std::move(yes), std::move(no));
     }
     case 'E': {
-        auto func = AstNode::deserialize(is);
-        auto args = is.read<std::vector<AstPtr>>([&is]() {
-            return AstNode::deserialize(is);
+        auto func = Expr::deserialize(is);
+        auto args = is.read<std::vector<ExprPtr>>([&is]() {
+            return Expr::deserialize(is);
         });
         return std::make_unique<FunCall>(source, std::move(func), std::move(args));
     }
     case 'S': {
-        auto haystack = AstNode::deserialize(is);
-        auto needle = AstNode::deserialize(is);
+        auto haystack = Expr::deserialize(is);
+        auto needle = Expr::deserialize(is);
         return std::make_unique<Index>(source, std::move(haystack), std::move(needle));
     }
     default:
@@ -308,16 +308,16 @@ AstPtr AstNode::deserialize(Deserializer& is) {
 uptr<ListElement> ListElement::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     switch (indicator) {
-    case 'E': return std::make_unique<SingletonListElement>(AstNode::deserialize(is));
-    case 'S': return std::make_unique<SplatListElement>(AstNode::deserialize(is));
+    case 'E': return std::make_unique<SingletonListElement>(Expr::deserialize(is));
+    case 'S': return std::make_unique<SplatListElement>(Expr::deserialize(is));
     case 'C': {
-        auto cond = AstNode::deserialize(is);
+        auto cond = Expr::deserialize(is);
         auto element = ListElement::deserialize(is);
         return std::make_unique<CondListElement>(std::move(cond), std::move(element));
     }
     case 'L': {
         auto binding = Binding::deserialize(is);
-        auto iter = AstNode::deserialize(is);
+        auto iter = Expr::deserialize(is);
         auto element = ListElement::deserialize(is);
         return std::make_unique<LoopListElement>(std::move(binding), std::move(iter), std::move(element));
     }
@@ -351,19 +351,19 @@ uptr<MapElement> MapElement::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     switch (indicator) {
     case 'E': {
-        auto key = AstNode::deserialize(is);
-        auto node = AstNode::deserialize(is);
+        auto key = Expr::deserialize(is);
+        auto node = Expr::deserialize(is);
         return std::make_unique<SingletonMapElement>(std::move(key), std::move(node));
     }
-    case 'S': return std::make_unique<SplatMapElement>(AstNode::deserialize(is));
+    case 'S': return std::make_unique<SplatMapElement>(Expr::deserialize(is));
     case 'C': {
-        auto cond = AstNode::deserialize(is);
+        auto cond = Expr::deserialize(is);
         auto element = MapElement::deserialize(is);
         return std::make_unique<CondMapElement>(std::move(cond), std::move(element));
     }
     case 'L': {
         auto binding = Binding::deserialize(is);
-        auto iter = AstNode::deserialize(is);
+        auto iter = Expr::deserialize(is);
         auto element = MapElement::deserialize(is);
         return std::make_unique<LoopMapElement>(std::move(binding), std::move(iter), std::move(element));
     }

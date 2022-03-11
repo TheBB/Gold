@@ -130,7 +130,7 @@ struct IdentifierBinding : public Binding {
 struct ListBinding : public Binding {
     using Entry = struct Entry {
         BindingPtr binding;
-        opt<AstPtr> fallback = opt<AstPtr>();
+        opt<ExprPtr> fallback = opt<ExprPtr>();
     };
 
     std::vector<Entry> bindings;
@@ -153,7 +153,7 @@ struct MapBinding : public Binding {
     using Entry = struct Entry {
         std::string name;
         BindingPtr binding;
-        opt<AstPtr> fallback = opt<AstPtr>();
+        opt<ExprPtr> fallback = opt<ExprPtr>();
     };
 
     std::vector<Entry> entries;
@@ -171,15 +171,15 @@ struct MapBinding : public Binding {
 };
 
 
-struct AstNode : public Serializable {
+struct Expr : public Serializable {
     Source src;
 
-    AstNode(Source src) : src(src) {}
-    virtual ~AstNode() {}
+    Expr(Source src) : src(src) {}
+    virtual ~Expr() {}
 
-    static uptr<AstNode> deserialize(std::string);
-    static uptr<AstNode> deserialize(std::istream&);
-    static uptr<AstNode> deserialize(Deserializer&);
+    static uptr<Expr> deserialize(std::string);
+    static uptr<Expr> deserialize(std::istream&);
+    static uptr<Expr> deserialize(Deserializer&);
 
     virtual void dump(std::ostream&) const = 0;
     virtual void free_identifiers(std::set<std::string>&) const = 0;
@@ -189,14 +189,14 @@ struct AstNode : public Serializable {
     const Source source() const { return src; }
 
     std::string dump() const;
-    friend std::ostream& operator<<(std::ostream& os, const AstNode& node) { node.dump(os); return os; }
+    friend std::ostream& operator<<(std::ostream& os, const Expr& node) { node.dump(os); return os; }
 };
 
 
-struct Literal : public AstNode {
+struct Literal : public Expr {
     const Object object;
 
-    Literal(Source src, Object object) : AstNode(src), object(object) {}
+    Literal(Source src, Object object) : Expr(src), object(object) {}
 
     virtual void dump(std::ostream& os) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -205,10 +205,10 @@ struct Literal : public AstNode {
 };
 
 
-struct Identifier : public AstNode {
+struct Identifier : public Expr {
     const std::string name;
 
-    Identifier(Source src, std::string name) : AstNode(src), name(name) {}
+    Identifier(Source src, std::string name) : Expr(src), name(name) {}
 
     virtual void dump(std::ostream& os) const;
     virtual void free_identifiers(std::set<std::string>& idents) const;
@@ -231,9 +231,9 @@ struct ListElement : public Serializable {
 
 
 struct SingletonListElement : public ListElement {
-    AstPtr node;
+    ExprPtr node;
 
-    SingletonListElement(AstPtr node) : node(std::move(node)) {}
+    SingletonListElement(ExprPtr node) : node(std::move(node)) {}
 
     virtual void fill(EvaluationContext&, Object::ListT&) const;
     virtual void do_serialize(Serializer&) const;
@@ -243,9 +243,9 @@ struct SingletonListElement : public ListElement {
 
 
 struct SplatListElement : public ListElement {
-    AstPtr node;
+    ExprPtr node;
 
-    SplatListElement(AstPtr node) : node(std::move(node)) {}
+    SplatListElement(ExprPtr node) : node(std::move(node)) {}
 
     virtual void fill(EvaluationContext&, Object::ListT&) const;
     virtual void do_serialize(Serializer&) const;
@@ -255,10 +255,10 @@ struct SplatListElement : public ListElement {
 
 
 struct CondListElement : public ListElement {
-    AstPtr cond;
+    ExprPtr cond;
     uptr<ListElement> element;
 
-    CondListElement(AstPtr cond, uptr<ListElement> element)
+    CondListElement(ExprPtr cond, uptr<ListElement> element)
         : cond(std::move(cond)), element(std::move(element)) {}
 
     virtual void fill(EvaluationContext&, Object::ListT&) const;
@@ -270,10 +270,10 @@ struct CondListElement : public ListElement {
 
 struct LoopListElement : public ListElement {
     BindingPtr binding;
-    AstPtr iter;
+    ExprPtr iter;
     uptr<ListElement> element;
 
-    LoopListElement(BindingPtr binding, AstPtr iter, uptr<ListElement> element)
+    LoopListElement(BindingPtr binding, ExprPtr iter, uptr<ListElement> element)
         : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
 
     virtual void fill(EvaluationContext&, Object::ListT&) const;
@@ -283,17 +283,17 @@ struct LoopListElement : public ListElement {
 };
 
 
-struct List : public AstNode {
+struct List : public Expr {
     using Entry = struct Entry {
-        AstPtr node;
+        ExprPtr node;
         bool splat;
     };
 
     std::vector<uptr<ListElement>> elements;
 
-    List(Source src) : AstNode(src) {}
+    List(Source src) : Expr(src) {}
     List(Source src, std::vector<uptr<ListElement>> elements)
-        : AstNode(src), elements(std::move(elements)) {}
+        : Expr(src), elements(std::move(elements)) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -316,9 +316,9 @@ struct MapElement : public Serializable {
 
 
 struct SingletonMapElement : public MapElement {
-    AstPtr key, node;
+    ExprPtr key, node;
 
-    SingletonMapElement(AstPtr key, AstPtr node) : key(std::move(key)), node(std::move(node)) {}
+    SingletonMapElement(ExprPtr key, ExprPtr node) : key(std::move(key)), node(std::move(node)) {}
 
     virtual void fill(EvaluationContext&) const;
     virtual void do_serialize(Serializer&) const;
@@ -328,9 +328,9 @@ struct SingletonMapElement : public MapElement {
 
 
 struct SplatMapElement : public MapElement {
-    AstPtr node;
+    ExprPtr node;
 
-    SplatMapElement(AstPtr node) : node(std::move(node)) {}
+    SplatMapElement(ExprPtr node) : node(std::move(node)) {}
 
     virtual void fill(EvaluationContext&) const;
     virtual void do_serialize(Serializer&) const;
@@ -340,10 +340,10 @@ struct SplatMapElement : public MapElement {
 
 
 struct CondMapElement : public MapElement {
-    AstPtr cond;
+    ExprPtr cond;
     uptr<MapElement> element;
 
-    CondMapElement(AstPtr cond, uptr<MapElement> element)
+    CondMapElement(ExprPtr cond, uptr<MapElement> element)
         : cond(std::move(cond)), element(std::move(element)) {}
 
     virtual void fill(EvaluationContext&) const;
@@ -355,10 +355,10 @@ struct CondMapElement : public MapElement {
 
 struct LoopMapElement : public MapElement {
     BindingPtr binding;
-    AstPtr iter;
+    ExprPtr iter;
     uptr<MapElement> element;
 
-    LoopMapElement(BindingPtr binding, AstPtr iter, uptr<MapElement> element)
+    LoopMapElement(BindingPtr binding, ExprPtr iter, uptr<MapElement> element)
         : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
 
     virtual void fill(EvaluationContext&) const;
@@ -368,12 +368,12 @@ struct LoopMapElement : public MapElement {
 };
 
 
-struct Map : public AstNode {
+struct Map : public Expr {
     std::vector<uptr<MapElement>> elements;
 
-    Map(Source src) : AstNode(src) {}
+    Map(Source src) : Expr(src) {}
     Map(Source src, std::vector<uptr<MapElement>> elements)
-        : AstNode(src), elements(std::move(elements)) {}
+        : Expr(src), elements(std::move(elements)) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -382,12 +382,12 @@ struct Map : public AstNode {
 };
 
 
-struct BinOp : public AstNode {
-    AstPtr lhs, rhs;
+struct BinOp : public Expr {
+    ExprPtr lhs, rhs;
     Operator op;
 
-    BinOp(Source src, AstPtr l, AstPtr r, Operator oper)
-        : AstNode(src), lhs(std::move(l)), rhs(std::move(r)), op(oper) {}
+    BinOp(Source src, ExprPtr l, ExprPtr r, Operator oper)
+        : Expr(src), lhs(std::move(l)), rhs(std::move(r)), op(oper) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -396,18 +396,18 @@ struct BinOp : public AstNode {
 };
 
 
-struct Block : public AstNode {
+struct Block : public Expr {
     using BindingElement = struct Entry {
         BindingPtr binding;
-        AstPtr expression;
+        ExprPtr expression;
     };
 
     std::vector<BindingElement> bindings;
-    AstPtr expression;
+    ExprPtr expression;
 
-    Block(Source src) : AstNode(src) {}
-    Block(Source src, std::vector<BindingElement> bindings, AstPtr expression)
-        : AstNode(src), bindings(std::move(bindings)), expression(std::move(expression)) {}
+    Block(Source src) : Expr(src) {}
+    Block(Source src, std::vector<BindingElement> bindings, ExprPtr expression)
+        : Expr(src), bindings(std::move(bindings)), expression(std::move(expression)) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -416,28 +416,13 @@ struct Block : public AstNode {
 };
 
 
-struct Function : public AstNode {
+struct Function : public Expr {
     sptr<Binding> parameters;
-    sptr<AstNode> expression;
+    sptr<Expr> expression;
 
-    Function(Source src) : AstNode(src) {}
-    Function(Source src, sptr<Binding> parameters, sptr<AstNode> expression)
-        : AstNode(src), parameters(parameters), expression(expression) {}
-
-    virtual void dump(std::ostream&) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
-    virtual Object evaluate(EvaluationContext&) const;
-    virtual void do_serialize(Serializer&) const;
-};
-
-
-struct Branch : public AstNode {
-    AstPtr condition;
-    AstPtr if_value;
-    AstPtr else_value;
-
-    Branch(Source src, AstPtr cond, AstPtr yes, AstPtr no)
-        : AstNode(src), condition(std::move(cond)), if_value(std::move(yes)), else_value(std::move(no)) {}
+    Function(Source src) : Expr(src) {}
+    Function(Source src, sptr<Binding> parameters, sptr<Expr> expression)
+        : Expr(src), parameters(parameters), expression(expression) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -446,13 +431,13 @@ struct Branch : public AstNode {
 };
 
 
-struct FunCall : public AstNode {
-    AstPtr function;
-    std::vector<AstPtr> args;
+struct Branch : public Expr {
+    ExprPtr condition;
+    ExprPtr if_value;
+    ExprPtr else_value;
 
-    FunCall(Source src, AstPtr function) : AstNode(src), function(std::move(function)) {}
-    FunCall(Source src, AstPtr function, std::vector<AstPtr> args)
-        : AstNode(src), function(std::move(function)), args(std::move(args)) {}
+    Branch(Source src, ExprPtr cond, ExprPtr yes, ExprPtr no)
+        : Expr(src), condition(std::move(cond)), if_value(std::move(yes)), else_value(std::move(no)) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -461,12 +446,27 @@ struct FunCall : public AstNode {
 };
 
 
-struct Index : public AstNode {
-    AstPtr haystack;
-    AstPtr needle;
+struct FunCall : public Expr {
+    ExprPtr function;
+    std::vector<ExprPtr> args;
 
-    Index(Source src, AstPtr haystack, AstPtr needle)
-        : AstNode(src), haystack(std::move(haystack)), needle(std::move(needle)) {}
+    FunCall(Source src, ExprPtr function) : Expr(src), function(std::move(function)) {}
+    FunCall(Source src, ExprPtr function, std::vector<ExprPtr> args)
+        : Expr(src), function(std::move(function)), args(std::move(args)) {}
+
+    virtual void dump(std::ostream&) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
+    virtual Object evaluate(EvaluationContext&) const;
+    virtual void do_serialize(Serializer&) const;
+};
+
+
+struct Index : public Expr {
+    ExprPtr haystack;
+    ExprPtr needle;
+
+    Index(Source src, ExprPtr haystack, ExprPtr needle)
+        : Expr(src), haystack(std::move(haystack)), needle(std::move(needle)) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -476,11 +476,11 @@ struct Index : public AstNode {
 
 
 bool analyze_grammar();
-AstPtr parse_string(std::string);
-AstPtr parse_file(std::string);
+ExprPtr parse_string(std::string);
+ExprPtr parse_file(std::string);
 void debug_parse(std::string);
 void debug_parse_tree(std::string);
 
-AstPtr normalize(tao::pegtl::parse_tree::node&);
+ExprPtr normalize(tao::pegtl::parse_tree::node&);
 
 } // Namespace Gold
