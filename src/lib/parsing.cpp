@@ -44,7 +44,6 @@ namespace Grammar
 
     // Forward declarations
     struct expression;
-    struct splatted;
     struct identifier_char: p::sor<
         p::alnum,
         p::one<'_'>
@@ -117,6 +116,9 @@ namespace Grammar
         p::seq<X, p::opt<token::comma>>
     >> {};
 
+    // Splat expressions
+    struct splatted: p::if_must<token::splat, postfix::rule> {};
+
     // Operators - these rules do not consume leading whitespace
     namespace op {
         struct divide: p::one<'/'> {};
@@ -141,22 +143,22 @@ namespace Grammar
     // Destructuring patterns
     namespace pattern {
         struct rule;
-        struct ident: p::seq<prepad<identifier>> {};
+        struct ident: prepad<identifier> {};
         struct opt_slurp: p::seq<token::splat, p::opt<identifier>> {};
         struct def_slurp: p::if_must<token::splat, identifier> {};
         namespace list {
             struct element: p::seq<pattern::rule, p::opt<p::if_must<token::equals, expression>>> {};
-            struct seq: p::seq<listof_term<element, pattern::opt_slurp>> {};
+            struct seq: listof_term<element, pattern::opt_slurp> {};
             struct rule: p::if_must<token::op_bracket, seq, token::cl_bracket> {};
         }
         namespace map {
-            struct single_entry: p::seq<prepad<identifier>> {};
+            struct single_entry: prepad<identifier> {};
             struct entry: p::if_must<p::seq<prepad<identifier>, token::colon>, pattern::rule> {};
             struct element: p::seq<
                 p::sor<entry, single_entry>,
                 p::opt<p::if_must<token::equals, expression>>
             > {};
-            struct seq: p::seq<listof_term<element, pattern::def_slurp>> {};
+            struct seq: listof_term<element, pattern::def_slurp> {};
             struct rule: p::if_must<token::op_brace, seq, token::cl_brace> {};
         }
         struct rule: prepad<p::sor<ident, list::rule, map::rule>> {};
@@ -215,11 +217,11 @@ namespace Grammar
             prepad<keyword::For>, pattern::rule, prepad<keyword::In>,
             expression, token::colon, element
         > {};
-        struct splat: p::seq<splatted> {};
+        struct splat: splatted {};
         struct singleton: p::seq<expression> {};
         struct cond: p::if_must<p::seq<prepad<keyword::If>, expression, token::colon>, element> {};
         struct element: p::sor<loop, cond, splat, singleton> {};
-        struct seq: p::seq<listof<element>> {};
+        struct seq: listof<element> {};
         struct rule: p::if_must<token::op_bracket, seq, token::cl_bracket> {};
     }
 
@@ -229,7 +231,7 @@ namespace Grammar
         struct const_identifier: p::plus<p::sor<identifier_char, p::one<'-'>>> {};
         struct var_identifier: p::if_must<token::dollar, expression> {};
         struct identifier: p::sor<var_identifier, const_identifier> {};
-        struct splat: p::seq<splatted> {};
+        struct splat: splatted {};
         struct entry: p::if_must<prepad<identifier>, token::colon, expression> {};
         struct loop: p::if_must<
             prepad<keyword::For>, pattern::rule, prepad<keyword::In>,
@@ -237,7 +239,7 @@ namespace Grammar
         > {};
         struct cond: p::if_must<prepad<keyword::If>, expression, token::colon, element> {};
         struct element: p::sor<loop, cond, splat, entry> {};
-        struct seq: p::seq<listof<element>> {};
+        struct seq: listof<element> {};
         struct rule: p::if_must<token::op_brace, seq, token::cl_brace> {};
     }
 
@@ -311,9 +313,6 @@ namespace Grammar
         > {};
         struct rule: p::seq<atomic, p::star<post_op>> {};
     }
-
-    // Special case: splat expressions
-    struct splatted: p::if_must<token::splat, postfix::rule> {};
 
     // Composite expressions (can't have postfix operators)
     struct composite: p::sor<
