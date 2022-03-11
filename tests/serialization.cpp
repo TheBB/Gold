@@ -130,158 +130,158 @@ TEST_CASE("Serialization of duplicate object", "[serialization]") {
 
 TEST_CASE("Serialization of AST literals", "[serialization]") {
     auto ast = parse_string("1");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("true");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("false");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("-1.23");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("\"dingbob\"");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of AST identifiers", "[serialization]") {
     auto ast = parse_string("dingbob");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("ift");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of list ASTs", "[serialization]") {
     auto ast = parse_string("[]");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("[true]");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("[\"\"]");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("[1, false, -2.3, \"fable\", lel]");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of map ASTs", "[serialization]") {
     auto ast = parse_string("{}");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("{a: 1}");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("{che9: false}");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("{fable: \"fable\"}");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: lel}");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of opseq ASTs", "[serialization]") {
     auto ast = parse_string("1 + 2");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("1 / 2 + 3");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("1 + 2 - 3 * 4 // 5 / 6");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("1 * (2 + 3)");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of block ASTs", "[serialization]") {
     auto ast = parse_string("let a = 1\nlet b = 2\nin a + b");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let [a] = [1] in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let [a, b] = [1, 2] in [a, b]");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let [a = 1] = [] in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let [a, ...] = [1] in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let [a, ...x] = [1] in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let {a: b} = c in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let {a} = c in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let {a = 1} = c in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let {a: b = 1} = c in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let {b, a = 1} = c in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let {a: b, ...x} = c in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let {a, ...x} = c in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let {a = 1, ...x} = c in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("let {a: b = 1, ...x} = c in a");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of function ASTs", "[serialization]") {
     auto ast = parse_string("() => 1");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("(a) => let b = a in b");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of conditional ASTs", "[serialization]") {
     auto ast = parse_string("if true then 1 else 2");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 }
 
 
 TEST_CASE("Serialization of postfix operator ASTs", "[serialization]") {
     auto ast = parse_string("func(1,2,3)");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("((x,y) => x+y)(1,2)");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("abc.def");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("f(a).x");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("f.x(a)");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 
     ast = parse_string("dingbob[\"roflmao\"]");
-    REQUIRE(AstNode::deserialize(ast->serialize())->dump() == ast->dump());
+    REQUIRE(Expr::deserialize(ast->serialize())->dump() == ast->dump());
 }

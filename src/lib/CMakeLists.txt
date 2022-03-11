@@ -4,8 +4,9 @@ set(GOLD_PRIVATE_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include PARENT_SCOPE)
 add_library(
     gold-nostdlib
     ${CMAKE_CURRENT_SOURCE_DIR}/gold.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/normalize.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/parsing.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/ast.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/evaluation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/serialization.cpp
 )
 

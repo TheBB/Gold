@@ -28,11 +28,11 @@ class EvaluationContext;
 class Object;
 class Serializer;
 class Deserializer;
-struct AstNode;
+struct Expr;
 struct Binding;
 
 
-using AstPtr = uptr<AstNode>;
+using ExprPtr = uptr<Expr>;
 using BindingPtr = uptr<Binding>;
 using Namespace = std::map<std::string, Object>;
 extern Namespace builtins;
@@ -123,7 +123,7 @@ public:
     using ClosureT = struct {
         Namespace nonlocals;
         sptr<Binding> parameters;
-        sptr<AstNode> expression;
+        sptr<Expr> expression;
     };
     using Closure = sptr<ClosureT>;
 
