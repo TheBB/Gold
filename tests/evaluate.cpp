@@ -276,7 +276,7 @@ TEST_CASE("Evaluation of functions", "[evaluate]") {
     REQUIRE(obj.unsafe_integer() == 1);
 
     obj = evaluate_string("() => q");
-    REQUIRE(obj.type() == Object::Type::closure);
+    REQUIRE(obj.type() == Object::Type::function);
 }
 
 

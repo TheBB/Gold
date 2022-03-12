@@ -88,13 +88,13 @@ TEST_CASE("Serialization of lists", "[serialization]") {
 }
 
 
-TEST_CASE("Serialization of closures", "[serialization]") {
+TEST_CASE("Serialization of functions", "[serialization]") {
     auto val = Object::deserialize(evaluate_string("(x, y) => x + y").serialize());
-    REQUIRE(val.type() == Object::Type::closure);
+    REQUIRE(val.type() == Object::Type::function);
     REQUIRE(val({Object::integer(1), Object::integer(2)}).unsafe_integer() == 3);
 
     val = Object::deserialize(evaluate_string("let a = 1 in () => a").serialize());
-    REQUIRE(val.type() == Object::Type::closure);
+    REQUIRE(val.type() == Object::Type::function);
     REQUIRE(val({}).unsafe_integer() == 1);
 
     val = Object::deserialize(evaluate_string("(x) => [1, if x: 1, for t in [x]: t, ...[x]]").serialize());
@@ -111,7 +111,7 @@ TEST_CASE("Serialization of closures", "[serialization]") {
 
 TEST_CASE("Serialization of builtins", "[serialization]") {
     auto val = Object::deserialize(evaluate_string("int").serialize());
-    REQUIRE(val.type() == Object::Type::builtin);
+    REQUIRE(val.type() == Object::Type::function);
     REQUIRE(val({Object::string("12")}).unsafe_integer() == 12);
 }
 

@@ -42,10 +42,10 @@ TEST_CASE("Basic methods", "[object]") {
     REQUIRE(Object::list(list).is_null() == false);
     REQUIRE(*Object::list(list).unsafe_list() == list);
 
-    REQUIRE(evaluate_string("() => 1").type() == Object::Type::closure);
+    REQUIRE(evaluate_string("() => 1").type() == Object::Type::function);
     REQUIRE(evaluate_string("() => 1").type_name() == "function");
 
-    REQUIRE(evaluate_string("int").type() == Object::Type::builtin);
+    REQUIRE(evaluate_string("int").type() == Object::Type::function);
     REQUIRE(evaluate_string("int").type_name() == "function");
 }
 

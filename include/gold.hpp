@@ -83,30 +83,9 @@ struct EvalException: public std::exception {
 };
 
 
-struct Binding : public Serializable {
-    Source src;
-
-    Binding(Source src) : src(src) {}
-    virtual ~Binding() {}
-
-    bool bind(EvaluationContext&, Object, bool = true) const;
-    virtual bool do_bind(EvaluationContext&, Object) const = 0;
-
-    virtual BindingPtr freeze(EvaluationContext& ctx) const = 0;
-
-    std::pair<std::set<std::string>, std::set<std::string>> free_and_bound() const;
-    virtual void free_and_bound(std::set<std::string>&, std::set<std::string>&) const = 0;
-
-    static BindingPtr deserialize(Deserializer&);
-
-    virtual void dump(std::ostream&) const = 0;
-    friend std::ostream& operator<<(std::ostream& os, const Binding& binding) { binding.dump(os); return os; }
-};
-
-
 class Object : public Serializable {
 public:
-    enum class Type { integer, string, null, boolean, floating, map, list, closure, builtin };
+    enum class Type { integer, string, null, boolean, floating, map, list, function };
 
     using Null = std::monostate;
 
@@ -135,7 +114,7 @@ public:
     using Variant = std::variant<Null, Integer, String, Boolean, Floating, Map, List, Closure, Builtin>;
 
 private:
-     Variant _data;
+    Variant _data;
 
 public:
     // Raw constructors

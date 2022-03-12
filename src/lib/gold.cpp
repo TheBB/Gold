@@ -40,8 +40,8 @@ Object::Type Object::type() const {
         [](Floating) { return Type::floating; },
         [](Map) { return Type::map; },
         [](List) { return Type::list; },
-        [](Closure) { return Type::closure; },
-        [](Builtin) { return Type::builtin; }
+        [](Closure) { return Type::function; },
+        [](Builtin) { return Type::function; }
     }, _data);
 }
 
@@ -226,20 +226,22 @@ Object Object::operator()(const std::vector<Object>& args) const {
 
 
 Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& args) const {
-    if (type() == Type::builtin)
-        return std::get<Builtin>(_data).callable(ctx, args);
-    if (type() != Type::closure)
-        throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));
-    auto closure = std::get<Closure>(_data);
-
-    ForwardContext newctx(ctx);
-    newctx.push_namespace(closure->nonlocals);
-    newctx.push_namespace();
-    if (!closure->parameters->bind(newctx, Object::list(args))) {
-        throw EvalException(closure->parameters->src, "failed to bind pattern");
-    }
-
-    return closure->expression->evaluate(newctx);
+    return std::visit(overloaded {
+        [&ctx, &args](Closure c) -> Object {
+            ForwardContext newctx(ctx);
+            newctx.push_namespace(c->nonlocals);
+            newctx.push_namespace();
+            if (!c->parameters->bind(newctx, Object::list(args)))
+                throw EvalException(c->parameters->src, "failed to bind pattern");
+            return c->expression->evaluate(newctx);
+        },
+        [&ctx, &args](Builtin b) -> Object {
+            return b.callable(ctx, args);
+        },
+        [this](auto&&) -> Object {
+            throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));
+        }
+    }, _data);
 }
 
 
@@ -255,24 +257,30 @@ Object Object::operator[](Object index) const {
 
 
 Object Object::operator[](intmax_t index) const {
-    if (type() != Object::Type::list)
-        throw EvalException(fmt::format("unsupported type for integer subscripting: `{}`", type_name()));
-    if (index < 0)
-        throw EvalException(fmt::format("list index out of range: {}", index));
-    auto& list = unsafe_list();
-    if ((size_t)index >= unsafe_list()->size())
-        throw EvalException(fmt::format("list index out of range: {} > {}", index, unsafe_list()->size()));
-    return (*list)[index];
+    return std::visit(overloaded {
+        [index](List list) {
+            if (index < 0 || (size_t)index >= list->size())
+                throw EvalException(fmt::format("list index out of range: {}", index));
+            return (*list)[index];
+        },
+        [this](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for integer subscripting: `{}`", type_name()));
+        }
+    }, _data);
 }
 
 
 Object Object::operator[](std::string index) const {
-    if (type() != Object::Type::map)
-        throw EvalException(fmt::format("unsupported type for string subscripting: `{}`", type_name()));
-    auto& map = unsafe_map();
-    if (map->find(index) == unsafe_map()->end())
-        throw EvalException(fmt::format("key not found: {}", index));
-    return (*map)[index];
+    return std::visit(overloaded {
+        [index](Map map) {
+            if (map->find(index) == map->end())
+                throw EvalException(fmt::format("key not found: {}", index));
+            return (*map)[index];
+        },
+        [this](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for string subscripting: `{}`", type_name()));
+        }
+    }, _data);
 }
 
 
