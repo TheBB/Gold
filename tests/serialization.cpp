@@ -91,28 +91,28 @@ TEST_CASE("Serialization of lists", "[serialization]") {
 TEST_CASE("Serialization of functions", "[serialization]") {
     auto val = Object::deserialize(evaluate_string("(x, y) => x + y").serialize());
     REQUIRE(val.type() == Object::Type::function);
-    REQUIRE(val({Object::integer(1), Object::integer(2)}).unsafe_integer() == 3);
+    REQUIRE(val(Object::integer(1), Object::integer(2)).unsafe_integer() == 3);
 
     val = Object::deserialize(evaluate_string("let a = 1 in () => a").serialize());
     REQUIRE(val.type() == Object::Type::function);
-    REQUIRE(val({}).unsafe_integer() == 1);
+    REQUIRE(val().unsafe_integer() == 1);
 
     val = Object::deserialize(evaluate_string("(x) => [1, if x: 1, for t in [x]: t, ...[x]]").serialize());
-    REQUIRE(val({Object::boolean(true)}).size() == 4);
-    REQUIRE(val({Object::boolean(false)}).size() == 3);
+    REQUIRE(val(Object::boolean(true)).size() == 4);
+    REQUIRE(val(Object::boolean(false)).size() == 3);
 
     val = Object::deserialize(evaluate_string(
         "(x) => {a: 1, if x: b: 1, for [k,v] in items({c: 1}): $k: v, ...{d: 1}}"
     ).serialize());
-    REQUIRE(val({Object::boolean(true)}).size() == 4);
-    REQUIRE(val({Object::boolean(false)}).size() == 3);
+    REQUIRE(val(Object::boolean(true)).size() == 4);
+    REQUIRE(val(Object::boolean(false)).size() == 3);
 }
 
 
 TEST_CASE("Serialization of builtins", "[serialization]") {
     auto val = Object::deserialize(evaluate_string("int").serialize());
     REQUIRE(val.type() == Object::Type::function);
-    REQUIRE(val({Object::string("12")}).unsafe_integer() == 12);
+    REQUIRE(val(Object::string("12")).unsafe_integer() == 12);
 }
 
 

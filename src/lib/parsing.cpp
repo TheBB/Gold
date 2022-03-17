@@ -10,13 +10,15 @@
 #include <tao/pegtl/contrib/parse_tree_to_dot.hpp>
 #include <tao/pegtl/contrib/trace.hpp>
 
-#include "gold.hpp"
-#include "parsing.hpp"
 #include "tree.hpp"
 
 
 using namespace Gold;
 namespace p = tao::pegtl;
+
+namespace Gold {
+Expr* parse(p::string_input<>& input);
+}
 
 
 namespace Grammar
@@ -457,13 +459,12 @@ void Gold::debug_parse_tree(std::string input) {
 }
 
 
-template <typename I>
-static ExprPtr _parse(I& input) {
+Expr* Gold::parse(p::string_input<>& input) {
     try {
         auto tree = p::parse_tree::parse<Grammar::file, Ast, Grammar::selector, p::nothing, Grammar::control>(input);
         if (!tree)
             throw EvalException("unknown parsing error");
-        return tree->expr();
+        return tree->root_expr();
     }
     catch (const p::parse_error& e) {
         EvalException exc(e.message());
@@ -476,62 +477,4 @@ static ExprPtr _parse(I& input) {
         });
         throw exc;
     }
-}
-
-
-template <typename I>
-static Object _evaluate(EvaluationContext& ctx, I& input) {
-    auto ast = _parse(input);
-    try {
-        return ast->evaluate(ctx);
-    }
-    catch (EvalException& e) {
-        e.tag_lines([&input](Source& src) {
-            return input.line_at(p::position(src.byte, src.line, src.column, ""));
-        });
-        throw;
-    }
-}
-
-
-template <typename I>
-static Object _evaluate(I& input) {
-    EvaluationContext ctx;
-    return _evaluate(ctx, input);
-}
-
-
-ExprPtr Gold::parse_string(std::string code) {
-    p::string_input in(code, "code");
-    return _parse(in);
-}
-
-
-ExprPtr Gold::parse_file(std::string path) {
-    p::file_input in(path, "code");
-    return _parse(in);
-}
-
-
-Object Gold::evaluate_string(std::string code) {
-    p::string_input in(code, "code");
-    return _evaluate(in);
-}
-
-
-Object Gold::evaluate_string(EvaluationContext& ctx, std::string code) {
-    p::string_input in(code, "code");
-    return _evaluate(ctx, in);
-}
-
-
-Object Gold::evaluate_file(std::string path) {
-    p::file_input in(path, "code");
-    return _evaluate(in);
-}
-
-
-Object Gold::evaluate_file(EvaluationContext& ctx, std::string path) {
-    p::file_input in(path, "code");
-    return _evaluate(ctx, in);
 }

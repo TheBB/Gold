@@ -1,14 +1,102 @@
 #include <iostream>
+#include <variant>
 #include <vector>
 
 #include <tao/pegtl.hpp>
 
-#include "gold.hpp"
+#include "gold-common.hpp"
 
 #pragma once
 
 
 namespace p = tao::pegtl;
+
+
+namespace Grammar
+{
+    struct file;
+    struct boolean;
+    struct identifier;
+    struct product;
+    struct sum;
+    struct ineq;
+    struct eq;
+    struct conj;
+    struct disj;
+    struct branch;
+    namespace pattern {
+        struct ident;
+        struct opt_slurp;
+        struct def_slurp;
+        namespace list {
+            struct element;
+            struct rule;
+        }
+        namespace map {
+            struct single_entry;
+            struct entry;
+            struct element;
+            struct rule;
+        }
+    }
+    namespace keyword {
+        struct Null;
+        struct And;
+        struct Or;
+    }
+    namespace postfix {
+        struct funcall_operator;
+        struct object_access;
+        struct subscript_operator;
+        struct rule;
+    }
+    namespace number {
+        struct integer;
+        struct floating;
+    }
+    namespace string {
+        struct data;
+        struct interp;
+        struct post;
+    }
+    namespace list {
+        struct singleton;
+        struct splat;
+        struct loop;
+        struct cond;
+        struct rule;
+    }
+    namespace map {
+        struct const_identifier;
+        struct var_identifier;
+        struct entry;
+        struct splat;
+        struct loop;
+        struct cond;
+        struct rule;
+    }
+    namespace func {
+        struct bracketed_param_list;
+        struct rule;
+    }
+    namespace block {
+        struct binding;
+        struct rule;
+    }
+    namespace op {
+        struct divide;
+        struct idivide;
+        struct multiply;
+        struct plus;
+        struct minus;
+        struct le;
+        struct ge;
+        struct lt;
+        struct gt;
+        struct dbleq;
+        struct ineq;
+    }
+}
 
 
 namespace Gold
@@ -24,8 +112,8 @@ struct Ast
     using MapEltN = std::function<uptr<MapElement>(const Ast&)>;
     using ListBindingEltN = std::function<void(const Ast&, uptr<ListBinding>&)>;
     using MapBindingEltN = std::function<void(const Ast&, uptr<MapBinding>&)>;
-    using MapBindingLeafN = std::function<MapBinding::Entry(const Ast&)>;
-    using BlockBindingEltN = std::function<Block::BindingElement(const Ast&)>;
+    using MapBindingLeafN = std::function<MapBindingEntry(const Ast&)>;
+    using BlockBindingEltN = std::function<BlockBindingElement(const Ast&)>;
 
     std::vector<uptr<Ast>> children;
     p::internal::iterator begin;
@@ -83,6 +171,8 @@ struct Ast
         children.push_back(std::move(child));
     }
 
+    Expr* root_expr() const;
+
     Source source() const;
     std::string_view string_view() const noexcept;
     std::string string() const;
@@ -92,11 +182,10 @@ struct Ast
     uptr<MapElement> map_element() const;
     Operator oper() const;
     BindingPtr binding() const;
-    Block::BindingElement binding_element() const;
+    BlockBindingElement binding_element() const;
     void list_binding_entry(uptr<ListBinding>& binding) const;
     void map_binding_entry(uptr<MapBinding>& binding) const;
-    MapBinding::Entry map_binding_leaf() const;
-
+    MapBindingEntry map_binding_leaf() const;
 };
 
 template<> void Ast::set_normalizer<Grammar::pattern::ident>();

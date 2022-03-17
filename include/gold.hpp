@@ -2,40 +2,17 @@
 #include <list>
 #include <map>
 #include <memory>
-#include <optional>
 #include <set>
 #include <sstream>
 #include <variant>
 #include <vector>
 
+#include "gold-common.hpp"
+
 #pragma once
 
 
 namespace Gold {
-
-
-template<typename T>
-using sptr = std::shared_ptr<T>;
-
-template<typename T>
-using uptr = std::unique_ptr<T>;
-
-template<typename T>
-using opt = std::optional<T>;
-
-
-class EvaluationContext;
-class Object;
-class Serializer;
-class Deserializer;
-struct Expr;
-struct Binding;
-
-
-using ExprPtr = uptr<Expr>;
-using BindingPtr = uptr<Binding>;
-using Namespace = std::map<std::string, Object>;
-extern Namespace builtins;
 
 
 class Serializable {
@@ -45,41 +22,6 @@ public:
     void serialize(Serializer& os) const;
 private:
     virtual void do_serialize(Serializer&) const = 0;
-};
-
-
-struct Source {
-    size_t byte;
-    size_t line;
-    size_t column;
-};
-
-
-struct InternalException: public std::exception {
-    std::string msg;
-    InternalException() : msg("an internal error happend - please report") {}
-    InternalException(std::string s) : msg(s) {}
-
-    const char* what() const noexcept {
-        return msg.c_str();
-    }
-};
-
-
-struct EvalException: public std::exception {
-    std::vector<Source> positions;
-    std::vector<std::string> lines;
-    std::string reason;
-    opt<std::string> message;
-
-    EvalException() : reason("") {}
-    EvalException(std::string_view reason) : reason(reason) {}
-    EvalException(Source src, std::string reason) : positions({src}), reason(reason) {}
-
-    void tag_position(Source, bool = false) noexcept;
-    void tag_lines(std::function<std::string_view(Source&)>) noexcept;
-
-    const char* what() const noexcept;
 };
 
 
@@ -108,7 +50,7 @@ public:
 
     using Builtin = struct {
         std::string name;
-        std::function<Object(EvaluationContext&, const std::vector<Object>&)> callable;
+        std::function<Object(EvaluationContext&, const Object&)> callable;
     };
 
     using Variant = std::variant<Null, Integer, String, Boolean, Floating, Map, List, Closure, Builtin>;
@@ -167,6 +109,12 @@ public:
     // Serialization
     virtual void do_serialize(Serializer&) const;
 
+    // Function calling
+    Object call(const std::vector<Object>&) const;
+    Object call(const Object&) const;
+    Object call(EvaluationContext&, const std::vector<Object>&) const;
+    Object call(EvaluationContext&, const Object&) const;
+
     // Operators
     Object operator+(Object) const;
     Object operator-(Object) const;
@@ -180,8 +128,9 @@ public:
     bool operator==(Object) const;
     bool operator!=(Object) const;
 
-    Object operator()(const std::vector<Object>&) const;
-    Object operator()(EvaluationContext&, const std::vector<Object>&) const;
+    Object operator()() const { return call(Object::list(std::vector<Object> {})); }
+    Object operator()(Object x) const { return call(Object::list({x})); }
+    Object operator()(Object x, Object y) const { return call(Object::list({x, y})); }
 
     Object operator[](Object) const;
     Object operator[](intmax_t) const;

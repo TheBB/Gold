@@ -8,93 +8,6 @@
 #pragma once
 
 
-namespace Grammar
-{
-    struct file;
-    struct boolean;
-    struct identifier;
-    struct product;
-    struct sum;
-    struct ineq;
-    struct eq;
-    struct conj;
-    struct disj;
-    struct branch;
-    namespace pattern {
-        struct ident;
-        struct opt_slurp;
-        struct def_slurp;
-        namespace list {
-            struct element;
-            struct rule;
-        }
-        namespace map {
-            struct single_entry;
-            struct entry;
-            struct element;
-            struct rule;
-        }
-    }
-    namespace keyword {
-        struct Null;
-        struct And;
-        struct Or;
-    }
-    namespace postfix {
-        struct funcall_operator;
-        struct object_access;
-        struct subscript_operator;
-        struct rule;
-    }
-    namespace number {
-        struct integer;
-        struct floating;
-    }
-    namespace string {
-        struct data;
-        struct interp;
-        struct post;
-    }
-    namespace list {
-        struct singleton;
-        struct splat;
-        struct loop;
-        struct cond;
-        struct rule;
-    }
-    namespace map {
-        struct const_identifier;
-        struct var_identifier;
-        struct entry;
-        struct splat;
-        struct loop;
-        struct cond;
-        struct rule;
-    }
-    namespace func {
-        struct bracketed_param_list;
-        struct rule;
-    }
-    namespace block {
-        struct binding;
-        struct rule;
-    }
-    namespace op {
-        struct divide;
-        struct idivide;
-        struct multiply;
-        struct plus;
-        struct minus;
-        struct le;
-        struct ge;
-        struct lt;
-        struct gt;
-        struct dbleq;
-        struct ineq;
-    }
-}
-
-
 namespace Gold
 {
 
@@ -170,12 +83,15 @@ struct ListBinding : public Binding {
 };
 
 
+struct MapBindingEntry {
+    std::string name;
+    BindingPtr binding;
+    opt<ExprPtr> fallback = opt<ExprPtr>();
+};
+
+
 struct MapBinding : public Binding {
-    using Entry = struct Entry {
-        std::string name;
-        BindingPtr binding;
-        opt<ExprPtr> fallback = opt<ExprPtr>();
-    };
+    using Entry = MapBindingEntry;
 
     std::vector<Entry> entries;
     opt<std::string> slurp_target;
@@ -417,11 +333,14 @@ struct BinOp : public Expr {
 };
 
 
+struct BlockBindingElement {
+    BindingPtr binding;
+    ExprPtr expression;
+};
+
+
 struct Block : public Expr {
-    using BindingElement = struct Entry {
-        BindingPtr binding;
-        ExprPtr expression;
-    };
+    using BindingElement = BlockBindingElement;
 
     std::vector<BindingElement> bindings;
     ExprPtr expression;
@@ -495,6 +414,8 @@ struct Index : public Expr {
     virtual void do_serialize(Serializer&) const;
 };
 
+
+template<typename T> ExprPtr parse(T&);
 
 bool analyze_grammar();
 ExprPtr parse_string(std::string);
