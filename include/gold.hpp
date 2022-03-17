@@ -131,6 +131,9 @@ public:
     Object operator()() const { return call(Object::list(std::vector<Object> {})); }
     Object operator()(Object x) const { return call(Object::list({x})); }
     Object operator()(Object x, Object y) const { return call(Object::list({x, y})); }
+    Object operator()(EvaluationContext& ctx) const { return call(ctx, Object::list(std::vector<Object> {})); }
+    Object operator()(EvaluationContext& ctx, Object x) const { return call(ctx, Object::list({x})); }
+    Object operator()(EvaluationContext& ctx, Object x, Object y) const { return call(ctx, Object::list({x, y})); }
 
     Object operator[](Object) const;
     Object operator[](intmax_t) const;

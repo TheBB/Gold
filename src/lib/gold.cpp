@@ -641,7 +641,7 @@ static Object builtin_map(EvaluationContext& ctx, const Object& args) {
             result->resize(x->size());
             std::transform(
                 x->begin(), x->end(), result->begin(),
-                [&func, &ctx](Object x) { return func.call(ctx, {x}); }
+                [&func, &ctx](Object x) { return func(ctx, x); }
             );
             return Object::list(result);
         },
@@ -660,7 +660,7 @@ static Object builtin_filter(EvaluationContext& ctx, const Object& args) {
             auto result = std::make_shared<Object::ListT>();
             std::copy_if(
                 x->begin(), x->end(), std::back_inserter(*result),
-                [&func, &ctx](auto x) { return (bool)func.call(ctx, {x}); }
+                [&func, &ctx](auto x) { return (bool)func(ctx, x); }
             );
             return Object::list(result);
         },
