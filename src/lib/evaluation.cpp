@@ -728,7 +728,7 @@ Object FunCall::evaluate(EvaluationContext& ctx) const {
     for (auto& arg : args)
         arglist.push_back(arg->evaluate(ctx));
     try {
-        auto rval = func(ctx, arglist);
+        auto rval = func.call(ctx, arglist);
         return rval;
     }
     catch (EvalException& e) {

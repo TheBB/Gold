@@ -1,19 +1,68 @@
 #include <algorithm>
 #include <cinttypes>
 #include <filesystem>
+#include <fstream>
 #include <iterator>
 #include <iostream>
 
 #include <fmt/core.h>
 
+#include <tao/pegtl.hpp>
+
 #include "gold.hpp"
 #include "parsing.hpp"
 
-using namespace Gold;
 
+using namespace Gold;
+namespace p = tao::pegtl;
 
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
+namespace Gold {
+Expr* parse(p::string_input<>& input);
+}
+
+
+ExprPtr Gold::parse_string(std::string code) {
+    p::string_input input(code, "code");
+    return ExprPtr(parse(input));
+}
+
+
+Object Gold::evaluate_string(std::string code) {
+    EvaluationContext ctx;
+    return evaluate_string(ctx, code);
+}
+
+
+Object Gold::evaluate_string(EvaluationContext& ctx, std::string code) {
+    p::string_input input(code, "code");
+    auto ast = parse(input);
+    try {
+        return ast->evaluate(ctx);
+    }
+    catch (EvalException& e) {
+        e.tag_lines([&input](Source& src) {
+            return input.line_at(p::position(src.byte, src.line, src.column, ""));
+        });
+        throw;
+    }
+}
+
+
+Object Gold::evaluate_file(std::string path) {
+    EvaluationContext ctx;
+    return evaluate_file(ctx, path);
+}
+
+
+Object Gold::evaluate_file(EvaluationContext& ctx, std::string path) {
+    std::ifstream file(path);
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return evaluate_string(ctx, buffer.str());
+}
 
 
 std::string Object::type_name() const {
@@ -219,19 +268,13 @@ bool Object::operator!=(Object other) const {
 }
 
 
-Object Object::operator()(const std::vector<Object>& args) const {
-    EvaluationContext ctx;
-    return (*this)(ctx, args);
-}
-
-
-Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& args) const {
+Object Object::call(EvaluationContext& ctx, const Object& args) const {
     return std::visit(overloaded {
         [&ctx, &args](Closure c) -> Object {
             ForwardContext newctx(ctx);
             newctx.push_namespace(c->nonlocals);
             newctx.push_namespace();
-            if (!c->parameters->bind(newctx, Object::list(args)))
+            if (!c->parameters->bind(newctx, args))
                 throw EvalException(c->parameters->src, "failed to bind pattern");
             return c->expression->evaluate(newctx);
         },
@@ -242,6 +285,23 @@ Object Object::operator()(EvaluationContext& ctx, const std::vector<Object>& arg
             throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));
         }
     }, _data);
+}
+
+
+Object Object::call(EvaluationContext& ctx, const std::vector<Object>& args) const {
+    return call(ctx, Object::list(args));
+}
+
+
+Object Object::call(const std::vector<Object>& args) const {
+    EvaluationContext ctx;
+    return call(ctx, Object::list(args));
+}
+
+
+Object Object::call(const Object& args) const {
+    EvaluationContext ctx;
+    return call(ctx, args);
 }
 
 
@@ -480,7 +540,7 @@ Object EvaluationContext::finalize_object() {
 }
 
 
-static Object builtin_int(EvaluationContext&, const std::vector<Object>& args) {
+static Object builtin_int(EvaluationContext&, const Object& args) {
     Object arg = args[0];
     return std::visit(overloaded {
         [&arg](Object::Integer x) { return arg; },
@@ -496,7 +556,7 @@ static Object builtin_int(EvaluationContext&, const std::vector<Object>& args) {
 }
 
 
-static Object builtin_bool(EvaluationContext&, const std::vector<Object>& args) {
+static Object builtin_bool(EvaluationContext&, const Object& args) {
     Object arg = args[0];
     return std::visit(overloaded {
         [](Object::Integer x) { return Object::boolean(x != 0 ? true : false); },
@@ -508,7 +568,7 @@ static Object builtin_bool(EvaluationContext&, const std::vector<Object>& args) 
 }
 
 
-static Object builtin_str(EvaluationContext&, const std::vector<Object>& args) {
+static Object builtin_str(EvaluationContext&, const Object& args) {
     Object arg = args[0];
     return std::visit(overloaded {
         [](Object::Integer x) { return Object::string(fmt::format("{}", x)); },
@@ -523,7 +583,7 @@ static Object builtin_str(EvaluationContext&, const std::vector<Object>& args) {
 }
 
 
-static Object builtin_float(EvaluationContext&, const std::vector<Object>& args) {
+static Object builtin_float(EvaluationContext&, const Object& args) {
     Object arg = args[0];
     return std::visit(overloaded {
         [](Object::Integer x) { return Object::floating((double)x); },
@@ -537,7 +597,7 @@ static Object builtin_float(EvaluationContext&, const std::vector<Object>& args)
 }
 
 
-static Object builtin_len(EvaluationContext&, const std::vector<Object>& args) {
+static Object builtin_len(EvaluationContext&, const Object& args) {
     Object arg = args[0];
     return std::visit(overloaded {
         [](Object::List x) { return Object::integer(x->size()); },
@@ -549,8 +609,8 @@ static Object builtin_len(EvaluationContext&, const std::vector<Object>& args) {
 }
 
 
-static Object builtin_range(EvaluationContext&, const std::vector<Object>& args) {
-    std::for_each(args.begin(), args.end(), [](auto x) {
+static Object builtin_range(EvaluationContext&, const Object& args) {
+    std::for_each(args.unsafe_list()->begin(), args.unsafe_list()->end(), [](auto x) {
         if (x.type() != Object::Type::integer)
             throw EvalException(fmt::format("unsupported type for `range()`: `{}`", x.type_name()));
     });
@@ -572,7 +632,7 @@ static Object builtin_range(EvaluationContext&, const std::vector<Object>& args)
 }
 
 
-static Object builtin_map(EvaluationContext& ctx, const std::vector<Object>& args) {
+static Object builtin_map(EvaluationContext& ctx, const Object& args) {
     Object func = args[0];
     Object sequence = args[1];
     return std::visit(overloaded {
@@ -581,7 +641,7 @@ static Object builtin_map(EvaluationContext& ctx, const std::vector<Object>& arg
             result->resize(x->size());
             std::transform(
                 x->begin(), x->end(), result->begin(),
-                [&func, &ctx](Object x) { return func(ctx, {x}); }
+                [&func, &ctx](Object x) { return func.call(ctx, {x}); }
             );
             return Object::list(result);
         },
@@ -592,7 +652,7 @@ static Object builtin_map(EvaluationContext& ctx, const std::vector<Object>& arg
 }
 
 
-static Object builtin_filter(EvaluationContext& ctx, const std::vector<Object>& args) {
+static Object builtin_filter(EvaluationContext& ctx, const Object& args) {
     Object func = args[0];
     Object sequence = args[1];
     return std::visit(overloaded {
@@ -600,7 +660,7 @@ static Object builtin_filter(EvaluationContext& ctx, const std::vector<Object>& 
             auto result = std::make_shared<Object::ListT>();
             std::copy_if(
                 x->begin(), x->end(), std::back_inserter(*result),
-                [&func, &ctx](auto x) { return (bool)func(ctx, {x}); }
+                [&func, &ctx](auto x) { return (bool)func.call(ctx, {x}); }
             );
             return Object::list(result);
         },
@@ -611,7 +671,7 @@ static Object builtin_filter(EvaluationContext& ctx, const std::vector<Object>& 
 }
 
 
-static Object builtin_items(EvaluationContext& ctx, const std::vector<Object>& args) {
+static Object builtin_items(EvaluationContext& ctx, const Object& args) {
     Object map = args[0];
     return std::visit(overloaded {
         [](Object::Map x) {
@@ -631,7 +691,7 @@ static Object builtin_items(EvaluationContext& ctx, const std::vector<Object>& a
 }
 
 
-static Object builtin_import(EvaluationContext& ctx, const std::vector<Object>& args) {
+static Object builtin_import(EvaluationContext& ctx, const Object& args) {
     Object arg = args[0];
     if (arg.type() != Object::Type::string)
         throw EvalException(fmt::format("unsupported type for `import()`: `{}`", arg.type_name()));

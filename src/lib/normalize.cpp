@@ -8,6 +8,11 @@
 using namespace Gold;
 
 
+Expr* Ast::root_expr() const {
+    return expr().release();
+}
+
+
 Source Ast::source() const {
     return Source { begin.byte, begin.line, begin.column };
 }
