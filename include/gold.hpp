@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <functional>
 #include <list>
 #include <map>
@@ -352,6 +353,7 @@ public:
 
 class EvaluationContext {
 private:
+    std::list<std::filesystem::path> paths;
     std::list<Namespace> namespaces;
     std::vector<Namespace> objects;
     std::vector<sptr<LibFinder>> libfinders;
@@ -373,8 +375,16 @@ public:
     void assign_object(const std::string& key, Object value);
     Object finalize_object();
 
+    void push_path(std::filesystem::path path) { paths.push_front(path.parent_path()); }
+    void pop_path() { paths.pop_front(); }
+    std::filesystem::path path_to(std::filesystem::path path) {
+        if (paths.empty())
+            return path;
+        return paths.front() / path;
+    }
+
     void append_libfinder(sptr<LibFinder> finder) { libfinders.push_back(std::move(finder)); }
-    virtual Object import(const std::string& path) const;
+    virtual Object import(const std::string& path);
 };
 
 

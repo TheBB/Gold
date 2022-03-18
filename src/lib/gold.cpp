@@ -58,9 +58,21 @@ Object Gold::evaluate_file(std::string path) {
 
 
 Object Gold::evaluate_file(EvaluationContext& ctx, std::string path) {
-    std::ifstream file(path);
+    auto fpath = ctx.path_to(std::filesystem::path(path));
+    if (!std::filesystem::exists(fpath))
+        throw EvalException(fmt::format("unable to find file '{}'", path));
+    ctx.push_path(fpath);
+    std::ifstream file(fpath);
+    if (!file.is_open()) {
+        ctx.pop_path();
+        throw EvalException(fmt::format("unable to open file '{}'", path));
+    }
     std::stringstream buffer;
     buffer << file.rdbuf();
+    if (file.fail()) {
+        ctx.pop_path();
+        throw EvalException(fmt::format("error occured while reading file '{}'", path));
+    }
     return evaluate_string(ctx, buffer.str());
 }
 
@@ -470,18 +482,24 @@ void Gold::register_stdlib(uptr<LibFinder> finder) {
 }
 
 
-Object EvaluationContext::import(const std::string& path) const {
+Object EvaluationContext::import(const std::string& path) {
     for (auto& finder : stdlibs()) {
         auto result = finder->find(path);
         if (result.has_value())
             return result.value();
     }
+
     for (auto& finder : libfinders) {
         auto result = finder->find(path);
         if (result.has_value())
             return result.value();
     }
-    throw EvalException(fmt::format("cannot locate file: {}", path));
+
+    // std::filesystem::path fpath(path);
+    // if (!std::filesystem::is_regular_file(fpath))
+    //     throw EvalException(fmt::format("cannot locate file: {}", path));
+
+    return evaluate_file(*this, path);
 }
 
 
