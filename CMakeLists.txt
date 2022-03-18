@@ -49,6 +49,8 @@ if(MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /bigobj")
 endif()
 
+add_compile_definitions(GOLD_EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples")
+
 if(APPLE)
     find_package(Boost COMPONENTS filesystem)
 endif()
