@@ -222,6 +222,9 @@ void Branch::do_serialize(Serializer& os) const {
 
 void FunCall::do_serialize(Serializer& os) const {
     os << 'E' << source() << function << args;
+    os.write(kwargs, [&os](const std::pair<std::string, ExprPtr>& pair) {
+        os << pair.first << pair.second;
+    });
 }
 
 
@@ -292,7 +295,12 @@ ExprPtr Expr::deserialize(Deserializer& is) {
         auto args = is.read<std::vector<ExprPtr>>([&is]() {
             return Expr::deserialize(is);
         });
-        return std::make_unique<FunCall>(source, std::move(func), std::move(args));
+        auto kwargs = is.read<std::vector<std::pair<std::string, ExprPtr>>>([&is]() {
+            auto key = is.read<std::string>();
+            auto expr = Expr::deserialize(is);
+            return std::make_pair(key, std::move(expr));
+        });
+        return std::make_unique<FunCall>(source, std::move(func), std::move(args), std::move(kwargs));
     }
     case 'S': {
         auto haystack = Expr::deserialize(is);

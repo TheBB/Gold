@@ -489,6 +489,12 @@ TEST_CASE("Function bindings", "[evaluate]") {
     REQUIRE(obj.unsafe_integer() == 6);
 
     obj = evaluate_string(
+        "let f = (x, {y, z}) => x + y + z\n"
+        "in f(1, y: 2, z: 3)"
+    );
+    REQUIRE(obj.unsafe_integer() == 6);
+
+    obj = evaluate_string(
         "let f = ({y = 1}) => y\n"
         "in f({})"
     );
