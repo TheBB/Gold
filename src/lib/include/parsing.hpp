@@ -389,10 +389,11 @@ struct Branch : public Expr {
 struct FunCall : public Expr {
     ExprPtr function;
     std::vector<ExprPtr> args;
+    std::vector<std::pair<std::string, ExprPtr>> kwargs;
 
     FunCall(Source src, ExprPtr function) : Expr(src), function(std::move(function)) {}
-    FunCall(Source src, ExprPtr function, std::vector<ExprPtr> args)
-        : Expr(src), function(std::move(function)), args(std::move(args)) {}
+    FunCall(Source src, ExprPtr function, std::vector<ExprPtr> args, std::vector<std::pair<std::string, ExprPtr>> kwargs)
+        : Expr(src), function(std::move(function)), args(std::move(args)), kwargs(std::move(kwargs)) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;

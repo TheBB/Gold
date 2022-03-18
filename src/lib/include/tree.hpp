@@ -45,6 +45,9 @@ namespace Grammar
         struct Or;
     }
     namespace postfix {
+        struct kwarg_identifier;
+        struct kwarg;
+        struct posarg;
         struct funcall_operator;
         struct object_access;
         struct subscript_operator;
@@ -110,6 +113,7 @@ struct Ast
     using BindingN = std::function<BindingPtr(const Ast&)>;
     using ListEltN =std::function<uptr<ListElement>(const Ast&)>;
     using MapEltN = std::function<uptr<MapElement>(const Ast&)>;
+    using FuncallArgN = std::function<void(const Ast&, ExprPtr&)>;
     using ListBindingEltN = std::function<void(const Ast&, uptr<ListBinding>&)>;
     using MapBindingEltN = std::function<void(const Ast&, uptr<MapBinding>&)>;
     using MapBindingLeafN = std::function<MapBindingEntry(const Ast&)>;
@@ -127,6 +131,7 @@ struct Ast
         BindingN,
         ListEltN,
         MapEltN,
+        FuncallArgN,
         ListBindingEltN,
         MapBindingEltN,
         MapBindingLeafN,
@@ -177,7 +182,8 @@ struct Ast
     std::string_view string_view() const noexcept;
     std::string string() const;
     ExprPtr expr() const;
-    ExprPtr postfix(ExprPtr expr) const;
+    ExprPtr postfix(ExprPtr) const;
+    void funcall_arg(ExprPtr&) const;
     uptr<ListElement> list_element() const;
     uptr<MapElement> map_element() const;
     Operator oper() const;
@@ -206,6 +212,9 @@ template<> void Ast::set_normalizer<Grammar::number::floating>();
 template<> void Ast::set_normalizer<Grammar::string::data>();
 template<> void Ast::set_normalizer<Grammar::string::interp>();
 template<> void Ast::set_normalizer<Grammar::string::post>();
+template<> void Ast::set_normalizer<Grammar::postfix::kwarg_identifier>();
+template<> void Ast::set_normalizer<Grammar::postfix::kwarg>();
+template<> void Ast::set_normalizer<Grammar::postfix::posarg>();
 template<> void Ast::set_normalizer<Grammar::postfix::funcall_operator>();
 template<> void Ast::set_normalizer<Grammar::postfix::object_access>();
 template<> void Ast::set_normalizer<Grammar::postfix::subscript_operator>();

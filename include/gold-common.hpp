@@ -32,12 +32,12 @@ using Namespace = std::map<std::string, Object>;
 extern Namespace builtins;
 
 enum class Operator;
-class ListElement;
-class MapElement;
-class ListBinding;
-class MapBinding;
-class MapBindingEntry;
-class BlockBindingElement;
+struct ListElement;
+struct MapElement;
+struct ListBinding;
+struct MapBinding;
+struct MapBindingEntry;
+struct BlockBindingElement;
 
 struct Source {
     size_t byte;

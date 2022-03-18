@@ -40,6 +40,11 @@ ExprPtr Ast::postfix(ExprPtr expr) const {
 }
 
 
+void Ast::funcall_arg(ExprPtr& expr) const {
+    std::get<FuncallArgN>(normalizer)(*this, expr);
+}
+
+
 uptr<ListElement> Ast::list_element() const {
     return std::get<ListEltN>(normalizer)(*this);
 }
@@ -433,11 +438,31 @@ template<> void Ast::set_normalizer<Grammar::func::rule>() {
 }
 
 
+template<> void Ast::set_normalizer<Grammar::postfix::kwarg_identifier>() {}
+template<> void Ast::set_normalizer<Grammar::postfix::kwarg>() {
+    normalizer = [](const Ast& ast, ExprPtr& expr) {
+        auto call = static_cast<FunCall*>(expr.get());
+        call->kwargs.push_back(std::make_pair(
+            ast.children[0]->string(),
+            ast.children[1]->expr()
+        ));
+    };
+}
+
+
+template<> void Ast::set_normalizer<Grammar::postfix::posarg>() {
+    normalizer = [](const Ast& ast, ExprPtr& expr) {
+        auto call = static_cast<FunCall*>(expr.get());
+        call->args.push_back(ast.children[0]->expr());
+    };
+}
+
+
 template<> void Ast::set_normalizer<Grammar::postfix::funcall_operator>() {
     normalizer = [](const Ast& ast, ExprPtr expr) -> ExprPtr {
-        auto call = std::make_unique<FunCall>(ast.source(), std::move(expr));
+        auto call = ExprPtr(new FunCall(ast.source(), std::move(expr)));
         for (auto& c : ast.children)
-            call->args.push_back(c->expr());
+            c->funcall_arg(call);
         return call;
     };
 }

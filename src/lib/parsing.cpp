@@ -142,6 +142,8 @@ namespace Grammar
         p::plus<identifier_char>
     > {};
 
+    struct map_identifier: p::plus<p::sor<identifier_char, p::one<'-'>>> {};
+
     // Destructuring patterns
     namespace pattern {
         struct rule;
@@ -230,7 +232,7 @@ namespace Grammar
     // Maps
     namespace map {
         struct element;
-        struct const_identifier: p::plus<p::sor<identifier_char, p::one<'-'>>> {};
+        struct const_identifier: map_identifier {};
         struct var_identifier: p::if_must<token::dollar, expression> {};
         struct identifier: p::sor<var_identifier, const_identifier> {};
         struct splat: splatted {};
@@ -303,7 +305,10 @@ namespace Grammar
 
     // Precedence level: postfix operators
     namespace postfix {
-        struct funcall_args: listof<expression> {};
+        struct kwarg_identifier: map_identifier {};
+        struct kwarg: p::seq<prepad<kwarg_identifier>, token::colon, expression> {};
+        struct posarg: p::seq<expression> {};
+        struct funcall_args: listof<p::sor<kwarg, posarg>> {};
         struct funcall_operator: p::seq<token::op_paren, funcall_args, token::cl_paren> {};
         struct object_access: p::seq<token::dot, identifier> {};
         struct subscript_operator: p::seq<token::op_bracket, expression, token::cl_bracket> {};
@@ -431,6 +436,9 @@ namespace Grammar
             op::dbleq,
             op::ineq,
             postfix::rule,
+            postfix::kwarg_identifier,
+            postfix::kwarg,
+            postfix::posarg,
             postfix::funcall_operator,
             postfix::object_access,
             postfix::subscript_operator,

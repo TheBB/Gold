@@ -710,7 +710,9 @@ Object Branch::evaluate(EvaluationContext& ctx) const {
 void FunCall::dump(std::ostream& os) const {
     os << "FunCall(" << *function;
     for (auto& arg : args)
-        os << ", " << *arg;
+        os << ", Arg(" << *arg << ")";
+    for (auto& kwarg : kwargs)
+        os << ", Kwarg(" << kwarg.first << ", " << *kwarg.second << ")";
     os << ")";
 }
 
@@ -719,6 +721,8 @@ void FunCall::free_identifiers(std::set<std::string>& idents) const {
     function->free_identifiers(idents);
     for (auto& arg : args)
         arg->free_identifiers(idents);
+    for (auto& kwarg : kwargs)
+        kwarg.second->free_identifiers(idents);
 }
 
 
@@ -727,6 +731,12 @@ Object FunCall::evaluate(EvaluationContext& ctx) const {
     std::vector<Object> arglist;
     for (auto& arg : args)
         arglist.push_back(arg->evaluate(ctx));
+    if (!kwargs.empty()) {
+        ctx.push_object();
+        for (auto& kwarg : kwargs)
+            ctx.assign_object(kwarg.first, kwarg.second->evaluate(ctx));
+        arglist.push_back(ctx.finalize_object());
+    }
     try {
         auto rval = func.call(ctx, arglist);
         return rval;
