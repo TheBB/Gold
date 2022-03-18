@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cinttypes>
-#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <iostream>
@@ -58,11 +57,11 @@ Object Gold::evaluate_file(std::string path) {
 
 
 Object Gold::evaluate_file(EvaluationContext& ctx, std::string path) {
-    auto fpath = ctx.path_to(std::filesystem::path(path));
-    if (!std::filesystem::exists(fpath))
+    auto fpath = ctx.path_to(filesystem::path(path));
+    if (!filesystem::exists(fpath))
         throw EvalException(fmt::format("unable to find file '{}'", path));
     ctx.push_path(fpath);
-    std::ifstream file(fpath);
+    std::ifstream file(fpath.string());
     if (!file.is_open()) {
         ctx.pop_path();
         throw EvalException(fmt::format("unable to open file '{}'", path));
@@ -494,10 +493,6 @@ Object EvaluationContext::import(const std::string& path) {
         if (result.has_value())
             return result.value();
     }
-
-    // std::filesystem::path fpath(path);
-    // if (!std::filesystem::is_regular_file(fpath))
-    //     throw EvalException(fmt::format("cannot locate file: {}", path));
 
     return evaluate_file(*this, path);
 }

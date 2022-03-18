@@ -53,6 +53,7 @@ add_compile_definitions(GOLD_EXAMPLES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples"
 
 if(APPLE)
     find_package(Boost COMPONENTS filesystem)
+    add_compile_definitions(GOLD_USE_BOOST_FILESYSTEM)
 endif()
 
 if(GOLD_BUILD_UTILS)

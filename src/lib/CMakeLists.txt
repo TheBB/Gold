@@ -14,7 +14,9 @@ target_include_directories(gold-nostdlib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc
 target_include_directories(gold-nostdlib PUBLIC ${GOLD_ROOT_DIR}/include)
 target_link_libraries(gold-nostdlib fmt::fmt taocpp::pegtl)
 
-
+if(APPLE)
+    target_link_libraries(gold-nostdlib Boost::filesystem)
+endif()
 
 add_library(
     gold-stdlib OBJECT

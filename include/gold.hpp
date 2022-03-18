@@ -1,4 +1,3 @@
-#include <filesystem>
 #include <functional>
 #include <list>
 #include <map>
@@ -7,6 +6,14 @@
 #include <sstream>
 #include <variant>
 #include <vector>
+
+#ifdef GOLD_USE_BOOST_FILESYSTEM
+#include <boost/filesystem.hpp>
+namespace filesystem = boost::filesystem;
+#else
+#include <filesystem>
+namespace filesystem = std::filesystem;
+#endif
 
 #include "gold-common.hpp"
 
@@ -353,7 +360,7 @@ public:
 
 class EvaluationContext {
 private:
-    std::list<std::filesystem::path> paths;
+    std::list<filesystem::path> paths;
     std::list<Namespace> namespaces;
     std::vector<Namespace> objects;
     std::vector<sptr<LibFinder>> libfinders;
@@ -375,9 +382,9 @@ public:
     void assign_object(const std::string& key, Object value);
     Object finalize_object();
 
-    void push_path(std::filesystem::path path) { paths.push_front(path.parent_path()); }
+    void push_path(filesystem::path path) { paths.push_front(path.parent_path()); }
     void pop_path() { paths.pop_front(); }
-    std::filesystem::path path_to(std::filesystem::path path) {
+    filesystem::path path_to(filesystem::path path) {
         if (paths.empty())
             return path;
         return paths.front() / path;
