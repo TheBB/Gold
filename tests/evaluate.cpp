@@ -277,6 +277,18 @@ TEST_CASE("Evaluation of functions", "[evaluate]") {
 
     obj = evaluate_string("() => q");
     REQUIRE(obj.type() == Object::Type::function);
+
+    obj = evaluate_string(
+        "let a = ({k=1}) => k\n"
+        "in a()"
+    );
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string(
+        "let a = ({k=1}) => k\n"
+        "in a(k: 2)"
+    );
+    REQUIRE(obj.unsafe_integer() == 2);
 }
 
 

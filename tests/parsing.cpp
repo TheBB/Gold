@@ -273,6 +273,12 @@ TEST_CASE("Functions", "[parsing]") {
 
     ast = parse_string("(a) => let b = a\nin b");
     REQUIRE(ast->dump() == "Function(List(Entry(Id(a))), Block(Entry(Id(b), Id(a)), Id(b)))");
+
+    ast = parse_string("({} = {}) => 1");
+    REQUIRE(ast->dump() == "Function(List(Entry(Map(), Map())), Lit(1))");
+
+    ast = parse_string("({}) => 1");
+    REQUIRE(ast->dump() == "Function(List(Entry(Map(), Map())), Lit(1))");
 }
 
 

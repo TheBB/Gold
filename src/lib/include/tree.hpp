@@ -124,6 +124,8 @@ struct Ast
     p::internal::iterator end;
     std::string name;
 
+    bool is_mapbinding = false;
+
     std::variant<
         std::monostate,
         ExprN,

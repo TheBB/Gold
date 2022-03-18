@@ -141,15 +141,30 @@ template<> void Ast::set_normalizer<Grammar::pattern::list::element>() {
 }
 
 
-static BindingPtr _list_pattern(const Ast& ast) {
-    auto list = std::make_unique<ListBinding>(ast.source());
-    for (auto& c : ast.children)
-        c->list_binding_entry(list);
-    return list;
+template<> void Ast::set_normalizer<Grammar::pattern::list::rule>() {
+    normalizer = [](const Ast& ast) -> BindingPtr {
+        auto list = std::make_unique<ListBinding>(ast.source());
+        for (auto& c : ast.children)
+            c->list_binding_entry(list);
+        return list;
+    };
 }
 
-template<> void Ast::set_normalizer<Grammar::pattern::list::rule>() { normalizer = _list_pattern; }
-template<> void Ast::set_normalizer<Grammar::func::bracketed_param_list>() { normalizer = _list_pattern; }
+
+template<> void Ast::set_normalizer<Grammar::func::bracketed_param_list>() {
+    normalizer = [](const Ast& ast) -> BindingPtr {
+        auto list = std::make_unique<ListBinding>(ast.source());
+        for (auto& c : ast.children)
+            c->list_binding_entry(list);
+        if (ast.children.empty() ||
+            ast.children.back()->children.empty() ||
+            !ast.children.back()->children[0]->is_mapbinding ||
+            list->bindings.back().fallback.has_value())
+            return list;
+        list->bindings.back().fallback = std::make_unique<Map>(Source {0,0,0});
+        return list;
+    };
+}
 
 
 template<> void Ast::set_normalizer<Grammar::pattern::map::entry>() {
@@ -191,6 +206,7 @@ template<> void Ast::set_normalizer<Grammar::pattern::map::element>() {
 
 
 template<> void Ast::set_normalizer<Grammar::pattern::map::rule>() {
+    is_mapbinding = true;
     normalizer = [](const Ast& ast) -> BindingPtr {
         auto map = std::make_unique<MapBinding>(ast.source());
         for (auto& c : ast.children)
@@ -429,6 +445,7 @@ template<> void Ast::set_normalizer<Grammar::branch>() {
 
 template<> void Ast::set_normalizer<Grammar::func::rule>() {
     normalizer = [](const Ast& ast) -> ExprPtr {
+        auto binding = ast.children[0]->binding();
          return std::make_unique<Function>(
             ast.source(),
             ast.children[0]->binding(),
