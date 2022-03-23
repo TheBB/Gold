@@ -65,6 +65,11 @@ BindingPtr Ast::binding() const {
 }
 
 
+void Ast::func_bindings(sptr<Binding>& args, sptr<Binding>& kwargs) const {
+    std::get<FuncBindingN>(normalizer)(*this, args, kwargs);
+}
+
+
 Block::BindingElement Ast::binding_element() const {
     return std::get<BlockBindingEltN>(normalizer)(*this);
 }
@@ -152,17 +157,25 @@ template<> void Ast::set_normalizer<Grammar::pattern::list::rule>() {
 
 
 template<> void Ast::set_normalizer<Grammar::func::bracketed_param_list>() {
-    normalizer = [](const Ast& ast) -> BindingPtr {
-        auto list = std::make_unique<ListBinding>(ast.source());
+    normalizer = [](const Ast& ast, sptr<Binding>& args, sptr<Binding>& kwargs) -> void {
+        if (ast.children.empty()) {
+            args = std::make_shared<ListBinding>(ast.source());
+            kwargs = std::make_shared<MapBinding>(Source {0,0,0});
+            return;
+        }
+
+        auto _args = std::make_unique<ListBinding>(ast.source());
         for (auto& c : ast.children)
-            c->list_binding_entry(list);
-        if (ast.children.empty() ||
-            ast.children.back()->children.empty() ||
-            !ast.children.back()->children[0]->is_mapbinding ||
-            list->bindings.back().fallback.has_value())
-            return list;
-        list->bindings.back().fallback = std::make_unique<Map>(Source {0,0,0});
-        return list;
+            c->list_binding_entry(_args);
+
+        if (!ast.children.back()->children.empty() && ast.children.back()->children[0]->is_mapbinding) {
+            kwargs = sptr<MapBinding>(static_cast<MapBinding*>(_args->bindings.back().binding.release()));
+            _args->bindings.pop_back();
+        }
+        else
+            kwargs = std::make_shared<MapBinding>(Source {0,0,0});
+
+        args = sptr<ListBinding>(static_cast<ListBinding*>(_args.release()));
     };
 }
 
@@ -445,12 +458,10 @@ template<> void Ast::set_normalizer<Grammar::branch>() {
 
 template<> void Ast::set_normalizer<Grammar::func::rule>() {
     normalizer = [](const Ast& ast) -> ExprPtr {
-        auto binding = ast.children[0]->binding();
-         return std::make_unique<Function>(
-            ast.source(),
-            ast.children[0]->binding(),
-            ast.children[1]->expr()
-        );
+        auto func = std::make_unique<Function>(ast.source());
+        func->expression = ast.children[1]->expr();
+        ast.children[0]->func_bindings(func->args, func->kwargs);
+        return func;
     };
 }
 

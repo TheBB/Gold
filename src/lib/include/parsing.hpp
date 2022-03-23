@@ -357,12 +357,13 @@ struct Block : public Expr {
 
 
 struct Function : public Expr {
-    sptr<Binding> parameters;
+    sptr<Binding> args;
+    sptr<Binding> kwargs;
     sptr<Expr> expression;
 
     Function(Source src) : Expr(src) {}
-    Function(Source src, sptr<Binding> parameters, sptr<Expr> expression)
-        : Expr(src), parameters(parameters), expression(expression) {}
+    Function(Source src, sptr<Binding> args, sptr<Binding> kwargs, sptr<Expr> expression)
+        : Expr(src), args(args), kwargs(kwargs), expression(expression) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;
