@@ -279,14 +279,16 @@ bool Object::operator!=(Object other) const {
 }
 
 
-Object Object::call(EvaluationContext& ctx, const Object& args) const {
+Object Object::call(EvaluationContext& ctx, const Object& args, const Object& kwargs) const {
     return std::visit(overloaded {
-        [&ctx, &args](Closure c) -> Object {
+        [&ctx, &args, &kwargs](Closure c) -> Object {
             ForwardContext newctx(ctx);
             newctx.push_namespace(c->nonlocals);
             newctx.push_namespace();
-            if (!c->parameters->bind(newctx, args))
-                throw EvalException(c->parameters->src, "failed to bind pattern");
+            if (!c->args->bind(newctx, args))
+                throw EvalException(c->args->src, "failed to bind pattern");
+            if (!c->kwargs->bind(newctx, kwargs))
+                throw EvalException(c->kwargs->src, "failed to bind pattern");
             return c->expression->evaluate(newctx);
         },
         [&ctx, &args](Builtin b) -> Object {
@@ -296,6 +298,11 @@ Object Object::call(EvaluationContext& ctx, const Object& args) const {
             throw EvalException(fmt::format("attempted to call non-function: `{}`", type_name()));
         }
     }, _data);
+}
+
+
+Object Object::call(EvaluationContext& ctx, const Object& args) const {
+    return call(ctx, args, Object::map());
 }
 
 
@@ -313,6 +320,12 @@ Object Object::call(const std::vector<Object>& args) const {
 Object Object::call(const Object& args) const {
     EvaluationContext ctx;
     return call(ctx, args);
+}
+
+
+Object Object::call(const Object& args, const Object& kwargs) const {
+    EvaluationContext ctx;
+    return call(ctx, args, kwargs);
 }
 
 

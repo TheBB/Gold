@@ -57,7 +57,7 @@ void Object::do_serialize(Serializer& s) const {
         [&s](Object::Closure v) {
             s << 'C';
             s.write(v, [&s](Object::ClosureT& c) {
-                s << c.nonlocals << c.parameters << c.expression;
+                s << c.nonlocals << c.args << c.kwargs << c.expression;
             });
         },
         [&s](Object::Builtin v) { s << 'U' << v.name; }
@@ -93,7 +93,10 @@ Object Object::deserialize(Deserializer& is) {
                 auto value = Object::deserialize(is);
                 return std::pair(key, value);
             });
-            closure->parameters = is.read<sptr<Binding>>([&is]() {
+            closure->args = is.read<sptr<Binding>>([&is]() {
+                return Binding::deserialize(is).release();
+            });
+            closure->kwargs = is.read<sptr<Binding>>([&is]() {
                 return Binding::deserialize(is).release();
             });
             closure->expression = is.read<sptr<Expr>>([&is]() {
@@ -211,7 +214,7 @@ void Block::do_serialize(Serializer& os) const {
 
 
 void Function::do_serialize(Serializer& os) const {
-    os << 'F' << source() << *parameters << *expression;
+    os << 'F' << source() << *args << *kwargs << *expression;
 }
 
 
@@ -280,9 +283,10 @@ ExprPtr Expr::deserialize(Deserializer& is) {
         return std::make_unique<Block>(source, std::move(bindings), Expr::deserialize(is));
     }
     case 'F': {
-        auto parameters = Binding::deserialize(is);
+        auto args = Binding::deserialize(is);
+        auto kwargs = Binding::deserialize(is);
         auto expression = Expr::deserialize(is);
-        return std::make_unique<Function>(source, std::move(parameters), std::move(expression));
+        return std::make_unique<Function>(source, std::move(args), std::move(kwargs), std::move(expression));
     }
     case 'C': {
         auto cond = Expr::deserialize(is);

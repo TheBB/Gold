@@ -51,7 +51,8 @@ public:
 
     using ClosureT = struct {
         Namespace nonlocals;
-        sptr<Binding> parameters;
+        sptr<Binding> args;
+        sptr<Binding> kwargs;
         sptr<Expr> expression;
     };
     using Closure = sptr<ClosureT>;
@@ -88,9 +89,11 @@ public:
 
     static Object map(Map value) { return Object(value); }
     static Object map(MapT value) { return Object(std::make_shared<MapT>(value)); }
+    static Object map() { return Object::map(MapT {}); }
 
     static Object list(List value) { return Object(value); }
     static Object list(ListT value) { return Object(std::make_shared<ListT>(value)); }
+    static Object list() { return Object::list(ListT {}); }
 
     static Object closure(Closure value) { return Object(value); }
     static Object builtin(Builtin value) { return Object(value); }
@@ -118,10 +121,12 @@ public:
     virtual void do_serialize(Serializer&) const;
 
     // Function calling
-    Object call(const std::vector<Object>&) const;
+    Object call(const ListT&) const;
     Object call(const Object&) const;
+    Object call(const Object&, const Object&) const;
     Object call(EvaluationContext&, const std::vector<Object>&) const;
     Object call(EvaluationContext&, const Object&) const;
+    Object call(EvaluationContext&, const Object&, const Object&) const;
 
     // Operators
     Object operator+(Object) const;

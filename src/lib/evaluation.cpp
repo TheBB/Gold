@@ -649,7 +649,7 @@ Object Block::evaluate(EvaluationContext& ctx) const {
 
 
 void Function::dump(std::ostream& os) const {
-    os << "Function(" << *parameters << ", " << *expression << ")";
+    os << "Function(" << *args << ", " << *kwargs << ", " << *expression << ")";
 }
 
 
@@ -657,7 +657,8 @@ void Function::free_identifiers(std::set<std::string>& idents) const {
     auto candidates = expression->free_identifiers();
 
     std::set<std::string> bound;
-    parameters->free_and_bound(idents, bound);
+    args->free_and_bound(idents, bound);
+    kwargs->free_and_bound(idents, bound);
 
     for (auto& c : bound)
         candidates.erase(c);
@@ -676,7 +677,8 @@ Object Function::evaluate(EvaluationContext& ctx) const {
             closure->nonlocals[id] = val.value();
     }
 
-    closure->parameters = parameters;
+    closure->args = args;
+    closure->kwargs = kwargs;
     closure->expression = expression;
     return Object::closure(closure);
 }
@@ -731,14 +733,19 @@ Object FunCall::evaluate(EvaluationContext& ctx) const {
     std::vector<Object> arglist;
     for (auto& arg : args)
         arglist.push_back(arg->evaluate(ctx));
+
+    Object kwarglist;
     if (!kwargs.empty()) {
         ctx.push_object();
         for (auto& kwarg : kwargs)
             ctx.assign_object(kwarg.first, kwarg.second->evaluate(ctx));
-        arglist.push_back(ctx.finalize_object());
+        kwarglist = ctx.finalize_object();
     }
+    else
+        kwarglist = Object::map();
+
     try {
-        auto rval = func.call(ctx, arglist);
+        auto rval = func.call(ctx, Object::list(arglist), kwarglist);
         return rval;
     }
     catch (EvalException& e) {

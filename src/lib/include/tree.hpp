@@ -111,6 +111,7 @@ struct Ast
     using ExprN = std::function<ExprPtr(const Ast&)>;
     using ModExprN = std::function<ExprPtr(const Ast&, ExprPtr)>;
     using BindingN = std::function<BindingPtr(const Ast&)>;
+    using FuncBindingN = std::function<void(const Ast&, sptr<Binding>&, sptr<Binding>&)>;
     using ListEltN =std::function<uptr<ListElement>(const Ast&)>;
     using MapEltN = std::function<uptr<MapElement>(const Ast&)>;
     using FuncallArgN = std::function<void(const Ast&, ExprPtr&)>;
@@ -131,6 +132,7 @@ struct Ast
         ExprN,
         ModExprN,
         BindingN,
+        FuncBindingN,
         ListEltN,
         MapEltN,
         FuncallArgN,
@@ -190,6 +192,7 @@ struct Ast
     uptr<MapElement> map_element() const;
     Operator oper() const;
     BindingPtr binding() const;
+    void func_bindings(sptr<Binding>&, sptr<Binding>&) const;
     BlockBindingElement binding_element() const;
     void list_binding_entry(uptr<ListBinding>& binding) const;
     void map_binding_entry(uptr<MapBinding>& binding) const;

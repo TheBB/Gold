@@ -269,16 +269,16 @@ TEST_CASE("Block expressions", "[parsing]") {
 
 TEST_CASE("Functions", "[parsing]") {
     auto ast = parse_string("() => 1");
-    REQUIRE(ast->dump() == "Function(List(), Lit(1))");
+    REQUIRE(ast->dump() == "Function(List(), Map(), Lit(1))");
 
     ast = parse_string("(a) => let b = a\nin b");
-    REQUIRE(ast->dump() == "Function(List(Entry(Id(a))), Block(Entry(Id(b), Id(a)), Id(b)))");
+    REQUIRE(ast->dump() == "Function(List(Entry(Id(a))), Map(), Block(Entry(Id(b), Id(a)), Id(b)))");
 
     ast = parse_string("({} = {}) => 1");
-    REQUIRE(ast->dump() == "Function(List(Entry(Map(), Map())), Lit(1))");
+    REQUIRE(ast->dump() == "Function(List(), Map(), Lit(1))");
 
     ast = parse_string("({}) => 1");
-    REQUIRE(ast->dump() == "Function(List(Entry(Map(), Map())), Lit(1))");
+    REQUIRE(ast->dump() == "Function(List(), Map(), Lit(1))");
 }
 
 
@@ -299,7 +299,7 @@ TEST_CASE("Postfix operators", "[parsing]") {
     REQUIRE(ast->dump() == "FunCall(Id(func), Kwarg(a, Lit(2)), Kwarg(b, Lit(3)))");
 
     ast = parse_string("((x,y) => x+y)(1,2)");
-    REQUIRE(ast->dump() == "FunCall(Function(List(Entry(Id(x)), Entry(Id(y))), BinOp(Id(x) + Id(y))), Arg(Lit(1)), Arg(Lit(2)))");
+    REQUIRE(ast->dump() == "FunCall(Function(List(Entry(Id(x)), Entry(Id(y))), Map(), BinOp(Id(x) + Id(y))), Arg(Lit(1)), Arg(Lit(2)))");
 
     ast = parse_string("abc.def");
     REQUIRE(ast->dump() == "Index(Id(abc), Lit(\"def\"))");
