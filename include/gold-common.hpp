@@ -31,7 +31,8 @@ using BindingPtr = uptr<Binding>;
 using Namespace = std::map<std::string, Object>;
 extern Namespace builtins;
 
-enum class Operator;
+enum class BinaryOperator;
+enum class UnaryOperator;
 struct ListElement;
 struct MapElement;
 struct ListBinding;

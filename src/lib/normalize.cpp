@@ -55,8 +55,13 @@ uptr<MapElement> Ast::map_element() const {
 }
 
 
-Operator Ast::oper() const {
-    return std::get<Operator>(normalizer);
+BinaryOperator Ast::binop() const {
+    return std::get<BinaryOperator>(normalizer);
+}
+
+
+UnaryOperator Ast::unop() const {
+    return std::get<UnaryOperator>(normalizer);
 }
 
 
@@ -317,7 +322,7 @@ template<> void Ast::set_normalizer<Grammar::string::post>() {
         auto expr = (*it)->expr();
         while (++it != ast.children.end()) {
             auto rhs = (*it)->expr();
-            expr = std::make_unique<BinOp>((*it)->source(), std::move(expr), std::move(rhs), Operator::plus);
+            expr = std::make_unique<BinOp>((*it)->source(), std::move(expr), std::move(rhs), BinaryOperator::plus);
         }
         return expr;
     };
@@ -523,17 +528,44 @@ template<> void Ast::set_normalizer<Grammar::postfix::rule>() {
 }
 
 
+template<> void Ast::set_normalizer<Grammar::prefix::rule>() {
+    normalizer = [](const Ast& ast) -> ExprPtr {
+        auto it = ast.children.rbegin();
+        auto expr = (*it++)->expr();
+        while (it != ast.children.rend()) {
+            auto op = (*it)->unop();
+            auto src = (*it++)->source();
+            expr = std::make_unique<UnOp>(src, std::move(expr), op);
+        }
+        return expr;
+    };
+}
+
+
 static ExprPtr _lbinop(const Ast& ast) {
     auto expr = ast.children[0]->expr();
     for (auto it = ast.children.begin() + 1; it != ast.children.end(); it++) {
         auto src = (*it)->source();
-        auto op = (*it++)->oper();
+        auto op = (*it++)->binop();
         auto rhs =  (*it)->expr();
         expr = std::make_unique<BinOp>(src, std::move(expr), std::move(rhs), op);
     }
     return expr;
 }
 
+static ExprPtr _rbinop(const Ast& ast) {
+    auto lhs = ast.children[0]->expr();
+    if (ast.children.size() == 1)
+        return lhs;
+    return std::make_unique<BinOp>(
+        ast.children[1]->source(),
+        std::move(lhs),
+        ast.children[2]->expr(),
+        ast.children[1]->binop()
+    );
+}
+
+template<> void Ast::set_normalizer<Grammar::power>() { normalizer = _rbinop; }
 template<> void Ast::set_normalizer<Grammar::product>() { normalizer = _lbinop; }
 template<> void Ast::set_normalizer<Grammar::sum>() { normalizer = _lbinop; }
 template<> void Ast::set_normalizer<Grammar::ineq>() { normalizer = _lbinop; }
@@ -541,16 +573,19 @@ template<> void Ast::set_normalizer<Grammar::eq>() { normalizer = _lbinop; }
 template<> void Ast::set_normalizer<Grammar::conj>() { normalizer = _lbinop; }
 template<> void Ast::set_normalizer<Grammar::disj>() { normalizer = _lbinop; }
 
-template<> void Ast::set_normalizer<Grammar::keyword::And>() { normalizer = Operator::conjunction; }
-template<> void Ast::set_normalizer<Grammar::keyword::Or>() { normalizer = Operator::disjunction; }
-template<> void Ast::set_normalizer<Grammar::op::divide>() { normalizer = Operator::divide; }
-template<> void Ast::set_normalizer<Grammar::op::idivide>() { normalizer = Operator::integer_divide; }
-template<> void Ast::set_normalizer<Grammar::op::multiply>() { normalizer = Operator::multiply; }
-template<> void Ast::set_normalizer<Grammar::op::plus>() { normalizer = Operator::plus; }
-template<> void Ast::set_normalizer<Grammar::op::minus>() { normalizer = Operator::minus; }
-template<> void Ast::set_normalizer<Grammar::op::le>() { normalizer = Operator::less_than_or_eq; }
-template<> void Ast::set_normalizer<Grammar::op::ge>() { normalizer = Operator::greater_than_or_eq; }
-template<> void Ast::set_normalizer<Grammar::op::lt>() { normalizer = Operator::less_than; }
-template<> void Ast::set_normalizer<Grammar::op::gt>() { normalizer = Operator::greater_than; }
-template<> void Ast::set_normalizer<Grammar::op::dbleq>() { normalizer = Operator::equal; }
-template<> void Ast::set_normalizer<Grammar::op::ineq>() { normalizer = Operator::not_equal; }
+template<> void Ast::set_normalizer<Grammar::keyword::And>() { normalizer = BinaryOperator::conjunction; }
+template<> void Ast::set_normalizer<Grammar::keyword::Or>() { normalizer = BinaryOperator::disjunction; }
+template<> void Ast::set_normalizer<Grammar::op::power>() { normalizer = BinaryOperator::power; }
+template<> void Ast::set_normalizer<Grammar::op::divide>() { normalizer = BinaryOperator::divide; }
+template<> void Ast::set_normalizer<Grammar::op::idivide>() { normalizer = BinaryOperator::integer_divide; }
+template<> void Ast::set_normalizer<Grammar::op::multiply>() { normalizer = BinaryOperator::multiply; }
+template<> void Ast::set_normalizer<Grammar::op::plus>() { normalizer = BinaryOperator::plus; }
+template<> void Ast::set_normalizer<Grammar::op::minus>() { normalizer = BinaryOperator::minus; }
+template<> void Ast::set_normalizer<Grammar::op::le>() { normalizer = BinaryOperator::less_than_or_eq; }
+template<> void Ast::set_normalizer<Grammar::op::ge>() { normalizer = BinaryOperator::greater_than_or_eq; }
+template<> void Ast::set_normalizer<Grammar::op::lt>() { normalizer = BinaryOperator::less_than; }
+template<> void Ast::set_normalizer<Grammar::op::gt>() { normalizer = BinaryOperator::greater_than; }
+template<> void Ast::set_normalizer<Grammar::op::dbleq>() { normalizer = BinaryOperator::equal; }
+template<> void Ast::set_normalizer<Grammar::op::ineq>() { normalizer = BinaryOperator::not_equal; }
+
+template<> void Ast::set_normalizer<Grammar::op::un_minus>() { normalizer = UnaryOperator::negate; }

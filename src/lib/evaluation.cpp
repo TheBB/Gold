@@ -14,21 +14,29 @@ template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 
-static std::string operator_to_string(Operator op) {
+static std::string binop_to_string(BinaryOperator op) {
     switch (op) {
-    case Operator::plus: return "+";
-    case Operator::minus: return "-";
-    case Operator::multiply: return "*";
-    case Operator::divide: return "/";
-    case Operator::integer_divide: return "//";
-    case Operator::less_than: return "<";
-    case Operator::less_than_or_eq: return "<=";
-    case Operator::greater_than: return ">";
-    case Operator::greater_than_or_eq: return ">=";
-    case Operator::equal: return "==";
-    case Operator::not_equal: return "!=";
-    case Operator::conjunction: return "and";
+    case BinaryOperator::plus: return "+";
+    case BinaryOperator::minus: return "-";
+    case BinaryOperator::multiply: return "*";
+    case BinaryOperator::divide: return "/";
+    case BinaryOperator::integer_divide: return "//";
+    case BinaryOperator::power: return "^";
+    case BinaryOperator::less_than: return "<";
+    case BinaryOperator::less_than_or_eq: return "<=";
+    case BinaryOperator::greater_than: return ">";
+    case BinaryOperator::greater_than_or_eq: return ">=";
+    case BinaryOperator::equal: return "==";
+    case BinaryOperator::not_equal: return "!=";
+    case BinaryOperator::conjunction: return "and";
     default: return "or";
+    }
+}
+
+
+static std::string unop_to_string(UnaryOperator op) {
+    switch (op) {
+    default: return "-";
     }
 }
 
@@ -563,7 +571,7 @@ Object Map::evaluate(EvaluationContext& ctx) const {
 
 
 void BinOp::dump(std::ostream& os) const {
-    os << "BinOp(" << *lhs << " " << operator_to_string(op) << " " <<  *rhs << ")";
+    os << "BinOp(" << *lhs << " " << binop_to_string(op) << " " <<  *rhs << ")";
 }
 
 
@@ -576,24 +584,49 @@ void BinOp::free_identifiers(std::set<std::string>& idents) const {
 Object BinOp::evaluate(EvaluationContext& ctx) const {
     auto l = lhs->evaluate(ctx);
     try {
-        if (op == Operator::conjunction)
+        if (op == BinaryOperator::conjunction)
             return (bool)l ? rhs->evaluate(ctx) : l;
-        if (op == Operator::disjunction)
+        if (op == BinaryOperator::disjunction)
             return (bool)l ? l : rhs->evaluate(ctx);
 
         auto r = rhs->evaluate(ctx);
         switch (op) {
-        case Operator::plus: return l + r; break;
-        case Operator::minus: return l - r; break;
-        case Operator::multiply: return l * r; break;
-        case Operator::divide: return l / r; break;
-        case Operator::integer_divide: return l.operator_idiv(r); break;
-        case Operator::less_than: return Object::boolean(l < r); break;
-        case Operator::less_than_or_eq: return Object::boolean(l <= r); break;
-        case Operator::greater_than: return Object::boolean(l > r); break;
-        case Operator::greater_than_or_eq: return Object::boolean(l >= r); break;
-        case Operator::equal: return Object::boolean(l == r); break;
+        case BinaryOperator::plus: return l + r; break;
+        case BinaryOperator::minus: return l - r; break;
+        case BinaryOperator::multiply: return l * r; break;
+        case BinaryOperator::divide: return l / r; break;
+        case BinaryOperator::power: return l.power(r); break;
+        case BinaryOperator::integer_divide: return l.idiv(r); break;
+        case BinaryOperator::less_than: return Object::boolean(l < r); break;
+        case BinaryOperator::less_than_or_eq: return Object::boolean(l <= r); break;
+        case BinaryOperator::greater_than: return Object::boolean(l > r); break;
+        case BinaryOperator::greater_than_or_eq: return Object::boolean(l >= r); break;
+        case BinaryOperator::equal: return Object::boolean(l == r); break;
         default: return Object::boolean(l != r); break;
+        }
+    }
+    catch (EvalException& e) {
+        e.tag_position(source());
+        throw;
+    }
+}
+
+
+void UnOp::dump(std::ostream& os) const {
+    os << "UnOp(" << unop_to_string(op) << " " << *operand << ")";
+}
+
+
+void UnOp::free_identifiers(std::set<std::string>& idents) const {
+    operand->free_identifiers(idents);
+}
+
+
+Object UnOp::evaluate(EvaluationContext& ctx) const {
+    auto val = operand->evaluate(ctx);
+    try {
+        switch (op) {
+        default: return -val; break;
         }
     }
     catch (EvalException& e) {

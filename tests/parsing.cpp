@@ -32,13 +32,13 @@ TEST_CASE("Parse integers", "[parsing]") {
     REQUIRE(ast->dump() == "Lit(1)");
 
     ast = parse_string("-1");
-    REQUIRE(ast->dump() == "Lit(-1)");
+    REQUIRE(ast->dump() == "UnOp(- Lit(1))");
 
     ast = parse_string("9223372036854775807");
     REQUIRE(ast->dump() == "Lit(9223372036854775807)");
 
-    ast = parse_string("-9223372036854775808");
-    REQUIRE(ast->dump() == "Lit(-9223372036854775808)");
+    ast = parse_string("-9223372036854775807");
+    REQUIRE(ast->dump() == "UnOp(- Lit(9223372036854775807))");
 }
 
 
@@ -59,7 +59,7 @@ TEST_CASE("Parse floats", "[parsing]") {
     REQUIRE(ast->dump() == "Lit(0.0)");
 
     ast = parse_string("-1.");
-    REQUIRE(ast->dump() == "Lit(-1.0)");
+    REQUIRE(ast->dump() == "UnOp(- Lit(1.0))");
 
     ast = parse_string("1e+1");
     REQUIRE(ast->dump() == "Lit(10.0)");
@@ -80,13 +80,13 @@ TEST_CASE("Parse floats", "[parsing]") {
     REQUIRE(ast->dump() == "Lit(0.1)");
 
     ast = parse_string("-1e+1");
-    REQUIRE(ast->dump() == "Lit(-10.0)");
+    REQUIRE(ast->dump() == "UnOp(- Lit(10.0))");
 
     ast = parse_string("-1e1");
-    REQUIRE(ast->dump() == "Lit(-10.0)");
+    REQUIRE(ast->dump() == "UnOp(- Lit(10.0))");
 
     ast = parse_string("-1e-1");
-    REQUIRE(ast->dump() == "Lit(-0.1)");
+    REQUIRE(ast->dump() == "UnOp(- Lit(0.1))");
 }
 
 
@@ -149,7 +149,7 @@ TEST_CASE("Parse lists of atomics", "[parsing]") {
     REQUIRE(ast->dump() == "List(Lit(\"\"))");
 
     ast = parse_string("[1, false, -2.3, \"fable\", lel]");
-    REQUIRE(ast->dump() == "List(Lit(1), Lit(false), Lit(-2.3), Lit(\"fable\"), Id(lel))");
+    REQUIRE(ast->dump() == "List(Lit(1), Lit(false), UnOp(- Lit(2.3)), Lit(\"fable\"), Id(lel))");
 }
 
 

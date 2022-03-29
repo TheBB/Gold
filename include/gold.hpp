@@ -1,3 +1,4 @@
+#include <iostream>
 #include <functional>
 #include <list>
 #include <map>
@@ -131,9 +132,11 @@ public:
     // Operators
     Object operator+(Object) const;
     Object operator-(Object) const;
+    Object operator-() const;
     Object operator*(Object) const;
     Object operator/(Object) const;
-    Object operator_idiv(Object) const;
+    Object idiv(Object) const;
+    Object power(Object) const;
     bool operator<(Object) const;
     bool operator<=(Object) const;
     bool operator>(Object) const;
@@ -371,7 +374,9 @@ private:
     std::vector<sptr<LibFinder>> libfinders;
 
 public:
-    EvaluationContext() { push_namespace(builtins); }
+    EvaluationContext() {
+        push_namespace(builtins);
+    }
 
     Object lookup(const std::string& key);
     opt<Object> weak_lookup(const std::string& key);

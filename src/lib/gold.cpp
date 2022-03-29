@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cinttypes>
+#include <cmath>
 #include <fstream>
 #include <iterator>
 #include <iostream>
@@ -145,6 +146,20 @@ Object Object::operator-(Object other) const {
 }
 
 
+Object Object::operator-() const {
+    return std::visit(overloaded {
+        [](Integer x) { return Object::integer(-x); },
+        [](Floating x) { return Object::floating(-x); },
+        [this](auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported type for operator `-`: `{}`",
+                type_name()
+            ));
+        }
+    }, _data);
+}
+
+
 Object Object::operator*(Object other) const {
     return std::visit(overloaded {
         [](Integer a, Integer b) { return Object::integer(a * b); },
@@ -177,12 +192,28 @@ Object Object::operator/(Object other) const {
 }
 
 
-Object Object::operator_idiv(Object other) const {
+Object Object::idiv(Object other) const {
     return std::visit(overloaded {
         [](Integer a, Integer b) { return Object::integer(a / b); },
         [this, other](auto&&, auto&&) -> Object {
             throw EvalException(fmt::format(
                 "unsupported types for operator `//`: `{}` and `{}`",
+                type_name(), other.type_name()
+            ));
+        }
+    }, _data, other._data);
+}
+
+
+Object Object::power(Object other) const {
+    return std::visit(overloaded {
+        [](Integer a, Integer b) { return Object::floating(pow(a, b)); },
+        [](Floating a, Integer b) { return Object::floating(pow(a, b)); },
+        [](Integer a, Floating b) { return Object::floating(pow(a, b)); },
+        [](Floating a, Floating b) { return Object::floating(pow(a, b)); },
+        [this, other](auto&&, auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported types for operator `^`: `{}` and `{}`",
                 type_name(), other.type_name()
             ));
         }
@@ -717,6 +748,72 @@ static Object builtin_items(EvaluationContext& ctx, const Object& args) {
 }
 
 
+static Object builtin_exp(EvaluationContext& ctx, const Object& args) {
+    double logbase = 1.0;
+    if (args.size() > 1)
+        logbase = log(std::visit(overloaded {
+            [](Object::Integer x) -> double { return x; },
+            [](Object::Floating x) { return x; },
+            [&args](auto&&) -> double {
+                throw EvalException(fmt::format("unsupported type for exponent: `{}`", args[1].type_name()));
+            }
+        }, args[1].data()));
+
+    return std::visit(overloaded {
+        [logbase](Object::Integer x) { return Object::floating(exp(x * logbase)); },
+        [logbase](Object::Floating x) { return Object::floating(exp(x * logbase)); },
+        [&args](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for base: `{}`", args[0].type_name()));
+        }
+    }, args[0].data());
+}
+
+
+static Object builtin_log(EvaluationContext& ctx, const Object& args) {
+    double logbase = 1.0;
+    if (args.size() > 1)
+        logbase = log(std::visit(overloaded {
+            [](Object::Integer x) -> double { return x; },
+            [](Object::Floating x) { return x; },
+            [&args](auto&&) -> double {
+                throw EvalException(fmt::format("unsupported type for exponent: `{}`", args[1].type_name()));
+            }
+        }, args[1].data()));
+
+    return std::visit(overloaded {
+        [logbase](Object::Integer x) { return Object::floating(log(x) / logbase); },
+        [logbase](Object::Floating x) { return Object::floating(log(x) / logbase); },
+        [&args](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for base: `{}`", args[0].type_name()));
+        }
+    }, args[0].data());
+}
+
+
+static Object builtin_ord(EvaluationContext& ctx, const Object& args) {
+    return std::visit(overloaded {
+        [](Object::String x) {
+            if (x.size() != 1)
+                throw EvalException("string must have length 1");
+            return Object::integer(x[0]);
+        },
+        [&args](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for `ord()`: `{}`", args[0].type_name()));
+        }
+    }, args[0].data());
+}
+
+
+static Object builtin_chr(EvaluationContext& ctx, const Object& args) {
+    return std::visit(overloaded {
+        [](Object::Integer x) { return Object::string(std::string {(char)x}); },
+        [&args](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for `chr()`: `{}`", args[0].type_name()));
+        }
+    }, args[0].data());
+}
+
+
 static Object builtin_import(EvaluationContext& ctx, const Object& args) {
     Object arg = args[0];
     if (arg.type() != Object::Type::string)
@@ -738,5 +835,9 @@ Namespace Gold::builtins = {
     BUILTIN("map", builtin_map),
     BUILTIN("filter", builtin_filter),
     BUILTIN("items", builtin_items),
+    BUILTIN("exp", builtin_exp),
+    BUILTIN("log", builtin_log),
+    BUILTIN("ord", builtin_ord),
+    BUILTIN("chr", builtin_chr),
     BUILTIN("import", builtin_import),
 };
