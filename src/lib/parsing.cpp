@@ -123,6 +123,7 @@ namespace Grammar
 
     // Operators - these rules do not consume leading whitespace
     namespace op {
+        struct power: p::one<'^'> {};
         struct divide: p::one<'/'> {};
         struct idivide: p::string<'/','/'> {};
         struct multiply: p::one<'*'> {};
@@ -134,6 +135,8 @@ namespace Grammar
         struct gt: p::one<'>'> {};
         struct dbleq: p::string<'=','='> {};
         struct ineq: p::string<'!','='> {};
+
+        struct un_minus: p::one<'-'> {};
     }
 
     // Identifiers
@@ -172,13 +175,14 @@ namespace Grammar
     namespace number {
         struct decimal: p::one<'.'> {};
         struct sign: p::opt<p::one<'-','+'>> {};
+        struct plus: p::opt<p::one<'+'>> {};
         struct leading: p::sor<p::one<'0'>, p::seq<p::range<'1','9'>, p::star<p::digit>>> {};
         struct trailing: p::plus<p::digit> {};
         struct exponent: p::seq<p::one<'e','E'>, sign, leading> {};
-        struct integer: p::seq<sign, leading> {};
-        struct float1: p::seq<sign, leading, decimal, p::opt<trailing>, p::opt<exponent>> {};
-        struct float2: p::seq<sign, p::opt<leading>, decimal, trailing, p::opt<exponent>> {};
-        struct float3: p::seq<sign, leading, exponent> {};
+        struct integer: p::seq<plus, leading> {};
+        struct float1: p::seq<plus, leading, decimal, p::opt<trailing>, p::opt<exponent>> {};
+        struct float2: p::seq<plus, p::opt<leading>, decimal, trailing, p::opt<exponent>> {};
+        struct float3: p::seq<plus, leading, exponent> {};
         struct floating: p::sor<float1, float2, float3> {};
         struct rule: p::sor<floating, integer> {};
     }
@@ -321,7 +325,15 @@ namespace Grammar
         struct rule: p::seq<atomic, p::star<post_op>> {};
     }
 
-    // Composite expressions (can't have postfix operators)
+    // Precedence level: prefix operators
+    namespace prefix {
+        struct pre_op: p::sor<
+            op::un_minus
+        > {};
+        struct rule: p::seq<p::star<prepad<pre_op>>, p::sor<power, postfix::rule>> {};
+    }
+
+    // Composite expressions (can't have postfix or prefix operators)
     struct composite: p::sor<
         func::rule,
         block::rule,
@@ -331,16 +343,15 @@ namespace Grammar
     template<typename T, typename O>
     struct lbinop: p::list<T, prepad<O>> {};
 
-    // // Left-associative operator sequence template
-    // template <typename T, typename O>
-    // struct lbinop {
-    //     struct operand: p::seq<T> {};
-    //     struct optor: O {};
-    //     struct operation: p::list<operand, prepad<optor>> {};
-    // };
+    template<typename TL, typename O, typename TR = TL>
+    struct rbinop: p::seq<TL, p::opt<prepad<O>, TR>> {};
 
-    // Binary operator precedence levels (left-to-right)
-    struct product: lbinop<postfix::rule, p::sor<op::idivide, op::multiply, op::divide>> {};
+    // Power operator
+    struct power_rhs: p::sor<power, prefix::rule> {};
+    struct power: rbinop<postfix::rule, op::power, power_rhs> {};
+
+    // Operator precedence levels
+    struct product: lbinop<power_rhs, p::sor<op::idivide, op::multiply, op::divide>> {};
     struct sum: lbinop<product, p::sor<op::plus, op::minus>> {};
     struct ineq: lbinop<sum, p::sor<op::le, op::ge, op::lt, op::gt>> {};
     struct eq: lbinop<ineq, p::sor<op::dbleq, op::ineq>> {};
@@ -418,12 +429,14 @@ namespace Grammar
             func::bracketed_param_list,
             func::rule,
             branch,
+            power,
             product,
             sum,
             ineq,
             eq,
             conj,
             disj,
+            op::power,
             op::divide,
             op::idivide,
             op::multiply,
@@ -435,6 +448,7 @@ namespace Grammar
             op::gt,
             op::dbleq,
             op::ineq,
+            op::un_minus,
             postfix::rule,
             postfix::kwarg_identifier,
             postfix::kwarg,
@@ -442,6 +456,7 @@ namespace Grammar
             postfix::funcall_operator,
             postfix::object_access,
             postfix::subscript_operator,
+            prefix::rule,
             file
         >
     >;

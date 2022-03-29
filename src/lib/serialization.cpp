@@ -204,6 +204,11 @@ void BinOp::do_serialize(Serializer& os) const {
 }
 
 
+void UnOp::do_serialize(Serializer& os) const {
+    os << 'U' << source() << operand << op;
+}
+
+
 void Block::do_serialize(Serializer& os) const {
     os << 'B' << source();
     os.write(bindings, [&os](const BindingElement& binding) {
@@ -271,8 +276,13 @@ ExprPtr Expr::deserialize(Deserializer& is) {
     case 'O': {
         auto lhs = Expr::deserialize(is);
         auto rhs = Expr::deserialize(is);
-        auto op = is.read<Operator>();
+        auto op = is.read<BinaryOperator>();
         return std::make_unique<BinOp>(source, std::move(lhs), std::move(rhs), op);
+    }
+    case 'U': {
+        auto operand = Expr::deserialize(is);
+        auto op = is.read<UnaryOperator>();
+        return std::make_unique<UnOp>(source, std::move(operand), op);
     }
     case 'B': {
         auto bindings = is.read<std::vector<Block::BindingElement>>([&is]() {

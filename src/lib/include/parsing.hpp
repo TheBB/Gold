@@ -11,12 +11,13 @@
 namespace Gold
 {
 
-enum class Operator {
+enum class BinaryOperator {
     plus,
     minus,
     multiply,
     divide,
     integer_divide,
+    power,
     less_than,
     less_than_or_eq,
     greater_than,
@@ -25,6 +26,11 @@ enum class Operator {
     not_equal,
     conjunction,
     disjunction
+};
+
+
+enum class UnaryOperator {
+    negate
 };
 
 
@@ -321,10 +327,23 @@ struct Map : public Expr {
 
 struct BinOp : public Expr {
     ExprPtr lhs, rhs;
-    Operator op;
+    BinaryOperator op;
 
-    BinOp(Source src, ExprPtr l, ExprPtr r, Operator oper)
+    BinOp(Source src, ExprPtr l, ExprPtr r, BinaryOperator oper)
         : Expr(src), lhs(std::move(l)), rhs(std::move(r)), op(oper) {}
+
+    virtual void dump(std::ostream&) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
+    virtual Object evaluate(EvaluationContext&) const;
+    virtual void do_serialize(Serializer&) const;
+};
+
+
+struct UnOp : public Expr {
+    ExprPtr operand;
+    UnaryOperator op;
+
+    UnOp(Source src, ExprPtr operand, UnaryOperator op) : Expr(src), operand(std::move(operand)), op(op) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;

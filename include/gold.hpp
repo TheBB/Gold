@@ -131,9 +131,11 @@ public:
     // Operators
     Object operator+(Object) const;
     Object operator-(Object) const;
+    Object operator-() const;
     Object operator*(Object) const;
     Object operator/(Object) const;
-    Object operator_idiv(Object) const;
+    Object idiv(Object) const;
+    Object power(Object) const;
     bool operator<(Object) const;
     bool operator<=(Object) const;
     bool operator>(Object) const;

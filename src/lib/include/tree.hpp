@@ -17,6 +17,7 @@ namespace Grammar
     struct file;
     struct boolean;
     struct identifier;
+    struct power;
     struct product;
     struct sum;
     struct ineq;
@@ -53,6 +54,9 @@ namespace Grammar
         struct subscript_operator;
         struct rule;
     }
+    namespace prefix {
+        struct rule;
+    }
     namespace number {
         struct integer;
         struct floating;
@@ -87,6 +91,7 @@ namespace Grammar
         struct rule;
     }
     namespace op {
+        struct power;
         struct divide;
         struct idivide;
         struct multiply;
@@ -98,6 +103,7 @@ namespace Grammar
         struct gt;
         struct dbleq;
         struct ineq;
+        struct un_minus;
     }
 }
 
@@ -140,7 +146,8 @@ struct Ast
         MapBindingEltN,
         MapBindingLeafN,
         BlockBindingEltN,
-        Operator
+        BinaryOperator,
+        UnaryOperator
     > normalizer;
 
     Ast() = default;
@@ -190,7 +197,8 @@ struct Ast
     void funcall_arg(ExprPtr&) const;
     uptr<ListElement> list_element() const;
     uptr<MapElement> map_element() const;
-    Operator oper() const;
+    BinaryOperator binop() const;
+    UnaryOperator unop() const;
     BindingPtr binding() const;
     void func_bindings(sptr<Binding>&, sptr<Binding>&) const;
     BlockBindingElement binding_element() const;
@@ -224,6 +232,7 @@ template<> void Ast::set_normalizer<Grammar::postfix::funcall_operator>();
 template<> void Ast::set_normalizer<Grammar::postfix::object_access>();
 template<> void Ast::set_normalizer<Grammar::postfix::subscript_operator>();
 template<> void Ast::set_normalizer<Grammar::postfix::rule>();
+template<> void Ast::set_normalizer<Grammar::prefix::rule>();
 template<> void Ast::set_normalizer<Grammar::list::splat>();
 template<> void Ast::set_normalizer<Grammar::list::singleton>();
 template<> void Ast::set_normalizer<Grammar::list::cond>();
@@ -240,6 +249,7 @@ template<> void Ast::set_normalizer<Grammar::block::rule>();
 template<> void Ast::set_normalizer<Grammar::func::bracketed_param_list>();
 template<> void Ast::set_normalizer<Grammar::func::rule>();
 template<> void Ast::set_normalizer<Grammar::branch>();
+template<> void Ast::set_normalizer<Grammar::power>();
 template<> void Ast::set_normalizer<Grammar::product>();
 template<> void Ast::set_normalizer<Grammar::sum>();
 template<> void Ast::set_normalizer<Grammar::ineq>();
@@ -248,6 +258,7 @@ template<> void Ast::set_normalizer<Grammar::conj>();
 template<> void Ast::set_normalizer<Grammar::disj>();
 template<> void Ast::set_normalizer<Grammar::keyword::And>();
 template<> void Ast::set_normalizer<Grammar::keyword::Or>();
+template<> void Ast::set_normalizer<Grammar::op::power>();
 template<> void Ast::set_normalizer<Grammar::op::divide>();
 template<> void Ast::set_normalizer<Grammar::op::idivide>();
 template<> void Ast::set_normalizer<Grammar::op::multiply>();
@@ -259,5 +270,6 @@ template<> void Ast::set_normalizer<Grammar::op::lt>();
 template<> void Ast::set_normalizer<Grammar::op::gt>();
 template<> void Ast::set_normalizer<Grammar::op::dbleq>();
 template<> void Ast::set_normalizer<Grammar::op::ineq>();
+template<> void Ast::set_normalizer<Grammar::op::un_minus>();
 
 }

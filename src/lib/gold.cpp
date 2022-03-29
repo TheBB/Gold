@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cinttypes>
+#include <cmath>
 #include <fstream>
 #include <iterator>
 #include <iostream>
@@ -145,6 +146,20 @@ Object Object::operator-(Object other) const {
 }
 
 
+Object Object::operator-() const {
+    return std::visit(overloaded {
+        [](Integer x) { return Object::integer(-x); },
+        [](Floating x) { return Object::floating(-x); },
+        [this](auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported type for operator `-`: `{}`",
+                type_name()
+            ));
+        }
+    }, _data);
+}
+
+
 Object Object::operator*(Object other) const {
     return std::visit(overloaded {
         [](Integer a, Integer b) { return Object::integer(a * b); },
@@ -177,12 +192,28 @@ Object Object::operator/(Object other) const {
 }
 
 
-Object Object::operator_idiv(Object other) const {
+Object Object::idiv(Object other) const {
     return std::visit(overloaded {
         [](Integer a, Integer b) { return Object::integer(a / b); },
         [this, other](auto&&, auto&&) -> Object {
             throw EvalException(fmt::format(
                 "unsupported types for operator `//`: `{}` and `{}`",
+                type_name(), other.type_name()
+            ));
+        }
+    }, _data, other._data);
+}
+
+
+Object Object::power(Object other) const {
+    return std::visit(overloaded {
+        [](Integer a, Integer b) { return Object::floating(pow(a, b)); },
+        [](Floating a, Integer b) { return Object::floating(pow(a, b)); },
+        [](Integer a, Floating b) { return Object::floating(pow(a, b)); },
+        [](Floating a, Floating b) { return Object::floating(pow(a, b)); },
+        [this, other](auto&&, auto&&) -> Object {
+            throw EvalException(fmt::format(
+                "unsupported types for operator `^`: `{}` and `{}`",
                 type_name(), other.type_name()
             ));
         }
