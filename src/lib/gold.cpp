@@ -748,6 +748,48 @@ static Object builtin_items(EvaluationContext& ctx, const Object& args) {
 }
 
 
+static Object builtin_exp(EvaluationContext& ctx, const Object& args) {
+    double logbase = 1.0;
+    if (args.size() > 1)
+        logbase = log(std::visit(overloaded {
+            [](Object::Integer x) -> double { return x; },
+            [](Object::Floating x) { return x; },
+            [&args](auto&&) -> double {
+                throw EvalException(fmt::format("unsupported type for exponent: `{}`", args[1].type_name()));
+            }
+        }, args[1].data()));
+
+    return std::visit(overloaded {
+        [logbase](Object::Integer x) { return Object::floating(exp(x * logbase)); },
+        [logbase](Object::Floating x) { return Object::floating(exp(x * logbase)); },
+        [&args](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for base: `{}`", args[0].type_name()));
+        }
+    }, args[0].data());
+}
+
+
+static Object builtin_log(EvaluationContext& ctx, const Object& args) {
+    double logbase = 1.0;
+    if (args.size() > 1)
+        logbase = log(std::visit(overloaded {
+            [](Object::Integer x) -> double { return x; },
+            [](Object::Floating x) { return x; },
+            [&args](auto&&) -> double {
+                throw EvalException(fmt::format("unsupported type for exponent: `{}`", args[1].type_name()));
+            }
+        }, args[1].data()));
+
+    return std::visit(overloaded {
+        [logbase](Object::Integer x) { return Object::floating(log(x) / logbase); },
+        [logbase](Object::Floating x) { return Object::floating(log(x) / logbase); },
+        [&args](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for base: `{}`", args[0].type_name()));
+        }
+    }, args[0].data());
+}
+
+
 static Object builtin_import(EvaluationContext& ctx, const Object& args) {
     Object arg = args[0];
     if (arg.type() != Object::Type::string)
@@ -769,5 +811,7 @@ Namespace Gold::builtins = {
     BUILTIN("map", builtin_map),
     BUILTIN("filter", builtin_filter),
     BUILTIN("items", builtin_items),
+    BUILTIN("exp", builtin_exp),
+    BUILTIN("log", builtin_log),
     BUILTIN("import", builtin_import),
 };

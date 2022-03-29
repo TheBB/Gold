@@ -1,3 +1,4 @@
+#include <iostream>
 #include <functional>
 #include <list>
 #include <map>
@@ -373,7 +374,9 @@ private:
     std::vector<sptr<LibFinder>> libfinders;
 
 public:
-    EvaluationContext() { push_namespace(builtins); }
+    EvaluationContext() {
+        push_namespace(builtins);
+    }
 
     Object lookup(const std::string& key);
     opt<Object> weak_lookup(const std::string& key);
