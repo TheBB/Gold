@@ -790,6 +790,30 @@ static Object builtin_log(EvaluationContext& ctx, const Object& args) {
 }
 
 
+static Object builtin_ord(EvaluationContext& ctx, const Object& args) {
+    return std::visit(overloaded {
+        [](Object::String x) {
+            if (x.size() != 1)
+                throw EvalException("string must have length 1");
+            return Object::integer(x[0]);
+        },
+        [&args](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for `ord()`: `{}`", args[0].type_name()));
+        }
+    }, args[0].data());
+}
+
+
+static Object builtin_chr(EvaluationContext& ctx, const Object& args) {
+    return std::visit(overloaded {
+        [](Object::Integer x) { return Object::string(std::string {(char)x}); },
+        [&args](auto&&) -> Object {
+            throw EvalException(fmt::format("unsupported type for `chr()`: `{}`", args[0].type_name()));
+        }
+    }, args[0].data());
+}
+
+
 static Object builtin_import(EvaluationContext& ctx, const Object& args) {
     Object arg = args[0];
     if (arg.type() != Object::Type::string)
@@ -813,5 +837,7 @@ Namespace Gold::builtins = {
     BUILTIN("items", builtin_items),
     BUILTIN("exp", builtin_exp),
     BUILTIN("log", builtin_log),
+    BUILTIN("ord", builtin_ord),
+    BUILTIN("chr", builtin_chr),
     BUILTIN("import", builtin_import),
 };
