@@ -88,6 +88,7 @@ namespace Grammar
     namespace token {
         struct equals: prepad<p::one<'='>> {};
         struct colon: prepad<p::one<':'>> {};
+        struct semicolon: prepad<p::one<';'>> {};
         struct dot: prepad<p::one<'.'>> {};
         struct comma: prepad<p::one<','>> {};
         struct op_paren: prepad<p::one<'('>> {};
@@ -269,10 +270,16 @@ namespace Grammar
 
     // Functions
     namespace func {
-        // struct param_list: listof<pattern::rule> {};
-        struct bracketed_param_list: p::seq<token::op_paren, pattern::list::seq, token::cl_paren> {};
+        struct posargs: pattern::list::seq {};
+        struct kwargs: pattern::map::seq {};
+        struct param_list: p::seq<
+            token::op_paren,
+            posargs,
+            p::opt<token::semicolon, kwargs>,
+            token::cl_paren
+        > {};
         struct rule: p::if_must<
-            p::seq<p::try_catch<bracketed_param_list>, token::implies>,
+            p::seq<p::try_catch<param_list>, token::implies>,
             expression
         > {};
     }
@@ -426,7 +433,8 @@ namespace Grammar
             block::rule,
             block::binding,
             identifier,
-            func::bracketed_param_list,
+            func::posargs,
+            func::kwargs,
             func::rule,
             branch,
             power,

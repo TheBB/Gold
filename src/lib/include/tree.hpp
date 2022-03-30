@@ -83,7 +83,8 @@ namespace Grammar
         struct rule;
     }
     namespace func {
-        struct bracketed_param_list;
+        struct posargs;
+        struct kwargs;
         struct rule;
     }
     namespace block {
@@ -117,7 +118,6 @@ struct Ast
     using ExprN = std::function<ExprPtr(const Ast&)>;
     using ModExprN = std::function<ExprPtr(const Ast&, ExprPtr)>;
     using BindingN = std::function<BindingPtr(const Ast&)>;
-    using FuncBindingN = std::function<void(const Ast&, sptr<Binding>&, sptr<Binding>&)>;
     using ListEltN =std::function<uptr<ListElement>(const Ast&)>;
     using MapEltN = std::function<uptr<MapElement>(const Ast&)>;
     using FuncallArgN = std::function<void(const Ast&, ExprPtr&)>;
@@ -138,7 +138,6 @@ struct Ast
         ExprN,
         ModExprN,
         BindingN,
-        FuncBindingN,
         ListEltN,
         MapEltN,
         FuncallArgN,
@@ -200,7 +199,6 @@ struct Ast
     BinaryOperator binop() const;
     UnaryOperator unop() const;
     BindingPtr binding() const;
-    void func_bindings(sptr<Binding>&, sptr<Binding>&) const;
     BlockBindingElement binding_element() const;
     void list_binding_entry(uptr<ListBinding>& binding) const;
     void map_binding_entry(uptr<MapBinding>& binding) const;
@@ -246,7 +244,8 @@ template<> void Ast::set_normalizer<Grammar::map::loop>();
 template<> void Ast::set_normalizer<Grammar::map::rule>();
 template<> void Ast::set_normalizer<Grammar::block::binding>();
 template<> void Ast::set_normalizer<Grammar::block::rule>();
-template<> void Ast::set_normalizer<Grammar::func::bracketed_param_list>();
+template<> void Ast::set_normalizer<Grammar::func::posargs>();
+template<> void Ast::set_normalizer<Grammar::func::kwargs>();
 template<> void Ast::set_normalizer<Grammar::func::rule>();
 template<> void Ast::set_normalizer<Grammar::branch>();
 template<> void Ast::set_normalizer<Grammar::power>();

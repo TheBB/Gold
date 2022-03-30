@@ -287,13 +287,13 @@ TEST_CASE("Evaluation of functions", "[evaluate]") {
     REQUIRE(obj.type() == Object::Type::function);
 
     obj = evaluate_string(
-        "let a = ({k=1}) => k\n"
+        "let a = (; k=1) => k\n"
         "in a()"
     );
     REQUIRE(obj.unsafe_integer() == 1);
 
     obj = evaluate_string(
-        "let a = ({k=1}) => k\n"
+        "let a = (; k=1) => k\n"
         "in a(k: 2)"
     );
     REQUIRE(obj.unsafe_integer() == 2);
@@ -503,33 +503,33 @@ TEST_CASE("Function bindings", "[evaluate]") {
     REQUIRE(obj.unsafe_integer() == 2);
 
     obj = evaluate_string(
-        "let f = (x, {y, z}) => x + y + z\n"
+        "let f = (x; y, z) => x + y + z\n"
         "in f(1, y: 2, z: 3)"
     );
     REQUIRE(obj.unsafe_integer() == 6);
 
     obj = evaluate_string(
-        "let f = ({y = 1}) => y\n"
+        "let f = (; y=1) => y\n"
         "in f()"
     );
     REQUIRE(obj.unsafe_integer() == 1);
 
     obj = evaluate_string(
         "let q = 1\n"
-        "let f = ({y = q}) => y\n"
+        "let f = (; y=q) => y\n"
         "in f()"
     );
     REQUIRE(obj.unsafe_integer() == 1);
 
     obj = evaluate_string(
-        "let f = (q) => ({y = q}) => y\n"
+        "let f = (q) => (; y=q) => y\n"
         "let q = 1\n"
         "in f(2)()"
     );
     REQUIRE(obj.unsafe_integer() == 2);
 
     obj = evaluate_string(
-        "let f = (x, y=15, {z=200}) => [x,y,z]\n"
+        "let f = (x, y=15; z=200) => [x,y,z]\n"
         "in [f(1), f(1,2), f(1,z:100), f(1,2,z:100)]"
     );
     REQUIRE(obj[0][0].unsafe_integer() == 1);
