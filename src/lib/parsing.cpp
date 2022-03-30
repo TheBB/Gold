@@ -272,7 +272,7 @@ namespace Grammar
         // struct param_list: listof<pattern::rule> {};
         struct bracketed_param_list: p::seq<token::op_paren, pattern::list::seq, token::cl_paren> {};
         struct rule: p::if_must<
-            p::seq<bracketed_param_list, token::implies>,
+            p::seq<p::try_catch<bracketed_param_list>, token::implies>,
             expression
         > {};
     }
