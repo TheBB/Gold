@@ -262,14 +262,14 @@ ExprPtr Expr::deserialize(Deserializer& is) {
     case 'I':
         return std::make_unique<Identifier>(source, is.read<std::string>());
     case 'L': {
-        auto elements = is.read<std::vector<uptr<ListElement>>>([&is]() {
-            return ListElement::deserialize(is);
+        auto elements = is.read<std::vector<uptr<CollectionElement>>>([&is]() {
+            return CollectionElement::deserialize(is);
         });
         return std::make_unique<List>(source, std::move(elements));
     }
     case 'M': {
-        auto entries = is.read<std::vector<uptr<MapElement>>>([&is]() {
-            return MapElement::deserialize(is);
+        auto entries = is.read<std::vector<uptr<CollectionElement>>>([&is]() {
+            return CollectionElement::deserialize(is);
         });
         return std::make_unique<Map>(source, std::move(entries));
     }
@@ -327,11 +327,11 @@ ExprPtr Expr::deserialize(Deserializer& is) {
 }
 
 
-uptr<ListElement> ListElement::deserialize(Deserializer& is) {
+uptr<CollectionElement> CollectionElement::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     switch (indicator) {
+    case 'S': return std::make_unique<SplatElement>(Expr::deserialize(is));
     case 'E': return std::make_unique<SingletonListElement>(Expr::deserialize(is));
-    case 'S': return std::make_unique<SplatListElement>(Expr::deserialize(is));
     case 'C': {
         auto cond = Expr::deserialize(is);
         auto element = ListElement::deserialize(is);
@@ -343,19 +343,35 @@ uptr<ListElement> ListElement::deserialize(Deserializer& is) {
         auto element = ListElement::deserialize(is);
         return std::make_unique<LoopListElement>(std::move(binding), std::move(iter), std::move(element));
     }
-    default:
-        throw InternalException(fmt::format("unknown list element indicator: {}", (int)indicator));
+    case 'e': {
+        auto key = Expr::deserialize(is);
+        auto node = Expr::deserialize(is);
+        return std::make_unique<SingletonMapElement>(std::move(key), std::move(node));
     }
+    case 'c': {
+        auto cond = Expr::deserialize(is);
+        auto element = MapElement::deserialize(is);
+        return std::make_unique<CondMapElement>(std::move(cond), std::move(element));
+    }
+    case 'l': {
+        auto binding = Binding::deserialize(is);
+        auto iter = Expr::deserialize(is);
+        auto element = MapElement::deserialize(is);
+        return std::make_unique<LoopMapElement>(std::move(binding), std::move(iter), std::move(element));
+    }
+    default:
+        throw InternalException(fmt::format("unknown collection element indicator: {}", (int)indicator));
+    }
+}
+
+
+void SplatElement::do_serialize(Serializer& os) const {
+    os << 'S' << node;
 }
 
 
 void SingletonListElement::do_serialize(Serializer& os) const {
     os << 'E' << node;
-}
-
-
-void SplatListElement::do_serialize(Serializer& os) const {
-    os << 'S' << node;
 }
 
 
@@ -369,47 +385,16 @@ void LoopListElement::do_serialize(Serializer& os) const {
 }
 
 
-uptr<MapElement> MapElement::deserialize(Deserializer& is) {
-    auto indicator = is.read<char>();
-    switch (indicator) {
-    case 'E': {
-        auto key = Expr::deserialize(is);
-        auto node = Expr::deserialize(is);
-        return std::make_unique<SingletonMapElement>(std::move(key), std::move(node));
-    }
-    case 'S': return std::make_unique<SplatMapElement>(Expr::deserialize(is));
-    case 'C': {
-        auto cond = Expr::deserialize(is);
-        auto element = MapElement::deserialize(is);
-        return std::make_unique<CondMapElement>(std::move(cond), std::move(element));
-    }
-    case 'L': {
-        auto binding = Binding::deserialize(is);
-        auto iter = Expr::deserialize(is);
-        auto element = MapElement::deserialize(is);
-        return std::make_unique<LoopMapElement>(std::move(binding), std::move(iter), std::move(element));
-    }
-    default:
-        throw InternalException(fmt::format("unknown map element indicator: {}", (int)indicator));
-    }
-}
-
-
 void SingletonMapElement::do_serialize(Serializer& os) const {
-    os << 'E' << key << node;
-}
-
-
-void SplatMapElement::do_serialize(Serializer& os) const {
-    os << 'S' << node;
+    os << 'e' << key << node;
 }
 
 
 void CondMapElement::do_serialize(Serializer& os) const {
-    os << 'C' << cond << element;
+    os << 'c' << cond << element;
 }
 
 
 void LoopMapElement::do_serialize(Serializer& os) const {
-    os << 'L' << binding << iter << element;
+    os << 'l' << binding << iter << element;
 }

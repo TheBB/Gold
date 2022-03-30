@@ -118,8 +118,7 @@ struct Ast
     using ExprN = std::function<ExprPtr(const Ast&)>;
     using ModExprN = std::function<ExprPtr(const Ast&, ExprPtr)>;
     using BindingN = std::function<BindingPtr(const Ast&)>;
-    using ListEltN =std::function<uptr<ListElement>(const Ast&)>;
-    using MapEltN = std::function<uptr<MapElement>(const Ast&)>;
+    using CollectionEltN =std::function<uptr<CollectionElement>(const Ast&)>;
     using FuncallArgN = std::function<void(const Ast&, ExprPtr&)>;
     using ListBindingEltN = std::function<void(const Ast&, uptr<ListBinding>&)>;
     using MapBindingEltN = std::function<void(const Ast&, uptr<MapBinding>&)>;
@@ -138,8 +137,7 @@ struct Ast
         ExprN,
         ModExprN,
         BindingN,
-        ListEltN,
-        MapEltN,
+        CollectionEltN,
         FuncallArgN,
         ListBindingEltN,
         MapBindingEltN,
@@ -194,8 +192,7 @@ struct Ast
     ExprPtr expr() const;
     ExprPtr postfix(ExprPtr) const;
     void funcall_arg(ExprPtr&) const;
-    uptr<ListElement> list_element() const;
-    uptr<MapElement> map_element() const;
+    uptr<CollectionElement> collection_element() const;
     BinaryOperator binop() const;
     UnaryOperator unop() const;
     BindingPtr binding() const;

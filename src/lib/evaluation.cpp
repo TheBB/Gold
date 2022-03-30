@@ -309,10 +309,63 @@ Object Identifier::evaluate(EvaluationContext& ctx) const {
 }
 
 
-std::set<std::string> ListElement::free_identifiers() const {
+std::set<std::string> CollectionElement::free_identifiers() const {
     std::set<std::string> idents;
     free_identifiers(idents);
     return idents;
+}
+
+
+void SplatElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
+    auto val = node->evaluate(ctx);
+    if (val.type() != Object::Type::list)
+        throw EvalException(node->source(), fmt::format("unable to splat non-list: `{}`", val.type_name()));
+    auto& inlist = val.unsafe_list();
+    std::copy(inlist->begin(), inlist->end(), std::back_inserter(list));
+}
+
+
+void SplatElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
+    auto val = node->evaluate(ctx);
+    if (val.type() != Object::Type::map)
+        throw EvalException(node->source(), fmt::format("unable to splat non-map: `{}`", val.type_name()));
+    for (auto& [key, val] : *val.unsafe_map())
+        map[key] = val;
+}
+
+
+void SplatElement::fill(EvaluationContext& ctx, Object::ListT& list, Object::MapT& map) const {
+    // TODO
+}
+
+
+void SplatElement::free_identifiers(std::set<std::string>& idents) const {
+    node->free_identifiers(idents);
+}
+
+
+void SplatElement::dump(std::ostream& os) const {
+    os << "Splat(" << *node << ")";
+}
+
+
+void ListElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
+    throw EvalException("attempted to use list element in map context");
+}
+
+
+void ListElement::fill(EvaluationContext& ctx, Object::ListT& list, Object::MapT& map) const {
+    fill(ctx, list);
+}
+
+
+void MapElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
+    throw EvalException("attempted to use map element in list context");
+}
+
+
+void MapElement::fill(EvaluationContext& ctx, Object::ListT& list, Object::MapT& map) const {
+    fill(ctx, map);
 }
 
 
@@ -328,25 +381,6 @@ void SingletonListElement::free_identifiers(std::set<std::string>& idents) const
 
 void SingletonListElement::dump(std::ostream& os) const {
     os << *node;
-}
-
-
-void SplatListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
-    auto val = node->evaluate(ctx);
-    if (val.type() != Object::Type::list)
-        throw EvalException(node->source(), fmt::format("unable to splat non-list: `{}`", val.type_name()));
-    auto& inlist = val.unsafe_list();
-    std::copy(inlist->begin(), inlist->end(), std::back_inserter(list));
-}
-
-
-void SplatListElement::free_identifiers(std::set<std::string>& idents) const {
-    node->free_identifiers(idents);
-}
-
-
-void SplatListElement::dump(std::ostream& os) const {
-    os << "Splat(" << *node << ")";
 }
 
 
@@ -436,21 +470,14 @@ Object List::evaluate(EvaluationContext& ctx) const {
 }
 
 
-std::set<std::string> MapElement::free_identifiers() const {
-    std::set<std::string> idents;
-    free_identifiers(idents);
-    return idents;
-}
-
-
-void SingletonMapElement::fill(EvaluationContext& ctx) const {
+void SingletonMapElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
     auto k = key->evaluate(ctx);
     if (k.type() != Object::Type::string)
         throw EvalException(
             key->source(),
             fmt::format("attempted using non-string type `{}` as object key", k.type_name())
         );
-    ctx.assign_object(k.unsafe_string(), node->evaluate(ctx));
+    map[k.unsafe_string()] = node->evaluate(ctx);
 }
 
 
@@ -465,26 +492,26 @@ void SingletonMapElement::dump(std::ostream& os) const {
 }
 
 
-void SplatMapElement::fill(EvaluationContext& ctx) const {
-    auto val = node->evaluate(ctx);
-    if (val.type() != Object::Type::map)
-        throw EvalException(node->source(), fmt::format("unable to splat non-map: `{}`", val.type_name()));
-    for (auto& [key, val] : *val.unsafe_map())
-        ctx.assign_object(key, val);
-}
+// void SplatMapElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
+//     auto val = node->evaluate(ctx);
+//     if (val.type() != Object::Type::map)
+//         throw EvalException(node->source(), fmt::format("unable to splat non-map: `{}`", val.type_name()));
+//     for (auto& [key, val] : *val.unsafe_map())
+//         map[key] = val;
+// }
 
 
-void SplatMapElement::free_identifiers(std::set<std::string>& idents) const {
-    node->free_identifiers(idents);
-}
+// void SplatMapElement::free_identifiers(std::set<std::string>& idents) const {
+//     node->free_identifiers(idents);
+// }
 
 
-void SplatMapElement::dump(std::ostream& os) const {
-    os << "Splat(" << *node << ")";
-}
+// void SplatMapElement::dump(std::ostream& os) const {
+//     os << "Splat(" << *node << ")";
+// }
 
 
-void CondMapElement::fill(EvaluationContext& ctx) const {
+void CondMapElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
     auto c = cond->evaluate(ctx);
     if (c.type() != Object::Type::boolean)
         throw EvalException(
@@ -492,7 +519,7 @@ void CondMapElement::fill(EvaluationContext& ctx) const {
             fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
         );
     if (c.unsafe_boolean())
-        element->fill(ctx);
+        element->fill(ctx, map);
 }
 
 
@@ -507,7 +534,7 @@ void CondMapElement::dump(std::ostream& os) const {
 }
 
 
-void LoopMapElement::fill(EvaluationContext& ctx) const {
+void LoopMapElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
     auto val = iter->evaluate(ctx);
     if (val.type() != Object::Type::list)
         throw EvalException(
@@ -518,7 +545,7 @@ void LoopMapElement::fill(EvaluationContext& ctx) const {
     for (auto& v : *val.unsafe_list()) {
         if (!binding->bind(ctx, v))
             throw EvalException(binding->src, "failed to bind pattern");
-        element->fill(ctx);
+        element->fill(ctx, map);
     }
     ctx.pop_namespace();
 }
@@ -563,10 +590,10 @@ void Map::free_identifiers(std::set<std::string>& idents) const {
 
 
 Object Map::evaluate(EvaluationContext& ctx) const {
-    ctx.push_object();
+    Object::MapT map;
     for (auto& element : elements)
-        element->fill(ctx);
-    return ctx.finalize_object();
+        element->fill(ctx, map);
+    return Object::map(map);
 }
 
 
