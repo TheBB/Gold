@@ -284,6 +284,19 @@ namespace Grammar
         > {};
     }
 
+    namespace kwargs_only_func {
+        struct kwargs: pattern::map::seq {};
+        struct param_list: p::seq<
+            token::op_brace,
+            kwargs,
+            token::cl_brace
+        > {};
+        struct rule: p::if_must<
+            p::seq<p::try_catch<param_list>, token::implies>,
+            expression
+        > {};
+    }
+
     // Conditionals
     struct branch: p::if_must<
         prepad<keyword::If>,
@@ -345,6 +358,7 @@ namespace Grammar
     // Composite expressions (can't have postfix or prefix operators)
     struct composite: p::sor<
         func::rule,
+        kwargs_only_func::rule,
         block::rule,
         branch
     > {};
@@ -438,6 +452,8 @@ namespace Grammar
             func::posargs,
             func::kwargs,
             func::rule,
+            kwargs_only_func::kwargs,
+            kwargs_only_func::rule,
             branch,
             power,
             product,

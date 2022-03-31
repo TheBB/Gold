@@ -599,6 +599,18 @@ TEST_CASE("Function bindings", "[evaluate]") {
     REQUIRE(obj[1]["y"].unsafe_integer() == 5);
     REQUIRE(obj[1]["z"].unsafe_integer() == 12);
     REQUIRE(obj[1]["c"].unsafe_integer() == 10);
+
+    obj = evaluate_string("({} => 1)()");
+    REQUIRE(obj.unsafe_integer() == 1);
+
+    obj = evaluate_string("({a,b} => a+b)(a: 1, b: 2)");
+    REQUIRE(obj.unsafe_integer() == 3);
+
+    obj = evaluate_string("({a,b=2} => a+b)(a: 1, b: 3)");
+    REQUIRE(obj.unsafe_integer() == 4);
+
+    obj = evaluate_string("({a,b=2} => a+b)(a: 1)");
+    REQUIRE(obj.unsafe_integer() == 3);
 }
 
 

@@ -171,6 +171,11 @@ template<> void Ast::set_normalizer<Grammar::pattern::map::entry>() {
 }
 
 
+template<> void Ast::set_normalizer<Grammar::kwargs_only_func::kwargs>() {
+    set_normalizer<Grammar::pattern::map::rule>();
+}
+
+
 template<> void Ast::set_normalizer<Grammar::pattern::map::single_entry>() {
     normalizer = [](const Ast& ast) -> MapBinding::Entry {
         auto name = ast.children[0]->string();
@@ -449,6 +454,17 @@ template<> void Ast::set_normalizer<Grammar::func::rule>() {
             func->kwargs = std::make_shared<MapBinding>(Source {0,0,0});
             func->expression = ast.children[1]->expr();
         }
+        return func;
+    };
+}
+
+
+template<> void Ast::set_normalizer<Grammar::kwargs_only_func::rule>() {
+    normalizer = [](const Ast& ast) -> ExprPtr {
+        auto func = std::make_unique<Function>(ast.source());
+        func->args = std::make_unique<ListBinding>(Source {0,0,0});
+        func->kwargs = ast.children[0]->binding();
+        func->expression = ast.children[1]->expr();
         return func;
     };
 }

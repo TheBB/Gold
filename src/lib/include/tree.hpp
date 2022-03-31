@@ -84,6 +84,10 @@ namespace Grammar
         struct kwargs;
         struct rule;
     }
+    namespace kwargs_only_func {
+        struct kwargs;
+        struct rule;
+    }
     namespace block {
         struct binding;
         struct rule;
@@ -238,6 +242,8 @@ template<> void Ast::set_normalizer<Grammar::block::rule>();
 template<> void Ast::set_normalizer<Grammar::func::posargs>();
 template<> void Ast::set_normalizer<Grammar::func::kwargs>();
 template<> void Ast::set_normalizer<Grammar::func::rule>();
+template<> void Ast::set_normalizer<Grammar::kwargs_only_func::kwargs>();
+template<> void Ast::set_normalizer<Grammar::kwargs_only_func::rule>();
 template<> void Ast::set_normalizer<Grammar::branch>();
 template<> void Ast::set_normalizer<Grammar::power>();
 template<> void Ast::set_normalizer<Grammar::product>();
