@@ -290,25 +290,25 @@ TEST_CASE("Conditionals", "[parsing]") {
 
 TEST_CASE("Postfix operators", "[parsing]") {
     auto ast = parse_string("func(1,2,3)");
-    REQUIRE(ast->dump() == "FunCall(Id(func), Arg(Lit(1)), Arg(Lit(2)), Arg(Lit(3)))");
+    REQUIRE(ast->dump() == "FunCall(Id(func), Lit(1), Lit(2), Lit(3))");
 
     ast = parse_string("func(1, 2, q: 3)");
-    REQUIRE(ast->dump() == "FunCall(Id(func), Arg(Lit(1)), Arg(Lit(2)), Kwarg(q, Lit(3)))");
+    REQUIRE(ast->dump() == "FunCall(Id(func), Lit(1), Lit(2), Entry(Lit(\"q\"), Lit(3)))");
 
     ast = parse_string("func(a: 2, b: 3)");
-    REQUIRE(ast->dump() == "FunCall(Id(func), Kwarg(a, Lit(2)), Kwarg(b, Lit(3)))");
+    REQUIRE(ast->dump() == "FunCall(Id(func), Entry(Lit(\"a\"), Lit(2)), Entry(Lit(\"b\"), Lit(3)))");
 
     ast = parse_string("((x,y) => x+y)(1,2)");
-    REQUIRE(ast->dump() == "FunCall(Function(List(Entry(Id(x)), Entry(Id(y))), Map(), BinOp(Id(x) + Id(y))), Arg(Lit(1)), Arg(Lit(2)))");
+    REQUIRE(ast->dump() == "FunCall(Function(List(Entry(Id(x)), Entry(Id(y))), Map(), BinOp(Id(x) + Id(y))), Lit(1), Lit(2))");
 
     ast = parse_string("abc.def");
     REQUIRE(ast->dump() == "Index(Id(abc), Lit(\"def\"))");
 
     ast = parse_string("f(a).x");
-    REQUIRE(ast->dump() == "Index(FunCall(Id(f), Arg(Id(a))), Lit(\"x\"))");
+    REQUIRE(ast->dump() == "Index(FunCall(Id(f), Id(a)), Lit(\"x\"))");
 
     ast = parse_string("f.x(a)");
-    REQUIRE(ast->dump() == "FunCall(Index(Id(f), Lit(\"x\")), Arg(Id(a)))");
+    REQUIRE(ast->dump() == "FunCall(Index(Id(f), Lit(\"x\")), Id(a))");
 
     ast = parse_string("dingbob[\"roflmao\"]");
     REQUIRE(ast->dump() == "Index(Id(dingbob), Lit(\"roflmao\"))");

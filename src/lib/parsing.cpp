@@ -316,10 +316,12 @@ namespace Grammar
 
     // Precedence level: postfix operators
     namespace postfix {
-        struct kwarg_identifier: map_identifier {};
-        struct kwarg: p::seq<prepad<kwarg_identifier>, token::colon, expression> {};
-        struct posarg: p::seq<expression> {};
-        struct funcall_args: listof<p::sor<kwarg, posarg>> {};
+        struct func_arg: p::sor<
+            list::splat,
+            p::try_catch<map::entry>,
+            list::singleton
+        > {};
+        struct funcall_args: listof<func_arg> {};
         struct funcall_operator: p::seq<token::op_paren, funcall_args, token::cl_paren> {};
         struct object_access: p::seq<token::dot, identifier> {};
         struct subscript_operator: p::seq<token::op_bracket, expression, token::cl_bracket> {};
@@ -458,9 +460,6 @@ namespace Grammar
             op::ineq,
             op::un_minus,
             postfix::rule,
-            postfix::kwarg_identifier,
-            postfix::kwarg,
-            postfix::posarg,
             postfix::funcall_operator,
             postfix::object_access,
             postfix::subscript_operator,

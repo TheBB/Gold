@@ -309,10 +309,155 @@ Object Identifier::evaluate(EvaluationContext& ctx) const {
 }
 
 
-std::set<std::string> ListElement::free_identifiers() const {
+std::set<std::string> CollectionElement::free_identifiers() const {
     std::set<std::string> idents;
     free_identifiers(idents);
     return idents;
+}
+
+
+void SplatElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
+    auto val = node->evaluate(ctx);
+    if (val.type() != Object::Type::list)
+        throw EvalException(node->source(), fmt::format("unable to splat non-list: `{}`", val.type_name()));
+    auto& inlist = val.unsafe_list();
+    std::copy(inlist->begin(), inlist->end(), std::back_inserter(list));
+}
+
+
+void SplatElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
+    auto val = node->evaluate(ctx);
+    if (val.type() != Object::Type::map)
+        throw EvalException(node->source(), fmt::format("unable to splat non-map: `{}`", val.type_name()));
+    for (auto& [key, val] : *val.unsafe_map())
+        map[key] = val;
+}
+
+
+void SplatElement::fill(EvaluationContext& ctx, Object::ListT& list, Object::MapT& map) const {
+    auto val = node->evaluate(ctx);
+    if (val.type() == Object::Type::map)
+        for (auto& [key, val] : *val.unsafe_map())
+            map[key] = val;
+    else if (val.type() == Object::Type::list) {
+        auto& inlist = val.unsafe_list();
+        std::copy(inlist->begin(), inlist->end(), std::back_inserter(list));
+    }
+    else
+        throw EvalException(node->source(), fmt::format("unable to splat `{}`", val.type_name()));
+}
+
+
+void SplatElement::free_identifiers(std::set<std::string>& idents) const {
+    node->free_identifiers(idents);
+}
+
+
+void SplatElement::dump(std::ostream& os) const {
+    os << "Splat(" << *node << ")";
+}
+
+
+void CondCollectionElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
+    Object::MapT map;
+    fill(ctx, list, map);
+}
+
+
+void CondCollectionElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
+    Object::ListT list;
+    fill(ctx, list, map);
+}
+
+
+void CondCollectionElement::fill(EvaluationContext& ctx, Object::ListT& list, Object::MapT& map) const {
+    auto c = cond->evaluate(ctx);
+    if (c.type() != Object::Type::boolean)
+        throw EvalException(
+            cond->source(),
+            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
+        );
+    if (c.unsafe_boolean())
+        element->fill(ctx, list, map);
+}
+
+
+void CondCollectionElement::free_identifiers(std::set<std::string>& idents) const {
+    cond->free_identifiers(idents);
+    element->free_identifiers(idents);
+}
+
+
+void CondCollectionElement::dump(std::ostream& os) const {
+    os << "Cond(" << *cond << ", " << *element << ")";
+}
+
+
+void LoopCollectionElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
+    Object::MapT map;
+    fill(ctx, list, map);
+}
+
+
+void LoopCollectionElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
+    Object::ListT list;
+    fill(ctx, list, map);
+}
+
+
+void LoopCollectionElement::fill(EvaluationContext& ctx, Object::ListT& list, Object::MapT& map) const {
+    auto val = iter->evaluate(ctx);
+    if (val.type() != Object::Type::list)
+        throw EvalException(
+            iter->source(),
+            fmt::format("unable to iterate over non-list `{}`", val.type_name())
+        );
+    ctx.push_namespace();
+    for (auto& v : *val.unsafe_list()) {
+        if (!binding->bind(ctx, v))
+            throw EvalException(binding->src, "failed to bind pattern");
+        element->fill(ctx, list, map);
+    }
+    ctx.pop_namespace();
+}
+
+
+void LoopCollectionElement::free_identifiers(std::set<std::string>& idents) const {
+    iter->free_identifiers(idents);
+
+    std::set<std::string> bound;
+    binding->free_and_bound(idents, bound);
+
+    auto candidates = element->free_identifiers();
+    for (auto& p : bound)
+        candidates.erase(p);
+    for (auto& c : candidates)
+        idents.insert(c);
+}
+
+
+void LoopCollectionElement::dump(std::ostream& os) const {
+    os << "For(" << *binding << ", " << *iter << ", " << *element << ")";
+}
+
+
+void ListElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
+    throw EvalException("attempted to use list element in map context");
+}
+
+
+void ListElement::fill(EvaluationContext& ctx, Object::ListT& list, Object::MapT& map) const {
+    fill(ctx, list);
+}
+
+
+void MapElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
+    throw EvalException("attempted to use map element in list context");
+}
+
+
+void MapElement::fill(EvaluationContext& ctx, Object::ListT& list, Object::MapT& map) const {
+    fill(ctx, map);
 }
 
 
@@ -328,84 +473,6 @@ void SingletonListElement::free_identifiers(std::set<std::string>& idents) const
 
 void SingletonListElement::dump(std::ostream& os) const {
     os << *node;
-}
-
-
-void SplatListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
-    auto val = node->evaluate(ctx);
-    if (val.type() != Object::Type::list)
-        throw EvalException(node->source(), fmt::format("unable to splat non-list: `{}`", val.type_name()));
-    auto& inlist = val.unsafe_list();
-    std::copy(inlist->begin(), inlist->end(), std::back_inserter(list));
-}
-
-
-void SplatListElement::free_identifiers(std::set<std::string>& idents) const {
-    node->free_identifiers(idents);
-}
-
-
-void SplatListElement::dump(std::ostream& os) const {
-    os << "Splat(" << *node << ")";
-}
-
-
-void CondListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
-    auto c = cond->evaluate(ctx);
-    if (c.type() != Object::Type::boolean)
-        throw EvalException(
-            cond->source(),
-            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
-        );
-    if (c.unsafe_boolean())
-        element->fill(ctx, list);
-}
-
-
-void CondListElement::free_identifiers(std::set<std::string>& idents) const {
-    cond->free_identifiers(idents);
-    element->free_identifiers(idents);
-}
-
-
-void CondListElement::dump(std::ostream& os) const {
-    os << "Cond(" << *cond << ", " << *element << ")";
-}
-
-
-void LoopListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
-    auto val = iter->evaluate(ctx);
-    if (val.type() != Object::Type::list)
-        throw EvalException(
-            iter->source(),
-            fmt::format("unable to iterate over non-list `{}`", val.type_name())
-        );
-    ctx.push_namespace();
-    for (auto& v : *val.unsafe_list()) {
-        if (!binding->bind(ctx, v))
-            throw EvalException(binding->src, "failed to bind pattern");
-        element->fill(ctx, list);
-    }
-    ctx.pop_namespace();
-}
-
-
-void LoopListElement::free_identifiers(std::set<std::string>& idents) const {
-    iter->free_identifiers(idents);
-
-    std::set<std::string> bound;
-    binding->free_and_bound(idents, bound);
-
-    auto candidates = element->free_identifiers();
-    for (auto& p : bound)
-        candidates.erase(p);
-    for (auto& c : candidates)
-        idents.insert(c);
-}
-
-
-void LoopListElement::dump(std::ostream& os) const {
-    os << "For(" << *binding << ", " << *iter << ", " << *element << ")";
 }
 
 
@@ -436,21 +503,14 @@ Object List::evaluate(EvaluationContext& ctx) const {
 }
 
 
-std::set<std::string> MapElement::free_identifiers() const {
-    std::set<std::string> idents;
-    free_identifiers(idents);
-    return idents;
-}
-
-
-void SingletonMapElement::fill(EvaluationContext& ctx) const {
+void SingletonMapElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
     auto k = key->evaluate(ctx);
     if (k.type() != Object::Type::string)
         throw EvalException(
             key->source(),
             fmt::format("attempted using non-string type `{}` as object key", k.type_name())
         );
-    ctx.assign_object(k.unsafe_string(), node->evaluate(ctx));
+    map[k.unsafe_string()] = node->evaluate(ctx);
 }
 
 
@@ -462,84 +522,6 @@ void SingletonMapElement::free_identifiers(std::set<std::string>& idents) const 
 
 void SingletonMapElement::dump(std::ostream& os) const {
     os << "Entry(" << *key << ", " << *node << ")";
-}
-
-
-void SplatMapElement::fill(EvaluationContext& ctx) const {
-    auto val = node->evaluate(ctx);
-    if (val.type() != Object::Type::map)
-        throw EvalException(node->source(), fmt::format("unable to splat non-map: `{}`", val.type_name()));
-    for (auto& [key, val] : *val.unsafe_map())
-        ctx.assign_object(key, val);
-}
-
-
-void SplatMapElement::free_identifiers(std::set<std::string>& idents) const {
-    node->free_identifiers(idents);
-}
-
-
-void SplatMapElement::dump(std::ostream& os) const {
-    os << "Splat(" << *node << ")";
-}
-
-
-void CondMapElement::fill(EvaluationContext& ctx) const {
-    auto c = cond->evaluate(ctx);
-    if (c.type() != Object::Type::boolean)
-        throw EvalException(
-            cond->source(),
-            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
-        );
-    if (c.unsafe_boolean())
-        element->fill(ctx);
-}
-
-
-void CondMapElement::free_identifiers(std::set<std::string>& idents) const {
-    cond->free_identifiers(idents);
-    element->free_identifiers(idents);
-}
-
-
-void CondMapElement::dump(std::ostream& os) const {
-    os << "Cond(" << *cond << ", " << *element << ")";
-}
-
-
-void LoopMapElement::fill(EvaluationContext& ctx) const {
-    auto val = iter->evaluate(ctx);
-    if (val.type() != Object::Type::list)
-        throw EvalException(
-            iter->source(),
-            fmt::format("unable to iterate over non-list `{}`", val.type_name())
-        );
-    ctx.push_namespace();
-    for (auto& v : *val.unsafe_list()) {
-        if (!binding->bind(ctx, v))
-            throw EvalException(binding->src, "failed to bind pattern");
-        element->fill(ctx);
-    }
-    ctx.pop_namespace();
-}
-
-
-void LoopMapElement::free_identifiers(std::set<std::string>& idents) const {
-    iter->free_identifiers(idents);
-
-    std::set<std::string> bound;
-    binding->free_and_bound(idents, bound);
-
-    auto candidates = element->free_identifiers();
-    for (auto& p : bound)
-        candidates.erase(p);
-    for (auto& c : candidates)
-        idents.insert(c);
-}
-
-
-void LoopMapElement::dump(std::ostream& os) const {
-    os << "For(" << *binding << ", " << *iter << ", " << *element << ")";
 }
 
 
@@ -563,10 +545,10 @@ void Map::free_identifiers(std::set<std::string>& idents) const {
 
 
 Object Map::evaluate(EvaluationContext& ctx) const {
-    ctx.push_object();
+    Object::MapT map;
     for (auto& element : elements)
-        element->fill(ctx);
-    return ctx.finalize_object();
+        element->fill(ctx, map);
+    return Object::map(map);
 }
 
 
@@ -744,41 +726,40 @@ Object Branch::evaluate(EvaluationContext& ctx) const {
 
 void FunCall::dump(std::ostream& os) const {
     os << "FunCall(" << *function;
-    for (auto& arg : args)
-        os << ", Arg(" << *arg << ")";
-    for (auto& kwarg : kwargs)
-        os << ", Kwarg(" << kwarg.first << ", " << *kwarg.second << ")";
+    for (auto& element : elements)
+        os << ", " << *element;
     os << ")";
 }
 
 
 void FunCall::free_identifiers(std::set<std::string>& idents) const {
     function->free_identifiers(idents);
-    for (auto& arg : args)
-        arg->free_identifiers(idents);
-    for (auto& kwarg : kwargs)
-        kwarg.second->free_identifiers(idents);
+    for (auto& element : elements)
+        element->free_identifiers(idents);
 }
 
 
 Object FunCall::evaluate(EvaluationContext& ctx) const {
     auto func = function->evaluate(ctx);
-    std::vector<Object> arglist;
-    for (auto& arg : args)
-        arglist.push_back(arg->evaluate(ctx));
+    Object::ListT arglist;
+    Object::MapT kwarglist;
+    for (auto& element : elements)
+        element->fill(ctx, arglist, kwarglist);
+    // for (auto& arg : args)
+    //     arglist.push_back(arg->evaluate(ctx));
 
-    Object kwarglist;
-    if (!kwargs.empty()) {
-        ctx.push_object();
-        for (auto& kwarg : kwargs)
-            ctx.assign_object(kwarg.first, kwarg.second->evaluate(ctx));
-        kwarglist = ctx.finalize_object();
-    }
-    else
-        kwarglist = Object::map();
+    // Object kwarglist;
+    // if (!kwargs.empty()) {
+    //     ctx.push_object();
+    //     for (auto& kwarg : kwargs)
+    //         ctx.assign_object(kwarg.first, kwarg.second->evaluate(ctx));
+    //     kwarglist = ctx.finalize_object();
+    // }
+    // else
+    //     kwarglist = Object::map();
 
     try {
-        auto rval = func.call(ctx, Object::list(arglist), kwarglist);
+        auto rval = func.call(ctx, Object::list(arglist), Object::map(kwarglist));
         return rval;
     }
     catch (EvalException& e) {

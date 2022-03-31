@@ -160,16 +160,82 @@ struct Identifier : public Expr {
 };
 
 
-struct ListElement : public Serializable {
-    virtual ~ListElement() {}
-    static uptr<ListElement> deserialize(Deserializer&);
+struct CollectionElement : public Serializable {
+    virtual ~CollectionElement() {}
+    static uptr<CollectionElement> deserialize(Deserializer&);
 
     virtual void fill(EvaluationContext&, Object::ListT&) const = 0;
+    virtual void fill(EvaluationContext&, Object::MapT&) const = 0;
+    virtual void fill(EvaluationContext&, Object::ListT&, Object::MapT&) const = 0;
+
     virtual void free_identifiers(std::set<std::string>&) const = 0;
     std::set<std::string> free_identifiers() const;
 
     virtual void dump(std::ostream& os) const = 0;
-    friend std::ostream& operator<<(std::ostream& os, const ListElement& node) { node.dump(os); return os; };
+    friend std::ostream& operator<<(std::ostream& os, const CollectionElement& node) { node.dump(os); return os; }
+};
+
+
+struct SplatElement : public CollectionElement {
+    ExprPtr node;
+
+    SplatElement(ExprPtr node) : node(std::move(node)) {}
+
+    virtual void fill(EvaluationContext&, Object::ListT&) const;
+    virtual void fill(EvaluationContext&, Object::MapT&) const;
+    virtual void fill(EvaluationContext&, Object::ListT&, Object::MapT&) const;
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
+struct CondCollectionElement : public CollectionElement {
+    ExprPtr cond;
+    uptr<CollectionElement> element;
+
+    CondCollectionElement(ExprPtr cond, uptr<CollectionElement> element)
+        : cond(std::move(cond)), element(std::move(element)) {}
+
+    virtual void fill(EvaluationContext&, Object::ListT&) const;
+    virtual void fill(EvaluationContext&, Object::MapT&) const;
+    virtual void fill(EvaluationContext&, Object::ListT&, Object::MapT&) const;
+
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
+struct LoopCollectionElement : public CollectionElement {
+    BindingPtr binding;
+    ExprPtr iter;
+    uptr<CollectionElement> element;
+
+    LoopCollectionElement(BindingPtr binding, ExprPtr iter, uptr<CollectionElement> element)
+        : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
+
+    virtual void fill(EvaluationContext&, Object::ListT&) const;
+    virtual void fill(EvaluationContext&, Object::MapT&) const;
+    virtual void fill(EvaluationContext&, Object::ListT&, Object::MapT&) const;
+
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
+struct ListElement : public CollectionElement {
+    virtual void fill(EvaluationContext&, Object::ListT&) const = 0;
+    virtual void fill(EvaluationContext&, Object::MapT&) const;
+    virtual void fill(EvaluationContext&, Object::ListT&, Object::MapT&) const;
+};
+
+
+struct MapElement : public CollectionElement {
+    virtual void fill(EvaluationContext&, Object::MapT&) const = 0;
+    virtual void fill(EvaluationContext&, Object::ListT&) const;
+    virtual void fill(EvaluationContext&, Object::ListT&, Object::MapT&) const;
 };
 
 
@@ -185,41 +251,12 @@ struct SingletonListElement : public ListElement {
 };
 
 
-struct SplatListElement : public ListElement {
-    ExprPtr node;
+struct SingletonMapElement : public MapElement {
+    ExprPtr key, node;
 
-    SplatListElement(ExprPtr node) : node(std::move(node)) {}
+    SingletonMapElement(ExprPtr key, ExprPtr node) : key(std::move(key)), node(std::move(node)) {}
 
-    virtual void fill(EvaluationContext&, Object::ListT&) const;
-    virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
-};
-
-
-struct CondListElement : public ListElement {
-    ExprPtr cond;
-    uptr<ListElement> element;
-
-    CondListElement(ExprPtr cond, uptr<ListElement> element)
-        : cond(std::move(cond)), element(std::move(element)) {}
-
-    virtual void fill(EvaluationContext&, Object::ListT&) const;
-    virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
-};
-
-
-struct LoopListElement : public ListElement {
-    BindingPtr binding;
-    ExprPtr iter;
-    uptr<ListElement> element;
-
-    LoopListElement(BindingPtr binding, ExprPtr iter, uptr<ListElement> element)
-        : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
-
-    virtual void fill(EvaluationContext&, Object::ListT&) const;
+    virtual void fill(EvaluationContext&, Object::MapT&) const;
     virtual void do_serialize(Serializer&) const;
     virtual void dump(std::ostream& os) const;
     virtual void free_identifiers(std::set<std::string>&) const;
@@ -227,15 +264,10 @@ struct LoopListElement : public ListElement {
 
 
 struct List : public Expr {
-    using Entry = struct Entry {
-        ExprPtr node;
-        bool splat;
-    };
-
-    std::vector<uptr<ListElement>> elements;
+    std::vector<uptr<CollectionElement>> elements;
 
     List(Source src) : Expr(src) {}
-    List(Source src, std::vector<uptr<ListElement>> elements)
+    List(Source src, std::vector<uptr<CollectionElement>> elements)
         : Expr(src), elements(std::move(elements)) {}
 
     virtual void dump(std::ostream&) const;
@@ -245,77 +277,11 @@ struct List : public Expr {
 };
 
 
-struct MapElement : public Serializable {
-    virtual ~MapElement() {}
-
-    virtual void fill(EvaluationContext&) const = 0;
-    static uptr<MapElement> deserialize(Deserializer&);
-    virtual void free_identifiers(std::set<std::string>&) const = 0;
-    std::set<std::string> free_identifiers() const;
-
-    virtual void dump(std::ostream& os) const = 0;
-    friend std::ostream& operator<<(std::ostream& os, const MapElement& node) { node.dump(os); return os; };
-};
-
-
-struct SingletonMapElement : public MapElement {
-    ExprPtr key, node;
-
-    SingletonMapElement(ExprPtr key, ExprPtr node) : key(std::move(key)), node(std::move(node)) {}
-
-    virtual void fill(EvaluationContext&) const;
-    virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
-};
-
-
-struct SplatMapElement : public MapElement {
-    ExprPtr node;
-
-    SplatMapElement(ExprPtr node) : node(std::move(node)) {}
-
-    virtual void fill(EvaluationContext&) const;
-    virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
-};
-
-
-struct CondMapElement : public MapElement {
-    ExprPtr cond;
-    uptr<MapElement> element;
-
-    CondMapElement(ExprPtr cond, uptr<MapElement> element)
-        : cond(std::move(cond)), element(std::move(element)) {}
-
-    virtual void fill(EvaluationContext&) const;
-    virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
-};
-
-
-struct LoopMapElement : public MapElement {
-    BindingPtr binding;
-    ExprPtr iter;
-    uptr<MapElement> element;
-
-    LoopMapElement(BindingPtr binding, ExprPtr iter, uptr<MapElement> element)
-        : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
-
-    virtual void fill(EvaluationContext&) const;
-    virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
-};
-
-
 struct Map : public Expr {
-    std::vector<uptr<MapElement>> elements;
+    std::vector<uptr<CollectionElement>> elements;
 
     Map(Source src) : Expr(src) {}
-    Map(Source src, std::vector<uptr<MapElement>> elements)
+    Map(Source src, std::vector<uptr<CollectionElement>> elements)
         : Expr(src), elements(std::move(elements)) {}
 
     virtual void dump(std::ostream&) const;
@@ -408,12 +374,11 @@ struct Branch : public Expr {
 
 struct FunCall : public Expr {
     ExprPtr function;
-    std::vector<ExprPtr> args;
-    std::vector<std::pair<std::string, ExprPtr>> kwargs;
+    std::vector<uptr<CollectionElement>> elements;
 
     FunCall(Source src, ExprPtr function) : Expr(src), function(std::move(function)) {}
-    FunCall(Source src, ExprPtr function, std::vector<ExprPtr> args, std::vector<std::pair<std::string, ExprPtr>> kwargs)
-        : Expr(src), function(std::move(function)), args(std::move(args)), kwargs(std::move(kwargs)) {}
+    FunCall(Source src, ExprPtr function, std::vector<uptr<CollectionElement>> elements)
+        : Expr(src), function(std::move(function)), elements(std::move(elements)) {}
 
     virtual void dump(std::ostream&) const;
     virtual void free_identifiers(std::set<std::string>&) const;

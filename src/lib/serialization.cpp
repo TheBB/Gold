@@ -229,10 +229,7 @@ void Branch::do_serialize(Serializer& os) const {
 
 
 void FunCall::do_serialize(Serializer& os) const {
-    os << 'E' << source() << function << args;
-    os.write(kwargs, [&os](const std::pair<std::string, ExprPtr>& pair) {
-        os << pair.first << pair.second;
-    });
+    os << 'E' << source() << function << elements;
 }
 
 
@@ -262,14 +259,14 @@ ExprPtr Expr::deserialize(Deserializer& is) {
     case 'I':
         return std::make_unique<Identifier>(source, is.read<std::string>());
     case 'L': {
-        auto elements = is.read<std::vector<uptr<ListElement>>>([&is]() {
-            return ListElement::deserialize(is);
+        auto elements = is.read<std::vector<uptr<CollectionElement>>>([&is]() {
+            return CollectionElement::deserialize(is);
         });
         return std::make_unique<List>(source, std::move(elements));
     }
     case 'M': {
-        auto entries = is.read<std::vector<uptr<MapElement>>>([&is]() {
-            return MapElement::deserialize(is);
+        auto entries = is.read<std::vector<uptr<CollectionElement>>>([&is]() {
+            return CollectionElement::deserialize(is);
         });
         return std::make_unique<Map>(source, std::move(entries));
     }
@@ -306,15 +303,10 @@ ExprPtr Expr::deserialize(Deserializer& is) {
     }
     case 'E': {
         auto func = Expr::deserialize(is);
-        auto args = is.read<std::vector<ExprPtr>>([&is]() {
-            return Expr::deserialize(is);
+        auto elements = is.read<std::vector<uptr<CollectionElement>>>([&is]() {
+            return CollectionElement::deserialize(is);
         });
-        auto kwargs = is.read<std::vector<std::pair<std::string, ExprPtr>>>([&is]() {
-            auto key = is.read<std::string>();
-            auto expr = Expr::deserialize(is);
-            return std::make_pair(key, std::move(expr));
-        });
-        return std::make_unique<FunCall>(source, std::move(func), std::move(args), std::move(kwargs));
+        return std::make_unique<FunCall>(source, std::move(func), std::move(elements));
     }
     case 'S': {
         auto haystack = Expr::deserialize(is);
@@ -327,25 +319,45 @@ ExprPtr Expr::deserialize(Deserializer& is) {
 }
 
 
-uptr<ListElement> ListElement::deserialize(Deserializer& is) {
+uptr<CollectionElement> CollectionElement::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     switch (indicator) {
-    case 'E': return std::make_unique<SingletonListElement>(Expr::deserialize(is));
-    case 'S': return std::make_unique<SplatListElement>(Expr::deserialize(is));
+    case 'S': return std::make_unique<SplatElement>(Expr::deserialize(is));
     case 'C': {
         auto cond = Expr::deserialize(is);
-        auto element = ListElement::deserialize(is);
-        return std::make_unique<CondListElement>(std::move(cond), std::move(element));
+        auto element = CollectionElement::deserialize(is);
+        return std::make_unique<CondCollectionElement>(std::move(cond), std::move(element));
     }
     case 'L': {
         auto binding = Binding::deserialize(is);
         auto iter = Expr::deserialize(is);
         auto element = ListElement::deserialize(is);
-        return std::make_unique<LoopListElement>(std::move(binding), std::move(iter), std::move(element));
+        return std::make_unique<LoopCollectionElement>(std::move(binding), std::move(iter), std::move(element));
+    }
+    case 'E': return std::make_unique<SingletonListElement>(Expr::deserialize(is));
+    case 'e': {
+        auto key = Expr::deserialize(is);
+        auto node = Expr::deserialize(is);
+        return std::make_unique<SingletonMapElement>(std::move(key), std::move(node));
     }
     default:
-        throw InternalException(fmt::format("unknown list element indicator: {}", (int)indicator));
+        throw InternalException(fmt::format("unknown collection element indicator: {}", (int)indicator));
     }
+}
+
+
+void SplatElement::do_serialize(Serializer& os) const {
+    os << 'S' << node;
+}
+
+
+void CondCollectionElement::do_serialize(Serializer& os) const {
+    os << 'C' << cond << element;
+}
+
+
+void LoopCollectionElement::do_serialize(Serializer& os) const {
+    os << 'L' << binding << iter << element;
 }
 
 
@@ -354,62 +366,6 @@ void SingletonListElement::do_serialize(Serializer& os) const {
 }
 
 
-void SplatListElement::do_serialize(Serializer& os) const {
-    os << 'S' << node;
-}
-
-
-void CondListElement::do_serialize(Serializer& os) const {
-    os << 'C' << cond << element;
-}
-
-
-void LoopListElement::do_serialize(Serializer& os) const {
-    os << 'L' << binding << iter << element;
-}
-
-
-uptr<MapElement> MapElement::deserialize(Deserializer& is) {
-    auto indicator = is.read<char>();
-    switch (indicator) {
-    case 'E': {
-        auto key = Expr::deserialize(is);
-        auto node = Expr::deserialize(is);
-        return std::make_unique<SingletonMapElement>(std::move(key), std::move(node));
-    }
-    case 'S': return std::make_unique<SplatMapElement>(Expr::deserialize(is));
-    case 'C': {
-        auto cond = Expr::deserialize(is);
-        auto element = MapElement::deserialize(is);
-        return std::make_unique<CondMapElement>(std::move(cond), std::move(element));
-    }
-    case 'L': {
-        auto binding = Binding::deserialize(is);
-        auto iter = Expr::deserialize(is);
-        auto element = MapElement::deserialize(is);
-        return std::make_unique<LoopMapElement>(std::move(binding), std::move(iter), std::move(element));
-    }
-    default:
-        throw InternalException(fmt::format("unknown map element indicator: {}", (int)indicator));
-    }
-}
-
-
 void SingletonMapElement::do_serialize(Serializer& os) const {
-    os << 'E' << key << node;
-}
-
-
-void SplatMapElement::do_serialize(Serializer& os) const {
-    os << 'S' << node;
-}
-
-
-void CondMapElement::do_serialize(Serializer& os) const {
-    os << 'C' << cond << element;
-}
-
-
-void LoopMapElement::do_serialize(Serializer& os) const {
-    os << 'L' << binding << iter << element;
+    os << 'e' << key << node;
 }

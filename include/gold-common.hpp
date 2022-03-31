@@ -33,6 +33,7 @@ extern Namespace builtins;
 
 enum class BinaryOperator;
 enum class UnaryOperator;
+struct CollectionElement;
 struct ListElement;
 struct MapElement;
 struct ListBinding;

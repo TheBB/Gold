@@ -45,13 +45,8 @@ void Ast::funcall_arg(ExprPtr& expr) const {
 }
 
 
-uptr<ListElement> Ast::list_element() const {
-    return std::get<ListEltN>(normalizer)(*this);
-}
-
-
-uptr<MapElement> Ast::map_element() const {
-    return std::get<MapEltN>(normalizer)(*this);
+uptr<CollectionElement> Ast::collection_element() const {
+    return std::get<CollectionEltN>(normalizer)(*this);
 }
 
 
@@ -68,11 +63,6 @@ UnaryOperator Ast::unop() const {
 BindingPtr Ast::binding() const {
     return std::get<BindingN>(normalizer)(*this);
 }
-
-
-// void Ast::func_bindings(sptr<Binding>& args, sptr<Binding>& kwargs) const {
-//     std::get<FuncBindingN>(normalizer)(*this, args, kwargs);
-// }
 
 
 Block::BindingElement Ast::binding_element() const {
@@ -169,30 +159,6 @@ template<> void Ast::set_normalizer<Grammar::func::posargs>() {
 template<> void Ast::set_normalizer<Grammar::func::kwargs>() {
     set_normalizer<Grammar::pattern::map::rule>();
 }
-
-
-// template<> void Ast::set_normalizer<Grammar::func::bracketed_param_list>() {
-//     normalizer = [](const Ast& ast, sptr<Binding>& args, sptr<Binding>& kwargs) -> void {
-//         if (ast.children.empty()) {
-//             args = std::make_shared<ListBinding>(ast.source());
-//             kwargs = std::make_shared<MapBinding>(Source {0,0,0});
-//             return;
-//         }
-
-//         auto _args = std::make_unique<ListBinding>(ast.source());
-//         for (auto& c : ast.children)
-//             c->list_binding_entry(_args);
-
-//         if (!ast.children.back()->children.empty() && ast.children.back()->children[0]->is_mapbinding) {
-//             kwargs = sptr<MapBinding>(static_cast<MapBinding*>(_args->bindings.back().binding.release()));
-//             _args->bindings.pop_back();
-//         }
-//         else
-//             kwargs = std::make_shared<MapBinding>(Source {0,0,0});
-
-//         args = sptr<ListBinding>(static_cast<ListBinding*>(_args.release()));
-//     };
-// }
 
 
 template<> void Ast::set_normalizer<Grammar::pattern::map::entry>() {
@@ -318,7 +284,7 @@ template<> void Ast::set_normalizer<Grammar::string::interp>() {
     normalizer = [](const Ast& ast) -> ExprPtr {
         auto func = std::make_unique<Identifier>(ast.source(), "str");
         auto call = std::make_unique<FunCall>(ast.source(), std::move(func));
-        call->args.push_back(ast.children[0]->expr());
+        call->elements.push_back(std::make_unique<SingletonListElement>(ast.children[0]->expr()));
         return call;
     };
 }
@@ -347,32 +313,32 @@ template<> void Ast::set_normalizer<Grammar::identifier>() {
 
 
 template<> void Ast::set_normalizer<Grammar::list::splat>() {
-    normalizer = [](const Ast& ast) -> uptr<ListElement> {
-        return std::make_unique<SplatListElement>(ast.children[0]->expr());
+    normalizer = [](const Ast& ast) -> uptr<CollectionElement> {
+        return std::make_unique<SplatElement>(ast.children[0]->expr());
     };
 }
 
 
 template<> void Ast::set_normalizer<Grammar::list::singleton>() {
-    normalizer = [](const Ast& ast) -> uptr<ListElement> {
+    normalizer = [](const Ast& ast) -> uptr<CollectionElement> {
         return std::make_unique<SingletonListElement>(ast.children[0]->expr());
     };
 }
 
 
 template<> void Ast::set_normalizer<Grammar::list::cond>() {
-    normalizer = [](const Ast& ast) -> uptr<ListElement> {
-        return std::make_unique<CondListElement>(ast.children[0]->expr(), ast.children[1]->list_element());
+    normalizer = [](const Ast& ast) -> uptr<CollectionElement> {
+        return std::make_unique<CondCollectionElement>(ast.children[0]->expr(), ast.children[1]->collection_element());
     };
 }
 
 
 template<> void Ast::set_normalizer<Grammar::list::loop>() {
-    normalizer = [](const Ast& ast) -> uptr<ListElement> {
-        return std::make_unique<LoopListElement>(
+    normalizer = [](const Ast& ast) -> uptr<CollectionElement> {
+        return std::make_unique<LoopCollectionElement>(
             ast.children[0]->binding(),
             ast.children[1]->expr(),
-            ast.children[2]->list_element()
+            ast.children[2]->collection_element()
         );
     };
 }
@@ -382,7 +348,7 @@ template<> void Ast::set_normalizer<Grammar::list::rule>() {
     normalizer = [](const Ast& ast) -> ExprPtr {
         auto list = std::make_unique<List>(ast.source());
         for (auto& c : ast.children)
-            list->elements.push_back(c->list_element());
+            list->elements.push_back(c->collection_element());
         return list;
     };
 }
@@ -396,32 +362,32 @@ template<> void Ast::set_normalizer<Grammar::map::const_identifier>() {
 
 
 template<> void Ast::set_normalizer<Grammar::map::splat>() {
-    normalizer = [](const Ast& ast) -> uptr<MapElement> {
-        return std::make_unique<SplatMapElement>(ast.children[0]->expr());
+    normalizer = [](const Ast& ast) -> uptr<CollectionElement> {
+        return std::make_unique<SplatElement>(ast.children[0]->expr());
     };
 }
 
 
 template<> void Ast::set_normalizer<Grammar::map::entry>() {
-    normalizer = [](const Ast& ast) -> uptr<MapElement> {
+    normalizer = [](const Ast& ast) -> uptr<CollectionElement> {
         return std::make_unique<SingletonMapElement>(ast.children[0]->expr(), ast.children[1]->expr());
     };
 }
 
 
 template<> void Ast::set_normalizer<Grammar::map::cond>() {
-    normalizer = [](const Ast& ast) -> uptr<MapElement> {
-        return std::make_unique<CondMapElement>(ast.children[0]->expr(), ast.children[1]->map_element());
+    normalizer = [](const Ast& ast) -> uptr<CollectionElement> {
+        return std::make_unique<CondCollectionElement>(ast.children[0]->expr(), ast.children[1]->collection_element());
     };
 }
 
 
 template<> void Ast::set_normalizer<Grammar::map::loop>() {
-    normalizer = [](const Ast& ast) -> uptr<MapElement> {
-        return std::make_unique<LoopMapElement>(
+    normalizer = [](const Ast& ast) -> uptr<CollectionElement> {
+        return std::make_unique<LoopCollectionElement>(
             ast.children[0]->binding(),
             ast.children[1]->expr(),
-            ast.children[2]->map_element()
+            ast.children[2]->collection_element()
         );
     };
 }
@@ -431,7 +397,7 @@ template<> void Ast::set_normalizer<Grammar::map::rule>() {
     normalizer = [](const Ast& ast) -> ExprPtr {
         auto map = std::make_unique<Map>(ast.source());
         for (auto& c : ast.children)
-            map->elements.push_back(c->map_element());
+            map->elements.push_back(c->collection_element());
         return map;
     };
 }
@@ -488,31 +454,11 @@ template<> void Ast::set_normalizer<Grammar::func::rule>() {
 }
 
 
-template<> void Ast::set_normalizer<Grammar::postfix::kwarg_identifier>() {}
-template<> void Ast::set_normalizer<Grammar::postfix::kwarg>() {
-    normalizer = [](const Ast& ast, ExprPtr& expr) {
-        auto call = static_cast<FunCall*>(expr.get());
-        call->kwargs.push_back(std::make_pair(
-            ast.children[0]->string(),
-            ast.children[1]->expr()
-        ));
-    };
-}
-
-
-template<> void Ast::set_normalizer<Grammar::postfix::posarg>() {
-    normalizer = [](const Ast& ast, ExprPtr& expr) {
-        auto call = static_cast<FunCall*>(expr.get());
-        call->args.push_back(ast.children[0]->expr());
-    };
-}
-
-
 template<> void Ast::set_normalizer<Grammar::postfix::funcall_operator>() {
     normalizer = [](const Ast& ast, ExprPtr expr) -> ExprPtr {
-        auto call = ExprPtr(new FunCall(ast.source(), std::move(expr)));
+        auto call = std::make_unique<FunCall>(ast.source(), std::move(expr));
         for (auto& c : ast.children)
-            c->funcall_arg(call);
+            call->elements.push_back(c->collection_element());
         return call;
     };
 }
