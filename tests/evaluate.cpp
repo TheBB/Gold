@@ -580,6 +580,25 @@ TEST_CASE("Function bindings", "[evaluate]") {
     REQUIRE(obj[1].size() == 2);
     REQUIRE(obj[1]["x"].unsafe_integer() == 3);
     REQUIRE(obj[1]["y"].unsafe_integer() == 4);
+
+    obj = evaluate_string(
+        "let dest = (...args; ...kwargs) => [args, kwargs]\n"
+        "let args = [1, 2, 3]\n"
+        "let kwargs = {x: 4, y: 5, z: 6}\n"
+        "in dest(0, ...args, 5, a: 8, ...kwargs, c: 10, z: 12)"
+    );
+    REQUIRE(obj[0].size() == 5);
+    REQUIRE(obj[0][0].unsafe_integer() == 0);
+    REQUIRE(obj[0][1].unsafe_integer() == 1);
+    REQUIRE(obj[0][2].unsafe_integer() == 2);
+    REQUIRE(obj[0][3].unsafe_integer() == 3);
+    REQUIRE(obj[0][4].unsafe_integer() == 5);
+    REQUIRE(obj[1].size() == 5);
+    REQUIRE(obj[1]["a"].unsafe_integer() == 8);
+    REQUIRE(obj[1]["x"].unsafe_integer() == 4);
+    REQUIRE(obj[1]["y"].unsafe_integer() == 5);
+    REQUIRE(obj[1]["z"].unsafe_integer() == 12);
+    REQUIRE(obj[1]["c"].unsafe_integer() == 10);
 }
 
 

@@ -317,6 +317,7 @@ namespace Grammar
     // Precedence level: postfix operators
     namespace postfix {
         struct func_arg: p::sor<
+            list::splat,
             p::try_catch<map::entry>,
             list::singleton
         > {};
