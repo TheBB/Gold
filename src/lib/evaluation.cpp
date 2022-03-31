@@ -359,26 +359,14 @@ void SplatElement::dump(std::ostream& os) const {
 
 
 void CondCollectionElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
-    auto c = cond->evaluate(ctx);
-    if (c.type() != Object::Type::boolean)
-        throw EvalException(
-            cond->source(),
-            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
-        );
-    if (c.unsafe_boolean())
-        element->fill(ctx, list);
+    Object::MapT map;
+    fill(ctx, list, map);
 }
 
 
 void CondCollectionElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
-    auto c = cond->evaluate(ctx);
-    if (c.type() != Object::Type::boolean)
-        throw EvalException(
-            cond->source(),
-            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
-        );
-    if (c.unsafe_boolean())
-        element->fill(ctx, map);
+    Object::ListT list;
+    fill(ctx, list, map);
 }
 
 
@@ -406,36 +394,14 @@ void CondCollectionElement::dump(std::ostream& os) const {
 
 
 void LoopCollectionElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
-    auto val = iter->evaluate(ctx);
-    if (val.type() != Object::Type::list)
-        throw EvalException(
-            iter->source(),
-            fmt::format("unable to iterate over non-list `{}`", val.type_name())
-        );
-    ctx.push_namespace();
-    for (auto& v : *val.unsafe_list()) {
-        if (!binding->bind(ctx, v))
-            throw EvalException(binding->src, "failed to bind pattern");
-        element->fill(ctx, list);
-    }
-    ctx.pop_namespace();
+    Object::MapT map;
+    fill(ctx, list, map);
 }
 
 
 void LoopCollectionElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
-    auto val = iter->evaluate(ctx);
-    if (val.type() != Object::Type::list)
-        throw EvalException(
-            iter->source(),
-            fmt::format("unable to iterate over non-list `{}`", val.type_name())
-        );
-    ctx.push_namespace();
-    for (auto& v : *val.unsafe_list()) {
-        if (!binding->bind(ctx, v))
-            throw EvalException(binding->src, "failed to bind pattern");
-        element->fill(ctx, map);
-    }
-    ctx.pop_namespace();
+    Object::ListT list;
+    fill(ctx, list, map);
 }
 
 
