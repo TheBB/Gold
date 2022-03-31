@@ -323,7 +323,6 @@ uptr<CollectionElement> CollectionElement::deserialize(Deserializer& is) {
     auto indicator = is.read<char>();
     switch (indicator) {
     case 'S': return std::make_unique<SplatElement>(Expr::deserialize(is));
-    case 'E': return std::make_unique<SingletonListElement>(Expr::deserialize(is));
     case 'C': {
         auto cond = Expr::deserialize(is);
         auto element = CollectionElement::deserialize(is);
@@ -333,18 +332,13 @@ uptr<CollectionElement> CollectionElement::deserialize(Deserializer& is) {
         auto binding = Binding::deserialize(is);
         auto iter = Expr::deserialize(is);
         auto element = ListElement::deserialize(is);
-        return std::make_unique<LoopListElement>(std::move(binding), std::move(iter), std::move(element));
+        return std::make_unique<LoopCollectionElement>(std::move(binding), std::move(iter), std::move(element));
     }
+    case 'E': return std::make_unique<SingletonListElement>(Expr::deserialize(is));
     case 'e': {
         auto key = Expr::deserialize(is);
         auto node = Expr::deserialize(is);
         return std::make_unique<SingletonMapElement>(std::move(key), std::move(node));
-    }
-    case 'l': {
-        auto binding = Binding::deserialize(is);
-        auto iter = Expr::deserialize(is);
-        auto element = MapElement::deserialize(is);
-        return std::make_unique<LoopMapElement>(std::move(binding), std::move(iter), std::move(element));
     }
     default:
         throw InternalException(fmt::format("unknown collection element indicator: {}", (int)indicator));
@@ -362,21 +356,16 @@ void CondCollectionElement::do_serialize(Serializer& os) const {
 }
 
 
+void LoopCollectionElement::do_serialize(Serializer& os) const {
+    os << 'L' << binding << iter << element;
+}
+
+
 void SingletonListElement::do_serialize(Serializer& os) const {
     os << 'E' << node;
 }
 
 
-void LoopListElement::do_serialize(Serializer& os) const {
-    os << 'L' << binding << iter << element;
-}
-
-
 void SingletonMapElement::do_serialize(Serializer& os) const {
     os << 'e' << key << node;
-}
-
-
-void LoopMapElement::do_serialize(Serializer& os) const {
-    os << 'l' << binding << iter << element;
 }

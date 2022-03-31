@@ -335,7 +335,7 @@ template<> void Ast::set_normalizer<Grammar::list::cond>() {
 
 template<> void Ast::set_normalizer<Grammar::list::loop>() {
     normalizer = [](const Ast& ast) -> uptr<CollectionElement> {
-        return std::make_unique<LoopListElement>(
+        return std::make_unique<LoopCollectionElement>(
             ast.children[0]->binding(),
             ast.children[1]->expr(),
             ast.children[2]->collection_element()
@@ -384,7 +384,7 @@ template<> void Ast::set_normalizer<Grammar::map::cond>() {
 
 template<> void Ast::set_normalizer<Grammar::map::loop>() {
     normalizer = [](const Ast& ast) -> uptr<CollectionElement> {
-        return std::make_unique<LoopMapElement>(
+        return std::make_unique<LoopCollectionElement>(
             ast.children[0]->binding(),
             ast.children[1]->expr(),
             ast.children[2]->collection_element()

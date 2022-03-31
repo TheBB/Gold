@@ -405,6 +405,76 @@ void CondCollectionElement::dump(std::ostream& os) const {
 }
 
 
+void LoopCollectionElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
+    auto val = iter->evaluate(ctx);
+    if (val.type() != Object::Type::list)
+        throw EvalException(
+            iter->source(),
+            fmt::format("unable to iterate over non-list `{}`", val.type_name())
+        );
+    ctx.push_namespace();
+    for (auto& v : *val.unsafe_list()) {
+        if (!binding->bind(ctx, v))
+            throw EvalException(binding->src, "failed to bind pattern");
+        element->fill(ctx, list);
+    }
+    ctx.pop_namespace();
+}
+
+
+void LoopCollectionElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
+    auto val = iter->evaluate(ctx);
+    if (val.type() != Object::Type::list)
+        throw EvalException(
+            iter->source(),
+            fmt::format("unable to iterate over non-list `{}`", val.type_name())
+        );
+    ctx.push_namespace();
+    for (auto& v : *val.unsafe_list()) {
+        if (!binding->bind(ctx, v))
+            throw EvalException(binding->src, "failed to bind pattern");
+        element->fill(ctx, map);
+    }
+    ctx.pop_namespace();
+}
+
+
+void LoopCollectionElement::fill(EvaluationContext& ctx, Object::ListT& list, Object::MapT& map) const {
+    auto val = iter->evaluate(ctx);
+    if (val.type() != Object::Type::list)
+        throw EvalException(
+            iter->source(),
+            fmt::format("unable to iterate over non-list `{}`", val.type_name())
+        );
+    ctx.push_namespace();
+    for (auto& v : *val.unsafe_list()) {
+        if (!binding->bind(ctx, v))
+            throw EvalException(binding->src, "failed to bind pattern");
+        element->fill(ctx, list, map);
+    }
+    ctx.pop_namespace();
+}
+
+
+void LoopCollectionElement::free_identifiers(std::set<std::string>& idents) const {
+    iter->free_identifiers(idents);
+
+    std::set<std::string> bound;
+    binding->free_and_bound(idents, bound);
+
+    auto candidates = element->free_identifiers();
+    for (auto& p : bound)
+        candidates.erase(p);
+    for (auto& c : candidates)
+        idents.insert(c);
+}
+
+
+void LoopCollectionElement::dump(std::ostream& os) const {
+    os << "For(" << *binding << ", " << *iter << ", " << *element << ")";
+}
+
+
 void ListElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
     throw EvalException("attempted to use list element in map context");
 }
@@ -437,42 +507,6 @@ void SingletonListElement::free_identifiers(std::set<std::string>& idents) const
 
 void SingletonListElement::dump(std::ostream& os) const {
     os << *node;
-}
-
-
-void LoopListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
-    auto val = iter->evaluate(ctx);
-    if (val.type() != Object::Type::list)
-        throw EvalException(
-            iter->source(),
-            fmt::format("unable to iterate over non-list `{}`", val.type_name())
-        );
-    ctx.push_namespace();
-    for (auto& v : *val.unsafe_list()) {
-        if (!binding->bind(ctx, v))
-            throw EvalException(binding->src, "failed to bind pattern");
-        element->fill(ctx, list);
-    }
-    ctx.pop_namespace();
-}
-
-
-void LoopListElement::free_identifiers(std::set<std::string>& idents) const {
-    iter->free_identifiers(idents);
-
-    std::set<std::string> bound;
-    binding->free_and_bound(idents, bound);
-
-    auto candidates = element->free_identifiers();
-    for (auto& p : bound)
-        candidates.erase(p);
-    for (auto& c : candidates)
-        idents.insert(c);
-}
-
-
-void LoopListElement::dump(std::ostream& os) const {
-    os << "For(" << *binding << ", " << *iter << ", " << *element << ")";
 }
 
 
@@ -522,42 +556,6 @@ void SingletonMapElement::free_identifiers(std::set<std::string>& idents) const 
 
 void SingletonMapElement::dump(std::ostream& os) const {
     os << "Entry(" << *key << ", " << *node << ")";
-}
-
-
-void LoopMapElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
-    auto val = iter->evaluate(ctx);
-    if (val.type() != Object::Type::list)
-        throw EvalException(
-            iter->source(),
-            fmt::format("unable to iterate over non-list `{}`", val.type_name())
-        );
-    ctx.push_namespace();
-    for (auto& v : *val.unsafe_list()) {
-        if (!binding->bind(ctx, v))
-            throw EvalException(binding->src, "failed to bind pattern");
-        element->fill(ctx, map);
-    }
-    ctx.pop_namespace();
-}
-
-
-void LoopMapElement::free_identifiers(std::set<std::string>& idents) const {
-    iter->free_identifiers(idents);
-
-    std::set<std::string> bound;
-    binding->free_and_bound(idents, bound);
-
-    auto candidates = element->free_identifiers();
-    for (auto& p : bound)
-        candidates.erase(p);
-    for (auto& c : candidates)
-        idents.insert(c);
-}
-
-
-void LoopMapElement::dump(std::ostream& os) const {
-    os << "For(" << *binding << ", " << *iter << ", " << *element << ")";
 }
 
 

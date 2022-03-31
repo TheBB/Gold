@@ -207,6 +207,24 @@ struct CondCollectionElement : public CollectionElement {
 };
 
 
+struct LoopCollectionElement : public CollectionElement {
+    BindingPtr binding;
+    ExprPtr iter;
+    uptr<CollectionElement> element;
+
+    LoopCollectionElement(BindingPtr binding, ExprPtr iter, uptr<CollectionElement> element)
+        : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
+
+    virtual void fill(EvaluationContext&, Object::ListT&) const;
+    virtual void fill(EvaluationContext&, Object::MapT&) const;
+    virtual void fill(EvaluationContext&, Object::ListT&, Object::MapT&) const;
+
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
 struct ListElement : public CollectionElement {
     virtual void fill(EvaluationContext&, Object::ListT&) const = 0;
     virtual void fill(EvaluationContext&, Object::MapT&) const;
@@ -233,40 +251,10 @@ struct SingletonListElement : public ListElement {
 };
 
 
-struct LoopListElement : public ListElement {
-    BindingPtr binding;
-    ExprPtr iter;
-    uptr<CollectionElement> element;
-
-    LoopListElement(BindingPtr binding, ExprPtr iter, uptr<CollectionElement> element)
-        : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
-
-    virtual void fill(EvaluationContext&, Object::ListT&) const;
-    virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
-};
-
-
 struct SingletonMapElement : public MapElement {
     ExprPtr key, node;
 
     SingletonMapElement(ExprPtr key, ExprPtr node) : key(std::move(key)), node(std::move(node)) {}
-
-    virtual void fill(EvaluationContext&, Object::MapT&) const;
-    virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
-};
-
-
-struct LoopMapElement : public MapElement {
-    BindingPtr binding;
-    ExprPtr iter;
-    uptr<CollectionElement> element;
-
-    LoopMapElement(BindingPtr binding, ExprPtr iter, uptr<CollectionElement> element)
-        : binding(std::move(binding)), iter(std::move(iter)), element(std::move(element)) {}
 
     virtual void fill(EvaluationContext&, Object::MapT&) const;
     virtual void do_serialize(Serializer&) const;
