@@ -335,7 +335,16 @@ void SplatElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
 
 
 void SplatElement::fill(EvaluationContext& ctx, Object::ListT& list, Object::MapT& map) const {
-    // TODO
+    auto val = node->evaluate(ctx);
+    if (val.type() == Object::Type::map)
+        for (auto& [key, val] : *val.unsafe_map())
+            map[key] = val;
+    else if (val.type() == Object::Type::list) {
+        auto& inlist = val.unsafe_list();
+        std::copy(inlist->begin(), inlist->end(), std::back_inserter(list));
+    }
+    else
+        throw EvalException(node->source(), fmt::format("unable to splat `{}`", val.type_name()));
 }
 
 
@@ -771,41 +780,40 @@ Object Branch::evaluate(EvaluationContext& ctx) const {
 
 void FunCall::dump(std::ostream& os) const {
     os << "FunCall(" << *function;
-    for (auto& arg : args)
-        os << ", Arg(" << *arg << ")";
-    for (auto& kwarg : kwargs)
-        os << ", Kwarg(" << kwarg.first << ", " << *kwarg.second << ")";
+    for (auto& element : elements)
+        os << ", " << *element;
     os << ")";
 }
 
 
 void FunCall::free_identifiers(std::set<std::string>& idents) const {
     function->free_identifiers(idents);
-    for (auto& arg : args)
-        arg->free_identifiers(idents);
-    for (auto& kwarg : kwargs)
-        kwarg.second->free_identifiers(idents);
+    for (auto& element : elements)
+        element->free_identifiers(idents);
 }
 
 
 Object FunCall::evaluate(EvaluationContext& ctx) const {
     auto func = function->evaluate(ctx);
-    std::vector<Object> arglist;
-    for (auto& arg : args)
-        arglist.push_back(arg->evaluate(ctx));
+    Object::ListT arglist;
+    Object::MapT kwarglist;
+    for (auto& element : elements)
+        element->fill(ctx, arglist, kwarglist);
+    // for (auto& arg : args)
+    //     arglist.push_back(arg->evaluate(ctx));
 
-    Object kwarglist;
-    if (!kwargs.empty()) {
-        ctx.push_object();
-        for (auto& kwarg : kwargs)
-            ctx.assign_object(kwarg.first, kwarg.second->evaluate(ctx));
-        kwarglist = ctx.finalize_object();
-    }
-    else
-        kwarglist = Object::map();
+    // Object kwarglist;
+    // if (!kwargs.empty()) {
+    //     ctx.push_object();
+    //     for (auto& kwarg : kwargs)
+    //         ctx.assign_object(kwarg.first, kwarg.second->evaluate(ctx));
+    //     kwarglist = ctx.finalize_object();
+    // }
+    // else
+    //     kwarglist = Object::map();
 
     try {
-        auto rval = func.call(ctx, Object::list(arglist), kwarglist);
+        auto rval = func.call(ctx, Object::list(arglist), Object::map(kwarglist));
         return rval;
     }
     catch (EvalException& e) {

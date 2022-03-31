@@ -284,7 +284,7 @@ template<> void Ast::set_normalizer<Grammar::string::interp>() {
     normalizer = [](const Ast& ast) -> ExprPtr {
         auto func = std::make_unique<Identifier>(ast.source(), "str");
         auto call = std::make_unique<FunCall>(ast.source(), std::move(func));
-        call->args.push_back(ast.children[0]->expr());
+        call->elements.push_back(std::make_unique<SingletonListElement>(ast.children[0]->expr()));
         return call;
     };
 }
@@ -454,31 +454,11 @@ template<> void Ast::set_normalizer<Grammar::func::rule>() {
 }
 
 
-template<> void Ast::set_normalizer<Grammar::postfix::kwarg_identifier>() {}
-template<> void Ast::set_normalizer<Grammar::postfix::kwarg>() {
-    normalizer = [](const Ast& ast, ExprPtr& expr) {
-        auto call = static_cast<FunCall*>(expr.get());
-        call->kwargs.push_back(std::make_pair(
-            ast.children[0]->string(),
-            ast.children[1]->expr()
-        ));
-    };
-}
-
-
-template<> void Ast::set_normalizer<Grammar::postfix::posarg>() {
-    normalizer = [](const Ast& ast, ExprPtr& expr) {
-        auto call = static_cast<FunCall*>(expr.get());
-        call->args.push_back(ast.children[0]->expr());
-    };
-}
-
-
 template<> void Ast::set_normalizer<Grammar::postfix::funcall_operator>() {
     normalizer = [](const Ast& ast, ExprPtr expr) -> ExprPtr {
-        auto call = ExprPtr(new FunCall(ast.source(), std::move(expr)));
+        auto call = std::make_unique<FunCall>(ast.source(), std::move(expr));
         for (auto& c : ast.children)
-            c->funcall_arg(call);
+            call->elements.push_back(c->collection_element());
         return call;
     };
 }

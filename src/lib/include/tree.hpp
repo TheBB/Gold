@@ -46,9 +46,6 @@ namespace Grammar
         struct Or;
     }
     namespace postfix {
-        struct kwarg_identifier;
-        struct kwarg;
-        struct posarg;
         struct funcall_operator;
         struct object_access;
         struct subscript_operator;
@@ -220,9 +217,6 @@ template<> void Ast::set_normalizer<Grammar::number::floating>();
 template<> void Ast::set_normalizer<Grammar::string::data>();
 template<> void Ast::set_normalizer<Grammar::string::interp>();
 template<> void Ast::set_normalizer<Grammar::string::post>();
-template<> void Ast::set_normalizer<Grammar::postfix::kwarg_identifier>();
-template<> void Ast::set_normalizer<Grammar::postfix::kwarg>();
-template<> void Ast::set_normalizer<Grammar::postfix::posarg>();
 template<> void Ast::set_normalizer<Grammar::postfix::funcall_operator>();
 template<> void Ast::set_normalizer<Grammar::postfix::object_access>();
 template<> void Ast::set_normalizer<Grammar::postfix::subscript_operator>();
