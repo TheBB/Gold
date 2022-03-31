@@ -544,6 +544,42 @@ TEST_CASE("Function bindings", "[evaluate]") {
     REQUIRE(obj[1][2].unsafe_integer() == 200);
     REQUIRE(obj[2][2].unsafe_integer() == 100);
     REQUIRE(obj[3][2].unsafe_integer() == 100);
+
+    obj = evaluate_string(
+        "let dest = (...args; ...kwargs) => [args, kwargs]\n"
+        "in dest()"
+    );
+    REQUIRE(obj[0].size() == 0);
+    REQUIRE(obj[1].size() == 0);
+
+    obj = evaluate_string(
+        "let dest = (...args; ...kwargs) => [args, kwargs]\n"
+        "in dest(1, 2)"
+    );
+    REQUIRE(obj[0].size() == 2);
+    REQUIRE(obj[0][0].unsafe_integer() == 1);
+    REQUIRE(obj[0][1].unsafe_integer() == 2);
+    REQUIRE(obj[1].size() == 0);
+
+    obj = evaluate_string(
+        "let dest = (...args; ...kwargs) => [args, kwargs]\n"
+        "in dest(x: 1, y: 2)"
+    );
+    REQUIRE(obj[0].size() == 0);
+    REQUIRE(obj[1].size() == 2);
+    REQUIRE(obj[1]["x"].unsafe_integer() == 1);
+    REQUIRE(obj[1]["y"].unsafe_integer() == 2);
+
+    obj = evaluate_string(
+        "let dest = (...args; ...kwargs) => [args, kwargs]\n"
+        "in dest(1, 2, x: 3, y: 4)"
+    );
+    REQUIRE(obj[0].size() == 2);
+    REQUIRE(obj[0][0].unsafe_integer() == 1);
+    REQUIRE(obj[0][1].unsafe_integer() == 2);
+    REQUIRE(obj[1].size() == 2);
+    REQUIRE(obj[1]["x"].unsafe_integer() == 3);
+    REQUIRE(obj[1]["y"].unsafe_integer() == 4);
 }
 
 
