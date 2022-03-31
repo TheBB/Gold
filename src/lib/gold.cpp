@@ -814,6 +814,46 @@ static Object builtin_chr(EvaluationContext& ctx, const Object& args) {
 }
 
 
+static Object builtin_isint(EvaluationContext& ctx, const Object& args) {
+    return Object::boolean(args[0].type() == Object::Type::integer);
+}
+
+
+static Object builtin_isstr(EvaluationContext& ctx, const Object& args) {
+    return Object::boolean(args[0].type() == Object::Type::string);
+}
+
+
+static Object builtin_isnull(EvaluationContext& ctx, const Object& args) {
+    return Object::boolean(args[0].type() == Object::Type::null);
+}
+
+
+static Object builtin_isbool(EvaluationContext& ctx, const Object& args) {
+    return Object::boolean(args[0].type() == Object::Type::boolean);
+}
+
+
+static Object builtin_isfloat(EvaluationContext& ctx, const Object& args) {
+    return Object::boolean(args[0].type() == Object::Type::floating);
+}
+
+
+static Object builtin_isobject(EvaluationContext& ctx, const Object& args) {
+    return Object::boolean(args[0].type() == Object::Type::map);
+}
+
+
+static Object builtin_islist(EvaluationContext& ctx, const Object& args) {
+    return Object::boolean(args[0].type() == Object::Type::list);
+}
+
+
+static Object builtin_isfunc(EvaluationContext& ctx, const Object& args) {
+    return Object::boolean(args[0].type() == Object::Type::function);
+}
+
+
 static Object builtin_import(EvaluationContext& ctx, const Object& args) {
     Object arg = args[0];
     if (arg.type() != Object::Type::string)
@@ -822,22 +862,30 @@ static Object builtin_import(EvaluationContext& ctx, const Object& args) {
 }
 
 
-#define BUILTIN(x,y) { x, Object(Object::Builtin { x, y })}
+#define BUILTIN(x) { #x, Object(Object::Builtin { #x, builtin_##x })}
 
 
 Namespace Gold::builtins = {
-    BUILTIN("int", builtin_int),
-    BUILTIN("bool", builtin_bool),
-    BUILTIN("str", builtin_str),
-    BUILTIN("float", builtin_float),
-    BUILTIN("len", builtin_len),
-    BUILTIN("range", builtin_range),
-    BUILTIN("map", builtin_map),
-    BUILTIN("filter", builtin_filter),
-    BUILTIN("items", builtin_items),
-    BUILTIN("exp", builtin_exp),
-    BUILTIN("log", builtin_log),
-    BUILTIN("ord", builtin_ord),
-    BUILTIN("chr", builtin_chr),
-    BUILTIN("import", builtin_import),
+    BUILTIN(int),
+    BUILTIN(bool),
+    BUILTIN(str),
+    BUILTIN(float),
+    BUILTIN(len),
+    BUILTIN(range),
+    BUILTIN(map),
+    BUILTIN(filter),
+    BUILTIN(items),
+    BUILTIN(exp),
+    BUILTIN(log),
+    BUILTIN(ord),
+    BUILTIN(chr),
+    BUILTIN(isint),
+    BUILTIN(isstr),
+    BUILTIN(isnull),
+    BUILTIN(isbool),
+    BUILTIN(isfloat),
+    BUILTIN(isobject),
+    BUILTIN(islist),
+    BUILTIN(isfunc),
+    BUILTIN(import),
 };
