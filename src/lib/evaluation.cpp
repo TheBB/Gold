@@ -358,6 +358,53 @@ void SplatElement::dump(std::ostream& os) const {
 }
 
 
+void CondCollectionElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
+    auto c = cond->evaluate(ctx);
+    if (c.type() != Object::Type::boolean)
+        throw EvalException(
+            cond->source(),
+            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
+        );
+    if (c.unsafe_boolean())
+        element->fill(ctx, list);
+}
+
+
+void CondCollectionElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
+    auto c = cond->evaluate(ctx);
+    if (c.type() != Object::Type::boolean)
+        throw EvalException(
+            cond->source(),
+            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
+        );
+    if (c.unsafe_boolean())
+        element->fill(ctx, map);
+}
+
+
+void CondCollectionElement::fill(EvaluationContext& ctx, Object::ListT& list, Object::MapT& map) const {
+    auto c = cond->evaluate(ctx);
+    if (c.type() != Object::Type::boolean)
+        throw EvalException(
+            cond->source(),
+            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
+        );
+    if (c.unsafe_boolean())
+        element->fill(ctx, list, map);
+}
+
+
+void CondCollectionElement::free_identifiers(std::set<std::string>& idents) const {
+    cond->free_identifiers(idents);
+    element->free_identifiers(idents);
+}
+
+
+void CondCollectionElement::dump(std::ostream& os) const {
+    os << "Cond(" << *cond << ", " << *element << ")";
+}
+
+
 void ListElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
     throw EvalException("attempted to use list element in map context");
 }
@@ -390,29 +437,6 @@ void SingletonListElement::free_identifiers(std::set<std::string>& idents) const
 
 void SingletonListElement::dump(std::ostream& os) const {
     os << *node;
-}
-
-
-void CondListElement::fill(EvaluationContext& ctx, Object::ListT& list) const {
-    auto c = cond->evaluate(ctx);
-    if (c.type() != Object::Type::boolean)
-        throw EvalException(
-            cond->source(),
-            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
-        );
-    if (c.unsafe_boolean())
-        element->fill(ctx, list);
-}
-
-
-void CondListElement::free_identifiers(std::set<std::string>& idents) const {
-    cond->free_identifiers(idents);
-    element->free_identifiers(idents);
-}
-
-
-void CondListElement::dump(std::ostream& os) const {
-    os << "Cond(" << *cond << ", " << *element << ")";
 }
 
 
@@ -498,48 +522,6 @@ void SingletonMapElement::free_identifiers(std::set<std::string>& idents) const 
 
 void SingletonMapElement::dump(std::ostream& os) const {
     os << "Entry(" << *key << ", " << *node << ")";
-}
-
-
-// void SplatMapElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
-//     auto val = node->evaluate(ctx);
-//     if (val.type() != Object::Type::map)
-//         throw EvalException(node->source(), fmt::format("unable to splat non-map: `{}`", val.type_name()));
-//     for (auto& [key, val] : *val.unsafe_map())
-//         map[key] = val;
-// }
-
-
-// void SplatMapElement::free_identifiers(std::set<std::string>& idents) const {
-//     node->free_identifiers(idents);
-// }
-
-
-// void SplatMapElement::dump(std::ostream& os) const {
-//     os << "Splat(" << *node << ")";
-// }
-
-
-void CondMapElement::fill(EvaluationContext& ctx, Object::MapT& map) const {
-    auto c = cond->evaluate(ctx);
-    if (c.type() != Object::Type::boolean)
-        throw EvalException(
-            cond->source(),
-            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
-        );
-    if (c.unsafe_boolean())
-        element->fill(ctx, map);
-}
-
-
-void CondMapElement::free_identifiers(std::set<std::string>& idents) const {
-    cond->free_identifiers(idents);
-    element->free_identifiers(idents);
-}
-
-
-void CondMapElement::dump(std::ostream& os) const {
-    os << "Cond(" << *cond << ", " << *element << ")";
 }
 
 

@@ -190,6 +190,23 @@ struct SplatElement : public CollectionElement {
 };
 
 
+struct CondCollectionElement : public CollectionElement {
+    ExprPtr cond;
+    uptr<CollectionElement> element;
+
+    CondCollectionElement(ExprPtr cond, uptr<CollectionElement> element)
+        : cond(std::move(cond)), element(std::move(element)) {}
+
+    virtual void fill(EvaluationContext&, Object::ListT&) const;
+    virtual void fill(EvaluationContext&, Object::MapT&) const;
+    virtual void fill(EvaluationContext&, Object::ListT&, Object::MapT&) const;
+
+    virtual void do_serialize(Serializer&) const;
+    virtual void dump(std::ostream& os) const;
+    virtual void free_identifiers(std::set<std::string>&) const;
+};
+
+
 struct ListElement : public CollectionElement {
     virtual void fill(EvaluationContext&, Object::ListT&) const = 0;
     virtual void fill(EvaluationContext&, Object::MapT&) const;
@@ -208,20 +225,6 @@ struct SingletonListElement : public ListElement {
     ExprPtr node;
 
     SingletonListElement(ExprPtr node) : node(std::move(node)) {}
-
-    virtual void fill(EvaluationContext&, Object::ListT&) const;
-    virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
-};
-
-
-struct CondListElement : public ListElement {
-    ExprPtr cond;
-    uptr<CollectionElement> element;
-
-    CondListElement(ExprPtr cond, uptr<CollectionElement> element)
-        : cond(std::move(cond)), element(std::move(element)) {}
 
     virtual void fill(EvaluationContext&, Object::ListT&) const;
     virtual void do_serialize(Serializer&) const;
@@ -249,20 +252,6 @@ struct SingletonMapElement : public MapElement {
     ExprPtr key, node;
 
     SingletonMapElement(ExprPtr key, ExprPtr node) : key(std::move(key)), node(std::move(node)) {}
-
-    virtual void fill(EvaluationContext&, Object::MapT&) const;
-    virtual void do_serialize(Serializer&) const;
-    virtual void dump(std::ostream& os) const;
-    virtual void free_identifiers(std::set<std::string>&) const;
-};
-
-
-struct CondMapElement : public MapElement {
-    ExprPtr cond;
-    uptr<CollectionElement> element;
-
-    CondMapElement(ExprPtr cond, uptr<CollectionElement> element)
-        : cond(std::move(cond)), element(std::move(element)) {}
 
     virtual void fill(EvaluationContext&, Object::MapT&) const;
     virtual void do_serialize(Serializer&) const;

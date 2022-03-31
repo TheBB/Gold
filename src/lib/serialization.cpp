@@ -326,8 +326,8 @@ uptr<CollectionElement> CollectionElement::deserialize(Deserializer& is) {
     case 'E': return std::make_unique<SingletonListElement>(Expr::deserialize(is));
     case 'C': {
         auto cond = Expr::deserialize(is);
-        auto element = ListElement::deserialize(is);
-        return std::make_unique<CondListElement>(std::move(cond), std::move(element));
+        auto element = CollectionElement::deserialize(is);
+        return std::make_unique<CondCollectionElement>(std::move(cond), std::move(element));
     }
     case 'L': {
         auto binding = Binding::deserialize(is);
@@ -339,11 +339,6 @@ uptr<CollectionElement> CollectionElement::deserialize(Deserializer& is) {
         auto key = Expr::deserialize(is);
         auto node = Expr::deserialize(is);
         return std::make_unique<SingletonMapElement>(std::move(key), std::move(node));
-    }
-    case 'c': {
-        auto cond = Expr::deserialize(is);
-        auto element = MapElement::deserialize(is);
-        return std::make_unique<CondMapElement>(std::move(cond), std::move(element));
     }
     case 'l': {
         auto binding = Binding::deserialize(is);
@@ -362,13 +357,13 @@ void SplatElement::do_serialize(Serializer& os) const {
 }
 
 
-void SingletonListElement::do_serialize(Serializer& os) const {
-    os << 'E' << node;
+void CondCollectionElement::do_serialize(Serializer& os) const {
+    os << 'C' << cond << element;
 }
 
 
-void CondListElement::do_serialize(Serializer& os) const {
-    os << 'C' << cond << element;
+void SingletonListElement::do_serialize(Serializer& os) const {
+    os << 'E' << node;
 }
 
 
@@ -379,11 +374,6 @@ void LoopListElement::do_serialize(Serializer& os) const {
 
 void SingletonMapElement::do_serialize(Serializer& os) const {
     os << 'e' << key << node;
-}
-
-
-void CondMapElement::do_serialize(Serializer& os) const {
-    os << 'c' << cond << element;
 }
 
 

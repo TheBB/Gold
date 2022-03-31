@@ -328,7 +328,7 @@ template<> void Ast::set_normalizer<Grammar::list::singleton>() {
 
 template<> void Ast::set_normalizer<Grammar::list::cond>() {
     normalizer = [](const Ast& ast) -> uptr<CollectionElement> {
-        return std::make_unique<CondListElement>(ast.children[0]->expr(), ast.children[1]->collection_element());
+        return std::make_unique<CondCollectionElement>(ast.children[0]->expr(), ast.children[1]->collection_element());
     };
 }
 
@@ -377,7 +377,7 @@ template<> void Ast::set_normalizer<Grammar::map::entry>() {
 
 template<> void Ast::set_normalizer<Grammar::map::cond>() {
     normalizer = [](const Ast& ast) -> uptr<CollectionElement> {
-        return std::make_unique<CondMapElement>(ast.children[0]->expr(), ast.children[1]->collection_element());
+        return std::make_unique<CondCollectionElement>(ast.children[0]->expr(), ast.children[1]->collection_element());
     };
 }
 
