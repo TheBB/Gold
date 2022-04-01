@@ -371,13 +371,7 @@ void CondCollectionElement::fill(EvaluationContext& ctx, Object::MapT& map) cons
 
 
 void CondCollectionElement::fill(EvaluationContext& ctx, Object::ListT& list, Object::MapT& map) const {
-    auto c = cond->evaluate(ctx);
-    if (c.type() != Object::Type::boolean)
-        throw EvalException(
-            cond->source(),
-            fmt::format("attempted branching with non-boolean type `{}`", c.type_name())
-        );
-    if (c.unsafe_boolean())
+    if ((bool)cond->evaluate(ctx))
         element->fill(ctx, list, map);
 }
 
@@ -713,13 +707,7 @@ void Branch::free_identifiers(std::set<std::string>& idents) const {
 
 
 Object Branch::evaluate(EvaluationContext& ctx) const {
-    auto cond = condition->evaluate(ctx);
-    if (cond.type() != Object::Type::boolean)
-        throw EvalException(
-            condition->source(),
-            fmt::format("attempted branching with non-boolean type `{}`", cond.type_name())
-        );
-    if (cond.unsafe_boolean())
+    if ((bool)condition->evaluate(ctx))
         return if_value->evaluate(ctx);
     return else_value->evaluate(ctx);
 }
@@ -746,18 +734,6 @@ Object FunCall::evaluate(EvaluationContext& ctx) const {
     Object::MapT kwarglist;
     for (auto& element : elements)
         element->fill(ctx, arglist, kwarglist);
-    // for (auto& arg : args)
-    //     arglist.push_back(arg->evaluate(ctx));
-
-    // Object kwarglist;
-    // if (!kwargs.empty()) {
-    //     ctx.push_object();
-    //     for (auto& kwarg : kwargs)
-    //         ctx.assign_object(kwarg.first, kwarg.second->evaluate(ctx));
-    //     kwarglist = ctx.finalize_object();
-    // }
-    // else
-    //     kwarglist = Object::map();
 
     try {
         auto rval = func.call(ctx, Object::list(arglist), Object::map(kwarglist));

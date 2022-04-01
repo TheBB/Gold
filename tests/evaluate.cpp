@@ -711,11 +711,6 @@ TEST_CASE("Errors", "[evaluate]") {
     REQUIRE_THROWS_WITH(evaluate_string("{...1}"), Contains("1:5"));
     REQUIRE_THROWS_WITH(evaluate_string("{for x in 1: a: x}"), Contains("1:11"));
 
-    // Branching on non-boolean
-    REQUIRE_THROWS_WITH(evaluate_string("[if 1: 1]"), Contains("1:5"));
-    REQUIRE_THROWS_WITH(evaluate_string("{if 1: a: 1}"), Contains("1:5"));
-    REQUIRE_THROWS_WITH(evaluate_string("if 1 then 2 else 3"), Contains("1:4"));
-
     // Maps without strings as keys
     REQUIRE_THROWS_WITH(evaluate_string("{$1: 1}"), Contains("1:3"));
 
