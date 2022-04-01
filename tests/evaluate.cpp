@@ -663,9 +663,9 @@ TEST_CASE("Type conversion", "[evaluate]") {
     REQUIRE(evaluate_string("int(-1.2)").unsafe_integer() == -1);
     REQUIRE(evaluate_string("int(\"-3\")").unsafe_integer() == -3);
     REQUIRE(evaluate_string("bool(1)").unsafe_boolean() == true);
-    REQUIRE(evaluate_string("bool(0)").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("bool(0)").unsafe_boolean() == true);
     REQUIRE(evaluate_string("bool(1.5)").unsafe_boolean() == true);
-    REQUIRE(evaluate_string("bool(0.0)").unsafe_boolean() == false);
+    REQUIRE(evaluate_string("bool(0.0)").unsafe_boolean() == true);
     REQUIRE(evaluate_string("bool(true)").unsafe_boolean() == true);
     REQUIRE(evaluate_string("bool(false)").unsafe_boolean() == false);
     REQUIRE(evaluate_string("bool(null)").unsafe_boolean() == false);

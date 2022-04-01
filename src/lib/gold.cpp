@@ -614,14 +614,7 @@ static Object builtin_int(EvaluationContext&, const Object& args) {
 
 
 static Object builtin_bool(EvaluationContext&, const Object& args) {
-    Object arg = args[0];
-    return std::visit(overloaded {
-        [](Object::Integer x) { return Object::boolean(x != 0 ? true : false); },
-        [](Object::Floating x) { return Object::boolean(x != 0 ? true : false); },
-        [&arg](Object::Boolean x) { return arg; },
-        [](Object::Null) { return Object::boolean(false); },
-        [](auto&&) { return Object::boolean(true); }
-    }, arg.data());
+    return Object::boolean((bool)args[0]);
 }
 
 

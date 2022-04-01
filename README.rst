@@ -126,9 +126,8 @@ Gold has an if-then-else structure::
 Because this must produce a value in all cases (it is an expression, not a
 statement), it is not possible to omit the *else* branch.
 
-Only booleans are admissible as valid conditional values in Gold.  Nothing else
-coerces to boolean, including typical behaviour like *null* or zeros being
-*false* and non-zeros being *true*.
+In Gold, only *false* and *null* are treated as falsy values. Everything
+else is truthy, including zero!
 
 
 Indexing
@@ -385,7 +384,7 @@ Built-in functions
 Gold provides the following built-in functions:
 
 - *int(x)* - convert its argument to an integer
-- *bool(x)* - convert its argument to a boolean
+- *bool(x)* - convert its argument to a boolean (as per branching rules)
 - *str(x)* - convert its argument to a string
 - *float(x)* - convert its argument to a floating point number
 - *len(x)* - return the number of items in a list or object
