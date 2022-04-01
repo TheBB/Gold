@@ -115,6 +115,25 @@ The bindings produced by a let-expression vanish after the final expression
 (after *in*) is evaluated, and they are not visible anywhere else.
 
 
+String interpolation
+--------------------
+
+Gold allows string interpolation using the syntax ``${...}``, with arbitrary
+expressions allowed inside the curly braces::
+
+    let x = 1
+    let y = 2
+    in "the sum of ${x} and ${y} is ${x+y}"
+
+The value of the expression is stringified using the *str()* function (see
+below), which admits all basic data types (numbers, booleans, null and other
+strings), but not lists, objects or functions.
+
+String interpolation can be suppressed by escaping the dollar sign::
+
+    "this \${string} is not interpolated"
+
+
 Branching
 ---------
 
