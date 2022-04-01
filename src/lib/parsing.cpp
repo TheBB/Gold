@@ -76,8 +76,9 @@ namespace Grammar
         struct Null: isolate<p::string<'n','u','l','l'>> {};
         struct And: isolate<p::string<'a','n','d'>> {};
         struct Or: isolate<p::string<'o','r'>> {};
+        struct Not: isolate<p::string<'n','o','t'>> {};
 
-        struct rule: p::sor<If, Then, Else, Let, In, True, False, Null, And, Or> {};
+        struct rule: p::sor<If, Then, Else, Let, In, True, False, Null, And, Or, Not> {};
     }
 
     // Prepad: consume whitespace before a rule but not after
@@ -136,6 +137,7 @@ namespace Grammar
         struct gt: p::one<'>'> {};
         struct dbleq: p::string<'=','='> {};
         struct ineq: p::string<'!','='> {};
+        struct invert: p::string<'n','o','t'> {};
 
         struct un_minus: p::one<'-'> {};
     }
@@ -350,7 +352,8 @@ namespace Grammar
     // Precedence level: prefix operators
     namespace prefix {
         struct pre_op: p::sor<
-            op::un_minus
+            op::un_minus,
+            op::invert
         > {};
         struct rule: p::seq<p::star<prepad<pre_op>>, p::sor<power, postfix::rule>> {};
     }
@@ -475,6 +478,7 @@ namespace Grammar
             op::dbleq,
             op::ineq,
             op::un_minus,
+            op::invert,
             postfix::rule,
             postfix::funcall_operator,
             postfix::object_access,

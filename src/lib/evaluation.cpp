@@ -608,7 +608,8 @@ Object UnOp::evaluate(EvaluationContext& ctx) const {
     auto val = operand->evaluate(ctx);
     try {
         switch (op) {
-        default: return -val; break;
+        case UnaryOperator::negate: return -val; break;
+        default: return Object::boolean(!(bool)val); break;
         }
     }
     catch (EvalException& e) {

@@ -30,7 +30,8 @@ enum class BinaryOperator {
 
 
 enum class UnaryOperator {
-    negate
+    negate,
+    invert
 };
 
 

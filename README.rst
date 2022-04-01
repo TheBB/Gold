@@ -222,11 +222,15 @@ requirement.
 In addition, Gold has a single unary prefix operator
 
 - ``-`` for unary negation
+- ``not`` for logical negation
 
-The power operator binds tighter than negation on the right, but not on the
+The power operator binds tighter than unary operators on the right, but not on the
 left, so that ``-2^2`` evaluates to -4.  In every other case, postfix operators
 (indexing and function calls) bind tighter than prefix operators, which in turn
 bind tighter than binary operators.
+
+All binary operators associate to the left, except for the power operator, which
+associates to the right.
 
 
 Destructuring

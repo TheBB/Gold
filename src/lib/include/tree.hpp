@@ -106,6 +106,7 @@ namespace Grammar
         struct dbleq;
         struct ineq;
         struct un_minus;
+        struct invert;
     }
 }
 
@@ -267,5 +268,6 @@ template<> void Ast::set_normalizer<Grammar::op::gt>();
 template<> void Ast::set_normalizer<Grammar::op::dbleq>();
 template<> void Ast::set_normalizer<Grammar::op::ineq>();
 template<> void Ast::set_normalizer<Grammar::op::un_minus>();
+template<> void Ast::set_normalizer<Grammar::op::invert>();
 
 }

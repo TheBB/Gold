@@ -568,3 +568,4 @@ template<> void Ast::set_normalizer<Grammar::op::dbleq>() { normalizer = BinaryO
 template<> void Ast::set_normalizer<Grammar::op::ineq>() { normalizer = BinaryOperator::not_equal; }
 
 template<> void Ast::set_normalizer<Grammar::op::un_minus>() { normalizer = UnaryOperator::negate; }
+template<> void Ast::set_normalizer<Grammar::op::invert>() { normalizer = UnaryOperator::invert; }
