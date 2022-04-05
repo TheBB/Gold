@@ -1,0 +1,41 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Gold",
+	"patterns": [
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#operators"
+		},
+		{
+			"include": "#strings"
+		}
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [{
+				"name": "keyword.control.gold",
+				"match": "\\b(for|if|then|else|let|in|true|false|null|and|or|not)\\b"
+			}]
+		},
+		"operators": {
+			"patterns": [{
+				"name": "keyword.operator.gold",
+				"match": "\\^|\\/\\/|\\*|\\/|\\+|-|=>|>=|<=|>|<|==|!=|="
+			}]
+		},
+		"strings": {
+			"name": "string.quoted.double.gold",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.gold",
+					"match": "\\\\."
+				}
+			]
+		}
+	},
+	"scopeName": "source.gold"
+}
