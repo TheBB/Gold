@@ -64,6 +64,10 @@ endif()
 find_package(fmt CONFIG REQUIRED)
 find_package(pegtl CONFIG REQUIRED)
 
+set(GMP_USE_STATIC_LIBS TRUE)
+set(GMPXX_USE_STATIC_LIBS TRUE)
+find_package(GMPXX REQUIRED)
+
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/lib)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/bin)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/stdlib)

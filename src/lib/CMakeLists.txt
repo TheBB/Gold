@@ -12,7 +12,7 @@ add_library(
 
 target_include_directories(gold-nostdlib PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(gold-nostdlib PUBLIC ${GOLD_ROOT_DIR}/include)
-target_link_libraries(gold-nostdlib fmt::fmt taocpp::pegtl)
+target_link_libraries(gold-nostdlib fmt::fmt taocpp::pegtl ${GMP_LIBRARIES})
 
 if(APPLE)
     target_link_libraries(gold-nostdlib Boost::filesystem)
