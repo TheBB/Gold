@@ -1,0 +1,29 @@
+{
+    "name": "goldlang",
+    "displayName": "GoldLang",
+    "description": "Syntax highlighting for the Gold language",
+    "repository": {
+        "url": "https://github.com/TheBB/Gold"
+    },
+    "publisher": "TheBB",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.46.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "gold",
+            "aliases": ["Gold", "gold"],
+            "extensions": [".gold"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "gold",
+            "scopeName": "source.gold",
+            "path": "./syntaxes/gold.tmLanguage.json"
+        }]
+    }
+}
