@@ -141,14 +141,16 @@ TEST_CASE("Arithmetic", "[evaluate]") {
     REQUIRE(evaluate_string("1 - 2.0").unsafe_floating() == -1.0);
     REQUIRE(evaluate_string("1 - 2 + 3").unsafe_integer() == 2);
     REQUIRE(evaluate_string("2 // 2 * 2").unsafe_integer() == 2);
-    REQUIRE(evaluate_string("2 ^ 2").unsafe_floating() == 4.0);
-    REQUIRE(evaluate_string("-2 ^ 2").unsafe_floating() == -4.0);
-    REQUIRE(evaluate_string("2 ^ 2 ^ 2").unsafe_floating() == 16.0);
-    REQUIRE(evaluate_string("-2 ^ 2 ^ 2").unsafe_floating() == -16.0);
-    REQUIRE(evaluate_string("2 ^ 3 ^ 3").unsafe_floating() == 134217728.0);
-    REQUIRE(evaluate_string("(2 ^ 3) ^ 3").unsafe_floating() == 512.0);
-    REQUIRE(evaluate_string("-2 ^ 3 ^ 3").unsafe_floating() == -134217728.0);
-    REQUIRE(evaluate_string("(-2 ^ 3) ^ 3").unsafe_floating() == -512.0);
+    REQUIRE(evaluate_string("2 ^ 2").unsafe_integer() == 4);
+    REQUIRE(evaluate_string("-2 ^ 2").unsafe_integer() == -4);
+    REQUIRE(evaluate_string("2 ^ 2 ^ 2").unsafe_integer() == 16);
+    REQUIRE(evaluate_string("-2 ^ 2 ^ 2").unsafe_integer() == -16);
+    REQUIRE(evaluate_string("2 ^ 3 ^ 3").unsafe_integer() == 134217728);
+    REQUIRE(evaluate_string("(2 ^ 3) ^ 3").unsafe_integer() == 512);
+    REQUIRE(evaluate_string("-2 ^ 3 ^ 3").unsafe_integer() == -134217728);
+    REQUIRE(evaluate_string("(-2 ^ 3) ^ 3").unsafe_integer() == -512);
+
+    REQUIRE(evaluate_string("(9999999999999999999999999 + 1) - 9999999999999999999999999").unsafe_integer() == 1);
 }
 
 
