@@ -26,6 +26,19 @@ namespace filesystem = std::filesystem;
 namespace Gold {
 
 
+class mpz_ext : public mpz_class {
+public:
+    mpz_ext() : mpz_class() {}
+    mpz_ext(std::intmax_t);
+    mpz_ext(mpz_class value) : mpz_class(value) {}
+    mpz_ext(std::string value) : mpz_class(value) {}
+    bool fits_intmax_t() const;
+    std::intmax_t get_intmax_t() const;
+private:
+    static mpz_ext _min, _max;
+};
+
+
 class Serializable {
 public:
     std::string serialize() const;
@@ -42,13 +55,13 @@ public:
 
     using Null = std::monostate;
 
-    using Integer = intmax_t;
+    using Integer = std::intmax_t;
     using String = std::string;
     using Boolean = bool;
     using Floating = double;
 
-    using BignumT = mpz_class;
-    using Bignum = sptr<mpz_class>;
+    using BignumT = mpz_ext;
+    using Bignum = sptr<mpz_ext>;
 
     using MapT = std::map<std::string, Object>;
     using Map = sptr<MapT>;
@@ -96,6 +109,7 @@ public:
 
     static Object integer(Bignum value) { return Object(value); }
     static Object integer(BignumT value) { return Object(std::make_shared<BignumT>(value)); }
+    static Object integer(mpz_class value) { return integer(mpz_ext(value)); }
     static Object integer(std::string value);
 
     static Object map(Map value) { return Object(value); }

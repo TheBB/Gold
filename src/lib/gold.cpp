@@ -25,6 +25,44 @@ Expr* parse(p::string_input<>& input);
 }
 
 
+mpz_ext mpz_ext::_min = mpz_ext(std::numeric_limits<std::intmax_t>::min());
+mpz_ext mpz_ext::_max = mpz_ext(std::numeric_limits<std::intmax_t>::max());
+
+
+mpz_ext::mpz_ext(std::intmax_t value) : mpz_class() {
+    bool add_one, flip;
+    if ((add_one = value == std::numeric_limits<std::intmax_t>::min()))
+        value++;
+    if ((flip = value < 0))
+        value = -value;
+    mpz_import(get_mpz_t(), 1, -1, sizeof value, 0, 1, &value);
+    if (add_one)
+        mpz_add_ui(get_mpz_t(), get_mpz_t(), 1);
+    if (flip)
+        mpz_neg(get_mpz_t(), get_mpz_t());
+}
+
+
+bool mpz_ext::fits_intmax_t() const {
+    if (mpz_cmp(get_mpz_t(), _max.get_mpz_t()) > 0)
+        return false;
+    if (mpz_cmp(get_mpz_t(), _min.get_mpz_t()) < 0)
+        return false;
+    return true;
+}
+
+
+std::intmax_t mpz_ext::get_intmax_t() const {
+    if (mpz_cmp(get_mpz_t(), _min.get_mpz_t()) == 0)
+        return std::numeric_limits<std::intmax_t>::min();
+    std::intmax_t rval;
+    mpz_export(&rval, nullptr, -1, sizeof rval, 0, 0, get_mpz_t());
+    if (mpz_sgn(get_mpz_t()) < 0)
+        rval = -rval;
+    return rval;
+}
+
+
 ExprPtr Gold::parse_string(std::string code) {
     p::string_input input(code, "code");
     return ExprPtr(parse(input));
@@ -83,7 +121,7 @@ Object Object::integer(std::string value) {
     auto ival = std::strtoimax(value.c_str(), nullptr, 10);
     if (errno != ERANGE)
         return Object::integer(ival);
-    mpz_class big(value);
+    mpz_ext big(value);
     return Object::integer(big);
 }
 
@@ -126,19 +164,19 @@ Object Object::operator+(Object other) const {
             auto imin = std::numeric_limits<intmax_t>::max();
             auto imax = std::numeric_limits<intmax_t>::min();
             if (a > 0 && b > 0 && a > imax - b)
-                return Object::integer(mpz_class(a) + b);
+                return Object::integer(mpz_ext(a) + mpz_ext(b));
             if (a < 0 && b < 0 && a < imin - b)
-                return Object::integer(mpz_class(a) + b);
+                return Object::integer(mpz_ext(a) + mpz_ext(b));
             return Object::integer(a + b);
         },
         [](Integer a, Floating b) { return Object::floating(a + b); },
         [](Floating a, Integer b) { return Object::floating(a + b); },
         [](Floating a, Floating b) { return Object::floating(a + b); },
-        [](Integer a, Bignum b) { return Object::integer(*b + a).compress(); },
-        [](Bignum a, Integer b) { return Object::integer(*a + b).compress(); },
+        [](Integer a, Bignum b) { return Object::integer(mpz_ext(a) + *b).compress(); },
+        [](Bignum a, Integer b) { return Object::integer(*a + mpz_ext(b)).compress(); },
         [](Bignum a, Bignum b) { return Object::integer(*a + *b).compress(); },
         [](Floating a, Bignum b) { return Object::floating(a + b->get_d()); },
-        [](Bignum a, Floating b) { return Object::integer(a->get_d() + b); },
+        [](Bignum a, Floating b) { return Object::floating(a->get_d() + b); },
         [](String a, String b) { return Object::string(a + b); },
         [](List a, List b) {
             List elements = std::make_shared<std::vector<Object>>();
@@ -162,16 +200,16 @@ Object Object::operator-(Object other) const {
             auto imin = std::numeric_limits<intmax_t>::max();
             auto imax = std::numeric_limits<intmax_t>::min();
             if (a > 0 && b < 0 && a > imax + b)
-                return Object::integer(mpz_class(a) - b);
+                return Object::integer(mpz_ext(a) - mpz_ext(b));
             if (a < 0 && b > 0 && a < imin + b)
-                return Object::integer(mpz_class(a) - b);
+                return Object::integer(mpz_ext(a) - mpz_ext(b));
             return Object::integer(a - b);
         },
         [](Floating a, Integer b) { return Object::floating(a - b); },
         [](Integer a, Floating b) { return Object::floating(a - b); },
         [](Floating a, Floating b) { return Object::floating(a - b); },
-        [](Integer a, Bignum b) { return Object::integer(a - *b).compress(); },
-        [](Bignum a, Integer b) { return Object::integer(*a - b).compress(); },
+        [](Integer a, Bignum b) { return Object::integer(mpz_ext(a) - *b).compress(); },
+        [](Bignum a, Integer b) { return Object::integer(*a - mpz_ext(b)).compress(); },
         [](Bignum a, Bignum b) { return Object::integer(*a - *b).compress(); },
         [](Floating a, Bignum b) { return Object::floating(a - b->get_d()); },
         [](Bignum a, Floating b) { return Object::floating(a->get_d() - b); },
@@ -187,7 +225,11 @@ Object Object::operator-(Object other) const {
 
 Object Object::operator-() const {
     return std::visit(overloaded {
-        [](Integer x) { return Object::integer(-x); },
+        [](Integer x) {
+            if (x == std::numeric_limits<std::intmax_t>::min())
+                return Object::integer(-mpz_ext(x));
+            return Object::integer(-x);
+        },
         [](Floating x) { return Object::floating(-x); },
         [](Bignum x) { return Object::integer(-(*x)); },
         [this](auto&&) -> Object {
@@ -205,14 +247,14 @@ Object Object::operator*(Object other) const {
         [](Integer a, Integer b) {
             auto bnd = (intmax_t) sqrt(std::numeric_limits<intmax_t>::max());
             if (a > bnd || -a > bnd || b > bnd || -b > bnd)
-                return Object::integer(mpz_class(a) * b).compress();
+                return Object::integer(mpz_ext(a) * mpz_ext(b)).compress();
             return Object::integer(a * b);
         },
         [](Floating a, Integer b) { return Object::floating(a * b); },
         [](Integer a, Floating b) { return Object::floating(a * b); },
         [](Floating a, Floating b) { return Object::floating(a * b); },
-        [](Integer a, Bignum b) { return Object::integer(a * *b).compress(); },
-        [](Bignum a, Integer b) { return Object::integer(*a * b).compress(); },
+        [](Integer a, Bignum b) { return Object::integer(mpz_ext(a) * *b).compress(); },
+        [](Bignum a, Integer b) { return Object::integer(*a * mpz_ext(b)).compress(); },
         [](Bignum a, Bignum b) { return Object::integer(*a * *b).compress(); },
         [](Floating a, Bignum b) { return Object::floating(a * b->get_d()); },
         [](Bignum a, Floating b) { return Object::floating(a->get_d() * b); },
@@ -250,8 +292,8 @@ Object Object::operator/(Object other) const {
 Object Object::idiv(Object other) const {
     return std::visit(overloaded {
         [](Integer a, Integer b) { return Object::integer(a / b); },
-        [](Bignum a, Integer b) { return Object::integer(*a / b).compress(); },
-        [](Integer a, Bignum b) { return Object::integer(a / *b).compress(); },
+        [](Bignum a, Integer b) { return Object::integer(*a / mpz_ext(b)).compress(); },
+        [](Integer a, Bignum b) { return Object::integer(mpz_ext(a) / *b).compress(); },
         [](Bignum a, Bignum b) { return Object::integer(*a / *b).compress(); },
         [this, other](auto&&, auto&&) -> Object {
             throw EvalException(fmt::format(
@@ -268,12 +310,8 @@ Object Object::power(Object other) const {
         [](Integer a, Integer b) {
             if (b < 0)
                 return Object::floating(pow(a, b));
-            mpz_class out;
-            if (a < 0) {
-                mpz_class _a(a);
-                mpz_pow_ui(out.get_mpz_t(), _a.get_mpz_t(), b);
-            } else
-                mpz_ui_pow_ui(out.get_mpz_t(), a, b);
+            mpz_ext out, _a(a);
+            mpz_pow_ui(out.get_mpz_t(), _a.get_mpz_t(), b);
             return Object::integer(out).compress();
         },
         [](Floating a, Integer b) { return Object::floating(pow(a, b)); },
@@ -306,8 +344,8 @@ bool Object::operator<(Object other) const {
         [](Floating a, Integer b) { return a < b; },
         [](Integer a, Floating b) { return a < b; },
         [](Floating a, Floating b) { return a < b; },
-        [](Integer a, Bignum b) { return mpz_cmp_si(b->get_mpz_t(), a) > 0; },
-        [](Bignum a, Integer b) { return mpz_cmp_si(a->get_mpz_t(), b) < 0; },
+        [](Integer a, Bignum b) { mpz_ext _a(a); return mpz_cmp(_a.get_mpz_t(), b->get_mpz_t()) < 0; },
+        [](Bignum a, Integer b) { mpz_ext _b(b); return mpz_cmp(a->get_mpz_t(), _b.get_mpz_t()) < 0; },
         [](Bignum a, Bignum b) { return mpz_cmp(a->get_mpz_t(), b->get_mpz_t()) < 0; },
         [](Floating a, Bignum b) { return mpz_cmp_d(b->get_mpz_t(), a) > 0; },
         [](Bignum a, Floating b) { return mpz_cmp_d(a->get_mpz_t(), b) < 0; },
@@ -328,8 +366,8 @@ bool Object::operator<=(Object other) const {
         [](Floating a, Integer b) { return a <= b; },
         [](Integer a, Floating b) { return a <= b; },
         [](Floating a, Floating b) { return a <= b; },
-        [](Integer a, Bignum b) { return mpz_cmp_si(b->get_mpz_t(), a) >= 0; },
-        [](Bignum a, Integer b) { return mpz_cmp_si(a->get_mpz_t(), b) <= 0; },
+        [](Integer a, Bignum b) { mpz_ext _a(a); return mpz_cmp(_a.get_mpz_t(), b->get_mpz_t()) <= 0; },
+        [](Bignum a, Integer b) { mpz_ext _b(b); return mpz_cmp(a->get_mpz_t(), _b.get_mpz_t()) <= 0; },
         [](Bignum a, Bignum b) { return mpz_cmp(a->get_mpz_t(), b->get_mpz_t()) <= 0; },
         [](Floating a, Bignum b) { return mpz_cmp_d(b->get_mpz_t(), a) >= 0; },
         [](Bignum a, Floating b) { return mpz_cmp_d(a->get_mpz_t(), b) <= 0; },
@@ -350,11 +388,11 @@ bool Object::operator>(Object other) const {
         [](Floating a, Integer b) { return a > b; },
         [](Integer a, Floating b) { return a > b; },
         [](Floating a, Floating b) { return a > b; },
-        [](Integer a, Bignum b) { return mpz_cmp_si(b->get_mpz_t(), a) > 0; },
-        [](Bignum a, Integer b) { return mpz_cmp_si(a->get_mpz_t(), b) < 0; },
-        [](Bignum a, Bignum b) { return mpz_cmp(a->get_mpz_t(), b->get_mpz_t()) < 0; },
-        [](Floating a, Bignum b) { return mpz_cmp_d(b->get_mpz_t(), a) > 0; },
-        [](Bignum a, Floating b) { return mpz_cmp_d(a->get_mpz_t(), b) < 0; },
+        [](Integer a, Bignum b) { mpz_ext _a(a); return mpz_cmp(_a.get_mpz_t(), b->get_mpz_t()) > 0; },
+        [](Bignum a, Integer b) { mpz_ext _b(b); return mpz_cmp(a->get_mpz_t(), _b.get_mpz_t()) > 0; },
+        [](Bignum a, Bignum b) { return mpz_cmp(a->get_mpz_t(), b->get_mpz_t()) > 0; },
+        [](Floating a, Bignum b) { return mpz_cmp_d(b->get_mpz_t(), a) < 0; },
+        [](Bignum a, Floating b) { return mpz_cmp_d(a->get_mpz_t(), b) > 0; },
         [](String a, String b) { return a > b; },
         [this, other](auto&&, auto&&) -> bool {
             throw EvalException(fmt::format(
@@ -372,8 +410,8 @@ bool Object::operator>=(Object other) const {
         [](Floating a, Integer b) { return a >= b; },
         [](Integer a, Floating b) { return a >= b; },
         [](Floating a, Floating b) { return a >= b; },
-        [](Integer a, Bignum b) { return mpz_cmp_si(b->get_mpz_t(), a) <= 0; },
-        [](Bignum a, Integer b) { return mpz_cmp_si(a->get_mpz_t(), b) >= 0; },
+        [](Integer a, Bignum b) { mpz_ext _a(a); return mpz_cmp(_a.get_mpz_t(), b->get_mpz_t()) >= 0; },
+        [](Bignum a, Integer b) { mpz_ext _b(b); return mpz_cmp(a->get_mpz_t(), _b.get_mpz_t()) >= 0; },
         [](Bignum a, Bignum b) { return mpz_cmp(a->get_mpz_t(), b->get_mpz_t()) >= 0; },
         [](Floating a, Bignum b) { return mpz_cmp_d(b->get_mpz_t(), a) <= 0; },
         [](Bignum a, Floating b) { return mpz_cmp_d(a->get_mpz_t(), b) >= 0; },
@@ -394,8 +432,8 @@ bool Object::operator==(Object other) const {
         [](Floating a, Integer b) { return a == b; },
         [](Integer a, Floating b) { return a == b; },
         [](Floating a, Floating b) { return a == b; },
-        [](Integer a, Bignum b) { return mpz_cmp_si(b->get_mpz_t(), a) == 0; },
-        [](Bignum a, Integer b) { return mpz_cmp_si(a->get_mpz_t(), b) == 0; },
+        [](Integer a, Bignum b) { mpz_ext _a(a); return mpz_cmp(_a.get_mpz_t(), b->get_mpz_t()) == 0; },
+        [](Bignum a, Integer b) { mpz_ext _b(b); return mpz_cmp(a->get_mpz_t(), _b.get_mpz_t()) == 0; },
         [](Bignum a, Bignum b) { return mpz_cmp(a->get_mpz_t(), b->get_mpz_t()) == 0; },
         [](Floating a, Bignum b) { return mpz_cmp_d(b->get_mpz_t(), a) == 0; },
         [](Bignum a, Floating b) { return mpz_cmp_d(a->get_mpz_t(), b) == 0; },
@@ -519,8 +557,8 @@ Object::operator bool() const {
 Object Object::compress() const {
     return std::visit(overloaded {
         [this](Bignum x) -> Object {
-            if (x->fits_slong_p())
-                return Object::integer(x->get_si());
+            if (x->fits_intmax_t())
+                return Object::integer(x->get_intmax_t());
             return *this;
         },
         [this](auto&&) { return *this; }

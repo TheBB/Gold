@@ -151,6 +151,8 @@ TEST_CASE("Arithmetic", "[evaluate]") {
     REQUIRE(evaluate_string("(-2 ^ 3) ^ 3").unsafe_integer() == -512);
 
     REQUIRE(evaluate_string("(9999999999999999999999999 + 1) - 9999999999999999999999999").unsafe_integer() == 1);
+    REQUIRE(evaluate_string("9223372036854775800 + 9223372036854775800 - 9223372036854775800").unsafe_integer()
+        == 9223372036854775800);
 }
 
 

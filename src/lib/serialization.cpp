@@ -74,7 +74,7 @@ Object Object::deserialize(Deserializer& is) {
     case 'S': return Object::string(is.read<Object::String>());
     case 'B': return Object::boolean(is.read<Object::Boolean>());
     case 'F': return Object::floating(is.read<Object::Floating>());
-    case 'H': return Object::integer(mpz_class(is.read<std::string>()));
+    case 'H': return Object::integer(mpz_ext(is.read<std::string>()));
     case 'M': return Object::map(is.read<Object::Map>([&is]() {
         return is.read<Object::MapT*>([&is]() {
             auto key = is.read<std::string>();
