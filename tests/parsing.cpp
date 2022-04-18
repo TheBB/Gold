@@ -39,6 +39,12 @@ TEST_CASE("Parse integers", "[parsing]") {
 
     ast = parse_string("-9223372036854775807");
     REQUIRE(ast->dump() == "UnOp(- Lit(9223372036854775807))");
+
+    ast = parse_string("9223372036854775808");
+    REQUIRE(ast->dump() == "Lit(9223372036854775808)");
+
+    ast = parse_string("99999999999999999999999999999");
+    REQUIRE(ast->dump() == "Lit(99999999999999999999999999999)");
 }
 
 
@@ -124,11 +130,6 @@ TEST_CASE("Parse identifiers", "[parsing]") {
     // Identifiers that begin with keywords are ok
     ast = parse_string("ift");
     REQUIRE(ast->dump() == "Id(ift)");
-
-    // But identifiers that ARE keywords aren't
-    // REQUIRE_THROWS_AS(parse_string("if"), ParseException);
-    // REQUIRE_THROWS_AS(parse_string("then"), ParseException);
-    // REQUIRE_THROWS_AS(parse_string("else"), ParseException);
 }
 
 

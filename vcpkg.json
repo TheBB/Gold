@@ -9,6 +9,7 @@
         "cxxopts",
         "fmt",
         "nlohmann-json",
-        "pegtl"
+        "pegtl",
+        "gmp"
     ]
 }

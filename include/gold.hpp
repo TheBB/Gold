@@ -16,12 +16,27 @@ namespace filesystem = boost::filesystem;
 namespace filesystem = std::filesystem;
 #endif
 
+#include <gmpxx.h>
+
 #include "gold-common.hpp"
 
 #pragma once
 
 
 namespace Gold {
+
+
+class mpz_ext : public mpz_class {
+public:
+    mpz_ext() : mpz_class() {}
+    mpz_ext(std::intmax_t);
+    mpz_ext(mpz_class value) : mpz_class(value) {}
+    mpz_ext(std::string value) : mpz_class(value) {}
+    bool fits_intmax_t() const;
+    std::intmax_t get_intmax_t() const;
+private:
+    static mpz_ext _min, _max;
+};
 
 
 class Serializable {
@@ -40,10 +55,13 @@ public:
 
     using Null = std::monostate;
 
-    using Integer = intmax_t;
+    using Integer = std::intmax_t;
     using String = std::string;
     using Boolean = bool;
     using Floating = double;
+
+    using BignumT = mpz_ext;
+    using Bignum = sptr<mpz_ext>;
 
     using MapT = std::map<std::string, Object>;
     using Map = sptr<MapT>;
@@ -63,7 +81,7 @@ public:
         std::function<Object(EvaluationContext&, const Object&)> callable;
     };
 
-    using Variant = std::variant<Null, Integer, String, Boolean, Floating, Map, List, Closure, Builtin>;
+    using Variant = std::variant<Null, Integer, String, Boolean, Floating, Bignum, Map, List, Closure, Builtin>;
 
 private:
     Variant _data;
@@ -73,6 +91,7 @@ public:
     Object() : _data() {}
     explicit Object(Null value) : _data(value) {}
     explicit Object(Integer value) : _data(value) {}
+    explicit Object(Bignum value) : _data(value) {}
     explicit Object(const String& value) : _data(value) {}
     explicit Object(Boolean value) : _data(value) {}
     explicit Object(Floating value) : _data(value) {}
@@ -87,6 +106,11 @@ public:
     static Object string(const String& value) { return Object(value); }
     static Object boolean(Boolean value) { return Object(value ? true : false); }
     static Object floating(Floating value) { return Object(value); }
+
+    static Object integer(Bignum value) { return Object(value); }
+    static Object integer(BignumT value) { return Object(std::make_shared<BignumT>(value)); }
+    static Object integer(mpz_class value) { return integer(mpz_ext(value)); }
+    static Object integer(std::string value);
 
     static Object map(Map value) { return Object(value); }
     static Object map(MapT value) { return Object(std::make_shared<MapT>(value)); }
@@ -156,6 +180,8 @@ public:
     Object operator[](std::string) const;
 
     explicit operator bool() const;
+
+    Object compress() const;
 
     // More convenient access
     size_t size() const;

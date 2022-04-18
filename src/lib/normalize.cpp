@@ -241,9 +241,7 @@ template<> void Ast::set_normalizer<Grammar::keyword::Null>() {
 
 template<> void Ast::set_normalizer<Grammar::number::integer>() {
     normalizer = [](const Ast& ast) -> ExprPtr {
-        auto str = ast.string();
-        auto value = std::strtoimax(str.c_str(), nullptr, 10);
-        return std::make_unique<Literal>(ast.source(), Object::integer(value));
+        return std::make_unique<Literal>(ast.source(), Object::integer(ast.string()));
     };
 }
 

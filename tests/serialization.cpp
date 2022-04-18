@@ -25,6 +25,10 @@ TEST_CASE("Serialization of integers", "[serialization]") {
     val = Object::deserialize(Object::integer(-9223372036854775807).serialize());
     REQUIRE(val.type() == Object::Type::integer);
     REQUIRE(val.unsafe_integer() == -9223372036854775807);
+
+    val = Object::deserialize(Object::integer("9223372036854775808").serialize());
+    REQUIRE(val.type() == Object::Type::integer);
+    REQUIRE(val.dump() == "9223372036854775808");
 }
 
 

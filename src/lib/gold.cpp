@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iterator>
 #include <iostream>
+#include <limits>
 
 #include <fmt/core.h>
 
@@ -21,6 +22,44 @@ template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 namespace Gold {
 Expr* parse(p::string_input<>& input);
+}
+
+
+mpz_ext mpz_ext::_min = mpz_ext(std::numeric_limits<std::intmax_t>::min());
+mpz_ext mpz_ext::_max = mpz_ext(std::numeric_limits<std::intmax_t>::max());
+
+
+mpz_ext::mpz_ext(std::intmax_t value) : mpz_class() {
+    bool add_one, flip;
+    if ((add_one = value == std::numeric_limits<std::intmax_t>::min()))
+        value++;
+    if ((flip = value < 0))
+        value = -value;
+    mpz_import(get_mpz_t(), 1, -1, sizeof value, 0, 1, &value);
+    if (add_one)
+        mpz_add_ui(get_mpz_t(), get_mpz_t(), 1);
+    if (flip)
+        mpz_neg(get_mpz_t(), get_mpz_t());
+}
+
+
+bool mpz_ext::fits_intmax_t() const {
+    if (mpz_cmp(get_mpz_t(), _max.get_mpz_t()) > 0)
+        return false;
+    if (mpz_cmp(get_mpz_t(), _min.get_mpz_t()) < 0)
+        return false;
+    return true;
+}
+
+
+std::intmax_t mpz_ext::get_intmax_t() const {
+    if (mpz_cmp(get_mpz_t(), _min.get_mpz_t()) == 0)
+        return std::numeric_limits<std::intmax_t>::min();
+    std::intmax_t rval;
+    mpz_export(&rval, nullptr, -1, sizeof rval, 0, 0, get_mpz_t());
+    if (mpz_sgn(get_mpz_t()) < 0)
+        rval = -rval;
+    return rval;
 }
 
 
@@ -77,6 +116,16 @@ Object Gold::evaluate_file(EvaluationContext& ctx, std::string path) {
 }
 
 
+Object Object::integer(std::string value) {
+    errno = 0;
+    auto ival = std::strtoimax(value.c_str(), nullptr, 10);
+    if (errno != ERANGE)
+        return Object::integer(ival);
+    mpz_ext big(value);
+    return Object::integer(big);
+}
+
+
 std::string Object::type_name() const {
     return std::visit(overloaded {
         [](Null) { return "null"; },
@@ -84,6 +133,7 @@ std::string Object::type_name() const {
         [](String) { return "string"; },
         [](Boolean) { return "boolean"; },
         [](Floating) { return "floating"; },
+        [](Bignum) { return "integer"; },
         [](Map) { return "map"; },
         [](List) { return "list"; },
         [](Closure) { return "function"; },
@@ -99,6 +149,7 @@ Object::Type Object::type() const {
         [](String) { return Type::string; },
         [](Boolean) { return Type::boolean; },
         [](Floating) { return Type::floating; },
+        [](Bignum) { return Type::integer; },
         [](Map) { return Type::map; },
         [](List) { return Type::list; },
         [](Closure) { return Type::function; },
@@ -109,10 +160,23 @@ Object::Type Object::type() const {
 
 Object Object::operator+(Object other) const {
     return std::visit(overloaded {
-        [](Integer a, Integer b) { return Object::integer(a + b); },
+        [](Integer a, Integer b) {
+            auto imin = std::numeric_limits<intmax_t>::max();
+            auto imax = std::numeric_limits<intmax_t>::min();
+            if (a > 0 && b > 0 && a > imax - b)
+                return Object::integer(mpz_ext(a) + mpz_ext(b));
+            if (a < 0 && b < 0 && a < imin - b)
+                return Object::integer(mpz_ext(a) + mpz_ext(b));
+            return Object::integer(a + b);
+        },
         [](Integer a, Floating b) { return Object::floating(a + b); },
         [](Floating a, Integer b) { return Object::floating(a + b); },
         [](Floating a, Floating b) { return Object::floating(a + b); },
+        [](Integer a, Bignum b) { return Object::integer(mpz_ext(a) + *b).compress(); },
+        [](Bignum a, Integer b) { return Object::integer(*a + mpz_ext(b)).compress(); },
+        [](Bignum a, Bignum b) { return Object::integer(*a + *b).compress(); },
+        [](Floating a, Bignum b) { return Object::floating(a + b->get_d()); },
+        [](Bignum a, Floating b) { return Object::floating(a->get_d() + b); },
         [](String a, String b) { return Object::string(a + b); },
         [](List a, List b) {
             List elements = std::make_shared<std::vector<Object>>();
@@ -132,10 +196,23 @@ Object Object::operator+(Object other) const {
 
 Object Object::operator-(Object other) const {
     return std::visit(overloaded {
-        [](Integer a, Integer b) { return Object::integer(a - b); },
+        [](Integer a, Integer b) {
+            auto imin = std::numeric_limits<intmax_t>::max();
+            auto imax = std::numeric_limits<intmax_t>::min();
+            if (a > 0 && b < 0 && a > imax + b)
+                return Object::integer(mpz_ext(a) - mpz_ext(b));
+            if (a < 0 && b > 0 && a < imin + b)
+                return Object::integer(mpz_ext(a) - mpz_ext(b));
+            return Object::integer(a - b);
+        },
         [](Floating a, Integer b) { return Object::floating(a - b); },
         [](Integer a, Floating b) { return Object::floating(a - b); },
         [](Floating a, Floating b) { return Object::floating(a - b); },
+        [](Integer a, Bignum b) { return Object::integer(mpz_ext(a) - *b).compress(); },
+        [](Bignum a, Integer b) { return Object::integer(*a - mpz_ext(b)).compress(); },
+        [](Bignum a, Bignum b) { return Object::integer(*a - *b).compress(); },
+        [](Floating a, Bignum b) { return Object::floating(a - b->get_d()); },
+        [](Bignum a, Floating b) { return Object::floating(a->get_d() - b); },
         [this, other](auto&&, auto&&) -> Object {
             throw EvalException(fmt::format(
                 "unsupported types for operator `-`: `{}` and `{}`",
@@ -148,8 +225,13 @@ Object Object::operator-(Object other) const {
 
 Object Object::operator-() const {
     return std::visit(overloaded {
-        [](Integer x) { return Object::integer(-x); },
+        [](Integer x) {
+            if (x == std::numeric_limits<std::intmax_t>::min())
+                return Object::integer(-mpz_ext(x));
+            return Object::integer(-x);
+        },
         [](Floating x) { return Object::floating(-x); },
+        [](Bignum x) { return Object::integer(-(*x)); },
         [this](auto&&) -> Object {
             throw EvalException(fmt::format(
                 "unsupported type for operator `-`: `{}`",
@@ -162,10 +244,20 @@ Object Object::operator-() const {
 
 Object Object::operator*(Object other) const {
     return std::visit(overloaded {
-        [](Integer a, Integer b) { return Object::integer(a * b); },
+        [](Integer a, Integer b) {
+            auto bnd = (intmax_t) sqrt(std::numeric_limits<intmax_t>::max());
+            if (a > bnd || -a > bnd || b > bnd || -b > bnd)
+                return Object::integer(mpz_ext(a) * mpz_ext(b)).compress();
+            return Object::integer(a * b);
+        },
         [](Floating a, Integer b) { return Object::floating(a * b); },
         [](Integer a, Floating b) { return Object::floating(a * b); },
         [](Floating a, Floating b) { return Object::floating(a * b); },
+        [](Integer a, Bignum b) { return Object::integer(mpz_ext(a) * *b).compress(); },
+        [](Bignum a, Integer b) { return Object::integer(*a * mpz_ext(b)).compress(); },
+        [](Bignum a, Bignum b) { return Object::integer(*a * *b).compress(); },
+        [](Floating a, Bignum b) { return Object::floating(a * b->get_d()); },
+        [](Bignum a, Floating b) { return Object::floating(a->get_d() * b); },
         [this, other](auto&&, auto&&) -> Object {
             throw EvalException(fmt::format(
                 "unsupported types for operator `*`: `{}` and `{}`",
@@ -182,6 +274,11 @@ Object Object::operator/(Object other) const {
         [](Floating a, Integer b) { return Object::floating(a / b); },
         [](Integer a, Floating b) { return Object::floating(a / b); },
         [](Floating a, Floating b) { return Object::floating(a / b); },
+        [](Integer a, Bignum b) { return Object::floating(a / b->get_d()); },
+        [](Bignum a, Integer b) { return Object::floating(a->get_d() / b); },
+        [](Bignum a, Bignum b) { return Object::floating(a->get_d() / b->get_d()); },
+        [](Floating a, Bignum b) { return Object::floating(a / b->get_d()); },
+        [](Bignum a, Floating b) { return Object::floating(a->get_d() / b); },
         [this, other](auto&&, auto&&) -> Object {
             throw EvalException(fmt::format(
                 "unsupported types for operator `/`: `{}` and `{}`",
@@ -195,6 +292,9 @@ Object Object::operator/(Object other) const {
 Object Object::idiv(Object other) const {
     return std::visit(overloaded {
         [](Integer a, Integer b) { return Object::integer(a / b); },
+        [](Bignum a, Integer b) { return Object::integer(*a / mpz_ext(b)).compress(); },
+        [](Integer a, Bignum b) { return Object::integer(mpz_ext(a) / *b).compress(); },
+        [](Bignum a, Bignum b) { return Object::integer(*a / *b).compress(); },
         [this, other](auto&&, auto&&) -> Object {
             throw EvalException(fmt::format(
                 "unsupported types for operator `//`: `{}` and `{}`",
@@ -207,10 +307,27 @@ Object Object::idiv(Object other) const {
 
 Object Object::power(Object other) const {
     return std::visit(overloaded {
-        [](Integer a, Integer b) { return Object::floating(pow(a, b)); },
+        [](Integer a, Integer b) {
+            if (b < 0)
+                return Object::floating(pow(a, b));
+            mpz_ext out, _a(a);
+            mpz_pow_ui(out.get_mpz_t(), _a.get_mpz_t(), b);
+            return Object::integer(out).compress();
+        },
         [](Floating a, Integer b) { return Object::floating(pow(a, b)); },
         [](Integer a, Floating b) { return Object::floating(pow(a, b)); },
         [](Floating a, Floating b) { return Object::floating(pow(a, b)); },
+        [](Integer a, Bignum b) { return Object::floating(pow(a, b->get_d())); },
+        [](Bignum a, Integer b) {
+            if (b < 0)
+                return Object::floating(pow(a->get_d(), b));
+            mpz_class out;
+            mpz_pow_ui(out.get_mpz_t(), a->get_mpz_t(), b);
+            return Object::integer(out).compress();
+        },
+        [](Bignum a, Bignum b) { return Object::floating(pow(a->get_d(), b->get_d())); },
+        [](Floating a, Bignum b) { return Object::floating(pow(a, b->get_d())); },
+        [](Bignum a, Floating b) { return Object::floating(pow(a->get_d(), b)); },
         [this, other](auto&&, auto&&) -> Object {
             throw EvalException(fmt::format(
                 "unsupported types for operator `^`: `{}` and `{}`",
@@ -227,6 +344,11 @@ bool Object::operator<(Object other) const {
         [](Floating a, Integer b) { return a < b; },
         [](Integer a, Floating b) { return a < b; },
         [](Floating a, Floating b) { return a < b; },
+        [](Integer a, Bignum b) { mpz_ext _a(a); return mpz_cmp(_a.get_mpz_t(), b->get_mpz_t()) < 0; },
+        [](Bignum a, Integer b) { mpz_ext _b(b); return mpz_cmp(a->get_mpz_t(), _b.get_mpz_t()) < 0; },
+        [](Bignum a, Bignum b) { return mpz_cmp(a->get_mpz_t(), b->get_mpz_t()) < 0; },
+        [](Floating a, Bignum b) { return mpz_cmp_d(b->get_mpz_t(), a) > 0; },
+        [](Bignum a, Floating b) { return mpz_cmp_d(a->get_mpz_t(), b) < 0; },
         [](String a, String b) { return a < b; },
         [this, other](auto&&, auto&&) -> bool {
             throw EvalException(fmt::format(
@@ -244,6 +366,11 @@ bool Object::operator<=(Object other) const {
         [](Floating a, Integer b) { return a <= b; },
         [](Integer a, Floating b) { return a <= b; },
         [](Floating a, Floating b) { return a <= b; },
+        [](Integer a, Bignum b) { mpz_ext _a(a); return mpz_cmp(_a.get_mpz_t(), b->get_mpz_t()) <= 0; },
+        [](Bignum a, Integer b) { mpz_ext _b(b); return mpz_cmp(a->get_mpz_t(), _b.get_mpz_t()) <= 0; },
+        [](Bignum a, Bignum b) { return mpz_cmp(a->get_mpz_t(), b->get_mpz_t()) <= 0; },
+        [](Floating a, Bignum b) { return mpz_cmp_d(b->get_mpz_t(), a) >= 0; },
+        [](Bignum a, Floating b) { return mpz_cmp_d(a->get_mpz_t(), b) <= 0; },
         [](String a, String b) { return a <= b; },
         [this, other](auto&&, auto&&) -> bool {
             throw EvalException(fmt::format(
@@ -261,6 +388,11 @@ bool Object::operator>(Object other) const {
         [](Floating a, Integer b) { return a > b; },
         [](Integer a, Floating b) { return a > b; },
         [](Floating a, Floating b) { return a > b; },
+        [](Integer a, Bignum b) { mpz_ext _a(a); return mpz_cmp(_a.get_mpz_t(), b->get_mpz_t()) > 0; },
+        [](Bignum a, Integer b) { mpz_ext _b(b); return mpz_cmp(a->get_mpz_t(), _b.get_mpz_t()) > 0; },
+        [](Bignum a, Bignum b) { return mpz_cmp(a->get_mpz_t(), b->get_mpz_t()) > 0; },
+        [](Floating a, Bignum b) { return mpz_cmp_d(b->get_mpz_t(), a) < 0; },
+        [](Bignum a, Floating b) { return mpz_cmp_d(a->get_mpz_t(), b) > 0; },
         [](String a, String b) { return a > b; },
         [this, other](auto&&, auto&&) -> bool {
             throw EvalException(fmt::format(
@@ -278,6 +410,11 @@ bool Object::operator>=(Object other) const {
         [](Floating a, Integer b) { return a >= b; },
         [](Integer a, Floating b) { return a >= b; },
         [](Floating a, Floating b) { return a >= b; },
+        [](Integer a, Bignum b) { mpz_ext _a(a); return mpz_cmp(_a.get_mpz_t(), b->get_mpz_t()) >= 0; },
+        [](Bignum a, Integer b) { mpz_ext _b(b); return mpz_cmp(a->get_mpz_t(), _b.get_mpz_t()) >= 0; },
+        [](Bignum a, Bignum b) { return mpz_cmp(a->get_mpz_t(), b->get_mpz_t()) >= 0; },
+        [](Floating a, Bignum b) { return mpz_cmp_d(b->get_mpz_t(), a) <= 0; },
+        [](Bignum a, Floating b) { return mpz_cmp_d(a->get_mpz_t(), b) >= 0; },
         [](String a, String b) { return a >= b; },
         [this, other](auto&&, auto&&) -> bool {
             throw EvalException(fmt::format(
@@ -295,6 +432,11 @@ bool Object::operator==(Object other) const {
         [](Floating a, Integer b) { return a == b; },
         [](Integer a, Floating b) { return a == b; },
         [](Floating a, Floating b) { return a == b; },
+        [](Integer a, Bignum b) { mpz_ext _a(a); return mpz_cmp(_a.get_mpz_t(), b->get_mpz_t()) == 0; },
+        [](Bignum a, Integer b) { mpz_ext _b(b); return mpz_cmp(a->get_mpz_t(), _b.get_mpz_t()) == 0; },
+        [](Bignum a, Bignum b) { return mpz_cmp(a->get_mpz_t(), b->get_mpz_t()) == 0; },
+        [](Floating a, Bignum b) { return mpz_cmp_d(b->get_mpz_t(), a) == 0; },
+        [](Bignum a, Floating b) { return mpz_cmp_d(a->get_mpz_t(), b) == 0; },
         [](String a, String b) { return a == b; },
         [](Boolean a, Boolean b) { return a == b; },
         [](Null, Null) { return true; },
@@ -363,6 +505,10 @@ Object Object::call(const Object& args, const Object& kwargs) const {
 Object Object::operator[](Object index) const {
     return std::visit(overloaded {
         [this](Integer x) { return (*this)[x]; },
+        [this](Bignum x) -> Object {
+            // Small bignums should never exist
+            throw EvalException(fmt::format("index out of bounds: {}", x->get_str()));
+        },
         [this](String x) { return (*this)[x]; },
         [&index](auto&&) -> Object {
             throw EvalException(fmt::format("unsupported subscript type: `{}`", index.type_name()));
@@ -408,6 +554,18 @@ Object::operator bool() const {
 }
 
 
+Object Object::compress() const {
+    return std::visit(overloaded {
+        [this](Bignum x) -> Object {
+            if (x->fits_intmax_t())
+                return Object::integer(x->get_intmax_t());
+            return *this;
+        },
+        [this](auto&&) { return *this; }
+    }, _data);
+}
+
+
 size_t Object::size() const {
     return std::visit(overloaded {
         [](List x) { return x->size(); },
@@ -447,6 +605,7 @@ void Object::dump(std::ostream& os) const {
         },
         [&os](Boolean x) { os << (x ? "true" : "false"); },
         [&os](Floating x) { os << fmt::format("{:#}", x); },
+        [&os](Bignum x) { os << x->get_str(); },
         [&os](Null) { os << "null"; },
         [&os](Closure) { os << "<closure>"; },
         [&os](Builtin) { os << "<builtin>"; },
