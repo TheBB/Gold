@@ -9,7 +9,7 @@ use nom::{
     branch::alt,
     bytes::complete::{escaped_transform, is_not, tag},
     character::complete::{char, none_of, one_of, multispace0},
-    combinator::{map, map_res, opt, peek, recognize, value, verify},
+    combinator::{map, map_res, opt, recognize, value, verify},
     error::{ParseError, FromExternalError, ContextError, VerboseError},
     multi::{many0, many1, separated_list0},
     sequence::{preceded, terminated, tuple},
@@ -39,6 +39,17 @@ pub enum Object {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Binding {
+    Identifier(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StringElement {
+    Raw(String),
+    Interpolate(AstNode),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ListElement {
     Singleton(AstNode),
 }
@@ -51,18 +62,32 @@ pub enum MapElement {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstNode {
     Literal(Object),
+    String(Vec<StringElement>),
     Identifier(String),
     List(Vec<ListElement>),
     Map(Vec<MapElement>),
+    Let(Vec<(Binding, AstNode)>, Box<AstNode>),
 }
 
 impl AstNode {
     fn integer(value: i64) -> AstNode { AstNode::Literal(Object::Integer(value)) }
     fn big_integer(value: BigInt) -> AstNode { AstNode::Literal(Object::BigInteger(value)) }
     fn float(value: f64) -> AstNode { AstNode::Literal(Object::Float(value)) }
-    fn string(value: String) -> AstNode { AstNode::Literal(Object::String(value)) }
     fn boolean(value: bool) -> AstNode { AstNode::Literal(Object::Boolean(value)) }
     fn null() -> AstNode { AstNode::Literal(Object::Null) }
+
+    fn string(value: Vec<StringElement>) -> AstNode {
+        if value.len() == 0 {
+            AstNode::Literal(Object::String("".to_string()))
+        } else if value.len() == 1 {
+            match &value[0] {
+                StringElement::Raw(val) => AstNode::Literal(Object::String(val.clone())),
+                _ => AstNode::String(value)
+            }
+        } else {
+            AstNode::String(value)
+        }
+    }
 }
 
 fn postpad<I, O, E: ParseError<I>, F>(
@@ -93,14 +118,15 @@ static KEYWORDS: [&'static str; 12] = [
 
 fn identifier<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    map(
+) -> IResult<&'a str, &'a str, E> {
+    // map(
         verify(
             is_not("-+/*[](){}\"\' \t\n\r"),
             |out: &str| !KEYWORDS.contains(&out),
-        ),
-        |out: &str| AstNode::Identifier(out.to_string())
-    )(input)
+        )(input)
+        // out.to_string()
+        // |out: &str| AstNode::Identifier(out.to_string())
+    // )(input)
 }
 
 fn map_identifier<'a, E: CompleteError<'a>>(
@@ -168,6 +194,37 @@ fn float<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+fn string_data<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, StringElement, E> {
+    map(
+        escaped_transform(
+            recognize(many1(none_of("\"\\$"))),
+            '\\',
+            alt((
+                value("\"", tag("\"")),
+                value("\\", tag("\\")),
+            )),
+        ),
+        StringElement::Raw,
+    )(input)
+}
+
+fn string_interp<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, StringElement, E> {
+    map(
+        preceded(
+            postpad(tag("${")),
+            terminated(
+                expression,
+                char('}'),
+            ),
+        ),
+        StringElement::Interpolate,
+    )(input)
+}
+
 fn string<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, AstNode, E> {
@@ -175,24 +232,11 @@ fn string<'a, E: CompleteError<'a>>(
         preceded(
             char('\"'),
             terminated(
-                alt((
-                    map(
-                        peek(char('\"')),
-                        |_| "".to_string(),
-                    ),
-                    escaped_transform(
-                        recognize(many1(none_of("\"\\"))),
-                        '\\',
-                        alt((
-                            value("\"", tag("\"")),
-                            value("\\", tag("\\")),
-                        )),
-                    ),
-                )),
+                many0(alt((string_interp, string_data))),
                 char('\"'),
             ),
         ),
-        AstNode::string,
+        AstNode::string
     )(input)
 }
 
@@ -264,7 +308,8 @@ fn map_element<'a, E: CompleteError<'a>>(
                 ),
                 expression,
             )),
-            |(key, value)| MapElement::Singleton(AstNode::string(key.to_string()), value),
+            |(key, value)| MapElement::Singleton({
+                let value = key.to_string(); AstNode::Literal(Object::String(value.to_string())) }, value),
         ),
     ))(input)
 }
@@ -295,16 +340,61 @@ fn postfixable<'a, E: CompleteError<'a>>(
 ) -> IResult<&'a str, AstNode, E> {
     postpad(alt((
         atomic,
-        identifier,
+        map(identifier, |out: &str| AstNode::Identifier(out.to_string())),
         list,
         mapping,
     )))(input)
 }
 
+fn binding<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, Binding, E> {
+    postpad(alt((
+        map(identifier, |out: &str| Binding::Identifier(out.to_string())),
+    )))(input)
+}
+
+fn let_block<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    map(
+        tuple((
+            many1(
+                tuple((
+                    preceded(
+                        postpad(tag("let")),
+                        binding,
+                    ),
+                    preceded(
+                        postpad(tag("=")),
+                        expression,
+                    ),
+                )),
+            ),
+            preceded(
+                postpad(tag("in")),
+                expression,
+            ),
+        )),
+        |(bindings, expr)| AstNode::Let(bindings, Box::new(expr)),
+    )(input)
+}
+
+fn composite<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    alt((
+        let_block,
+    ))(input)
+}
+
 fn expression<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, AstNode, E> {
-    postfixable(input)
+    alt((
+        composite,
+        postfixable,
+    ))(input)
 }
 
 pub fn parse(input: &str) -> Result<AstNode, String> {
