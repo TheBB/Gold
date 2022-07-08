@@ -12,7 +12,7 @@ use nom::{
     combinator::{map, map_res, opt, recognize, value, verify},
     error::{ParseError, FromExternalError, ContextError, VerboseError},
     multi::{many0, many1, separated_list0},
-    sequence::{preceded, terminated, tuple},
+    sequence::{delimited, preceded, terminated, tuple},
 };
 
 trait CompleteError<'a>:
@@ -60,6 +60,13 @@ pub enum MapElement {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Operator {
+    Index(Box<AstNode>),
+    ArithmeticalNegate,
+    LogicalNegate,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum AstNode {
     Literal(Object),
     String(Vec<StringElement>),
@@ -67,6 +74,7 @@ pub enum AstNode {
     List(Vec<ListElement>),
     Map(Vec<MapElement>),
     Let(Vec<(Binding, AstNode)>, Box<AstNode>),
+    Operator(Box<AstNode>, Operator),
 }
 
 impl AstNode {
@@ -116,17 +124,22 @@ static KEYWORDS: [&'static str; 12] = [
     "not",
 ];
 
+fn keyword<'a, E: ParseError<&'a str>>(
+    value: &'static str
+) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
+    verify(
+        is_not(",.-+/*[](){}\"\' \t\n\r"),
+        move |out: &str| out == value,
+    )
+}
+
 fn identifier<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, &'a str, E> {
-    // map(
-        verify(
-            is_not("-+/*[](){}\"\' \t\n\r"),
-            |out: &str| !KEYWORDS.contains(&out),
-        )(input)
-        // out.to_string()
-        // |out: &str| AstNode::Identifier(out.to_string())
-    // )(input)
+    verify(
+        is_not(".-+/*[](){}\"\' \t\n\r"),
+        |out: &str| !KEYWORDS.contains(&out),
+    )(input)
 }
 
 fn map_identifier<'a, E: CompleteError<'a>>(
@@ -244,15 +257,15 @@ fn boolean<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, AstNode, E> {
     alt((
-        value(AstNode::boolean(true), tag("true")),
-        value(AstNode::boolean(false), tag("false")),
+        value(AstNode::boolean(true), keyword("true")),
+        value(AstNode::boolean(false), keyword("false")),
     ))(input)
 }
 
 fn null<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, AstNode, E> {
-    value(AstNode::null(), tag("null"))(input)
+    value(AstNode::null(), keyword("null"))(input)
 }
 
 fn atomic<'a, E: CompleteError<'a>>(
@@ -346,6 +359,71 @@ fn postfixable<'a, E: CompleteError<'a>>(
     )))(input)
 }
 
+fn object_access<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, Operator, E> {
+    map(
+        preceded(
+            postpad(char('.')),
+            identifier,
+        ),
+        |out: &str| Operator::Index(Box::new(AstNode::Literal(Object::String(out.to_string())))),
+    )(input)
+}
+
+fn object_index<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, Operator, E> {
+    map(
+        delimited(
+            postpad(char('[')),
+            expression,
+            char(']'),
+        ),
+        |expr| Operator::Index(Box::new(expr)),
+    )(input)
+}
+
+fn postfixed<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    map(
+        tuple((
+            postfixable,
+            many0(postpad(alt((
+                object_access,
+                object_index,
+            )))),
+        )),
+        |(expr, ops)| {
+            ops.into_iter().fold(
+                expr,
+                |expr, op| AstNode::Operator(Box::new(expr), op),
+            )
+        },
+    )(input)
+}
+
+fn prefixed<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    map(
+        tuple((
+            many0(alt((
+                value(Operator::ArithmeticalNegate, postpad(tag("-"))),
+                value(Operator::LogicalNegate, postpad(keyword("not"))),
+            ))),
+            postfixed,
+        )),
+        |(ops, expr)| {
+            ops.into_iter().rev().fold(
+                expr,
+                |expr, op| AstNode::Operator(Box::new(expr), op),
+            )
+        },
+    )(input)
+}
+
 fn binding<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, Binding, E> {
@@ -362,7 +440,7 @@ fn let_block<'a, E: CompleteError<'a>>(
             many1(
                 tuple((
                     preceded(
-                        postpad(tag("let")),
+                        postpad(keyword("let")),
                         binding,
                     ),
                     preceded(
@@ -393,7 +471,7 @@ fn expression<'a, E: CompleteError<'a>>(
 ) -> IResult<&'a str, AstNode, E> {
     alt((
         composite,
-        postfixable,
+        prefixed,
     ))(input)
 }
 
