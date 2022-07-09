@@ -368,3 +368,159 @@ fn unary_operators() {
         )),
     );
 }
+
+#[test]
+fn power_operators() {
+    assert_eq!(
+        parse("2^3"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Literal(Object::Integer(2))),
+            Operator::Power(
+                Box::new(AstNode::Literal(Object::Integer(3))),
+            ),
+        )),
+    );
+
+    assert_eq!(
+        parse("2^-3"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Literal(Object::Integer(2))),
+            Operator::Power(
+                Box::new(AstNode::Operator(
+                    Box::new(AstNode::Literal(Object::Integer(3))),
+                    Operator::ArithmeticalNegate,
+                )),
+            ),
+        )),
+    );
+
+    assert_eq!(
+        parse("-2^3"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Operator(
+                Box::new(AstNode::Literal(Object::Integer(2))),
+                Operator::Power(
+                    Box::new(AstNode::Literal(Object::Integer(3))),
+                ),
+            )),
+            Operator::ArithmeticalNegate,
+        )),
+    );
+
+    assert_eq!(
+        parse("-2^-3"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Operator(
+                Box::new(AstNode::Literal(Object::Integer(2))),
+                Operator::Power(
+                    Box::new(AstNode::Operator(
+                        Box::new(AstNode::Literal(Object::Integer(3))),
+                        Operator::ArithmeticalNegate,
+                    )),
+                ),
+            )),
+            Operator::ArithmeticalNegate,
+        )),
+    );
+}
+
+#[test]
+fn operators() {
+    assert_eq!(
+        parse("1 + 2"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Literal(Object::Integer(1))),
+            Operator::Add(Box::new(
+                AstNode::Literal(Object::Integer(2)),
+            )),
+        )),
+    );
+
+    assert_eq!(
+        parse("1 / 2 + 3"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Operator(
+                Box::new(AstNode::Literal(Object::Integer(1))),
+                Operator::Divide(Box::new(
+                    AstNode::Literal(Object::Integer(2))
+                )),
+            )),
+            Operator::Add(Box::new(
+                AstNode::Literal(Object::Integer(3)),
+            )),
+        )),
+    );
+
+    assert_eq!(
+        parse("1 + 2 - 3 * 4 // 5 / 6"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Operator(
+                Box::new(AstNode::Literal(Object::Integer(1))),
+                Operator::Add(Box::new(AstNode::Literal(Object::Integer(2)))),
+            )),
+            Operator::Subtract(Box::new(
+                AstNode::Operator(
+                    Box::new(AstNode::Operator(
+                        Box::new(AstNode::Operator(
+                            Box::new(AstNode::Literal(Object::Integer(3))),
+                            Operator::Multiply(Box::new(AstNode::Literal(Object::Integer(4)))),
+                        )),
+                        Operator::IntegerDivide(Box::new(AstNode::Literal(Object::Integer(5)))),
+                    )),
+                    Operator::Divide(Box::new(AstNode::Literal(Object::Integer(6)))),
+                ),
+            )),
+        )),
+    );
+
+    assert_eq!(
+        parse("1 < 2"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Literal(Object::Integer(1))),
+            Operator::Less(Box::new(
+                AstNode::Literal(Object::Integer(2)),
+            )),
+        )),
+    );
+
+    assert_eq!(
+        parse("1 > 2 <= 3 >= 4 == 5 != 6"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Operator(
+                Box::new(AstNode::Operator(
+                    Box::new(AstNode::Operator(
+                        Box::new(AstNode::Operator(
+                            Box::new(AstNode::Literal(Object::Integer(1))),
+                            Operator::Greater(Box::new(
+                                AstNode::Literal(Object::Integer(2)),
+                            )),
+                        )),
+                        Operator::LessEqual(Box::new(
+                            AstNode::Literal(Object::Integer(3)),
+                        )),
+                    )),
+                    Operator::GreaterEqual(Box::new(
+                        AstNode::Literal(Object::Integer(4)),
+                    )),
+                )),
+                Operator::Equal(Box::new(
+                    AstNode::Literal(Object::Integer(5)),
+                )),
+            )),
+            Operator::NotEqual(Box::new(
+                AstNode::Literal(Object::Integer(6)),
+            )),
+        )),
+    );
+
+    assert_eq!(
+        parse("1 and 2 or 3"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Operator(
+                Box::new(AstNode::Literal(Object::Integer(1))),
+                Operator::And(Box::new(AstNode::Literal(Object::Integer(2)))),
+            )),
+            Operator::Or(Box::new(AstNode::Literal(Object::Integer(3)))),
+        )),
+    );
+}

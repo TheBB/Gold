@@ -64,7 +64,23 @@ pub enum Operator {
     Index(Box<AstNode>),
     ArithmeticalNegate,
     LogicalNegate,
+    Power(Box<AstNode>),
+    Multiply(Box<AstNode>),
+    IntegerDivide(Box<AstNode>),
+    Divide(Box<AstNode>),
+    Add(Box<AstNode>),
+    Subtract(Box<AstNode>),
+    Less(Box<AstNode>),
+    Greater(Box<AstNode>),
+    LessEqual(Box<AstNode>),
+    GreaterEqual(Box<AstNode>),
+    Equal(Box<AstNode>),
+    NotEqual(Box<AstNode>),
+    And(Box<AstNode>),
+    Or(Box<AstNode>),
 }
+
+type OpCons = fn(Box<AstNode>) -> Operator;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstNode {
@@ -104,7 +120,7 @@ fn postpad<I, O, E: ParseError<I>, F>(
 where
     F: Parser<I, O, E>,
     I: Clone + nom::InputTakeAtPosition,
-    <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone
+    <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
 {
     terminated(parser, multispace0)
 }
@@ -413,7 +429,7 @@ fn prefixed<'a, E: CompleteError<'a>>(
                 value(Operator::ArithmeticalNegate, postpad(tag("-"))),
                 value(Operator::LogicalNegate, postpad(keyword("not"))),
             ))),
-            postfixed,
+            power,
         )),
         |(ops, expr)| {
             ops.into_iter().rev().fold(
@@ -421,6 +437,154 @@ fn prefixed<'a, E: CompleteError<'a>>(
                 |expr, op| AstNode::Operator(Box::new(expr), op),
             )
         },
+    )(input)
+}
+
+fn binop<I, E: ParseError<I>, G, H>(
+    operators: G,
+    operand: H,
+) -> impl FnMut(I) -> IResult<I, Operator, E>
+where
+    I: Clone + nom::InputTakeAtPosition,
+    <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
+    G: Parser<I, OpCons, E>,
+    H: Parser<I, AstNode, E>,
+{
+    map(
+        tuple((
+            postpad(operators),
+            operand,
+        )),
+        |(func, expr)| func(Box::new(expr)),
+    )
+}
+
+fn binops<I, E: ParseError<I>, G, H>(
+    operators: G,
+    operand: H,
+    right: bool,
+) -> impl FnMut(I) -> IResult<I, AstNode, E>
+where
+    I: Clone + nom::InputTakeAtPosition + nom::InputLength,
+    <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
+    G: Parser<I, Operator, E>,
+    H: Parser<I, AstNode, E> + Copy,
+{
+    map(
+        tuple((
+            operand,
+            many0(operators),
+        )),
+        move |(expr, ops)| {
+            let acc = |expr: AstNode, op: Operator| AstNode::Operator(Box::new(expr), op);
+            if right {
+                ops.into_iter().rev().fold(expr, acc)
+            } else {
+                ops.into_iter().fold(expr, acc)
+            }
+        },
+    )
+}
+
+fn power<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    binops(
+        binop(
+            alt((
+                value(Operator::Power as OpCons, tag("^")),
+                value(Operator::Multiply as OpCons, tag("*")),
+            )),
+            prefixed,
+        ),
+        postfixed,
+        true,
+    )(input)
+}
+
+fn lbinop<I, E: ParseError<I>, G, H>(
+    operators: G,
+    operands: H
+) -> impl FnMut(I) -> IResult<I, AstNode, E>
+where
+    I: Clone + nom::InputTakeAtPosition + nom::InputLength,
+    <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
+    G: Parser<I, OpCons, E>,
+    H: Parser<I, AstNode, E> + Copy,
+{
+    binops(binop(operators, operands), operands, false)
+}
+
+fn product<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    lbinop(
+        alt((
+            value(Operator::Multiply as OpCons, tag("*")),
+            value(Operator::IntegerDivide as OpCons, tag("//")),
+            value(Operator::Divide as OpCons, tag("/")),
+        )),
+        prefixed
+    )(input)
+}
+
+fn sum<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    lbinop(
+        alt((
+            value(Operator::Add as OpCons, tag("+")),
+            value(Operator::Subtract as OpCons, tag("-")),
+        )),
+        product,
+    )(input)
+}
+
+fn inequality<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    lbinop(
+        alt((
+            value(Operator::LessEqual as OpCons, tag("<=")),
+            value(Operator::GreaterEqual as OpCons, tag(">=")),
+            value(Operator::Less as OpCons, tag("<")),
+            value(Operator::Greater as OpCons, tag(">")),
+        )),
+        sum,
+    )(input)
+}
+
+fn equality<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    lbinop(
+        alt((
+            value(Operator::Equal as OpCons, tag("==")),
+            value(Operator::NotEqual as OpCons, tag("!=")),
+        )),
+        inequality,
+    )(input)
+}
+
+fn conjunction<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    lbinop(
+        alt((
+            value(Operator::And as OpCons, tag("and")),
+        )),
+        equality,
+    )(input)
+}
+
+fn disjunction<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    lbinop(
+        alt((
+            value(Operator::Or as OpCons, tag("or")),
+        )),
+        conjunction,
     )(input)
 }
 
@@ -471,7 +635,7 @@ fn expression<'a, E: CompleteError<'a>>(
 ) -> IResult<&'a str, AstNode, E> {
     alt((
         composite,
-        prefixed,
+        disjunction,
     ))(input)
 }
 
