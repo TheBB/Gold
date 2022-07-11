@@ -271,6 +271,99 @@ fn let_blocks() {
             Box::new(AstNode::Identifier("a".to_string())),
         )),
     );
+
+    assert_eq!(
+        parse("let [a, b=1, ...] = c in [a, b]"),
+        Ok(AstNode::Let(
+            vec![
+                (
+                    Binding::List(vec![
+                        ListBindingElement::Binding(Binding::Identifier("a".to_string()), None),
+                        ListBindingElement::Binding(Binding::Identifier("b".to_string()), Some(AstNode::Literal(Object::Integer(1)))),
+                        ListBindingElement::Slurp,
+                    ]),
+                    AstNode::Identifier("c".to_string()),
+                ),
+            ],
+            Box::new(AstNode::List(vec![
+                ListElement::Singleton(AstNode::Identifier("a".to_string())),
+                ListElement::Singleton(AstNode::Identifier("b".to_string())),
+            ])),
+        ))
+    );
+
+    assert_eq!(
+        parse("let [_, ...rest] = list in rest"),
+        Ok(AstNode::Let(
+            vec![
+                (
+                    Binding::List(vec![
+                        ListBindingElement::Binding(Binding::Identifier("_".to_string()), None),
+                        ListBindingElement::SlurpTo("rest".to_string()),
+                    ]),
+                    AstNode::Identifier("list".to_string()),
+                ),
+            ],
+            Box::new(AstNode::Identifier("rest".to_string()),)
+        )),
+    );
+
+    assert_eq!(
+        parse("let {a} = x in a"),
+        Ok(AstNode::Let(
+            vec![
+                (
+                    Binding::Map(vec![
+                        MapBindingElement::Binding(
+                            "a".to_string(),
+                            None,
+                            Binding::Identifier("a".to_string())
+                        ),
+                    ]),
+                    AstNode::Identifier("x".to_string()),
+                ),
+            ],
+            Box::new(AstNode::Identifier("a".to_string())),
+        )),
+    );
+
+    assert_eq!(
+        parse("let {(a)} = x in a"),
+        Ok(AstNode::Let(
+            vec![
+                (
+                    Binding::Map(vec![
+                        MapBindingElement::Binding(
+                            "a".to_string(),
+                            None,
+                            Binding::Identifier("a".to_string())
+                        ),
+                    ]),
+                    AstNode::Identifier("x".to_string()),
+                ),
+            ],
+            Box::new(AstNode::Identifier("a".to_string())),
+        )),
+    );
+
+    assert_eq!(
+        parse("let {(a = y)} = x in a"),
+        Ok(AstNode::Let(
+            vec![
+                (
+                    Binding::Map(vec![
+                        MapBindingElement::Binding(
+                            "a".to_string(),
+                            Some(AstNode::Identifier("y".to_string())),
+                            Binding::Identifier("a".to_string())
+                        ),
+                    ]),
+                    AstNode::Identifier("x".to_string()),
+                ),
+            ],
+            Box::new(AstNode::Identifier("a".to_string())),
+        )),
+    );
 }
 
 #[test]

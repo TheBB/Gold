@@ -39,8 +39,23 @@ pub enum Object {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum ListBindingElement {
+    Binding(Binding, Option<AstNode>),
+    SlurpTo(String),
+    Slurp,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum MapBindingElement {
+    Binding(String, Option<AstNode>, Binding),
+    SlurpTo(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Binding {
     Identifier(String),
+    List(Vec<ListBindingElement>),
+    Map(Vec<MapBindingElement>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -144,7 +159,7 @@ fn keyword<'a, E: ParseError<&'a str>>(
     value: &'static str
 ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
     verify(
-        is_not(",.-+/*[](){}\"\' \t\n\r"),
+        is_not("=,.-+/*[](){}\"\' \t\n\r"),
         move |out: &str| out == value,
     )
 }
@@ -153,7 +168,7 @@ fn identifier<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, &'a str, E> {
     verify(
-        is_not(".-+/*[](){}\"\' \t\n\r"),
+        is_not("=.,-+/*[](){}\"\' \t\n\r"),
         |out: &str| !KEYWORDS.contains(&out),
     )(input)
 }
@@ -161,7 +176,7 @@ fn identifier<'a, E: CompleteError<'a>>(
 fn map_identifier<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, &'a str, E> {
-    is_not("=$\"\' \t\n\r")(input)
+    is_not("=$}()\"\' \t\n\r")(input)
 }
 
 fn decimal<'a, E: CompleteError<'a>>(
@@ -588,12 +603,132 @@ fn disjunction<'a, E: CompleteError<'a>>(
     )(input)
 }
 
-fn binding<'a, E: CompleteError<'a>>(
+fn ident_binding<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, Binding, E> {
     postpad(alt((
         map(identifier, |out: &str| Binding::Identifier(out.to_string())),
     )))(input)
+}
+
+fn list_binding_element<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, ListBindingElement, E> {
+    map(
+        tuple((binding, opt(preceded(postpad(char('=')), expression)))),
+        |(b, e)| ListBindingElement::Binding(b, e)
+    )(input)
+}
+
+fn list_binding<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, Binding, E> {
+    map(
+        terminated(
+            tuple((
+                separated_list0(
+                    postpad(char(',')),
+                    list_binding_element,
+                ),
+                opt(
+                    preceded(
+                        tuple((postpad(char(',')), postpad(tag("...")))),
+                        opt(identifier),
+                    ),
+                ),
+            )),
+            opt(postpad(char(','))),
+        ),
+        |(mut bindings, slurp)| {
+            match slurp {
+                Some(Some(name)) => bindings.push(ListBindingElement::SlurpTo(name.to_string())),
+                Some(None) => bindings.push(ListBindingElement::Slurp),
+                _ => {}
+            };
+            Binding::List(bindings)
+        }
+    )(input)
+}
+
+fn map_binding_element<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, MapBindingElement, E> {
+    map(
+        tuple((
+            alt((
+                map(
+                    postpad(map_identifier),
+                    |name: &str| (name, None),
+                ),
+                map(
+                    delimited(postpad(char('(')), postpad(map_identifier), postpad(char(')'))),
+                    |name: &str| (name, None),
+                ),
+                map(
+                    delimited(
+                        postpad(char('(')),
+                        tuple((
+                            terminated(postpad(map_identifier), postpad(char('='))),
+                            expression,
+                        )),
+                        postpad(char(')')),
+                    ),
+                    |(name, expr)| (name, Some(expr)),
+                ),
+            )),
+            opt(
+                preceded(
+                    postpad(char('=')),
+                    binding,
+                ),
+            ),
+        )),
+        |((name, default), binding)| {
+            match binding {
+                None => MapBindingElement::Binding(name.to_string(), default, Binding::Identifier(name.to_string())),
+                Some(x) => MapBindingElement::Binding(name.to_string(), default, x),
+            }
+        }
+    )(input)
+}
+
+fn map_binding<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, Binding, E> {
+    map(
+        terminated(
+            tuple((
+                separated_list0(
+                    postpad(char(',')),
+                    map_binding_element
+                ),
+                opt(
+                    preceded(
+                        tuple((postpad(char(',')), postpad(tag("...")))),
+                        postpad(identifier),
+                    ),
+                ),
+            )),
+            opt(postpad(char(','))),
+        ),
+        |(mut bindings, slurp)| {
+            match slurp {
+                Some(name) => bindings.push(MapBindingElement::SlurpTo(name.to_string())),
+                _ => {}
+            };
+            Binding::Map(bindings)
+        },
+    )(input)
+}
+
+fn binding<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, Binding, E> {
+    alt((
+        ident_binding,
+        delimited(postpad(char('[')), list_binding, postpad(char(']'))),
+        delimited(postpad(char('{')), map_binding, postpad(char('}'))),
+    ))(input)
 }
 
 fn let_block<'a, E: CompleteError<'a>>(
