@@ -75,8 +75,15 @@ pub enum MapElement {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum ArgElement {
+    Singleton(AstNode),
+    Keyword(String, AstNode),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
     Index(Box<AstNode>),
+    FunCall(Vec<ArgElement>),
     ArithmeticalNegate,
     LogicalNegate,
     Power(Box<AstNode>),
@@ -106,6 +113,7 @@ pub enum AstNode {
     Map(Vec<MapElement>),
     Let(Vec<(Binding, AstNode)>, Box<AstNode>),
     Operator(Box<AstNode>, Operator),
+    Function(Binding, Binding, Box<AstNode>),
 }
 
 impl AstNode {
@@ -159,7 +167,7 @@ fn keyword<'a, E: ParseError<&'a str>>(
     value: &'static str
 ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
     verify(
-        is_not("=,.-+/*[](){}\"\' \t\n\r"),
+        is_not("=,;.-+/*[](){}\"\' \t\n\r"),
         move |out: &str| out == value,
     )
 }
@@ -168,7 +176,7 @@ fn identifier<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, &'a str, E> {
     verify(
-        is_not("=.,-+/*[](){}\"\' \t\n\r"),
+        is_not("=.,;-+/*[](){}\"\' \t\n\r"),
         |out: &str| !KEYWORDS.contains(&out),
     )(input)
 }
@@ -383,6 +391,7 @@ fn postfixable<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, AstNode, E> {
     postpad(alt((
+        delimited(postpad(char('(')), expression, postpad(char(')'))),
         atomic,
         map(identifier, |out: &str| AstNode::Identifier(out.to_string())),
         list,
@@ -415,6 +424,43 @@ fn object_index<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+fn function_arg<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, ArgElement, E> {
+    alt((
+        map(
+            tuple((
+                postpad(identifier),
+                preceded(
+                    postpad(char('=')),
+                    expression,
+                ),
+            )),
+            |(name, expr)| ArgElement::Keyword(name.to_string(), expr),
+        ),
+        map(
+            expression,
+            ArgElement::Singleton,
+        ),
+    ))(input)
+}
+
+fn function_call<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, Operator, E> {
+    map(
+        delimited(
+            postpad(char('(')),
+            separated_list0(
+                postpad(char(',')),
+                function_arg,
+            ),
+            postpad(char(')')),
+        ),
+        Operator::FunCall,
+    )(input)
+}
+
 fn postfixed<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, AstNode, E> {
@@ -424,6 +470,7 @@ fn postfixed<'a, E: CompleteError<'a>>(
             many0(postpad(alt((
                 object_access,
                 object_index,
+                function_call,
             )))),
         )),
         |(expr, ops)| {
@@ -731,6 +778,37 @@ fn binding<'a, E: CompleteError<'a>>(
     ))(input)
 }
 
+fn function<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    map(
+        tuple((
+            delimited(
+                postpad(char('(')),
+                tuple((
+                    list_binding,
+                    opt(
+                        preceded(
+                            postpad(char(';')),
+                            map_binding,
+                        ),
+                    ),
+                )),
+                postpad(char(')')),
+            ),
+            preceded(
+                postpad(tag("=>")),
+                expression,
+            ),
+        )),
+        |((posargs, kwargs), expr)| AstNode::Function(
+            posargs,
+            kwargs.unwrap_or_else(|| Binding::Map(vec![])),
+            Box::new(expr),
+        )
+    )(input)
+}
+
 fn let_block<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, AstNode, E> {
@@ -762,6 +840,7 @@ fn composite<'a, E: CompleteError<'a>>(
 ) -> IResult<&'a str, AstNode, E> {
     alt((
         let_block,
+        function,
     ))(input)
 }
 

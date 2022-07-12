@@ -430,6 +430,74 @@ fn indexing() {
 }
 
 #[test]
+fn funcall() {
+    assert_eq!(
+        parse("func(1, 2, 3)"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Identifier("func".to_string())),
+            Operator::FunCall(vec![
+                ArgElement::Singleton(AstNode::Literal(Object::Integer(1))),
+                ArgElement::Singleton(AstNode::Literal(Object::Integer(2))),
+                ArgElement::Singleton(AstNode::Literal(Object::Integer(3))),
+            ]),
+        )),
+    );
+
+    assert_eq!(
+        parse("func(1, 2, a=3)"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Identifier("func".to_string())),
+            Operator::FunCall(vec![
+                ArgElement::Singleton(AstNode::Literal(Object::Integer(1))),
+                ArgElement::Singleton(AstNode::Literal(Object::Integer(2))),
+                ArgElement::Keyword(
+                    "a".to_string(),
+                    AstNode::Literal(Object::Integer(3)),
+                ),
+            ]),
+        )),
+    );
+
+    assert_eq!(
+        parse("func(a=2, b=3)"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Identifier("func".to_string())),
+            Operator::FunCall(vec![
+                ArgElement::Keyword(
+                    "a".to_string(),
+                    AstNode::Literal(Object::Integer(2)),
+                ),
+                ArgElement::Keyword(
+                    "b".to_string(),
+                    AstNode::Literal(Object::Integer(3)),
+                ),
+            ]),
+        )),
+    );
+
+    assert_eq!(
+        parse("((x,y) => x+y)(1,2)"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Function(
+                Binding::List(vec![
+                    ListBindingElement::Binding(Binding::Identifier("x".to_string()), None),
+                    ListBindingElement::Binding(Binding::Identifier("y".to_string()), None),
+                ]),
+                Binding::Map(vec![]),
+                Box::new(AstNode::Operator(
+                    Box::new(AstNode::Identifier("x".to_string())),
+                    Operator::Add(Box::new(AstNode::Identifier("y".to_string()))),
+                )),
+            )),
+            Operator::FunCall(vec![
+                ArgElement::Singleton(AstNode::Literal(Object::Integer(1))),
+                ArgElement::Singleton(AstNode::Literal(Object::Integer(2))),
+            ]),
+        )),
+    );
+}
+
+#[test]
 fn unary_operators() {
     assert_eq!(
         parse("-1"),
@@ -614,6 +682,46 @@ fn operators() {
                 Operator::And(Box::new(AstNode::Literal(Object::Integer(2)))),
             )),
             Operator::Or(Box::new(AstNode::Literal(Object::Integer(3)))),
+        )),
+    );
+}
+
+#[test]
+fn functions() {
+    assert_eq!(
+        parse("() => 1"),
+        Ok(AstNode::Function(
+            Binding::List(vec![]),
+            Binding::Map(vec![]),
+            Box::new(AstNode::Literal(Object::Integer(1))),
+        ))
+    );
+
+    assert_eq!(
+        parse("(;) => 1"),
+        Ok(AstNode::Function(
+            Binding::List(vec![]),
+            Binding::Map(vec![]),
+            Box::new(AstNode::Literal(Object::Integer(1))),
+        ))
+    );
+
+    assert_eq!(
+        parse("(a) => let b = a in b"),
+        Ok(AstNode::Function(
+            Binding::List(vec![
+                ListBindingElement::Binding(Binding::Identifier("a".to_string()), None),
+            ]),
+            Binding::Map(vec![]),
+            Box::new(AstNode::Let(
+                vec![
+                    (
+                        Binding::Identifier("b".to_string()),
+                        AstNode::Identifier("a".to_string()),
+                    ),
+                ],
+                Box::new(AstNode::Identifier("b".to_string())),
+            )),
         )),
     );
 }
