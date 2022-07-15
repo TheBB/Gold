@@ -121,6 +121,43 @@ fn lists() {
             ListElement::Singleton(AstNode::Identifier("lel".to_string())),
         ])),
     );
+
+    assert_eq!(
+        parse("[1, ...x, y]"),
+        Ok(AstNode::List(vec![
+            ListElement::Singleton(AstNode::Literal(Object::Integer(1))),
+            ListElement::Splat(AstNode::Identifier("x".to_string())),
+            ListElement::Singleton(AstNode::Identifier("y".to_string())),
+        ])),
+    );
+
+    assert_eq!(
+        parse("[1, for x in y: x, 2]"),
+        Ok(AstNode::List(vec![
+            ListElement::Singleton(AstNode::Literal(Object::Integer(1))),
+            ListElement::Loop(
+                Binding::Identifier("x".to_string()),
+                AstNode::Identifier("y".to_string()),
+                Box::new(ListElement::Singleton(AstNode::Identifier("x".to_string()))),
+            ),
+            ListElement::Singleton(AstNode::Literal(Object::Integer(2))),
+        ])),
+    );
+
+    assert_eq!(
+        parse("[if f(x): x]"),
+        Ok(AstNode::List(vec![
+            ListElement::Cond(
+                AstNode::Operator(
+                    Box::new(AstNode::Identifier("f".to_string())),
+                    Operator::FunCall(vec![
+                        ArgElement::Singleton(AstNode::Identifier("x".to_string())),
+                    ]),
+                ),
+                Box::new(ListElement::Singleton(AstNode::Identifier("x".to_string()))),
+            ),
+        ])),
+    );
 }
 
 #[test]
@@ -245,6 +282,52 @@ fn maps() {
                 AstNode::Literal(Object::String("ident-with-hyphen".to_string())),
                 AstNode::Literal(Object::Integer(1)),
             )
+        ])),
+    );
+
+    assert_eq!(
+        parse("{...y, x = 1}"),
+        Ok(AstNode::Map(vec![
+            MapElement::Splat(AstNode::Identifier("y".to_string())),
+            MapElement::Singleton(
+                AstNode::Literal(Object::String("x".to_string())),
+                AstNode::Literal(Object::Integer(1)),
+            ),
+        ])),
+    );
+
+    assert_eq!(
+        parse("{for [x,y] in z: x = y}"),
+        Ok(AstNode::Map(vec![
+            MapElement::Loop(
+                Binding::List(vec![
+                    ListBindingElement::Binding(Binding::Identifier("x".to_string()), None),
+                    ListBindingElement::Binding(Binding::Identifier("y".to_string()), None),
+                ]),
+                AstNode::Identifier("z".to_string()),
+                Box::new(MapElement::Singleton(
+                    AstNode::Literal(Object::String("x".to_string())),
+                    AstNode::Identifier("y".to_string()),
+                )),
+            ),
+        ])),
+    );
+
+    assert_eq!(
+        parse("{if f(x): z = y}"),
+        Ok(AstNode::Map(vec![
+            MapElement::Cond(
+                AstNode::Operator(
+                    Box::new(AstNode::Identifier("f".to_string())),
+                    Operator::FunCall(vec![
+                        ArgElement::Singleton(AstNode::Identifier("x".to_string())),
+                    ]),
+                ),
+                Box::new(MapElement::Singleton(
+                    AstNode::Literal(Object::String("z".to_string())),
+                    AstNode::Identifier("y".to_string()),
+                )),
+            ),
         ])),
     );
 }
@@ -492,6 +575,19 @@ fn funcall() {
             Operator::FunCall(vec![
                 ArgElement::Singleton(AstNode::Literal(Object::Integer(1))),
                 ArgElement::Singleton(AstNode::Literal(Object::Integer(2))),
+            ]),
+        )),
+    );
+
+    assert_eq!(
+        parse("func(1, ...y, z=2, ...q)"),
+        Ok(AstNode::Operator(
+            Box::new(AstNode::Identifier("func".to_string())),
+            Operator::FunCall(vec![
+                ArgElement::Singleton(AstNode::Literal(Object::Integer(1))),
+                ArgElement::Splat(AstNode::Identifier("y".to_string())),
+                ArgElement::Keyword("z".to_string(), AstNode::Literal(Object::Integer(2))),
+                ArgElement::Splat(AstNode::Identifier("q".to_string())),
             ]),
         )),
     );

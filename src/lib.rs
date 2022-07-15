@@ -67,17 +67,24 @@ pub enum StringElement {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ListElement {
     Singleton(AstNode),
+    Splat(AstNode),
+    Loop(Binding, AstNode, Box<ListElement>),
+    Cond(AstNode, Box<ListElement>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MapElement {
     Singleton(AstNode, AstNode),
+    Splat(AstNode),
+    Loop(Binding, AstNode, Box<MapElement>),
+    Cond(AstNode, Box<MapElement>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ArgElement {
     Singleton(AstNode),
     Keyword(String, AstNode),
+    Splat(AstNode),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -167,7 +174,7 @@ fn keyword<'a, E: ParseError<&'a str>>(
     value: &'static str
 ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
     verify(
-        is_not("=,;.-+/*[](){}\"\' \t\n\r"),
+        is_not("=,;.:-+/*[](){}\"\' \t\n\r"),
         move |out: &str| out == value,
     )
 }
@@ -176,7 +183,7 @@ fn identifier<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, &'a str, E> {
     verify(
-        is_not("=.,;-+/*[](){}\"\' \t\n\r"),
+        is_not("=.,:;-+/*[](){}\"\' \t\n\r"),
         |out: &str| !KEYWORDS.contains(&out),
     )(input)
 }
@@ -323,6 +330,25 @@ fn list_element<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, ListElement, E> {
     alt((
+        map(
+            preceded(postpad(tag("...")), expression),
+            ListElement::Splat,
+        ),
+        map(
+            tuple((
+                preceded(postpad(tag("for")), binding),
+                preceded(postpad(tag("in")), expression),
+                preceded(postpad(char(':')), list_element),
+            )),
+            |(binding, iterable, expr)| ListElement::Loop(binding, iterable, Box::new(expr)),
+        ),
+        map(
+            tuple((
+                preceded(postpad(tag("if")), expression),
+                preceded(postpad(char(':')), list_element),
+            )),
+            |(cond, expr)| ListElement::Cond(cond, Box::new(expr)),
+        ),
         map(expression, ListElement::Singleton),
     ))(input)
 }
@@ -352,6 +378,25 @@ fn map_element<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, MapElement, E> {
     alt((
+        map(
+            preceded(postpad(tag("...")), expression),
+            MapElement::Splat,
+        ),
+        map(
+            tuple((
+                preceded(postpad(tag("for")), binding),
+                preceded(postpad(tag("in")), expression),
+                preceded(postpad(char(':')), map_element),
+            )),
+            |(binding, iterable, expr)| MapElement::Loop(binding, iterable, Box::new(expr)),
+        ),
+        map(
+            tuple((
+                preceded(postpad(tag("if")), expression),
+                preceded(postpad(char(':')), map_element),
+            )),
+            |(cond, expr)| MapElement::Cond(cond, Box::new(expr)),
+        ),
         map(
             tuple((
                 terminated(
@@ -428,6 +473,10 @@ fn function_arg<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, ArgElement, E> {
     alt((
+        map(
+            preceded(postpad(tag("...")), expression),
+            ArgElement::Splat,
+        ),
         map(
             tuple((
                 postpad(identifier),
