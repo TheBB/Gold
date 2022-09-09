@@ -135,11 +135,11 @@ fn lists() {
         parse("[1, for x in y: x, 2]"),
         Ok(AstNode::List(vec![
             ListElement::Singleton(AstNode::Literal(Object::Integer(1))),
-            ListElement::Loop(
-                Binding::Identifier("x".to_string()),
-                AstNode::Identifier("y".to_string()),
-                Box::new(ListElement::Singleton(AstNode::Identifier("x".to_string()))),
-            ),
+            ListElement::Loop {
+                binding: Binding::Identifier("x".to_string()),
+                iterable: AstNode::Identifier("y".to_string()),
+                element: Box::new(ListElement::Singleton(AstNode::Identifier("x".to_string()))),
+            },
             ListElement::Singleton(AstNode::Literal(Object::Integer(2))),
         ])),
     );
@@ -147,15 +147,15 @@ fn lists() {
     assert_eq!(
         parse("[if f(x): x]"),
         Ok(AstNode::List(vec![
-            ListElement::Cond(
-                AstNode::Operator(
+            ListElement::Cond {
+                condition: AstNode::Operator(
                     Box::new(AstNode::Identifier("f".to_string())),
                     Operator::FunCall(vec![
                         ArgElement::Singleton(AstNode::Identifier("x".to_string())),
                     ]),
                 ),
-                Box::new(ListElement::Singleton(AstNode::Identifier("x".to_string()))),
-            ),
+                element: Box::new(ListElement::Singleton(AstNode::Identifier("x".to_string()))),
+            },
         ])),
     );
 }
@@ -186,148 +186,168 @@ fn maps() {
     assert_eq!(parse("{  }"), Ok(AstNode::Map(vec![])));
 
     assert_eq!(
-        parse("{a = 1}"),
+        parse("{a: 1}"),
         Ok(AstNode::Map(vec![
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("a".to_string())),
-                AstNode::Literal(Object::Integer(1)),
-            ),
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("a".to_string())),
+                value: AstNode::Literal(Object::Integer(1)),
+            },
         ])),
     );
 
     assert_eq!(
-        parse("{a = 1,}"),
+        parse("{a: 1,}"),
         Ok(AstNode::Map(vec![
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("a".to_string())),
-                AstNode::Literal(Object::Integer(1)),
-            ),
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("a".to_string())),
+                value: AstNode::Literal(Object::Integer(1)),
+            },
         ])),
     );
 
     assert_eq!(
-        parse("{  a=1,}"),
+        parse("{  a :1,}"),
         Ok(AstNode::Map(vec![
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("a".to_string())),
-                AstNode::Literal(Object::Integer(1)),
-            ),
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("a".to_string())),
+                value: AstNode::Literal(Object::Integer(1)),
+            },
         ])),
     );
 
     assert_eq!(
-        parse("{a = 1  ,b=2}"),
+        parse("{a: 1  ,b:2}"),
         Ok(AstNode::Map(vec![
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("a".to_string())),
-                AstNode::Literal(Object::Integer(1)),
-            ),
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("b".to_string())),
-                AstNode::Literal(Object::Integer(2)),
-            ),
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("a".to_string())),
+                value: AstNode::Literal(Object::Integer(1)),
+            },
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("b".to_string())),
+                value: AstNode::Literal(Object::Integer(2)),
+            },
         ])),
     );
 
     assert_eq!(
-        parse("{che9 = false}"),
+        parse("{che9: false}"),
         Ok(AstNode::Map(vec![
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("che9".to_string())),
-                AstNode::Literal(Object::Boolean(false)),
-            ),
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("che9".to_string())),
+                value: AstNode::Literal(Object::Boolean(false)),
+            },
         ])),
     );
 
     assert_eq!(
-        parse("{fable = \"fable\"}"),
+        parse("{fable: \"fable\"}"),
         Ok(AstNode::Map(vec![
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("fable".to_string())),
-                AstNode::Literal(Object::String("fable".to_string())),
-            ),
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("fable".to_string())),
+                value: AstNode::Literal(Object::String("fable".to_string())),
+            },
         ])),
     );
 
     assert_eq!(
-        parse("{a = 1, b = true, c = 2.e1, d = \"hoho\", e = 1e1}"),
+        parse("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}"),
         Ok(AstNode::Map(vec![
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("a".to_string())),
-                AstNode::Literal(Object::Integer(1)),
-            ),
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("b".to_string())),
-                AstNode::Literal(Object::Boolean(true)),
-            ),
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("c".to_string())),
-                AstNode::Literal(Object::Float(20.0)),
-            ),
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("d".to_string())),
-                AstNode::Literal(Object::String("hoho".to_string())),
-            ),
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("e".to_string())),
-                AstNode::Literal(Object::Float(10.0)),
-            ),
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("a".to_string())),
+                value: AstNode::Literal(Object::Integer(1)),
+            },
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("b".to_string())),
+                value: AstNode::Literal(Object::Boolean(true)),
+            },
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("c".to_string())),
+                value: AstNode::Literal(Object::Float(20.0)),
+            },
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("d".to_string())),
+                value: AstNode::Literal(Object::String("hoho".to_string())),
+            },
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("e".to_string())),
+                value: AstNode::Literal(Object::Float(10.0)),
+            },
         ])),
     );
 
     assert_eq!(
-        parse("{ident-with-hyphen = 1}"),
+        parse("{ident-with-hyphen: 1}"),
         Ok(AstNode::Map(vec![
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("ident-with-hyphen".to_string())),
-                AstNode::Literal(Object::Integer(1)),
-            )
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("ident-with-hyphen".to_string())),
+                value: AstNode::Literal(Object::Integer(1)),
+            }
         ])),
     );
 
     assert_eq!(
-        parse("{...y, x = 1}"),
+        parse("{$z: y}"),
+        Ok(AstNode::Map(vec![
+            MapElement::Singleton {
+                key: AstNode::Identifier("z".to_string()),
+                value: AstNode::Identifier("y".to_string()),
+            },
+        ])),
+    );
+
+    assert_eq!(
+        parse("{$(z): y}"),
+        Ok(AstNode::Map(vec![
+            MapElement::Singleton {
+                key: AstNode::Identifier("z".to_string()),
+                value: AstNode::Identifier("y".to_string()),
+            },
+        ])),
+    );
+
+    assert_eq!(
+        parse("{...y, x: 1}"),
         Ok(AstNode::Map(vec![
             MapElement::Splat(AstNode::Identifier("y".to_string())),
-            MapElement::Singleton(
-                AstNode::Literal(Object::String("x".to_string())),
-                AstNode::Literal(Object::Integer(1)),
-            ),
+            MapElement::Singleton {
+                key: AstNode::Literal(Object::String("x".to_string())),
+                value: AstNode::Literal(Object::Integer(1)),
+            },
         ])),
     );
 
     assert_eq!(
-        parse("{for [x,y] in z: x = y}"),
+        parse("{for [x,y] in z: x: y}"),
         Ok(AstNode::Map(vec![
-            MapElement::Loop(
-                Binding::List(vec![
-                    ListBindingElement::Binding(Binding::Identifier("x".to_string()), None),
-                    ListBindingElement::Binding(Binding::Identifier("y".to_string()), None),
+            MapElement::Loop {
+                binding: Binding::List(vec![
+                    ListBindingElement::Binding { binding: Binding::Identifier("x".to_string()), default: None },
+                    ListBindingElement::Binding { binding: Binding::Identifier("y".to_string()), default: None },
                 ]),
-                AstNode::Identifier("z".to_string()),
-                Box::new(MapElement::Singleton(
-                    AstNode::Literal(Object::String("x".to_string())),
-                    AstNode::Identifier("y".to_string()),
-                )),
-            ),
+                iterable: AstNode::Identifier("z".to_string()),
+                element: Box::new(MapElement::Singleton {
+                    key: AstNode::Literal(Object::String("x".to_string())),
+                    value: AstNode::Identifier("y".to_string()),
+                }),
+            },
         ])),
     );
 
     assert_eq!(
-        parse("{if f(x): z = y}"),
+        parse("{if f(x): z: y}"),
         Ok(AstNode::Map(vec![
-            MapElement::Cond(
-                AstNode::Operator(
+            MapElement::Cond {
+                condition: AstNode::Operator(
                     Box::new(AstNode::Identifier("f".to_string())),
                     Operator::FunCall(vec![
                         ArgElement::Singleton(AstNode::Identifier("x".to_string())),
                     ]),
                 ),
-                Box::new(MapElement::Singleton(
-                    AstNode::Literal(Object::String("z".to_string())),
-                    AstNode::Identifier("y".to_string()),
-                )),
-            ),
+                element: Box::new(MapElement::Singleton {
+                    key: AstNode::Literal(Object::String("z".to_string())),
+                    value: AstNode::Identifier("y".to_string()),
+                }),
+            },
         ])),
     );
 }
@@ -361,8 +381,8 @@ fn let_blocks() {
             vec![
                 (
                     Binding::List(vec![
-                        ListBindingElement::Binding(Binding::Identifier("a".to_string()), None),
-                        ListBindingElement::Binding(Binding::Identifier("b".to_string()), Some(AstNode::Literal(Object::Integer(1)))),
+                        ListBindingElement::Binding { binding: Binding::Identifier("a".to_string()), default: None },
+                        ListBindingElement::Binding { binding: Binding::Identifier("b".to_string()), default: Some(AstNode::Literal(Object::Integer(1))) },
                         ListBindingElement::Slurp,
                     ]),
                     AstNode::Identifier("c".to_string()),
@@ -381,7 +401,7 @@ fn let_blocks() {
             vec![
                 (
                     Binding::List(vec![
-                        ListBindingElement::Binding(Binding::Identifier("_".to_string()), None),
+                        ListBindingElement::Binding { binding: Binding::Identifier("_".to_string()), default: None },
                         ListBindingElement::SlurpTo("rest".to_string()),
                     ]),
                     AstNode::Identifier("list".to_string()),
@@ -397,11 +417,11 @@ fn let_blocks() {
             vec![
                 (
                     Binding::Map(vec![
-                        MapBindingElement::Binding(
-                            "a".to_string(),
-                            None,
-                            Binding::Identifier("a".to_string())
-                        ),
+                        MapBindingElement::Binding {
+                            key: "a".to_string(),
+                            binding: Binding::Identifier("a".to_string()),
+                            default: None,
+                        },
                     ]),
                     AstNode::Identifier("x".to_string()),
                 ),
@@ -411,16 +431,16 @@ fn let_blocks() {
     );
 
     assert_eq!(
-        parse("let {(a)} = x in a"),
+        parse("let {a as b} = x in a"),
         Ok(AstNode::Let(
             vec![
                 (
                     Binding::Map(vec![
-                        MapBindingElement::Binding(
-                            "a".to_string(),
-                            None,
-                            Binding::Identifier("a".to_string())
-                        ),
+                        MapBindingElement::Binding {
+                            key: "a".to_string(),
+                            binding: Binding::Identifier("b".to_string()),
+                            default: None,
+                        },
                     ]),
                     AstNode::Identifier("x".to_string()),
                 ),
@@ -430,16 +450,35 @@ fn let_blocks() {
     );
 
     assert_eq!(
-        parse("let {(a = y)} = x in a"),
+        parse("let {a: y} = x in a"),
         Ok(AstNode::Let(
             vec![
                 (
                     Binding::Map(vec![
-                        MapBindingElement::Binding(
-                            "a".to_string(),
-                            Some(AstNode::Identifier("y".to_string())),
-                            Binding::Identifier("a".to_string())
-                        ),
+                        MapBindingElement::Binding {
+                            key: "a".to_string(),
+                            binding: Binding::Identifier("a".to_string()),
+                            default: Some(AstNode::Identifier("y".to_string())),
+                        },
+                    ]),
+                    AstNode::Identifier("x".to_string()),
+                ),
+            ],
+            Box::new(AstNode::Identifier("a".to_string())),
+        )),
+    );
+
+    assert_eq!(
+        parse("let {a as b: y} = x in a"),
+        Ok(AstNode::Let(
+            vec![
+                (
+                    Binding::Map(vec![
+                        MapBindingElement::Binding {
+                            key: "a".to_string(),
+                            binding: Binding::Identifier("b".to_string()),
+                            default: Some(AstNode::Identifier("y".to_string())),
+                        },
                     ]),
                     AstNode::Identifier("x".to_string()),
                 ),
@@ -527,7 +566,7 @@ fn funcall() {
     );
 
     assert_eq!(
-        parse("func(1, 2, a=3)"),
+        parse("func(1, 2, a: 3)"),
         Ok(AstNode::Operator(
             Box::new(AstNode::Identifier("func".to_string())),
             Operator::FunCall(vec![
@@ -542,7 +581,7 @@ fn funcall() {
     );
 
     assert_eq!(
-        parse("func(a=2, b=3)"),
+        parse("func(a: 2, b: 3)"),
         Ok(AstNode::Operator(
             Box::new(AstNode::Identifier("func".to_string())),
             Operator::FunCall(vec![
@@ -563,8 +602,8 @@ fn funcall() {
         Ok(AstNode::Operator(
             Box::new(AstNode::Function(
                 Binding::List(vec![
-                    ListBindingElement::Binding(Binding::Identifier("x".to_string()), None),
-                    ListBindingElement::Binding(Binding::Identifier("y".to_string()), None),
+                    ListBindingElement::Binding { binding: Binding::Identifier("x".to_string()), default: None },
+                    ListBindingElement::Binding { binding: Binding::Identifier("y".to_string()), default: None },
                 ]),
                 Binding::Map(vec![]),
                 Box::new(AstNode::Operator(
@@ -580,7 +619,7 @@ fn funcall() {
     );
 
     assert_eq!(
-        parse("func(1, ...y, z=2, ...q)"),
+        parse("func(1, ...y, z: 2, ...q)"),
         Ok(AstNode::Operator(
             Box::new(AstNode::Identifier("func".to_string())),
             Operator::FunCall(vec![
@@ -806,7 +845,7 @@ fn functions() {
         parse("(a) => let b = a in b"),
         Ok(AstNode::Function(
             Binding::List(vec![
-                ListBindingElement::Binding(Binding::Identifier("a".to_string()), None),
+                ListBindingElement::Binding { binding: Binding::Identifier("a".to_string()), default: None },
             ]),
             Binding::Map(vec![]),
             Box::new(AstNode::Let(

@@ -40,14 +40,21 @@ pub enum Object {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ListBindingElement {
-    Binding(Binding, Option<AstNode>),
+    Binding {
+        binding: Binding,
+        default: Option<AstNode>,
+    },
     SlurpTo(String),
     Slurp,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MapBindingElement {
-    Binding(String, Option<AstNode>, Binding),
+    Binding {
+        key: String,
+        binding: Binding,
+        default: Option<AstNode>,
+    },
     SlurpTo(String),
 }
 
@@ -68,16 +75,33 @@ pub enum StringElement {
 pub enum ListElement {
     Singleton(AstNode),
     Splat(AstNode),
-    Loop(Binding, AstNode, Box<ListElement>),
-    Cond(AstNode, Box<ListElement>),
+    Loop {
+        binding: Binding,
+        iterable: AstNode,
+        element: Box<ListElement>,
+    },
+    Cond {
+        condition: AstNode,
+        element: Box<ListElement>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MapElement {
-    Singleton(AstNode, AstNode),
+    Singleton {
+        key: AstNode,
+        value: AstNode,
+    },
     Splat(AstNode),
-    Loop(Binding, AstNode, Box<MapElement>),
-    Cond(AstNode, Box<MapElement>),
+    Loop {
+        binding: Binding,
+        iterable: AstNode,
+        element: Box<MapElement>,
+    },
+    Cond {
+        condition: AstNode,
+        element: Box<MapElement>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -191,7 +215,7 @@ fn identifier<'a, E: CompleteError<'a>>(
 fn map_identifier<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, &'a str, E> {
-    is_not("=$}()\"\' \t\n\r")(input)
+    is_not(":$}()\"\' \t\n\r")(input)
 }
 
 fn decimal<'a, E: CompleteError<'a>>(
@@ -340,14 +364,21 @@ fn list_element<'a, E: CompleteError<'a>>(
                 preceded(postpad(tag("in")), expression),
                 preceded(postpad(char(':')), list_element),
             )),
-            |(binding, iterable, expr)| ListElement::Loop(binding, iterable, Box::new(expr)),
+            |(binding, iterable, expr)| ListElement::Loop {
+                binding,
+                iterable,
+                element: Box::new(expr),
+            },
         ),
         map(
             tuple((
                 preceded(postpad(tag("if")), expression),
                 preceded(postpad(char(':')), list_element),
             )),
-            |(cond, expr)| ListElement::Cond(cond, Box::new(expr)),
+            |(condition, expr)| ListElement::Cond {
+                condition,
+                element: Box::new(expr),
+            },
         ),
         map(expression, ListElement::Singleton),
     ))(input)
@@ -388,25 +419,44 @@ fn map_element<'a, E: CompleteError<'a>>(
                 preceded(postpad(tag("in")), expression),
                 preceded(postpad(char(':')), map_element),
             )),
-            |(binding, iterable, expr)| MapElement::Loop(binding, iterable, Box::new(expr)),
+            |(binding, iterable, expr)| MapElement::Loop {
+                binding,
+                iterable,
+                element: Box::new(expr),
+            },
         ),
         map(
             tuple((
                 preceded(postpad(tag("if")), expression),
                 preceded(postpad(char(':')), map_element),
             )),
-            |(cond, expr)| MapElement::Cond(cond, Box::new(expr)),
+            |(condition, expr)| MapElement::Cond {
+                condition,
+                element: Box::new(expr)
+            },
+        ),
+        map(
+            tuple((
+                terminated(
+                    preceded(postpad(char('$')), expression),
+                    postpad(char(':')),
+                ),
+                expression,
+            )),
+            |(key, value)| MapElement::Singleton { key, value },
         ),
         map(
             tuple((
                 terminated(
                     postpad(map_identifier),
-                    postpad(char('=')),
+                    postpad(char(':')),
                 ),
                 expression,
             )),
-            |(key, value)| MapElement::Singleton({
-                let value = key.to_string(); AstNode::Literal(Object::String(value.to_string())) }, value),
+            |(key, value)| MapElement::Singleton {
+                key: AstNode::Literal(Object::String(key.to_string())),
+                value,
+            },
         ),
     ))(input)
 }
@@ -481,7 +531,7 @@ fn function_arg<'a, E: CompleteError<'a>>(
             tuple((
                 postpad(identifier),
                 preceded(
-                    postpad(char('=')),
+                    postpad(char(':')),
                     expression,
                 ),
             )),
@@ -712,7 +762,7 @@ fn list_binding_element<'a, E: CompleteError<'a>>(
 ) -> IResult<&'a str, ListBindingElement, E> {
     map(
         tuple((binding, opt(preceded(postpad(char('=')), expression)))),
-        |(b, e)| ListBindingElement::Binding(b, e)
+        |(b, e)| ListBindingElement::Binding { binding: b, default: e }
     )(input)
 }
 
@@ -753,36 +803,39 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
         tuple((
             alt((
                 map(
+                    tuple((
+                        postpad(map_identifier),
+                        preceded(
+                            postpad(tag("as")),
+                            binding,
+                        ),
+                    )),
+                    |(name, binding)| (name, Some(binding)),
+                ),
+                map(
                     postpad(map_identifier),
                     |name: &str| (name, None),
-                ),
-                map(
-                    delimited(postpad(char('(')), postpad(map_identifier), postpad(char(')'))),
-                    |name: &str| (name, None),
-                ),
-                map(
-                    delimited(
-                        postpad(char('(')),
-                        tuple((
-                            terminated(postpad(map_identifier), postpad(char('='))),
-                            expression,
-                        )),
-                        postpad(char(')')),
-                    ),
-                    |(name, expr)| (name, Some(expr)),
                 ),
             )),
             opt(
                 preceded(
-                    postpad(char('=')),
-                    binding,
+                    postpad(char(':')),
+                    expression,
                 ),
             ),
         )),
-        |((name, default), binding)| {
+        |((name, binding), default)| {
             match binding {
-                None => MapBindingElement::Binding(name.to_string(), default, Binding::Identifier(name.to_string())),
-                Some(x) => MapBindingElement::Binding(name.to_string(), default, x),
+                None => MapBindingElement::Binding {
+                    key: name.to_string(),
+                    binding: Binding::Identifier(name.to_string()),
+                    default,
+                },
+                Some(binding) => MapBindingElement::Binding {
+                    key: name.to_string(),
+                    binding,
+                    default,
+                },
             }
         }
     )(input)
