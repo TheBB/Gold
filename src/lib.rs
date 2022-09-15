@@ -1,4 +1,4 @@
-use std::num::ParseFloatError;
+use std::{num::ParseFloatError, collections::HashMap, rc::Rc};
 
 use num_bigint::{BigInt, ParseBigIntError};
 use num_traits::Num;
@@ -35,6 +35,9 @@ pub enum Object {
     Float(f64),
     String(String),
     Boolean(bool),
+    List(Rc<Vec<Object>>),
+    Map(Rc<HashMap<String, Object>>),
+    Function(Binding, Binding, Rc<AstNode>),
     Null,
 }
 
@@ -142,9 +145,24 @@ pub enum AstNode {
     Identifier(String),
     List(Vec<ListElement>),
     Map(Vec<MapElement>),
-    Let(Vec<(Binding, AstNode)>, Box<AstNode>),
-    Operator(Box<AstNode>, Operator),
-    Function(Binding, Binding, Box<AstNode>),
+    Let {
+        bindings: Vec<(Binding, AstNode)>,
+        expression: Box<AstNode>,
+    },
+    Operator {
+        operand: Box<AstNode>,
+        operator: Operator,
+    },
+    Function {
+        positional: Binding,
+        keywords: Binding,
+        expression: Box<AstNode>,
+    },
+    Branch {
+        condition: Box<AstNode>,
+        true_branch: Box<AstNode>,
+        false_branch: Box<AstNode>,
+    }
 }
 
 impl AstNode {
@@ -215,7 +233,7 @@ fn identifier<'a, E: CompleteError<'a>>(
 fn map_identifier<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, &'a str, E> {
-    is_not(":$}()\"\' \t\n\r")(input)
+    is_not(",=:$}()\"\' \t\n\r")(input)
 }
 
 fn decimal<'a, E: CompleteError<'a>>(
@@ -575,7 +593,7 @@ fn postfixed<'a, E: CompleteError<'a>>(
         |(expr, ops)| {
             ops.into_iter().fold(
                 expr,
-                |expr, op| AstNode::Operator(Box::new(expr), op),
+                |expr, operator| AstNode::Operator { operand: Box::new(expr), operator },
             )
         },
     )(input)
@@ -595,7 +613,7 @@ fn prefixed<'a, E: CompleteError<'a>>(
         |(ops, expr)| {
             ops.into_iter().rev().fold(
                 expr,
-                |expr, op| AstNode::Operator(Box::new(expr), op),
+                |expr, operator| AstNode::Operator { operand: Box::new(expr), operator },
             )
         },
     )(input)
@@ -637,7 +655,7 @@ where
             many0(operators),
         )),
         move |(expr, ops)| {
-            let acc = |expr: AstNode, op: Operator| AstNode::Operator(Box::new(expr), op);
+            let acc = |expr: AstNode, operator: Operator| AstNode::Operator { operand: Box::new(expr), operator };
             if right {
                 ops.into_iter().rev().fold(expr, acc)
             } else {
@@ -806,7 +824,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                     tuple((
                         postpad(map_identifier),
                         preceded(
-                            postpad(tag("as")),
+                            postpad(char(':')),
                             binding,
                         ),
                     )),
@@ -819,7 +837,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
             )),
             opt(
                 preceded(
-                    postpad(char(':')),
+                    postpad(char('=')),
                     expression,
                 ),
             ),
@@ -903,11 +921,34 @@ fn function<'a, E: CompleteError<'a>>(
                 expression,
             ),
         )),
-        |((posargs, kwargs), expr)| AstNode::Function(
-            posargs,
-            kwargs.unwrap_or_else(|| Binding::Map(vec![])),
-            Box::new(expr),
-        )
+        |((posargs, kwargs), expr)| AstNode::Function {
+            positional: posargs,
+            keywords: kwargs.unwrap_or_else(|| Binding::Map(vec![])),
+            expression: Box::new(expr),
+        },
+    )(input)
+}
+
+fn keyword_function<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    map(
+        tuple((
+            delimited(
+                postpad(char('{')),
+                map_binding,
+                postpad(char('}')),
+            ),
+            preceded(
+                postpad(tag("=>")),
+                expression,
+            ),
+        )),
+        |(kwargs, expr)| AstNode::Function {
+            positional: Binding::List(vec![]),
+            keywords: kwargs,
+            expression: Box::new(expr),
+        },
     )(input)
 }
 
@@ -933,7 +974,33 @@ fn let_block<'a, E: CompleteError<'a>>(
                 expression,
             ),
         )),
-        |(bindings, expr)| AstNode::Let(bindings, Box::new(expr)),
+        |(bindings, expr)| AstNode::Let { bindings, expression: Box::new(expr) },
+    )(input)
+}
+
+fn branch<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, AstNode, E> {
+    map(
+        tuple((
+            preceded(
+                postpad(keyword("if")),
+                expression,
+            ),
+            preceded(
+                postpad(keyword("then")),
+                expression,
+            ),
+            preceded(
+                postpad(keyword("else")),
+                expression,
+            ),
+        )),
+        |(condition, true_branch, false_branch)| AstNode::Branch {
+            condition: Box::new(condition),
+            true_branch: Box::new(true_branch),
+            false_branch: Box::new(false_branch),
+        },
     )(input)
 }
 
@@ -942,7 +1009,9 @@ fn composite<'a, E: CompleteError<'a>>(
 ) -> IResult<&'a str, AstNode, E> {
     alt((
         let_block,
+        branch,
         function,
+        keyword_function,
     ))(input)
 }
 
