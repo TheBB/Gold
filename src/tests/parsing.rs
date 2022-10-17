@@ -1,162 +1,146 @@
+use num_bigint::{BigInt};
+use num_traits::Num;
+
+use std::ops::{Add, Div, Mul, Neg, Not, Sub};
+
 use super::super::*;
 
 #[test]
 fn booleans_and_null() {
-    assert_eq!(parse("true"), Ok(AstNode::Literal(Object::Boolean(true))));
-    assert_eq!(parse("false"), Ok(AstNode::Literal(Object::Boolean(false))));
-    assert_eq!(parse("null"), Ok(AstNode::Literal(Object::Null)));
+    assert_eq!(parse("true"), Ok(true.to_ast()));
+    assert_eq!(parse("false"), Ok(false.to_ast()));
+    assert_eq!(parse("null"), Ok(Object::Null.literal()));
 }
 
 #[test]
 fn integers() {
-    assert_eq!(parse("0"), Ok(AstNode::Literal(Object::Integer(0))));
-    assert_eq!(parse("1"), Ok(AstNode::Literal(Object::Integer(1))));
-    assert_eq!(parse("9223372036854775807"), Ok(AstNode::Literal(Object::Integer(9223372036854775807))));
+    assert_eq!(parse("0"), Ok(0.to_ast()));
+    assert_eq!(parse("1"), Ok(1.to_ast()));
+    assert_eq!(parse("9223372036854775807"), Ok(9223372036854775807i64.to_ast()));
     assert_eq!(
         parse("9223372036854775808"),
-        Ok(AstNode::Literal(Object::BigInteger(BigInt::from_str_radix("9223372036854775808", 10).unwrap()))),
+        Ok(Object::BigInteger(BigInt::from_str_radix("9223372036854775808", 10).unwrap()).literal()),
     );
 }
 
 #[test]
 fn floats() {
-    assert_eq!(parse("0.0"), Ok(AstNode::Literal(Object::Float(0.0))));
-    assert_eq!(parse("0."), Ok(AstNode::Literal(Object::Float(0.0))));
-    assert_eq!(parse(".0"), Ok(AstNode::Literal(Object::Float(0.0))));
-    assert_eq!(parse("0e0"), Ok(AstNode::Literal(Object::Float(0.0))));
-    assert_eq!(parse("0e1"), Ok(AstNode::Literal(Object::Float(0.0))));
-    assert_eq!(parse("1."), Ok(AstNode::Literal(Object::Float(1.0))));
-    assert_eq!(parse("1e+1"), Ok(AstNode::Literal(Object::Float(10.0))));
-    assert_eq!(parse("1e1"), Ok(AstNode::Literal(Object::Float(10.0))));
-    assert_eq!(parse("1e-1"), Ok(AstNode::Literal(Object::Float(0.1))));
+    assert_eq!(parse("0.0"), Ok(0f64.to_ast()));
+    assert_eq!(parse("0.0"), Ok(0f64.to_ast()));
+    assert_eq!(parse("0."), Ok(0f64.to_ast()));
+    assert_eq!(parse(".0"), Ok(0f64.to_ast()));
+    assert_eq!(parse("0e0"), Ok(0f64.to_ast()));
+    assert_eq!(parse("0e1"), Ok(0f64.to_ast()));
+    assert_eq!(parse("1."), Ok(1f64.to_ast()));
+    assert_eq!(parse("1e+1"), Ok(10f64.to_ast()));
+    assert_eq!(parse("1e1"), Ok(10f64.to_ast()));
+    assert_eq!(parse("1e-1"), Ok(0.1f64.to_ast()));
 }
 
 #[test]
 fn strings() {
-    assert_eq!(parse("\"\""), Ok(AstNode::Literal(Object::String("".to_string()))));
-    assert_eq!(parse("\"dingbob\""), Ok(AstNode::Literal(Object::String("dingbob".to_string()))));
-    assert_eq!(parse("\"ding\\\"bob\""), Ok(AstNode::Literal(Object::String("ding\"bob".to_string()))));
-    assert_eq!(parse("\"ding\\\\bob\""), Ok(AstNode::Literal(Object::String("ding\\bob".to_string()))));
+    assert_eq!(parse("\"\""), Ok("".to_ast()));
+    assert_eq!(parse("\"dingbob\""), Ok("dingbob".to_ast()));
+    assert_eq!(parse("\"ding\\\"bob\""), Ok("ding\"bob".to_ast()));
+    assert_eq!(parse("\"ding\\\\bob\""), Ok("ding\\bob".to_ast()));
 
     assert_eq!(
         parse("\"dingbob${a}\""),
         Ok(AstNode::String(vec![
-            StringElement::Raw("dingbob".to_string()),
-            StringElement::Interpolate(AstNode::Identifier("a".to_string())),
+            StringElement::raw("dingbob"),
+            StringElement::Interpolate("a".id()),
         ])),
     );
 
     assert_eq!(
         parse("\"dingbob${ a}\""),
         Ok(AstNode::String(vec![
-            StringElement::Raw("dingbob".to_string()),
-            StringElement::Interpolate(AstNode::Identifier("a".to_string())),
+            StringElement::raw("dingbob"),
+            StringElement::Interpolate("a".id()),
         ])),
     );
 }
 
 #[test]
 fn identifiers() {
-    assert_eq!(parse("dingbob"), Ok(AstNode::Identifier("dingbob".to_string())));
-    assert_eq!(parse("lets"), Ok(AstNode::Identifier("lets".to_string())));
-    assert_eq!(parse("not1"), Ok(AstNode::Identifier("not1".to_string())));
+    assert_eq!(parse("dingbob"), Ok("dingbob".id()));
+    assert_eq!(parse("lets"), Ok("lets".id()));
+    assert_eq!(parse("not1"), Ok("not1".id()));
 }
 
 #[test]
 fn lists() {
-    assert_eq!(parse("[]"), Ok(AstNode::List(vec![])));
-    assert_eq!(parse("[   ]"), Ok(AstNode::List(vec![])));
+    assert_eq!(
+        parse("[]"),
+        Ok(AstNode::list(())),
+    );
+
+    assert_eq!(
+        parse("[   ]"),
+        Ok(AstNode::list(()))
+    );
 
     assert_eq!(
         parse("[true]"),
-        Ok(AstNode::List(vec![
-            ListElement::Singleton(AstNode::Literal(Object::Boolean(true))),
-        ])),
+        Ok(AstNode::list((true,)))
     );
 
     assert_eq!(
         parse("[\"\"]"),
-        Ok(AstNode::List(vec![
-            ListElement::Singleton(AstNode::Literal(Object::String("".to_string()))),
-        ])),
+        Ok(AstNode::list(("",)))
     );
 
     assert_eq!(
         parse("[1,]"),
-        Ok(AstNode::List(vec![
-            ListElement::Singleton(AstNode::Literal(Object::Integer(1))),
-        ])),
+        Ok(AstNode::list((1,))),
     );
 
     assert_eq!(
         parse("[  1   ,  ]"),
-        Ok(AstNode::List(vec![
-            ListElement::Singleton(AstNode::Literal(Object::Integer(1))),
-        ])),
+        Ok(AstNode::list((1,))),
     );
 
     assert_eq!(
         parse("[  1   ,2  ]"),
-        Ok(AstNode::List(vec![
-            ListElement::Singleton(AstNode::Literal(Object::Integer(1))),
-            ListElement::Singleton(AstNode::Literal(Object::Integer(2))),
-        ])),
+        Ok(AstNode::list((1,2))),
     );
 
     assert_eq!(
         parse("[  1   ,2  ,]"),
-        Ok(AstNode::List(vec![
-            ListElement::Singleton(AstNode::Literal(Object::Integer(1))),
-            ListElement::Singleton(AstNode::Literal(Object::Integer(2))),
-        ])),
+        Ok(AstNode::list((1,2))),
     );
 
     assert_eq!(
         parse("[1, false, 2.3, \"fable\", lel]"),
-        Ok(AstNode::List(vec![
-            ListElement::Singleton(AstNode::Literal(Object::Integer(1))),
-            ListElement::Singleton(AstNode::Literal(Object::Boolean(false))),
-            ListElement::Singleton(AstNode::Literal(Object::Float(2.3))),
-            ListElement::Singleton(AstNode::Literal(Object::String("fable".to_string()))),
-            ListElement::Singleton(AstNode::Identifier("lel".to_string())),
-        ])),
+        Ok(AstNode::list((1, false, 2.3, "fable", "lel".id()))),
     );
 
     assert_eq!(
         parse("[1, ...x, y]"),
-        Ok(AstNode::List(vec![
-            ListElement::Singleton(AstNode::Literal(Object::Integer(1))),
-            ListElement::Splat(AstNode::Identifier("x".to_string())),
-            ListElement::Singleton(AstNode::Identifier("y".to_string())),
-        ])),
+        Ok(AstNode::list((1, "x".id().splat(), "y".id()))),
     );
 
     assert_eq!(
         parse("[1, for x in y: x, 2]"),
-        Ok(AstNode::List(vec![
-            ListElement::Singleton(AstNode::Literal(Object::Integer(1))),
+        Ok(AstNode::list((
+            1,
             ListElement::Loop {
-                binding: Binding::Identifier("x".to_string()),
-                iterable: AstNode::Identifier("y".to_string()),
-                element: Box::new(ListElement::Singleton(AstNode::Identifier("x".to_string()))),
+                binding: Binding::id("x"),
+                iterable:"y".id(),
+                element: Box::new(ListElement::singleton("x".id())),
             },
-            ListElement::Singleton(AstNode::Literal(Object::Integer(2))),
-        ])),
+            2,
+        )))
     );
 
     assert_eq!(
         parse("[if f(x): x]"),
-        Ok(AstNode::List(vec![
+        Ok(AstNode::list((
             ListElement::Cond {
-                condition: AstNode::Operator {
-                    operand: Box::new(AstNode::Identifier("f".to_string())),
-                    operator: Operator::FunCall(vec![
-                        ArgElement::Singleton(AstNode::Identifier("x".to_string())),
-                    ]),
-                },
-                element: Box::new(ListElement::Singleton(AstNode::Identifier("x".to_string()))),
+                condition:"f".id().funcall(("x".id(),)),
+                element: ListElement::singleton("x".id()).to_box(),
             },
-        ])),
+        ))),
     );
 }
 
@@ -164,87 +148,69 @@ fn lists() {
 fn nested_lists() {
     assert_eq!(
         parse("[[]]"),
-        Ok(AstNode::List(vec![
-            ListElement::Singleton(AstNode::List(vec![])),
-        ])),
+        Ok(AstNode::list((AstNode::list(()),))),
     );
 
     assert_eq!(
         parse("[1, [2]]"),
-        Ok(AstNode::List(vec![
-            ListElement::Singleton(AstNode::Literal(Object::Integer(1))),
-            ListElement::Singleton(AstNode::List(vec![
-                ListElement::Singleton(AstNode::Literal(Object::Integer(2))),
-            ])),
-        ])),
+        Ok(AstNode::list((1, AstNode::list((2,))))),
     );
 }
 
 #[test]
 fn maps() {
-    assert_eq!(parse("{}"), Ok(AstNode::Map(vec![])));
-    assert_eq!(parse("{  }"), Ok(AstNode::Map(vec![])));
+    assert_eq!(
+        parse("{}"),
+        Ok(AstNode::map(())),
+    );
+
+    assert_eq!(
+        parse("{  }"),
+        Ok(AstNode::map(())),
+    );
 
     assert_eq!(
         parse("{a: 1}"),
-        Ok(AstNode::Map(vec![
-            MapElement::Singleton {
-                key: AstNode::Literal(Object::String("a".to_string())),
-                value: AstNode::Literal(Object::Integer(1)),
-            },
-        ])),
+        Ok(AstNode::map((
+            ("a", 1),
+        ))),
     );
 
     assert_eq!(
         parse("{a: 1,}"),
-        Ok(AstNode::Map(vec![
-            MapElement::Singleton {
-                key: AstNode::Literal(Object::String("a".to_string())),
-                value: AstNode::Literal(Object::Integer(1)),
-            },
-        ])),
+        Ok(AstNode::map((
+            ("a", 1),
+        ))),
     );
 
     assert_eq!(
         parse("{  a :1,}"),
-        Ok(AstNode::Map(vec![
-            MapElement::Singleton {
-                key: AstNode::Literal(Object::String("a".to_string())),
-                value: AstNode::Literal(Object::Integer(1)),
-            },
-        ])),
+        Ok(AstNode::map((
+            ("a", 1),
+        ))),
     );
 
     assert_eq!(
         parse("{a: 1  ,b:2}"),
-        Ok(AstNode::Map(vec![
-            MapElement::Singleton {
-                key: AstNode::Literal(Object::String("a".to_string())),
-                value: AstNode::Literal(Object::Integer(1)),
-            },
-            MapElement::Singleton {
-                key: AstNode::Literal(Object::String("b".to_string())),
-                value: AstNode::Literal(Object::Integer(2)),
-            },
-        ])),
+        Ok(AstNode::map((
+            ("a", 1),
+            ("b", 2),
+        ))),
     );
 
     assert_eq!(
         parse("{che9: false}"),
-        Ok(AstNode::Map(vec![
-            MapElement::Singleton {
-                key: AstNode::Literal(Object::String("che9".to_string())),
-                value: AstNode::Literal(Object::Boolean(false)),
-            },
-        ])),
+        Ok(AstNode::map((
+            ("che9", false),
+        ))),
     );
 
     assert_eq!(
         parse("{fable: \"fable\"}"),
         Ok(AstNode::Map(vec![
             MapElement::Singleton {
-                key: AstNode::Literal(Object::String("fable".to_string())),
-                value: AstNode::Literal(Object::String("fable".to_string())),
+                key: Object::string("fable").literal(),
+                value: Object::string("fable").literal(),
             },
         ])),
     );
@@ -253,24 +219,24 @@ fn maps() {
         parse("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}"),
         Ok(AstNode::Map(vec![
             MapElement::Singleton {
-                key: AstNode::Literal(Object::String("a".to_string())),
-                value: AstNode::Literal(Object::Integer(1)),
+                key: Object::string("a").literal(),
+                value: Object::Integer(1).literal(),
             },
             MapElement::Singleton {
-                key: AstNode::Literal(Object::String("b".to_string())),
-                value: AstNode::Literal(Object::Boolean(true)),
+                key: Object::string("b").literal(),
+                value: Object::Boolean(true).literal(),
             },
             MapElement::Singleton {
-                key: AstNode::Literal(Object::String("c".to_string())),
-                value: AstNode::Literal(Object::Float(20.0)),
+                key: Object::string("c").literal(),
+                value: Object::Float(20.0).literal(),
             },
             MapElement::Singleton {
-                key: AstNode::Literal(Object::String("d".to_string())),
-                value: AstNode::Literal(Object::String("hoho".to_string())),
+                key: Object::string("d").literal(),
+                value: Object::string("hoho").literal(),
             },
             MapElement::Singleton {
-                key: AstNode::Literal(Object::String("e".to_string())),
-                value: AstNode::Literal(Object::Float(10.0)),
+                key: Object::string("e").literal(),
+                value: Object::Float(10.0).literal(),
             },
         ])),
     );
@@ -279,8 +245,8 @@ fn maps() {
         parse("{ident-with-hyphen: 1}"),
         Ok(AstNode::Map(vec![
             MapElement::Singleton {
-                key: AstNode::Literal(Object::String("ident-with-hyphen".to_string())),
-                value: AstNode::Literal(Object::Integer(1)),
+                key: "ident-with-hyphen".to_ast(),
+                value: 1.to_ast(),
             }
         ])),
     );
@@ -289,8 +255,8 @@ fn maps() {
         parse("{$z: y}"),
         Ok(AstNode::Map(vec![
             MapElement::Singleton {
-                key: AstNode::Identifier("z".to_string()),
-                value: AstNode::Identifier("y".to_string()),
+                key: "z".id(),
+                value: "y".id(),
             },
         ])),
     );
@@ -299,8 +265,8 @@ fn maps() {
         parse("{$(z): y}"),
         Ok(AstNode::Map(vec![
             MapElement::Singleton {
-                key: AstNode::Identifier("z".to_string()),
-                value: AstNode::Identifier("y".to_string()),
+                key: "z".id(),
+                value: "y".id(),
             },
         ])),
     );
@@ -308,10 +274,10 @@ fn maps() {
     assert_eq!(
         parse("{...y, x: 1}"),
         Ok(AstNode::Map(vec![
-            MapElement::Splat(AstNode::Identifier("y".to_string())),
+            MapElement::Splat("y".id()),
             MapElement::Singleton {
-                key: AstNode::Literal(Object::String("x".to_string())),
-                value: AstNode::Literal(Object::Integer(1)),
+                key: Object::string("x").literal(),
+                value: Object::Integer(1).literal(),
             },
         ])),
     );
@@ -321,13 +287,13 @@ fn maps() {
         Ok(AstNode::Map(vec![
             MapElement::Loop {
                 binding: Binding::List(vec![
-                    ListBindingElement::Binding { binding: Binding::Identifier("x".to_string()), default: None },
-                    ListBindingElement::Binding { binding: Binding::Identifier("y".to_string()), default: None },
+                    ListBindingElement::Binding { binding: Binding::id("x"), default: None },
+                    ListBindingElement::Binding { binding: Binding::id("y"), default: None },
                 ]),
-                iterable: AstNode::Identifier("z".to_string()),
+                iterable: "z".id(),
                 element: Box::new(MapElement::Singleton {
-                    key: AstNode::Literal(Object::String("x".to_string())),
-                    value: AstNode::Identifier("y".to_string()),
+                    key: Object::string("x").literal(),
+                    value: "y".id(),
                 }),
             },
         ])),
@@ -337,15 +303,10 @@ fn maps() {
         parse("{if f(x): z: y}"),
         Ok(AstNode::Map(vec![
             MapElement::Cond {
-                condition: AstNode::Operator {
-                    operand: Box::new(AstNode::Identifier("f".to_string())),
-                    operator: Operator::FunCall(vec![
-                        ArgElement::Singleton(AstNode::Identifier("x".to_string())),
-                    ]),
-                },
+                condition:"f".id().funcall(("x".id(),)),
                 element: Box::new(MapElement::Singleton {
-                    key: AstNode::Literal(Object::String("z".to_string())),
-                    value: AstNode::Identifier("y".to_string()),
+                    key: Object::string("z").literal(),
+                    value: "y".id(),
                 }),
             },
         ])),
@@ -358,9 +319,9 @@ fn let_blocks() {
         parse("let a = \"b\" in 1"),
         Ok(AstNode::Let {
             bindings: vec![
-                (Binding::Identifier("a".to_string()), AstNode::Literal(Object::String("b".to_string()))),
+                (Binding::id("a"), "b".to_ast()),
             ],
-            expression: Box::new(AstNode::Literal(Object::Integer(1))),
+            expression: 1.to_ast().to_box(),
         }),
     );
 
@@ -368,10 +329,10 @@ fn let_blocks() {
         parse("let a = 1 let b = 2 in a"),
         Ok(AstNode::Let {
             bindings: vec![
-                (Binding::Identifier("a".to_string()), AstNode::Literal(Object::Integer(1))),
-                (Binding::Identifier("b".to_string()), AstNode::Literal(Object::Integer(2))),
+                (Binding::id("a"), 1.to_ast()),
+                (Binding::id("b"), 2.to_ast()),
             ],
-            expression: Box::new(AstNode::Identifier("a".to_string())),
+            expression: "a".id().to_box(),
         }),
     );
 
@@ -381,16 +342,16 @@ fn let_blocks() {
             bindings: vec![
                 (
                     Binding::List(vec![
-                        ListBindingElement::Binding { binding: Binding::Identifier("a".to_string()), default: None },
-                        ListBindingElement::Binding { binding: Binding::Identifier("b".to_string()), default: Some(AstNode::Literal(Object::Integer(1))) },
+                        ListBindingElement::Binding { binding: Binding::id("a"), default: None },
+                        ListBindingElement::Binding { binding: Binding::id("b"), default: Some(1.to_ast()) },
                         ListBindingElement::Slurp,
                     ]),
-                    AstNode::Identifier("c".to_string()),
+                    "c".id(),
                 ),
             ],
             expression: Box::new(AstNode::List(vec![
-                ListElement::Singleton(AstNode::Identifier("a".to_string())),
-                ListElement::Singleton(AstNode::Identifier("b".to_string())),
+                ListElement::Singleton("a".id()),
+                ListElement::Singleton("b".id()),
             ])),
         })
     );
@@ -401,13 +362,13 @@ fn let_blocks() {
             bindings: vec![
                 (
                     Binding::List(vec![
-                        ListBindingElement::Binding { binding: Binding::Identifier("_".to_string()), default: None },
-                        ListBindingElement::SlurpTo("rest".to_string()),
+                        ListBindingElement::Binding { binding: Binding::id("_"), default: None },
+                        ListBindingElement::slurp_to("rest"),
                     ]),
-                    AstNode::Identifier("list".to_string()),
+                    "list".id(),
                 ),
             ],
-            expression: Box::new(AstNode::Identifier("rest".to_string()),)
+            expression: "rest".id().to_box(),
         }),
     );
 
@@ -419,14 +380,14 @@ fn let_blocks() {
                     Binding::Map(vec![
                         MapBindingElement::Binding {
                             key: "a".to_string(),
-                            binding: Binding::Identifier("a".to_string()),
+                            binding: Binding::id("a"),
                             default: None,
                         },
                     ]),
-                    AstNode::Identifier("x".to_string()),
+                    "x".id(),
                 ),
             ],
-            expression: Box::new(AstNode::Identifier("a".to_string())),
+            expression: "a".id().to_box(),
         }),
     );
 
@@ -438,14 +399,14 @@ fn let_blocks() {
                     Binding::Map(vec![
                         MapBindingElement::Binding {
                             key: "a".to_string(),
-                            binding: Binding::Identifier("b".to_string()),
+                            binding: Binding::id("b"),
                             default: None,
                         },
                     ]),
-                    AstNode::Identifier("x".to_string()),
+                    "x".id(),
                 ),
             ],
-            expression: Box::new(AstNode::Identifier("a".to_string())),
+            expression: "a".id().to_box(),
         }),
     );
 
@@ -457,14 +418,14 @@ fn let_blocks() {
                     Binding::Map(vec![
                         MapBindingElement::Binding {
                             key: "a".to_string(),
-                            binding: Binding::Identifier("a".to_string()),
-                            default: Some(AstNode::Identifier("y".to_string())),
+                            binding: Binding::id("a"),
+                            default: Some("y".id()),
                         },
                     ]),
-                    AstNode::Identifier("x".to_string()),
+                    "x".id(),
                 ),
             ],
-            expression: Box::new(AstNode::Identifier("a".to_string())),
+            expression: "a".id().to_box(),
         }),
     );
 
@@ -476,14 +437,14 @@ fn let_blocks() {
                     Binding::Map(vec![
                         MapBindingElement::Binding {
                             key: "a".to_string(),
-                            binding: Binding::Identifier("b".to_string()),
-                            default: Some(AstNode::Identifier("y".to_string())),
+                            binding: Binding::id("b"),
+                            default: Some("y".id()),
                         },
                     ]),
-                    AstNode::Identifier("x".to_string()),
+                    "x".id(),
                 ),
             ],
-            expression: Box::new(AstNode::Identifier("a".to_string())),
+            expression: "a".id().to_box(),
         }),
     );
 }
@@ -493,9 +454,9 @@ fn branching() {
     assert_eq!(
         parse("if a then b else c"),
         Ok(AstNode::Branch {
-            condition: Box::new(AstNode::Identifier("a".to_string())),
-            true_branch: Box::new(AstNode::Identifier("b".to_string())),
-            false_branch: Box::new(AstNode::Identifier("c".to_string())),
+            condition: Box::new("a".id()),
+            true_branch: Box::new("b".id()),
+            false_branch: Box::new("c".id()),
         }),
     );
 }
@@ -504,62 +465,32 @@ fn branching() {
 fn indexing() {
     assert_eq!{
         parse("a.b"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Identifier("a".to_string())),
-            operator: Operator::Index(Box::new(AstNode::Literal(Object::String("b".to_string())))),
-        }),
+        Ok("a".id().index(Object::string("b").literal())),
     };
 
     assert_eq!(
         parse("a[b]"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Identifier("a".to_string())),
-            operator: Operator::Index(Box::new(AstNode::Identifier("b".to_string()))),
-        }),
+        Ok("a".id().index("b".id())),
     );
 
     assert_eq!(
         parse("a.b.c"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Identifier("a".to_string())),
-                operator: Operator::Index(Box::new(AstNode::Literal(Object::String("b".to_string())))),
-            }),
-            operator: Operator::Index(Box::new(AstNode::Literal(Object::String("c".to_string())))),
-        }),
+        Ok("a".id().index("b").index("c")),
     );
 
     assert_eq!(
         parse("a[b].c"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Identifier("a".to_string())),
-                operator: Operator::Index(Box::new(AstNode::Identifier("b".to_string()))),
-            }),
-            operator: Operator::Index(Box::new(AstNode::Literal(Object::String("c".to_string())))),
-        }),
+        Ok("a".id().index("b".id()).index("c")),
     );
 
     assert_eq!(
         parse("a.b[c]"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Identifier("a".to_string())),
-                operator: Operator::Index(Box::new(AstNode::Literal(Object::String("b".to_string())))),
-            }),
-            operator: Operator::Index(Box::new(AstNode::Identifier("c".to_string()))),
-        }),
+        Ok("a".id().index("b").index("c".id())),
     );
 
     assert_eq!(
         parse("a[b][c]"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Identifier("a".to_string())),
-                operator: Operator::Index(Box::new(AstNode::Identifier("b".to_string()))),
-            }),
-            operator: Operator::Index(Box::new(AstNode::Identifier("c".to_string()))),
-        }),
+        Ok("a".id().index("b".id()).index("c".id())),
     );
 }
 
@@ -567,80 +498,36 @@ fn indexing() {
 fn funcall() {
     assert_eq!(
         parse("func(1, 2, 3)"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Identifier("func".to_string())),
-            operator: Operator::FunCall(vec![
-                ArgElement::Singleton(AstNode::Literal(Object::Integer(1))),
-                ArgElement::Singleton(AstNode::Literal(Object::Integer(2))),
-                ArgElement::Singleton(AstNode::Literal(Object::Integer(3))),
-            ]),
-        }),
+        Ok("func".id().funcall((1, 2, 3))),
     );
 
     assert_eq!(
         parse("func(1, 2, a: 3)"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Identifier("func".to_string())),
-            operator: Operator::FunCall(vec![
-                ArgElement::Singleton(AstNode::Literal(Object::Integer(1))),
-                ArgElement::Singleton(AstNode::Literal(Object::Integer(2))),
-                ArgElement::Keyword(
-                    "a".to_string(),
-                    AstNode::Literal(Object::Integer(3)),
-                ),
-            ]),
-        }),
+        Ok("func".id().funcall((1, 2, ("a", 3)))),
     );
 
     assert_eq!(
         parse("func(a: 2, b: 3)"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Identifier("func".to_string())),
-            operator: Operator::FunCall(vec![
-                ArgElement::Keyword(
-                    "a".to_string(),
-                    AstNode::Literal(Object::Integer(2)),
-                ),
-                ArgElement::Keyword(
-                    "b".to_string(),
-                    AstNode::Literal(Object::Integer(3)),
-                ),
-            ]),
-        }),
+        Ok("func".id().funcall((("a", 2), ("b", 3)))),
     );
 
     assert_eq!(
         parse("((x,y) => x+y)(1,2)"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Function {
+        Ok(
+            AstNode::Function {
                 positional: Binding::List(vec![
-                    ListBindingElement::Binding { binding: Binding::Identifier("x".to_string()), default: None },
-                    ListBindingElement::Binding { binding: Binding::Identifier("y".to_string()), default: None },
+                    ListBindingElement::Binding { binding: Binding::id("x"), default: None },
+                    ListBindingElement::Binding { binding: Binding::id("y"), default: None },
                 ]),
                 keywords: Binding::Map(vec![]),
-                expression: Box::new(AstNode::Operator {
-                    operand: Box::new(AstNode::Identifier("x".to_string())),
-                    operator: Operator::Add(Box::new(AstNode::Identifier("y".to_string()))),
-                }),
-            }),
-            operator: Operator::FunCall(vec![
-                ArgElement::Singleton(AstNode::Literal(Object::Integer(1))),
-                ArgElement::Singleton(AstNode::Literal(Object::Integer(2))),
-        ]),
-    }),
+                expression: "x".id().add("y".id()).to_box(),
+            }.funcall((1, 2))
+        ),
     );
 
     assert_eq!(
         parse("func(1, ...y, z: 2, ...q)"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Identifier("func".to_string())),
-            operator: Operator::FunCall(vec![
-                ArgElement::Singleton(AstNode::Literal(Object::Integer(1))),
-                ArgElement::Splat(AstNode::Identifier("y".to_string())),
-                ArgElement::Keyword("z".to_string(), AstNode::Literal(Object::Integer(2))),
-                ArgElement::Splat(AstNode::Identifier("q".to_string())),
-            ]),
-        }),
+        Ok("func".id().funcall((1, "y".id().splat(), ("z", 2), "q".id().splat()))),
     );
 }
 
@@ -648,32 +535,17 @@ fn funcall() {
 fn unary_operators() {
     assert_eq!(
         parse("-1"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Literal(Object::Integer(1))),
-            operator: Operator::ArithmeticalNegate,
-        }),
+        Ok(1.to_ast().neg()),
     );
 
     assert_eq!(
         parse("- not 1"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Literal(Object::Integer(1))),
-                operator: Operator::LogicalNegate,
-            }),
-            operator: Operator::ArithmeticalNegate,
-        }),
+        Ok(1.to_ast().not().neg()),
     );
 
     assert_eq!(
         parse("not -1"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Literal(Object::Integer(1))),
-                operator: Operator::ArithmeticalNegate,
-            }),
-            operator: Operator::LogicalNegate,
-        }),
+        Ok(1.to_ast().neg().not()),
     );
 }
 
@@ -681,54 +553,22 @@ fn unary_operators() {
 fn power_operators() {
     assert_eq!(
         parse("2^3"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Literal(Object::Integer(2))),
-            operator: Operator::Power(
-                Box::new(AstNode::Literal(Object::Integer(3))),
-            ),
-        }),
+        Ok(2.to_ast().pow(3)),
     );
 
     assert_eq!(
         parse("2^-3"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Literal(Object::Integer(2))),
-            operator: Operator::Power(
-                Box::new(AstNode::Operator {
-                    operand: Box::new(AstNode::Literal(Object::Integer(3))),
-                    operator: Operator::ArithmeticalNegate,
-                }),
-            ),
-        }),
+        Ok(2.to_ast().pow(3.to_ast().neg())),
     );
 
     assert_eq!(
         parse("-2^3"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Literal(Object::Integer(2))),
-                operator: Operator::Power(
-                    Box::new(AstNode::Literal(Object::Integer(3))),
-                ),
-            }),
-            operator: Operator::ArithmeticalNegate,
-        }),
+        Ok(2.to_ast().pow(3).neg()),
     );
 
     assert_eq!(
         parse("-2^-3"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Literal(Object::Integer(2))),
-                operator: Operator::Power(
-                    Box::new(AstNode::Operator {
-                        operand: Box::new(AstNode::Literal(Object::Integer(3))),
-                        operator: Operator::ArithmeticalNegate,
-                    }),
-                ),
-            }),
-            operator: Operator::ArithmeticalNegate,
-        }),
+        Ok(2.to_ast().pow(3.to_ast().neg()).neg()),
     );
 }
 
@@ -736,100 +576,32 @@ fn power_operators() {
 fn operators() {
     assert_eq!(
         parse("1 + 2"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Literal(Object::Integer(1))),
-            operator: Operator::Add(Box::new(
-                AstNode::Literal(Object::Integer(2)),
-            )),
-        }),
+        Ok(1.to_ast().add(2)),
     );
 
     assert_eq!(
         parse("1 / 2 + 3"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Literal(Object::Integer(1))),
-                operator: Operator::Divide(Box::new(
-                    AstNode::Literal(Object::Integer(2))
-                )),
-            }),
-            operator: Operator::Add(Box::new(
-                AstNode::Literal(Object::Integer(3)),
-            )),
-        }),
+        Ok(1.to_ast().div(2).add(3)),
     );
 
     assert_eq!(
         parse("1 + 2 - 3 * 4 // 5 / 6"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Literal(Object::Integer(1))),
-                operator: Operator::Add(Box::new(AstNode::Literal(Object::Integer(2)))),
-            }),
-            operator: Operator::Subtract(Box::new(
-                AstNode::Operator {
-                    operand: Box::new(AstNode::Operator {
-                        operand: Box::new(AstNode::Operator {
-                            operand: Box::new(AstNode::Literal(Object::Integer(3))),
-                            operator: Operator::Multiply(Box::new(AstNode::Literal(Object::Integer(4)))),
-                        }),
-                        operator: Operator::IntegerDivide(Box::new(AstNode::Literal(Object::Integer(5)))),
-                    }),
-                    operator: Operator::Divide(Box::new(AstNode::Literal(Object::Integer(6)))),
-                },
-            )),
-        }),
+        Ok(1.to_ast().add(2).sub(3.to_ast().mul(4).idiv(5).div(6))),
     );
 
     assert_eq!(
         parse("1 < 2"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Literal(Object::Integer(1))),
-            operator: Operator::Less(Box::new(
-                AstNode::Literal(Object::Integer(2)),
-            )),
-        }),
+        Ok(1.to_ast().lt(2)),
     );
 
     assert_eq!(
         parse("1 > 2 <= 3 >= 4 == 5 != 6"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Operator {
-                    operand: Box::new(AstNode::Operator {
-                        operand: Box::new(AstNode::Operator {
-                            operand: Box::new(AstNode::Literal(Object::Integer(1))),
-                            operator: Operator::Greater(Box::new(
-                                AstNode::Literal(Object::Integer(2)),
-                            )),
-                        }),
-                        operator: Operator::LessEqual(Box::new(
-                            AstNode::Literal(Object::Integer(3)),
-                        )),
-                    }),
-                    operator: Operator::GreaterEqual(Box::new(
-                        AstNode::Literal(Object::Integer(4)),
-                    )),
-                }),
-                operator: Operator::Equal(Box::new(
-                    AstNode::Literal(Object::Integer(5)),
-                )),
-            }),
-            operator: Operator::NotEqual(Box::new(
-                AstNode::Literal(Object::Integer(6)),
-            )),
-        }),
+        Ok(1.to_ast().gt(2).lte(3).gte(4).eql(5).neql(6)),
     );
 
     assert_eq!(
         parse("1 and 2 or 3"),
-        Ok(AstNode::Operator {
-            operand: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Literal(Object::Integer(1))),
-                operator: Operator::And(Box::new(AstNode::Literal(Object::Integer(2)))),
-            }),
-            operator: Operator::Or(Box::new(AstNode::Literal(Object::Integer(3)))),
-        }),
+        Ok(1.to_ast().and(2).or(3)),
     );
 }
 
@@ -840,7 +612,7 @@ fn functions() {
         Ok(AstNode::Function {
             positional: Binding::List(vec![]),
             keywords: Binding::Map(vec![]),
-            expression: Box::new(AstNode::Literal(Object::Integer(1))),
+            expression: 1.to_ast().to_box(),
         }),
     );
 
@@ -849,7 +621,7 @@ fn functions() {
         Ok(AstNode::Function {
             positional: Binding::List(vec![]),
             keywords: Binding::Map(vec![]),
-            expression: Box::new(AstNode::Literal(Object::Integer(1))),
+            expression: 1.to_ast().to_box(),
         }),
     );
 
@@ -858,7 +630,7 @@ fn functions() {
         Ok(AstNode::Function {
             positional: Binding::List(vec![]),
             keywords: Binding::Map(vec![]),
-            expression: Box::new(AstNode::Literal(Object::Integer(1))),
+            expression: 1.to_ast().to_box(),
         }),
     );
 
@@ -866,17 +638,17 @@ fn functions() {
         parse("(a) => let b = a in b"),
         Ok(AstNode::Function {
             positional: Binding::List(vec![
-                ListBindingElement::Binding { binding: Binding::Identifier("a".to_string()), default: None },
+                ListBindingElement::Binding { binding: Binding::id("a"), default: None },
             ]),
             keywords: Binding::Map(vec![]),
             expression: Box::new(AstNode::Let {
                 bindings: vec![
                     (
-                        Binding::Identifier("b".to_string()),
-                        AstNode::Identifier("a".to_string()),
+                        Binding::id("b"),
+                        "a".id(),
                     ),
                 ],
-                expression: Box::new(AstNode::Identifier("b".to_string())),
+                expression: Box::new("b".id()),
             }),
         }),
     );
@@ -888,19 +660,16 @@ fn functions() {
             keywords: Binding::Map(vec![
                 MapBindingElement::Binding {
                     key: "x".to_string(),
-                    binding: Binding::Identifier("x".to_string()),
-                    default: Some(AstNode::Literal(Object::Integer(1))),
+                    binding: Binding::id("x"),
+                    default: Some(1.to_ast()),
                 },
                 MapBindingElement::Binding {
                     key: "y".to_string(),
-                    binding: Binding::Identifier("y".to_string()),
-                    default: Some(AstNode::Literal(Object::Integer(2))),
+                    binding: Binding::id("y"),
+                    default: Some(2.to_ast()),
                 },
             ]),
-            expression: Box::new(AstNode::Operator {
-                operand: Box::new(AstNode::Identifier("x".to_string())),
-                operator: Operator::Add(Box::new(AstNode::Identifier("y".to_string()))),
-            }),
+            expression: "x".id().add("y".id()).to_box(),
         }),
     );
 }

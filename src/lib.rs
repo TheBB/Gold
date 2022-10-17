@@ -1,44 +1,79 @@
-use std::{num::ParseFloatError, collections::HashMap, rc::Rc};
+use std::{collections::HashMap, ops, rc::Rc};
 
-use num_bigint::{BigInt, ParseBigIntError};
-use num_traits::Num;
+use num_bigint::BigInt;
 
-use nom::{
-    IResult, Parser,
-    Err::{Incomplete, Error, Failure},
-    branch::alt,
-    bytes::complete::{escaped_transform, is_not, tag},
-    character::complete::{char, none_of, one_of, multispace0},
-    combinator::{map, map_res, opt, recognize, value, verify},
-    error::{ParseError, FromExternalError, ContextError, VerboseError},
-    multi::{many0, many1, separated_list0},
-    sequence::{delimited, preceded, terminated, tuple},
-};
+pub trait Boxable<T> where T: Sized {
+    fn to_box(self) -> Box<T>;
+}
 
-trait CompleteError<'a>:
-    ParseError<&'a str> +
-    ContextError<&'a str> +
-    FromExternalError<&'a str, ParseBigIntError> +
-    FromExternalError<&'a str, ParseFloatError> {}
+impl<T> Boxable<T> for Box<T> {
+    fn to_box(self) -> Box<T> { self }
+}
 
-impl<'a, T> CompleteError<'a> for T
-    where T:
-    ParseError<&'a str> +
-    ContextError<&'a str> +
-    FromExternalError<&'a str, ParseBigIntError> +
-    FromExternalError<&'a str, ParseFloatError> {}
+pub struct Splat<T> {
+    object: T
+}
+
+pub trait Splattable<T> {
+    fn splat(self) -> Splat<T>;
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Object {
     Integer(i64),
     BigInteger(BigInt),
     Float(f64),
-    String(String),
+    String(Rc<String>),
     Boolean(bool),
     List(Rc<Vec<Object>>),
-    Map(Rc<HashMap<String, Object>>),
+    Map(Rc<HashMap<Rc<String>, Object>>),
     Function(Binding, Binding, Rc<AstNode>),
     Null,
+}
+
+impl Boxable<Object> for Object {
+    fn to_box(self) -> Box<Object> { Box::new(self) }
+}
+
+impl Splattable<Object> for Object {
+    fn splat(self) -> Splat<Object> { Splat::<Object> { object: self } }
+}
+
+impl Object {
+    pub fn string<T: ToString>(x: T) -> Object { Object::String(Rc::new(x.to_string())) }
+    pub fn literal(self) -> AstNode { AstNode::Literal(self) }
+}
+
+pub trait ToObject {
+    fn to_object(self) -> Object;
+}
+
+impl ToObject for &str {
+    fn to_object(self) -> Object { Object::String(Rc::new(self.to_string())) }
+}
+
+impl ToObject for String {
+    fn to_object(self) -> Object { Object::String(Rc::new(self)) }
+}
+
+impl ToObject for i32 {
+    fn to_object(self) -> Object { Object::Integer(self as i64) }
+}
+
+impl ToObject for i64 {
+    fn to_object(self) -> Object { Object::Integer(self) }
+}
+
+impl ToObject for f64 {
+    fn to_object(self) -> Object { Object::Float(self) }
+}
+
+impl ToObject for bool {
+    fn to_object(self) -> Object { Object::Boolean(self) }
+}
+
+impl ToObject for Object {
+    fn to_object(self) -> Object { self }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -49,6 +84,10 @@ pub enum ListBindingElement {
     },
     SlurpTo(String),
     Slurp,
+}
+
+impl ListBindingElement {
+    pub fn slurp_to<T: ToString>(x: T) -> ListBindingElement { ListBindingElement::SlurpTo(x.to_string()) }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -68,10 +107,20 @@ pub enum Binding {
     Map(Vec<MapBindingElement>),
 }
 
+impl Binding {
+    pub fn id<T: ToString>(x: T) -> Binding { Binding::Identifier(x.to_string()) }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum StringElement {
-    Raw(String),
+    Raw(Rc<String>),
     Interpolate(AstNode),
+}
+
+impl StringElement {
+    pub fn raw<T>(val: T) -> StringElement where T: ToString {
+        StringElement::Raw(Rc::new(val.to_string()))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -87,6 +136,120 @@ pub enum ListElement {
         condition: AstNode,
         element: Box<ListElement>,
     },
+}
+
+pub trait ToListElement {
+    fn to_list_element(self) -> ListElement;
+}
+
+impl ToListElement for ListElement {
+    fn to_list_element(self) -> ListElement { self }
+}
+
+impl<T> ToListElement for T where T: ToAstNode {
+    fn to_list_element(self) -> ListElement {
+        ListElement::Singleton(self.to_ast())
+    }
+}
+
+impl<T> ToListElement for Splat<T> where T: ToAstNode {
+    fn to_list_element(self) -> ListElement {
+        ListElement::Splat(self.object.to_ast())
+    }
+}
+
+pub trait ToList {
+    fn to_list(self) -> Vec<ListElement>;
+}
+
+impl ToList for Vec<ListElement> {
+    fn to_list(self) -> Vec<ListElement> { self }
+}
+
+impl ToList for () {
+    fn to_list(self) -> Vec<ListElement> { vec![] }
+}
+
+impl<A> ToList for (A,)
+where
+    A: ToListElement
+{
+    fn to_list(self) -> Vec<ListElement> {
+        vec![self.0.to_list_element()]
+    }
+}
+
+impl<A,B,> ToList for (A,B)
+where
+    A: ToListElement,
+    B: ToListElement
+{
+    fn to_list(self) -> Vec<ListElement> {
+        vec![
+            self.0.to_list_element(),
+            self.1.to_list_element(),
+        ]
+    }
+}
+
+impl<A,B,C> ToList for (A,B,C)
+where
+    A: ToListElement,
+    B: ToListElement,
+    C: ToListElement
+{
+    fn to_list(self) -> Vec<ListElement> {
+        vec![
+            self.0.to_list_element(),
+            self.1.to_list_element(),
+            self.2.to_list_element(),
+        ]
+    }
+}
+
+impl<A,B,C,D> ToList for (A,B,C,D)
+where
+    A: ToListElement,
+    B: ToListElement,
+    C: ToListElement,
+    D: ToListElement
+{
+    fn to_list(self) -> Vec<ListElement> {
+        vec![
+            self.0.to_list_element(),
+            self.1.to_list_element(),
+            self.2.to_list_element(),
+            self.3.to_list_element(),
+        ]
+    }
+}
+
+impl<A,B,C,D,E> ToList for (A,B,C,D,E)
+where
+    A: ToListElement,
+    B: ToListElement,
+    C: ToListElement,
+    D: ToListElement,
+    E: ToListElement
+{
+    fn to_list(self) -> Vec<ListElement> {
+        vec![
+            self.0.to_list_element(),
+            self.1.to_list_element(),
+            self.2.to_list_element(),
+            self.3.to_list_element(),
+            self.4.to_list_element(),
+        ]
+    }
+}
+
+impl Boxable<ListElement> for ListElement {
+    fn to_box(self) -> Box<ListElement> { Box::new(self) }
+}
+
+impl ListElement {
+    pub fn singleton<T>(x: T) -> ListElement where T: ToAstNode { ListElement::Singleton(x.to_ast()) }
+    pub fn splat<T>(x: T) -> ListElement where T: ToAstNode { ListElement::Splat(x.to_ast()) }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -107,12 +270,155 @@ pub enum MapElement {
     },
 }
 
+pub trait ToMapElement {
+    fn to_map_element(self) -> MapElement;
+}
+
+impl ToMapElement for MapElement {
+    fn to_map_element(self) -> MapElement { self }
+}
+
+impl<S,T> ToMapElement for (S, T) where T: ToAstNode, S: ToAstNode {
+    fn to_map_element(self) -> MapElement {
+        MapElement::Singleton {
+            key: self.0.to_ast(),
+            value: self.1.to_ast(),
+        }
+    }
+}
+
+impl<T> ToMapElement for Splat<T> where T: ToAstNode {
+    fn to_map_element(self) -> MapElement {
+        MapElement::Splat(self.object.to_ast())
+    }
+}
+
+pub trait ToMap {
+    fn to_map(self) -> Vec<MapElement>;
+}
+
+impl ToMap for Vec<MapElement> {
+    fn to_map(self) -> Vec<MapElement> { self }
+}
+
+impl ToMap for () {
+    fn to_map(self) -> Vec<MapElement> { vec![] }
+}
+
+impl<A> ToMap for (A,)
+where
+    A: ToMapElement
+{
+    fn to_map(self) -> Vec<MapElement> {
+        vec![self.0.to_map_element()]
+    }
+}
+
+impl<A,B> ToMap for (A,B)
+where
+    A: ToMapElement,
+    B: ToMapElement
+{
+    fn to_map(self) -> Vec<MapElement> {
+        vec![
+            self.0.to_map_element(),
+            self.1.to_map_element(),
+        ]
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ArgElement {
     Singleton(AstNode),
     Keyword(String, AstNode),
     Splat(AstNode),
 }
+
+pub trait ToArg {
+    fn to_arg(self) -> ArgElement;
+}
+
+impl<T> ToArg for T where T: ToAstNode {
+    fn to_arg(self) -> ArgElement {
+        ArgElement::Singleton(self.to_ast())
+    }
+}
+
+impl<S,T> ToArg for (S, T) where S: ToString, T: ToAstNode {
+    fn to_arg(self) -> ArgElement {
+        ArgElement::Keyword(self.0.to_string(), self.1.to_ast())
+    }
+}
+
+impl<T> ToArg for Splat<T> where T: ToAstNode {
+    fn to_arg(self) -> ArgElement {
+        ArgElement::Splat(self.object.to_ast())
+    }
+}
+
+pub trait ToArgs {
+    fn to_args(self) -> Vec<ArgElement>;
+}
+
+impl ToArgs for Vec<ArgElement> {
+    fn to_args(self) -> Vec<ArgElement> { self }
+}
+
+impl ToArgs for () {
+    fn to_args(self) -> Vec<ArgElement> { vec![] }
+}
+
+impl<A> ToArgs for (A,) where A: ToArg {
+    fn to_args(self) -> Vec<ArgElement> {
+        vec![self.0.to_arg()]
+    }
+}
+
+impl<A,B> ToArgs for (A,B)
+where
+    A: ToArg,
+    B: ToArg
+{
+    fn to_args(self) -> Vec<ArgElement> {
+        vec![
+            self.0.to_arg(),
+            self.1.to_arg(),
+        ]
+    }
+}
+
+impl<A,B,C> ToArgs for (A,B,C)
+where
+    A: ToArg,
+    B: ToArg,
+    C: ToArg
+{
+    fn to_args(self) -> Vec<ArgElement> {
+        vec![
+            self.0.to_arg(),
+            self.1.to_arg(),
+            self.2.to_arg(),
+        ]
+    }
+}
+
+impl<A,B,C,D> ToArgs for (A,B,C,D)
+where
+    A: ToArg,
+    B: ToArg,
+    C: ToArg,
+    D: ToArg
+{
+    fn to_args(self) -> Vec<ArgElement> {
+        vec![
+            self.0.to_arg(),
+            self.1.to_arg(),
+            self.2.to_arg(),
+            self.3.to_arg(),
+        ]
+    }
+}
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
@@ -136,7 +442,23 @@ pub enum Operator {
     Or(Box<AstNode>),
 }
 
-type OpCons = fn(Box<AstNode>) -> Operator;
+impl Operator {
+    pub fn index<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::Index(x.to_box()) }
+    pub fn power<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::Power(x.to_box()) }
+    pub fn multiply<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::Multiply(x.to_box()) }
+    pub fn integer_divide<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::IntegerDivide(x.to_box()) }
+    pub fn divide<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::Divide(x.to_box()) }
+    pub fn add<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::Add(x.to_box()) }
+    pub fn subtract<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::Subtract(x.to_box()) }
+    pub fn less<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::Less(x.to_box()) }
+    pub fn greater<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::Greater(x.to_box()) }
+    pub fn less_equal<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::LessEqual(x.to_box()) }
+    pub fn greater_equal<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::GreaterEqual(x.to_box()) }
+    pub fn equal<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::Equal(x.to_box()) }
+    pub fn not_equal<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::NotEqual(x.to_box()) }
+    pub fn and<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::And(x.to_box()) }
+    pub fn or<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::Or(x.to_box()) }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstNode {
@@ -165,6 +487,44 @@ pub enum AstNode {
     }
 }
 
+impl Boxable<AstNode> for AstNode {
+    fn to_box(self) -> Box<AstNode> { Box::new(self) }
+}
+
+impl Splattable<AstNode> for AstNode {
+    fn splat(self) -> Splat<AstNode> { Splat::<AstNode> { object: self } }
+}
+
+impl<T> ops::Add<T> for AstNode where T: ToAstNode {
+    type Output = AstNode;
+    fn add(self, rhs: T) -> AstNode { self.operate(Operator::add(rhs.to_ast())) }
+}
+
+impl<T> ops::Sub<T> for AstNode where T: ToAstNode {
+    type Output = AstNode;
+    fn sub(self, rhs: T) -> AstNode { self.operate(Operator::subtract(rhs.to_ast())) }
+}
+
+impl<T> ops::Mul<T> for AstNode where T: ToAstNode {
+    type Output = AstNode;
+    fn mul(self, rhs: T) -> AstNode { self.operate(Operator::multiply(rhs.to_ast())) }
+}
+
+impl<T> ops::Div<T> for AstNode where T: ToAstNode {
+    type Output = AstNode;
+    fn div(self, rhs: T) -> AstNode { self.operate(Operator::divide(rhs.to_ast())) }
+}
+
+impl ops::Neg for AstNode {
+    type Output = AstNode;
+    fn neg(self) -> AstNode { self.operate(Operator::ArithmeticalNegate) }
+}
+
+impl ops::Not for AstNode {
+    type Output = AstNode;
+    fn not(self) -> AstNode { self.operate(Operator::LogicalNegate) }
+}
+
 impl AstNode {
     fn integer(value: i64) -> AstNode { AstNode::Literal(Object::Integer(value)) }
     fn big_integer(value: BigInt) -> AstNode { AstNode::Literal(Object::BigInteger(value)) }
@@ -172,9 +532,34 @@ impl AstNode {
     fn boolean(value: bool) -> AstNode { AstNode::Literal(Object::Boolean(value)) }
     fn null() -> AstNode { AstNode::Literal(Object::Null) }
 
+    pub fn id<T: ToString>(x: T) -> AstNode { AstNode::Identifier(x.to_string()) }
+
+    pub fn list<T>(x: T) -> AstNode where T: ToList { AstNode::List(x.to_list()) }
+    pub fn map<T>(x: T) -> AstNode where T: ToMap { AstNode::Map(x.to_map()) }
+
+    pub fn operate(self, op: Operator) -> AstNode {
+        AstNode::Operator {
+            operand: self.to_box(),
+            operator: op,
+        }
+    }
+
+    pub fn idiv<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::integer_divide(rhs.to_ast())) }
+    pub fn lt<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::less(rhs.to_ast())) }
+    pub fn gt<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::greater(rhs.to_ast())) }
+    pub fn lte<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::less_equal(rhs.to_ast())) }
+    pub fn gte<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::greater_equal(rhs.to_ast())) }
+    pub fn eql<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::equal(rhs.to_ast())) }
+    pub fn neql<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::not_equal(rhs.to_ast())) }
+    pub fn and<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::and(rhs.to_ast())) }
+    pub fn or<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::or(rhs.to_ast())) }
+    pub fn pow<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::power(rhs.to_ast())) }
+    pub fn index<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::index(rhs.to_ast())) }
+    pub fn funcall<T>(self, args: T) -> AstNode where T: ToArgs { self.operate(Operator::FunCall(args.to_args())) }
+
     fn string(value: Vec<StringElement>) -> AstNode {
         if value.len() == 0 {
-            AstNode::Literal(Object::String("".to_string()))
+            AstNode::Literal(Object::String(Rc::new("".to_string())))
         } else if value.len() == 1 {
             match &value[0] {
                 StringElement::Raw(val) => AstNode::Literal(Object::String(val.clone())),
@@ -186,857 +571,29 @@ impl AstNode {
     }
 }
 
-fn postpad<I, O, E: ParseError<I>, F>(
-    parser: F,
-) -> impl FnMut(I) -> IResult<I, O, E>
-where
-    F: Parser<I, O, E>,
-    I: Clone + nom::InputTakeAtPosition,
-    <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
-{
-    terminated(parser, multispace0)
+pub trait ToAstNode {
+    fn to_ast(self) -> AstNode;
 }
 
-static KEYWORDS: [&'static str; 12] = [
-    "for",
-    "if",
-    "then",
-    "else",
-    "let",
-    "in",
-    "true",
-    "false",
-    "null",
-    "and",
-    "or",
-    "not",
-];
-
-fn keyword<'a, E: ParseError<&'a str>>(
-    value: &'static str
-) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
-    verify(
-        is_not("=,;.:-+/*[](){}\"\' \t\n\r"),
-        move |out: &str| out == value,
-    )
+impl<T> ToAstNode for T where T: ToObject {
+    fn to_ast(self) -> AstNode { self.to_object().literal() }
 }
 
-fn identifier<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, &'a str, E> {
-    verify(
-        is_not("=.,:;-+/*[](){}\"\' \t\n\r"),
-        |out: &str| !KEYWORDS.contains(&out),
-    )(input)
+impl ToAstNode for AstNode {
+    fn to_ast(self) -> AstNode { self }
 }
 
-fn map_identifier<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, &'a str, E> {
-    is_not(",=:$}()\"\' \t\n\r")(input)
+pub trait IdAble {
+    fn id(self) -> AstNode;
 }
 
-fn decimal<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, &'a str, E> {
-    recognize(tuple((
-        one_of("0123456789"),
-        many0(one_of("0123456789_")),
-    )))(input)
+impl<T> IdAble for T where T: ToString {
+    fn id(self) -> AstNode { AstNode::id(self.to_string()) }
 }
 
-fn exponent<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&str, &str, E> {
-    recognize(tuple((
-        one_of("eE"),
-        opt(one_of("+-")),
-        decimal,
-    )))(input)
-}
+mod parsing;
 
-fn integer<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    map_res(
-        decimal,
-        |out: &'a str| {
-            let s = out.replace("_", "");
-            i64::from_str_radix(s.as_str(), 10).map_or_else(
-                |_| { BigInt::from_str_radix(s.as_str(), 10).map(AstNode::big_integer) },
-                |val| Ok(AstNode::integer(val)),
-            )
-        }
-    )(input)
-}
-
-fn float<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    map_res(
-        alt((
-            recognize(tuple((
-                decimal,
-                char('.'),
-                opt(decimal),
-                opt(exponent),
-            ))),
-            recognize(tuple((
-                char('.'),
-                decimal,
-                opt(exponent),
-            ))),
-            recognize(tuple((
-                decimal,
-                exponent,
-            ))),
-        )),
-        |out: &str| { out.replace("_", "").parse::<f64>().map(AstNode::float) }
-    )(input)
-}
-
-fn string_data<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, StringElement, E> {
-    map(
-        escaped_transform(
-            recognize(many1(none_of("\"\\$"))),
-            '\\',
-            alt((
-                value("\"", tag("\"")),
-                value("\\", tag("\\")),
-            )),
-        ),
-        StringElement::Raw,
-    )(input)
-}
-
-fn string_interp<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, StringElement, E> {
-    map(
-        preceded(
-            postpad(tag("${")),
-            terminated(
-                expression,
-                char('}'),
-            ),
-        ),
-        StringElement::Interpolate,
-    )(input)
-}
-
-fn string<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    map(
-        preceded(
-            char('\"'),
-            terminated(
-                many0(alt((string_interp, string_data))),
-                char('\"'),
-            ),
-        ),
-        AstNode::string
-    )(input)
-}
-
-fn boolean<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    alt((
-        value(AstNode::boolean(true), keyword("true")),
-        value(AstNode::boolean(false), keyword("false")),
-    ))(input)
-}
-
-fn null<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    value(AstNode::null(), keyword("null"))(input)
-}
-
-fn atomic<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    alt((
-        null,
-        boolean,
-        float,
-        integer,
-        string,
-    ))(input)
-}
-
-fn list_element<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, ListElement, E> {
-    alt((
-        map(
-            preceded(postpad(tag("...")), expression),
-            ListElement::Splat,
-        ),
-        map(
-            tuple((
-                preceded(postpad(tag("for")), binding),
-                preceded(postpad(tag("in")), expression),
-                preceded(postpad(char(':')), list_element),
-            )),
-            |(binding, iterable, expr)| ListElement::Loop {
-                binding,
-                iterable,
-                element: Box::new(expr),
-            },
-        ),
-        map(
-            tuple((
-                preceded(postpad(tag("if")), expression),
-                preceded(postpad(char(':')), list_element),
-            )),
-            |(condition, expr)| ListElement::Cond {
-                condition,
-                element: Box::new(expr),
-            },
-        ),
-        map(expression, ListElement::Singleton),
-    ))(input)
-}
-
-fn list<'a, E: CompleteError<'a>>(
-    input: &'a str
-) -> IResult<&'a str, AstNode, E> {
-    map(
-        preceded(
-            postpad(char('[')),
-            terminated(
-                separated_list0(
-                    postpad(char(',')),
-                    list_element
-                ),
-                tuple((
-                    opt(postpad(char(','))),
-                    char(']')
-                )),
-            ),
-        ),
-        AstNode::List,
-    )(input)
-}
-
-fn map_element<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, MapElement, E> {
-    alt((
-        map(
-            preceded(postpad(tag("...")), expression),
-            MapElement::Splat,
-        ),
-        map(
-            tuple((
-                preceded(postpad(tag("for")), binding),
-                preceded(postpad(tag("in")), expression),
-                preceded(postpad(char(':')), map_element),
-            )),
-            |(binding, iterable, expr)| MapElement::Loop {
-                binding,
-                iterable,
-                element: Box::new(expr),
-            },
-        ),
-        map(
-            tuple((
-                preceded(postpad(tag("if")), expression),
-                preceded(postpad(char(':')), map_element),
-            )),
-            |(condition, expr)| MapElement::Cond {
-                condition,
-                element: Box::new(expr)
-            },
-        ),
-        map(
-            tuple((
-                terminated(
-                    preceded(postpad(char('$')), expression),
-                    postpad(char(':')),
-                ),
-                expression,
-            )),
-            |(key, value)| MapElement::Singleton { key, value },
-        ),
-        map(
-            tuple((
-                terminated(
-                    postpad(map_identifier),
-                    postpad(char(':')),
-                ),
-                expression,
-            )),
-            |(key, value)| MapElement::Singleton {
-                key: AstNode::Literal(Object::String(key.to_string())),
-                value,
-            },
-        ),
-    ))(input)
-}
-
-fn mapping<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    map(
-        preceded(
-            postpad(char('{')),
-            terminated(
-                separated_list0(
-                    postpad(char(',')),
-                    map_element,
-                ),
-                tuple((
-                    opt(postpad(char(','))),
-                    char('}'),
-                )),
-            ),
-        ),
-        AstNode::Map,
-    )(input)
-}
-
-fn postfixable<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    postpad(alt((
-        delimited(postpad(char('(')), expression, postpad(char(')'))),
-        atomic,
-        map(identifier, |out: &str| AstNode::Identifier(out.to_string())),
-        list,
-        mapping,
-    )))(input)
-}
-
-fn object_access<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Operator, E> {
-    map(
-        preceded(
-            postpad(char('.')),
-            identifier,
-        ),
-        |out: &str| Operator::Index(Box::new(AstNode::Literal(Object::String(out.to_string())))),
-    )(input)
-}
-
-fn object_index<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Operator, E> {
-    map(
-        delimited(
-            postpad(char('[')),
-            expression,
-            char(']'),
-        ),
-        |expr| Operator::Index(Box::new(expr)),
-    )(input)
-}
-
-fn function_arg<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, ArgElement, E> {
-    alt((
-        map(
-            preceded(postpad(tag("...")), expression),
-            ArgElement::Splat,
-        ),
-        map(
-            tuple((
-                postpad(identifier),
-                preceded(
-                    postpad(char(':')),
-                    expression,
-                ),
-            )),
-            |(name, expr)| ArgElement::Keyword(name.to_string(), expr),
-        ),
-        map(
-            expression,
-            ArgElement::Singleton,
-        ),
-    ))(input)
-}
-
-fn function_call<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Operator, E> {
-    map(
-        delimited(
-            postpad(char('(')),
-            separated_list0(
-                postpad(char(',')),
-                function_arg,
-            ),
-            postpad(char(')')),
-        ),
-        Operator::FunCall,
-    )(input)
-}
-
-fn postfixed<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    map(
-        tuple((
-            postfixable,
-            many0(postpad(alt((
-                object_access,
-                object_index,
-                function_call,
-            )))),
-        )),
-        |(expr, ops)| {
-            ops.into_iter().fold(
-                expr,
-                |expr, operator| AstNode::Operator { operand: Box::new(expr), operator },
-            )
-        },
-    )(input)
-}
-
-fn prefixed<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    map(
-        tuple((
-            many0(alt((
-                value(Operator::ArithmeticalNegate, postpad(tag("-"))),
-                value(Operator::LogicalNegate, postpad(keyword("not"))),
-            ))),
-            power,
-        )),
-        |(ops, expr)| {
-            ops.into_iter().rev().fold(
-                expr,
-                |expr, operator| AstNode::Operator { operand: Box::new(expr), operator },
-            )
-        },
-    )(input)
-}
-
-fn binop<I, E: ParseError<I>, G, H>(
-    operators: G,
-    operand: H,
-) -> impl FnMut(I) -> IResult<I, Operator, E>
-where
-    I: Clone + nom::InputTakeAtPosition,
-    <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
-    G: Parser<I, OpCons, E>,
-    H: Parser<I, AstNode, E>,
-{
-    map(
-        tuple((
-            postpad(operators),
-            operand,
-        )),
-        |(func, expr)| func(Box::new(expr)),
-    )
-}
-
-fn binops<I, E: ParseError<I>, G, H>(
-    operators: G,
-    operand: H,
-    right: bool,
-) -> impl FnMut(I) -> IResult<I, AstNode, E>
-where
-    I: Clone + nom::InputTakeAtPosition + nom::InputLength,
-    <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
-    G: Parser<I, Operator, E>,
-    H: Parser<I, AstNode, E> + Copy,
-{
-    map(
-        tuple((
-            operand,
-            many0(operators),
-        )),
-        move |(expr, ops)| {
-            let acc = |expr: AstNode, operator: Operator| AstNode::Operator { operand: Box::new(expr), operator };
-            if right {
-                ops.into_iter().rev().fold(expr, acc)
-            } else {
-                ops.into_iter().fold(expr, acc)
-            }
-        },
-    )
-}
-
-fn power<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    binops(
-        binop(
-            alt((
-                value(Operator::Power as OpCons, tag("^")),
-                value(Operator::Multiply as OpCons, tag("*")),
-            )),
-            prefixed,
-        ),
-        postfixed,
-        true,
-    )(input)
-}
-
-fn lbinop<I, E: ParseError<I>, G, H>(
-    operators: G,
-    operands: H
-) -> impl FnMut(I) -> IResult<I, AstNode, E>
-where
-    I: Clone + nom::InputTakeAtPosition + nom::InputLength,
-    <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
-    G: Parser<I, OpCons, E>,
-    H: Parser<I, AstNode, E> + Copy,
-{
-    binops(binop(operators, operands), operands, false)
-}
-
-fn product<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    lbinop(
-        alt((
-            value(Operator::Multiply as OpCons, tag("*")),
-            value(Operator::IntegerDivide as OpCons, tag("//")),
-            value(Operator::Divide as OpCons, tag("/")),
-        )),
-        prefixed
-    )(input)
-}
-
-fn sum<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    lbinop(
-        alt((
-            value(Operator::Add as OpCons, tag("+")),
-            value(Operator::Subtract as OpCons, tag("-")),
-        )),
-        product,
-    )(input)
-}
-
-fn inequality<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    lbinop(
-        alt((
-            value(Operator::LessEqual as OpCons, tag("<=")),
-            value(Operator::GreaterEqual as OpCons, tag(">=")),
-            value(Operator::Less as OpCons, tag("<")),
-            value(Operator::Greater as OpCons, tag(">")),
-        )),
-        sum,
-    )(input)
-}
-
-fn equality<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    lbinop(
-        alt((
-            value(Operator::Equal as OpCons, tag("==")),
-            value(Operator::NotEqual as OpCons, tag("!=")),
-        )),
-        inequality,
-    )(input)
-}
-
-fn conjunction<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    lbinop(
-        alt((
-            value(Operator::And as OpCons, tag("and")),
-        )),
-        equality,
-    )(input)
-}
-
-fn disjunction<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    lbinop(
-        alt((
-            value(Operator::Or as OpCons, tag("or")),
-        )),
-        conjunction,
-    )(input)
-}
-
-fn ident_binding<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Binding, E> {
-    postpad(alt((
-        map(identifier, |out: &str| Binding::Identifier(out.to_string())),
-    )))(input)
-}
-
-fn list_binding_element<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, ListBindingElement, E> {
-    map(
-        tuple((binding, opt(preceded(postpad(char('=')), expression)))),
-        |(b, e)| ListBindingElement::Binding { binding: b, default: e }
-    )(input)
-}
-
-fn list_binding<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Binding, E> {
-    map(
-        terminated(
-            tuple((
-                separated_list0(
-                    postpad(char(',')),
-                    list_binding_element,
-                ),
-                opt(
-                    preceded(
-                        tuple((postpad(char(',')), postpad(tag("...")))),
-                        opt(identifier),
-                    ),
-                ),
-            )),
-            opt(postpad(char(','))),
-        ),
-        |(mut bindings, slurp)| {
-            match slurp {
-                Some(Some(name)) => bindings.push(ListBindingElement::SlurpTo(name.to_string())),
-                Some(None) => bindings.push(ListBindingElement::Slurp),
-                _ => {}
-            };
-            Binding::List(bindings)
-        }
-    )(input)
-}
-
-fn map_binding_element<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, MapBindingElement, E> {
-    map(
-        tuple((
-            alt((
-                map(
-                    tuple((
-                        postpad(map_identifier),
-                        preceded(
-                            postpad(char(':')),
-                            binding,
-                        ),
-                    )),
-                    |(name, binding)| (name, Some(binding)),
-                ),
-                map(
-                    postpad(map_identifier),
-                    |name: &str| (name, None),
-                ),
-            )),
-            opt(
-                preceded(
-                    postpad(char('=')),
-                    expression,
-                ),
-            ),
-        )),
-        |((name, binding), default)| {
-            match binding {
-                None => MapBindingElement::Binding {
-                    key: name.to_string(),
-                    binding: Binding::Identifier(name.to_string()),
-                    default,
-                },
-                Some(binding) => MapBindingElement::Binding {
-                    key: name.to_string(),
-                    binding,
-                    default,
-                },
-            }
-        }
-    )(input)
-}
-
-fn map_binding<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Binding, E> {
-    map(
-        terminated(
-            tuple((
-                separated_list0(
-                    postpad(char(',')),
-                    map_binding_element
-                ),
-                opt(
-                    preceded(
-                        tuple((postpad(char(',')), postpad(tag("...")))),
-                        postpad(identifier),
-                    ),
-                ),
-            )),
-            opt(postpad(char(','))),
-        ),
-        |(mut bindings, slurp)| {
-            match slurp {
-                Some(name) => bindings.push(MapBindingElement::SlurpTo(name.to_string())),
-                _ => {}
-            };
-            Binding::Map(bindings)
-        },
-    )(input)
-}
-
-fn binding<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Binding, E> {
-    alt((
-        ident_binding,
-        delimited(postpad(char('[')), list_binding, postpad(char(']'))),
-        delimited(postpad(char('{')), map_binding, postpad(char('}'))),
-    ))(input)
-}
-
-fn function<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    map(
-        tuple((
-            delimited(
-                postpad(char('(')),
-                tuple((
-                    list_binding,
-                    opt(
-                        preceded(
-                            postpad(char(';')),
-                            map_binding,
-                        ),
-                    ),
-                )),
-                postpad(char(')')),
-            ),
-            preceded(
-                postpad(tag("=>")),
-                expression,
-            ),
-        )),
-        |((posargs, kwargs), expr)| AstNode::Function {
-            positional: posargs,
-            keywords: kwargs.unwrap_or_else(|| Binding::Map(vec![])),
-            expression: Box::new(expr),
-        },
-    )(input)
-}
-
-fn keyword_function<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    map(
-        tuple((
-            delimited(
-                postpad(char('{')),
-                map_binding,
-                postpad(char('}')),
-            ),
-            preceded(
-                postpad(tag("=>")),
-                expression,
-            ),
-        )),
-        |(kwargs, expr)| AstNode::Function {
-            positional: Binding::List(vec![]),
-            keywords: kwargs,
-            expression: Box::new(expr),
-        },
-    )(input)
-}
-
-fn let_block<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    map(
-        tuple((
-            many1(
-                tuple((
-                    preceded(
-                        postpad(keyword("let")),
-                        binding,
-                    ),
-                    preceded(
-                        postpad(tag("=")),
-                        expression,
-                    ),
-                )),
-            ),
-            preceded(
-                postpad(tag("in")),
-                expression,
-            ),
-        )),
-        |(bindings, expr)| AstNode::Let { bindings, expression: Box::new(expr) },
-    )(input)
-}
-
-fn branch<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    map(
-        tuple((
-            preceded(
-                postpad(keyword("if")),
-                expression,
-            ),
-            preceded(
-                postpad(keyword("then")),
-                expression,
-            ),
-            preceded(
-                postpad(keyword("else")),
-                expression,
-            ),
-        )),
-        |(condition, true_branch, false_branch)| AstNode::Branch {
-            condition: Box::new(condition),
-            true_branch: Box::new(true_branch),
-            false_branch: Box::new(false_branch),
-        },
-    )(input)
-}
-
-fn composite<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    alt((
-        let_block,
-        branch,
-        function,
-        keyword_function,
-    ))(input)
-}
-
-fn expression<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    alt((
-        composite,
-        disjunction,
-    ))(input)
-}
-
-pub fn parse(input: &str) -> Result<AstNode, String> {
-    expression::<VerboseError<&str>>(input).map_or_else(
-        |err| match err {
-            Incomplete(_) => Err("incomplete input".to_string()),
-            Error(e) | Failure(e) => Err(format!("{:#?}", e)),
-        },
-        |(remaining, node)| if remaining.len() > 0 {
-            Err(format!("unconsumed input: {}", remaining))
-        } else {
-            Ok(node)
-        }
-    )
-}
+pub use parsing::parse;
 
 #[cfg(test)]
 mod tests;
