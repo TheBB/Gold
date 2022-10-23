@@ -1,9 +1,10 @@
 use std::collections::HashMap;
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::Neg;
 use std::rc::Rc;
 
-use ibig::IBig;
-use num::checked_pow;
+use num_traits::checked_pow;
+use rug::Integer;
+use rug::ops::Pow;
 
 use crate::ast::{StringElement, ListBindingElement, ListElement, MapElement, Operator, UnOp, BinOp};
 
@@ -14,7 +15,7 @@ use super::object::Object;
 struct Arith<F,G,H,X,Y,Z>
 where
     F: Fn(i64, i64) -> Option<X>,
-    G: Fn(IBig, IBig) -> Y,
+    G: Fn(&Integer, &Integer) -> Y,
     H: Fn(f64, f64) -> Z,
 {
     ixi: F,
@@ -26,7 +27,7 @@ where
 fn arithmetic_operate<F,G,H,X,Y,Z>(ops: Arith<F,G,H,X,Y,Z>, x: Object, y: Object) -> Result<Object, String>
 where
     F: Fn(i64, i64) -> Option<X>,
-    G: Fn(IBig, IBig) -> Y,
+    G: Fn(&Integer, &Integer) -> Y,
     H: Fn(f64, f64) -> Z,
     Object: From<X>,
     Object: From<Y>,
@@ -37,13 +38,13 @@ where
     match (x, y) {
         (Object::Integer(xx), Object::Integer(yy)) => Ok(
             ixi(xx, yy).map(Object::from).unwrap_or_else(
-                || Object::from(bxb(IBig::from(xx), IBig::from(yy))).numeric_normalize()
+                || Object::from(bxb(&Integer::from(xx), &Integer::from(yy))).numeric_normalize()
             )
         ),
 
-        (Object::Integer(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(IBig::from(xx), yy))),
-        (Object::BigInteger(xx), Object::Integer(yy)) => Ok(Object::from(bxb(xx, IBig::from(yy)))),
-        (Object::BigInteger(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(xx, yy))),
+        (Object::Integer(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&Integer::from(xx), &yy))),
+        (Object::BigInteger(xx), Object::Integer(yy)) => Ok(Object::from(bxb(&xx, &Integer::from(yy)))),
+        (Object::BigInteger(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&xx, &yy))),
 
         (Object::Float(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx, yy))),
         (Object::Integer(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx as f64, yy))),
@@ -60,15 +61,15 @@ where
 fn power(x: Object, y: Object) -> Result<Object, String> {
     match (&x, &y) {
         (Object::Integer(x), Object::Integer(y)) if *y >= 0 => {
-            let yy: usize = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
-            Ok(checked_pow(*x, yy).map(Object::from).unwrap_or_else(
-                || Object::from(IBig::from(*x).pow(yy))
+            let yy: u32 = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
+            Ok(checked_pow(*x, yy as usize).map(Object::from).unwrap_or_else(
+                || Object::from(Integer::from(*x).pow(yy))
             ))
         },
 
         (Object::BigInteger(x), Object::Integer(y)) if *y >= 0 => {
-            let yy: usize = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
-            Ok(Object::from(x.pow(yy)))
+            let yy: u32 = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
+            Ok(Object::from(Integer::from(x.as_ref().pow(yy))))
         },
 
         _ => {
@@ -251,39 +252,35 @@ impl<'a> Namespace<'a> {
     fn operate(&self, operator: &Operator, value: Object) -> Result<Object, String> {
         let add = Arith {
             ixi: i64::checked_add,
-            bxb: IBig::add,
-            fxf: f64::add,
+            bxb: |x,y| Integer::from(x + y),
+            fxf: |x,y| x + y,
         };
         let sub = Arith {
             ixi: i64::checked_sub,
-            bxb: IBig::sub,
-            fxf: f64::sub,
+            bxb: |x,y| Integer::from(x - y),
+            fxf: |x,y| x - y,
         };
         let mul = Arith {
             ixi: i64::checked_mul,
-            bxb: IBig::mul,
-            fxf: f64::mul,
+            bxb: |x,y| Integer::from(x * y),
+            fxf: |x,y| x * y,
         };
         let div = Arith {
             ixi: |x,y| Some((x as f64) / (y as f64)),
             bxb: |x,y| x.to_f64() / y.to_f64(),
-            fxf: f64::div,
+            fxf: |x,y| x / y,
         };
         let idiv = Arith {
             ixi: i64::checked_div,
-            bxb: IBig::div,
-            fxf: |a,b| (a / b).floor() as f64,
+            bxb: |x,y| Integer::from(x / y),
+            fxf: |x,y| (x / y).floor() as f64,
         };
-
-        // let idiv = Arith {
-        //     ixi: i64::checked_mul,
-        // };
 
         match operator {
             Operator::UnOp(UnOp::LogicalNegate) => Ok(Object::Boolean(!value.truthy())),
             Operator::UnOp(UnOp::ArithmeticalNegate) => match value {
                 Object::Integer(x) => Ok(Object::Integer(-x)),
-                Object::BigInteger(x) => Ok(Object::BigInteger(-x)),
+                Object::BigInteger(x) => Ok(Object::from((*x).clone().neg())),
                 Object::Float(x) => Ok(Object::Float(-x)),
                 _ => Err("type mismatch".to_string()),
             },

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use ibig::IBig;
+use rug::Integer;
 
 use super::ast::{Binding, AstNode};
 use super::traits::{Boxable, Splattable, Splat};
@@ -23,7 +23,7 @@ fn escape(s: &str) -> String {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Object {
     Integer(i64),
-    BigInteger(IBig),
+    BigInteger(Rc<Integer>),
     Float(f64),
     String(Rc<String>),
     Boolean(bool),
@@ -68,7 +68,7 @@ impl Object {
 
     pub fn numeric_normalize(self) -> Object {
         if let Object::BigInteger(x) = &self {
-            i64::try_from(x).map(Object::Integer).unwrap_or(self)
+            x.to_i64().map(Object::from).unwrap_or(self)
         } else {
             self
         }
@@ -87,8 +87,8 @@ impl From<f64> for Object {
     fn from(x: f64) -> Object { Object::Float(x) }
 }
 
-impl From<IBig> for Object {
-    fn from(x: IBig) -> Object { Object::BigInteger(x) }
+impl From<Integer> for Object {
+    fn from(x: Integer) -> Object { Object::BigInteger(Rc::new(x)) }
 }
 
 impl TryInto<f64> for Object {

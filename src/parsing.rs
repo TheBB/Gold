@@ -1,7 +1,6 @@
 use std::num::ParseFloatError;
 
-use ibig::{IBig};
-use ibig::error::{ParseError as IBigParseError};
+use rug::{Integer, integer::ParseIntegerError};
 
 use nom::{
     IResult, Parser,
@@ -21,14 +20,14 @@ use super::object::Object;
 trait CompleteError<'a>:
     ParseError<&'a str> +
     ContextError<&'a str> +
-    FromExternalError<&'a str, IBigParseError> +
+    FromExternalError<&'a str, ParseIntegerError> +
     FromExternalError<&'a str, ParseFloatError> {}
 
 impl<'a, T> CompleteError<'a> for T
 where T:
     ParseError<&'a str> +
     ContextError<&'a str> +
-    FromExternalError<&'a str, IBigParseError> +
+    FromExternalError<&'a str, ParseIntegerError> +
     FromExternalError<&'a str, ParseFloatError> {}
 
 
@@ -111,7 +110,7 @@ fn integer<'a, E: CompleteError<'a>>(
         |out: &'a str| {
             let s = out.replace("_", "");
             i64::from_str_radix(s.as_str(), 10).map_or_else(
-                |_| { IBig::from_str_radix(s.as_str(), 10).map(AstNode::big_integer) },
+                |_| { Integer::from_str_radix(s.as_str(), 10).map(AstNode::big_integer) },
                 |val| Ok(AstNode::integer(val)),
             )
         }
