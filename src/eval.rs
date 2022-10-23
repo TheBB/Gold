@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::cmp::Ordering;
 use std::ops::Neg;
 use std::rc::Rc;
 
@@ -76,7 +77,7 @@ fn power(x: Object, y: Object) -> Result<Object, String> {
             let xx: f64 = x.try_into().map_err(|_| "wrong type for power".to_string())?;
             let yy: f64 = y.try_into().map_err(|_| "wrong type for power".to_string())?;
             Ok(Object::from(xx.powf(yy)))
-        }
+        },
     }
 }
 
@@ -284,6 +285,8 @@ impl<'a> Namespace<'a> {
                 Object::Float(x) => Ok(Object::Float(-x)),
                 _ => Err("type mismatch".to_string()),
             },
+            Operator::BinOp(BinOp::And, node) => if value.truthy() { self.eval(node) } else { Ok(value) },
+            Operator::BinOp(BinOp::Or, node) => if value.truthy() { Ok(value) } else { self.eval(node) },
             Operator::BinOp(op, node) => {
                 let other = self.eval(node)?;
                 match (op, &value, &other) {
@@ -294,6 +297,12 @@ impl<'a> Namespace<'a> {
                     (BinOp::Divide, _, _) => arithmetic_operate(div, value, other),
                     (BinOp::IntegerDivide, _, _) => arithmetic_operate(idiv, value, other),
                     (BinOp::Power, _, _) => power(value, other),
+                    (BinOp::Less, _, _) => value.partial_cmp(&other).map(|x| Object::Boolean(x == Ordering::Less)).ok_or_else(|| "err".to_string()),
+                    (BinOp::LessEqual, _, _) => value.partial_cmp(&other).map(|x| Object::Boolean(x != Ordering::Greater)).ok_or_else(|| "err".to_string()),
+                    (BinOp::Greater, _, _) => value.partial_cmp(&other).map(|x| Object::Boolean(x == Ordering::Greater)).ok_or_else(|| "err".to_string()),
+                    (BinOp::GreaterEqual, _, _) => value.partial_cmp(&other).map(|x| Object::Boolean(x != Ordering::Less)).ok_or_else(|| "err".to_string()),
+                    (BinOp::Equal, _, _) => Ok(Object::Boolean(value == other)),
+                    (BinOp::NotEqual, _, _) => Ok(Object::Boolean(value != other)),
                     _ => Err("unsupported operator".to_string()),
                 }
             }
