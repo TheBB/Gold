@@ -1,6 +1,6 @@
 use std::ops::{Add, Div, Mul, Neg, Not, Sub};
 
-use ibig::IBig;
+use rug::Integer;
 
 use crate::ast::*;
 use crate::object::{Object};
@@ -22,7 +22,7 @@ fn integers() {
     assert_eq!(parse("9223372036854775807"), Ok(9223372036854775807i64.to_ast()));
     assert_eq!(
         parse("9223372036854775808"),
-        Ok(Object::BigInteger(IBig::from_str_radix("9223372036854775808", 10).unwrap()).literal()),
+        Ok(Object::from(Integer::from_str_radix("9223372036854775808", 10).unwrap()).literal()),
     );
 }
 

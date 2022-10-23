@@ -1,7 +1,7 @@
 use std::ops;
 use std::rc::Rc;
 
-use ibig::IBig;
+use rug::Integer;
 
 use super::object::{Object, ToObject};
 use super::traits::{Boxable, Splat, Splattable};
@@ -467,7 +467,7 @@ impl ops::Not for AstNode {
 
 impl AstNode {
     pub fn integer(value: i64) -> AstNode { AstNode::Literal(Object::Integer(value)) }
-    pub fn big_integer(value: IBig) -> AstNode { AstNode::Literal(Object::BigInteger(value)) }
+    pub fn big_integer(value: Integer) -> AstNode { AstNode::Literal(Object::from(value)) }
     pub fn float(value: f64) -> AstNode { AstNode::Literal(Object::Float(value)) }
     pub fn boolean(value: bool) -> AstNode { AstNode::Literal(Object::Boolean(value)) }
     pub fn null() -> AstNode { AstNode::Literal(Object::Null) }

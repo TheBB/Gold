@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use ibig::IBig;
+use rug::Integer;
 
 use crate::object::{Object, ToObject};
 
@@ -10,7 +10,7 @@ fn to_string() {
     assert_eq!(1.to_object().to_string(), "1");
     assert_eq!((-1).to_object().to_string(), "-1");
     assert_eq!(
-        Object::BigInteger(IBig::from_str_radix("9223372036854775808", 10).unwrap()).to_string(),
+        Object::from(Integer::from_str_radix("9223372036854775808", 10).unwrap()).to_string(),
         "9223372036854775808",
     );
 
