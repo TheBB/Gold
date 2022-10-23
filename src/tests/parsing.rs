@@ -1,9 +1,12 @@
-use num_bigint::{BigInt};
-use num_traits::Num;
-
 use std::ops::{Add, Div, Mul, Neg, Not, Sub};
 
-use super::super::*;
+use ibig::IBig;
+
+use crate::ast::*;
+use crate::object::{Object};
+use crate::parsing::parse;
+use crate::traits::{Boxable, Splattable};
+
 
 #[test]
 fn booleans_and_null() {
@@ -19,7 +22,7 @@ fn integers() {
     assert_eq!(parse("9223372036854775807"), Ok(9223372036854775807i64.to_ast()));
     assert_eq!(
         parse("9223372036854775808"),
-        Ok(Object::BigInteger(BigInt::from_str_radix("9223372036854775808", 10).unwrap()).literal()),
+        Ok(Object::BigInteger(IBig::from_str_radix("9223372036854775808", 10).unwrap()).literal()),
     );
 }
 

@@ -1,7 +1,7 @@
 use std::num::ParseFloatError;
 
-use num_bigint::{BigInt, ParseBigIntError};
-use num_traits::Num;
+use ibig::{IBig};
+use ibig::error::{ParseError as IBigParseError};
 
 use nom::{
     IResult, Parser,
@@ -15,19 +15,20 @@ use nom::{
     sequence::{delimited, preceded, terminated, tuple},
 };
 
-use super::{AstNode, Operator, StringElement, ListElement, MapElement, Object, ArgElement, Binding, ListBindingElement, MapBindingElement};
+use super::ast::*;
+use super::object::Object;
 
 trait CompleteError<'a>:
     ParseError<&'a str> +
     ContextError<&'a str> +
-    FromExternalError<&'a str, ParseBigIntError> +
+    FromExternalError<&'a str, IBigParseError> +
     FromExternalError<&'a str, ParseFloatError> {}
 
 impl<'a, T> CompleteError<'a> for T
-    where T:
+where T:
     ParseError<&'a str> +
     ContextError<&'a str> +
-    FromExternalError<&'a str, ParseBigIntError> +
+    FromExternalError<&'a str, IBigParseError> +
     FromExternalError<&'a str, ParseFloatError> {}
 
 
@@ -110,7 +111,7 @@ fn integer<'a, E: CompleteError<'a>>(
         |out: &'a str| {
             let s = out.replace("_", "");
             i64::from_str_radix(s.as_str(), 10).map_or_else(
-                |_| { BigInt::from_str_radix(s.as_str(), 10).map(AstNode::big_integer) },
+                |_| { IBig::from_str_radix(s.as_str(), 10).map(AstNode::big_integer) },
                 |val| Ok(AstNode::integer(val)),
             )
         }
@@ -367,7 +368,7 @@ fn object_access<'a, E: CompleteError<'a>>(
             postpad(char('.')),
             identifier,
         ),
-        |out: &str| Operator::Index(Box::new(Object::string(out).literal())),
+        |out: &str| Operator::BinOp(BinOp::Index, Box::new(Object::string(out).literal())),
     )(input)
 }
 
@@ -380,7 +381,7 @@ fn object_index<'a, E: CompleteError<'a>>(
             expression,
             char(']'),
         ),
-        |expr| Operator::Index(Box::new(expr)),
+        |expr| Operator::BinOp(BinOp::Index, Box::new(expr)),
     )(input)
 }
 
@@ -452,15 +453,15 @@ fn prefixed<'a, E: CompleteError<'a>>(
     map(
         tuple((
             many0(alt((
-                value(Operator::ArithmeticalNegate, postpad(tag("-"))),
-                value(Operator::LogicalNegate, postpad(keyword("not"))),
+                value(UnOp::ArithmeticalNegate, postpad(tag("-"))),
+                value(UnOp::LogicalNegate, postpad(keyword("not"))),
             ))),
             power,
         )),
         |(ops, expr)| {
             ops.into_iter().rev().fold(
                 expr,
-                |expr, operator| AstNode::Operator { operand: Box::new(expr), operator },
+                |expr, operator| AstNode::Operator { operand: Box::new(expr), operator: Operator::UnOp(operator) },
             )
         },
     )(input)
@@ -652,7 +653,7 @@ fn list_binding<'a, E: CompleteError<'a>>(
         ),
         |(mut bindings, slurp)| {
             match slurp {
-                Some(Some(name)) => bindings.push(ListBindingElement::SlurpTo(name.to_string())),
+                Some(Some(name)) => bindings.push(ListBindingElement::slurp_to(name)),
                 Some(None) => bindings.push(ListBindingElement::Slurp),
                 _ => {}
             };

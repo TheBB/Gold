@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ibig = "0.3.6"
 nom = "7.1.1"
-num-bigint = "0.4.3"
-num-traits = "0.2.15"
+num = "0.4.0"
+rug = "1.17.0"
