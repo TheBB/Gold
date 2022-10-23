@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -58,10 +59,10 @@ impl Object {
         }
     }
 
-    pub fn truthy(self) -> bool {
+    pub fn truthy(&self) -> bool {
         match self {
             Object::Null => false,
-            Object::Boolean(val) => val,
+            Object::Boolean(val) => *val,
             _ => true,
         }
     }
@@ -71,6 +72,23 @@ impl Object {
             x.to_i64().map(Object::from).unwrap_or(self)
         } else {
             self
+        }
+    }
+}
+
+impl PartialOrd<Object> for Object {
+    fn partial_cmp(&self, other: &Object) -> Option<Ordering> {
+        match (self, other) {
+            (Object::Integer(x), Object::Integer(y)) => x.partial_cmp(y),
+            (Object::Integer(x), Object::BigInteger(y)) => x.partial_cmp(y.as_ref()),
+            (Object::Integer(x), Object::Float(y)) => (*x as f64).partial_cmp(y),
+            (Object::BigInteger(x), Object::Integer(y)) => x.as_ref().partial_cmp(y),
+            (Object::BigInteger(x), Object::BigInteger(y)) => x.as_ref().partial_cmp(y.as_ref()),
+            (Object::BigInteger(x), Object::Float(y)) => x.as_ref().partial_cmp(y),
+            (Object::Float(x), Object::Integer(y)) => x.partial_cmp(&(*y as f64)),
+            (Object::Float(x), Object::BigInteger(y)) => x.partial_cmp(y.as_ref()),
+            (Object::Float(x), Object::Float(y)) => x.partial_cmp(y),
+            _ => None,
         }
     }
 }
