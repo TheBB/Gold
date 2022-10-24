@@ -30,7 +30,7 @@ pub enum Object {
     Boolean(bool),
     List(Rc<Vec<Object>>),
     Map(Rc<HashMap<Rc<String>, Object>>),
-    Function(Binding, Binding, Rc<AstNode>),
+    Function(Binding, Binding, Rc<HashMap<Rc<String>, Object>>, Rc<AstNode>),
     Null,
 }
 

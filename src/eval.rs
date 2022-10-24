@@ -305,7 +305,7 @@ impl<'a> Namespace<'a> {
                     (BinOp::NotEqual, _, _) => Ok(Object::Boolean(value != other)),
                     _ => Err("unsupported operator".to_string()),
                 }
-            }
+            },
             _ => Err("unsupported operator".to_string()),
         }
     }
@@ -359,7 +359,7 @@ impl<'a> Namespace<'a> {
             AstNode::Operator { operand, operator } => {
                 let x = self.eval(operand)?;
                 self.operate(operator, x)
-            }
+            },
 
             AstNode::Branch { condition, true_branch, false_branch } => {
                 let cond = self.eval(condition)?;
@@ -370,7 +370,16 @@ impl<'a> Namespace<'a> {
                 }
             },
 
-            _ => Err("what".to_string())
+            AstNode::Function { positional, keywords, expression } => {
+                let mut closure: HashMap<Rc<String>, Object> = HashMap::new();
+                for ident in node.free() {
+                    let val = self.get(&ident)?;
+                    closure.insert(ident, val);
+                }
+                Ok(Object::Function(
+                    positional.clone(), keywords.clone(), Rc::new(closure), Rc::new((**expression).clone())
+                ))
+            },
         }
     }
 }

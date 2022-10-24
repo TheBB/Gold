@@ -727,7 +727,7 @@ fn map_binding<'a, E: CompleteError<'a>>(
         ),
         |(mut bindings, slurp)| {
             match slurp {
-                Some(name) => bindings.push(MapBindingElement::SlurpTo(name.to_string())),
+                Some(name) => bindings.push(MapBindingElement::slurp_to(name.to_string())),
                 _ => {}
             };
             Binding::Map(bindings)
