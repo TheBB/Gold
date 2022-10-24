@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ops;
 use std::rc::Rc;
 
@@ -19,6 +20,15 @@ pub enum ListBindingElement {
 
 impl ListBindingElement {
     pub fn slurp_to<T: ToString>(x: T) -> ListBindingElement { ListBindingElement::SlurpTo(Rc::new(x.to_string())) }
+    pub fn free_and_bound(&self, free: &mut HashSet<Rc<String>>, bound: &mut HashSet<Rc<String>>) {
+        match self {
+            ListBindingElement::Binding { binding, default } => {
+                binding_element_free_and_bound(binding, default, free, bound);
+            },
+            ListBindingElement::SlurpTo(name) => { bound.insert(name.clone()); },
+            _ => {},
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,7 +38,35 @@ pub enum MapBindingElement {
         binding: Binding,
         default: Option<AstNode>,
     },
-    SlurpTo(String),
+    SlurpTo(Rc<String>),
+}
+
+impl MapBindingElement {
+    pub fn slurp_to<T: ToString>(x: T) -> MapBindingElement { MapBindingElement::SlurpTo(Rc::new(x.to_string())) }
+    pub fn free_and_bound(&self, free: &mut HashSet<Rc<String>>, bound: &mut HashSet<Rc<String>>) {
+        match self {
+            MapBindingElement::Binding { key: _, binding, default } => {
+                binding_element_free_and_bound(binding, default, free, bound);
+            },
+            MapBindingElement::SlurpTo(name) => { bound.insert(name.clone()); },
+        }
+    }
+}
+
+fn binding_element_free_and_bound(
+    binding: &Binding,
+    default: &Option<AstNode>,
+    free: &mut HashSet<Rc<String>>,
+    bound: &mut HashSet<Rc<String>>,
+) {
+    if let Some(expr) = default {
+        for ident in expr.free() {
+            if !bound.contains(&ident) {
+                free.insert(ident);
+            }
+        }
+    }
+    binding.free_and_bound(free, bound)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -40,6 +78,22 @@ pub enum Binding {
 
 impl Binding {
     pub fn id<T: ToString>(x: T) -> Binding { Binding::Identifier(Rc::new(x.to_string())) }
+
+    pub fn free_and_bound(&self, free: &mut HashSet<Rc<String>>, bound: &mut HashSet<Rc<String>>) {
+        match self {
+            Binding::Identifier(name) => { bound.insert(name.clone()); },
+            Binding::List(elements) => {
+                for element in elements {
+                    element.free_and_bound(free, bound);
+                }
+            },
+            Binding::Map(elements) => {
+                for element in elements {
+                    element.free_and_bound(free, bound);
+                }
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,6 +121,35 @@ pub enum ListElement {
         condition: AstNode,
         element: Box<ListElement>,
     },
+}
+
+impl ListElement {
+    pub fn free(&self) -> HashSet<Rc<String>> {
+        let mut free: HashSet<Rc<String>> = HashSet::new();
+        self.free_impl(&mut free);
+        free
+    }
+
+    pub fn free_impl(&self, free: &mut HashSet<Rc<String>>) {
+        match self {
+            ListElement::Singleton(expr) => expr.free_impl(free),
+            ListElement::Splat(expr) => expr.free_impl(free),
+            ListElement::Cond { condition, element } => {
+                condition.free_impl(free);
+                element.free_impl(free);
+            },
+            ListElement::Loop { binding, iterable, element } => {
+                iterable.free_impl(free);
+                let mut bound: HashSet<Rc<String>> = HashSet::new();
+                binding.free_and_bound(free, &mut bound);
+                for ident in element.free() {
+                    if !bound.contains(&ident) {
+                        free.insert(ident);
+                    }
+                }
+            }
+        }
+    }
 }
 
 pub trait ToListElement {
@@ -201,6 +284,39 @@ pub enum MapElement {
     },
 }
 
+impl MapElement {
+    pub fn free(&self) -> HashSet<Rc<String>> {
+        let mut free: HashSet<Rc<String>> = HashSet::new();
+        self.free_impl(&mut free);
+        free
+    }
+
+    pub fn free_impl(&self, free: &mut HashSet<Rc<String>>) {
+        match self {
+            MapElement::Singleton { key, value } => {
+                key.free_impl(free);
+                value.free_impl(free);
+            },
+            MapElement::Splat(expr) => expr.free_impl(free),
+            MapElement::Cond { condition, element } => {
+                condition.free_impl(free);
+                element.free_impl(free);
+            },
+            MapElement::Loop { binding, iterable, element } => {
+                iterable.free_impl(free);
+                let mut bound: HashSet<Rc<String>> = HashSet::new();
+                binding.free_and_bound(free, &mut bound);
+                for ident in element.as_ref().free() {
+                    if !bound.contains(&ident) {
+                        free.insert(ident);
+                    }
+                }
+            }
+        }
+    }
+}
+
+
 pub trait ToMapElement {
     fn to_map_element(self) -> MapElement;
 }
@@ -263,6 +379,16 @@ pub enum ArgElement {
     Singleton(AstNode),
     Keyword(String, AstNode),
     Splat(AstNode),
+}
+
+impl ArgElement {
+    pub fn free_impl(&self, free: &mut HashSet<Rc<String>>) {
+        match self {
+            ArgElement::Singleton(expr) => { expr.free_impl(free); },
+            ArgElement::Splat(expr) => { expr.free_impl(free); },
+            ArgElement::Keyword(_, expr) => { expr.free_impl(free); },
+        }
+    }
 }
 
 pub trait ToArg {
@@ -507,6 +633,79 @@ impl AstNode {
             }
         } else {
             AstNode::String(value)
+        }
+    }
+
+    pub fn free(&self) -> HashSet<Rc<String>> {
+        let mut free: HashSet<Rc<String>> = HashSet::new();
+        self.free_impl(&mut free);
+        free
+    }
+
+    pub fn free_impl(&self, free: &mut HashSet<Rc<String>>) {
+        match self {
+            AstNode::Literal(_) => {},
+            AstNode::String(elements) => {
+                for element in elements {
+                    if let StringElement::Interpolate(expr) = element {
+                        expr.free_impl(free);
+                    }
+                }
+            },
+            AstNode::Identifier(name) => { free.insert(name.clone()); },
+            AstNode::List(elements) => {
+                for element in elements {
+                    element.free_impl(free);
+                }
+            },
+            AstNode::Map(elements) => {
+                for element in elements {
+                    element.free_impl(free);
+                }
+            },
+            AstNode::Let { bindings, expression } => {
+                let mut bound: HashSet<Rc<String>> = HashSet::new();
+                for (binding, expr) in bindings {
+                    for id in expr.free() {
+                        if !bound.contains(&id) {
+                            free.insert(id);
+                        }
+                    }
+                    binding.free_and_bound(free, &mut bound);
+                }
+                for id in expression.free() {
+                    if !bound.contains(&id) {
+                        free.insert(id);
+                    }
+                }
+            },
+            AstNode::Operator { operand, operator } => {
+                operand.free_impl(free);
+                match operator {
+                    Operator::BinOp(_, expr) => expr.free_impl(free),
+                    Operator::FunCall(elements) => {
+                        for element in elements {
+                            element.free_impl(free);
+                        }
+                    }
+                    _ => {},
+                }
+            },
+            AstNode::Branch { condition, true_branch, false_branch } => {
+                condition.free_impl(free);
+                true_branch.free_impl(free);
+                false_branch.free_impl(free);
+            },
+            AstNode::Function { positional, keywords, expression } => {
+                let mut bound: HashSet<Rc<String>> = HashSet::new();
+                positional.free_and_bound(free, &mut bound);
+                keywords.free_and_bound(free, &mut bound);
+                for id in expression.free() {
+                    if !bound.contains(&id) {
+                        free.insert(id);
+                    }
+                }
+            }
         }
     }
 }
