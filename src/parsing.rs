@@ -400,7 +400,7 @@ fn function_arg<'a, E: CompleteError<'a>>(
                     expression,
                 ),
             )),
-            |(name, expr)| ArgElement::Keyword(name.to_string(), expr),
+            |(name, expr)| ArgElement::keyword(name, expr),
         ),
         map(
             expression,

@@ -7,7 +7,7 @@ use num_traits::checked_pow;
 use rug::Integer;
 use rug::ops::Pow;
 
-use crate::ast::{StringElement, ListBindingElement, ListElement, MapElement, Operator, UnOp, BinOp};
+use crate::ast::{StringElement, ListBindingElement, ListElement, MapElement, Operator, UnOp, BinOp, ArgElement};
 
 use super::ast::{AstNode, Binding};
 use super::object::Object;
@@ -95,6 +95,14 @@ impl<'a> Namespace<'a> {
 
     pub fn subtend(&'a self) -> Namespace<'a> {
         Namespace { names: HashMap::new(), prev: Some(self) }
+    }
+
+    pub fn subtend_with(&'a self, context: &HashMap<Rc<String>, Object>) -> Namespace<'a> {
+        let mut names: HashMap<Rc<String>, Object> = HashMap::new();
+        for (k, v) in context {
+            names.insert(k.clone(), v.clone());
+        }
+        Namespace { names, prev: Some(self) }
     }
 
     pub fn set(&mut self, key: &Rc<String>, value: Object) {
@@ -250,6 +258,38 @@ impl<'a> Namespace<'a> {
         }
     }
 
+    fn fill_args(&self, element: &ArgElement, args: &mut Vec<Object>, kwargs: &mut HashMap<Rc<String>, Object>) -> Result<(), String> {
+        match element {
+            ArgElement::Singleton(node) => {
+                let val = self.eval(node)?;
+                args.push(val);
+                Ok(())
+            },
+
+            ArgElement::Splat(node) => {
+                let val = self.eval(node)?;
+                match val {
+                    Object::List(vals) => {
+                        args.extend_from_slice(&vals);
+                        Ok(())
+                    },
+                    Object::Map(vals) => {
+                        for (k, v) in vals.as_ref() {
+                            kwargs.insert(k.clone(), v.clone());
+                        }
+                        Ok(())
+                    },
+                    _ => Err("splatting non-list, non-map".to_string()),
+                }
+            },
+
+            ArgElement::Keyword(key, value) => {
+                kwargs.insert(key.clone(), self.eval(value)?);
+                Ok(())
+            }
+        }
+    }
+
     fn operate(&self, operator: &Operator, value: Object) -> Result<Object, String> {
         let add = Arith {
             ixi: i64::checked_add,
@@ -306,7 +346,21 @@ impl<'a> Namespace<'a> {
                     _ => Err("unsupported operator".to_string()),
                 }
             },
-            _ => Err("unsupported operator".to_string()),
+            Operator::FunCall(elements) => {
+                if let Object::Function(args_b, kwargs_b, closure, node) = value {
+                    let mut args: Vec<Object> = vec![];
+                    let mut kwargs: HashMap<Rc<String>, Object> = HashMap::new();
+                    for element in elements {
+                        self.fill_args(element, &mut args, &mut kwargs)?;
+                    }
+                    let mut sub = self.subtend_with(&*closure);
+                    sub.bind(&args_b, Object::List(Rc::new(args)))?;
+                    sub.bind(&kwargs_b, Object::Map(Rc::new(kwargs)))?;
+                    sub.eval(&node)
+                } else {
+                    Err("calling a non-function".to_string())
+                }
+            },
         }
     }
 

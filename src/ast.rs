@@ -377,11 +377,15 @@ where
 #[derive(Debug, Clone, PartialEq)]
 pub enum ArgElement {
     Singleton(AstNode),
-    Keyword(String, AstNode),
+    Keyword(Rc<String>, AstNode),
     Splat(AstNode),
 }
 
 impl ArgElement {
+    pub fn keyword<T>(key: T, val: AstNode) -> ArgElement where T: ToString {
+        ArgElement::Keyword(Rc::new(key.to_string()), val)
+    }
+
     pub fn free_impl(&self, free: &mut HashSet<Rc<String>>) {
         match self {
             ArgElement::Singleton(expr) => { expr.free_impl(free); },
@@ -403,7 +407,7 @@ impl<T> ToArg for T where T: ToAstNode {
 
 impl<S,T> ToArg for (S, T) where S: ToString, T: ToAstNode {
     fn to_arg(self) -> ArgElement {
-        ArgElement::Keyword(self.0.to_string(), self.1.to_ast())
+        ArgElement::Keyword(Rc::new(self.0.to_string()), self.1.to_ast())
     }
 }
 
