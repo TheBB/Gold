@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use rug::Integer;
 
-use super::object::{Object, ToObject};
+use super::object::{Object, Key};
 use super::traits::{Boxable, Splat, Splattable};
 
 
@@ -14,13 +14,14 @@ pub enum ListBindingElement {
         binding: Binding,
         default: Option<AstNode>,
     },
-    SlurpTo(Rc<String>),
+    SlurpTo(Key),
     Slurp,
 }
 
 impl ListBindingElement {
     pub fn slurp_to<T: ToString>(x: T) -> ListBindingElement { ListBindingElement::SlurpTo(Rc::new(x.to_string())) }
-    pub fn free_and_bound(&self, free: &mut HashSet<Rc<String>>, bound: &mut HashSet<Rc<String>>) {
+
+    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Rc<String>>) {
         match self {
             ListBindingElement::Binding { binding, default } => {
                 binding_element_free_and_bound(binding, default, free, bound);
@@ -34,16 +35,17 @@ impl ListBindingElement {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MapBindingElement {
     Binding {
-        key: String,
+        key: Key,
         binding: Binding,
         default: Option<AstNode>,
     },
-    SlurpTo(Rc<String>),
+    SlurpTo(Key),
 }
 
 impl MapBindingElement {
     pub fn slurp_to<T: ToString>(x: T) -> MapBindingElement { MapBindingElement::SlurpTo(Rc::new(x.to_string())) }
-    pub fn free_and_bound(&self, free: &mut HashSet<Rc<String>>, bound: &mut HashSet<Rc<String>>) {
+
+    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Rc<String>>) {
         match self {
             MapBindingElement::Binding { key: _, binding, default } => {
                 binding_element_free_and_bound(binding, default, free, bound);
@@ -53,11 +55,12 @@ impl MapBindingElement {
     }
 }
 
+
 fn binding_element_free_and_bound(
     binding: &Binding,
     default: &Option<AstNode>,
-    free: &mut HashSet<Rc<String>>,
-    bound: &mut HashSet<Rc<String>>,
+    free: &mut HashSet<Key>,
+    bound: &mut HashSet<Key>,
 ) {
     if let Some(expr) = default {
         for ident in expr.free() {
@@ -69,9 +72,10 @@ fn binding_element_free_and_bound(
     binding.free_and_bound(free, bound)
 }
 
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Binding {
-    Identifier(Rc<String>),
+    Identifier(Key),
     List(Vec<ListBindingElement>),
     Map(Vec<MapBindingElement>),
 }
@@ -79,7 +83,7 @@ pub enum Binding {
 impl Binding {
     pub fn id<T: ToString>(x: T) -> Binding { Binding::Identifier(Rc::new(x.to_string())) }
 
-    pub fn free_and_bound(&self, free: &mut HashSet<Rc<String>>, bound: &mut HashSet<Rc<String>>) {
+    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Rc<String>>) {
         match self {
             Binding::Identifier(name) => { bound.insert(name.clone()); },
             Binding::List(elements) => {
@@ -96,9 +100,10 @@ impl Binding {
     }
 }
 
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum StringElement {
-    Raw(Rc<String>),
+    Raw(Key),
     Interpolate(AstNode),
 }
 
@@ -107,6 +112,7 @@ impl StringElement {
         StringElement::Raw(Rc::new(val.to_string()))
     }
 }
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ListElement {
@@ -124,13 +130,13 @@ pub enum ListElement {
 }
 
 impl ListElement {
-    pub fn free(&self) -> HashSet<Rc<String>> {
-        let mut free: HashSet<Rc<String>> = HashSet::new();
+    pub fn free(&self) -> HashSet<Key> {
+        let mut free: HashSet<Key> = HashSet::new();
         self.free_impl(&mut free);
         free
     }
 
-    pub fn free_impl(&self, free: &mut HashSet<Rc<String>>) {
+    pub fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
             ListElement::Singleton(expr) => expr.free_impl(free),
             ListElement::Splat(expr) => expr.free_impl(free),
@@ -140,7 +146,7 @@ impl ListElement {
             },
             ListElement::Loop { binding, iterable, element } => {
                 iterable.free_impl(free);
-                let mut bound: HashSet<Rc<String>> = HashSet::new();
+                let mut bound: HashSet<Key> = HashSet::new();
                 binding.free_and_bound(free, &mut bound);
                 for ident in element.free() {
                     if !bound.contains(&ident) {
@@ -150,27 +156,23 @@ impl ListElement {
             }
         }
     }
+
+    pub fn singleton<T>(x: T) -> ListElement where T: ToAstNode { ListElement::Singleton(x.to_ast()) }
+    pub fn splat<T>(x: T) -> ListElement where T: ToAstNode { ListElement::Splat(x.to_ast()) }
 }
 
-pub trait ToListElement {
-    fn to_list_element(self) -> ListElement;
-}
-
-impl ToListElement for ListElement {
-    fn to_list_element(self) -> ListElement { self }
-}
-
-impl<T> ToListElement for T where T: ToAstNode {
-    fn to_list_element(self) -> ListElement {
-        ListElement::Singleton(self.to_ast())
+impl<T> From<T> for ListElement where T: ToAstNode {
+    fn from(x: T) -> ListElement {
+        ListElement::Singleton(x.to_ast())
     }
 }
 
-impl<T> ToListElement for Splat<T> where T: ToAstNode {
-    fn to_list_element(self) -> ListElement {
-        ListElement::Splat(self.object.to_ast())
+impl<T> From<Splat<T>> for ListElement where T: ToAstNode {
+    fn from(x: Splat<T>) -> ListElement {
+        ListElement::Splat(x.object.to_ast())
     }
 }
+
 
 pub trait ToList {
     fn to_list(self) -> Vec<ListElement>;
@@ -186,85 +188,79 @@ impl ToList for () {
 
 impl<A> ToList for (A,)
 where
-    A: ToListElement
+    ListElement: From<A>,
 {
     fn to_list(self) -> Vec<ListElement> {
-        vec![self.0.to_list_element()]
+        vec![
+            ListElement::from(self.0),
+        ]
     }
 }
 
 impl<A,B,> ToList for (A,B)
 where
-    A: ToListElement,
-    B: ToListElement
+    ListElement: From<A>,
+    ListElement: From<B>,
 {
     fn to_list(self) -> Vec<ListElement> {
         vec![
-            self.0.to_list_element(),
-            self.1.to_list_element(),
+            ListElement::from(self.0),
+            ListElement::from(self.1),
         ]
     }
 }
 
 impl<A,B,C> ToList for (A,B,C)
 where
-    A: ToListElement,
-    B: ToListElement,
-    C: ToListElement
+    ListElement: From<A>,
+    ListElement: From<B>,
+    ListElement: From<C>,
 {
     fn to_list(self) -> Vec<ListElement> {
         vec![
-            self.0.to_list_element(),
-            self.1.to_list_element(),
-            self.2.to_list_element(),
+            ListElement::from(self.0),
+            ListElement::from(self.1),
+            ListElement::from(self.2),
         ]
     }
 }
 
 impl<A,B,C,D> ToList for (A,B,C,D)
 where
-    A: ToListElement,
-    B: ToListElement,
-    C: ToListElement,
-    D: ToListElement
+    ListElement: From<A>,
+    ListElement: From<B>,
+    ListElement: From<C>,
+    ListElement: From<D>,
 {
     fn to_list(self) -> Vec<ListElement> {
         vec![
-            self.0.to_list_element(),
-            self.1.to_list_element(),
-            self.2.to_list_element(),
-            self.3.to_list_element(),
+            ListElement::from(self.0),
+            ListElement::from(self.1),
+            ListElement::from(self.2),
+            ListElement::from(self.3),
         ]
     }
 }
 
 impl<A,B,C,D,E> ToList for (A,B,C,D,E)
 where
-    A: ToListElement,
-    B: ToListElement,
-    C: ToListElement,
-    D: ToListElement,
-    E: ToListElement
+    ListElement: From<A>,
+    ListElement: From<B>,
+    ListElement: From<C>,
+    ListElement: From<D>,
+    ListElement: From<E>,
 {
     fn to_list(self) -> Vec<ListElement> {
         vec![
-            self.0.to_list_element(),
-            self.1.to_list_element(),
-            self.2.to_list_element(),
-            self.3.to_list_element(),
-            self.4.to_list_element(),
+            ListElement::from(self.0),
+            ListElement::from(self.1),
+            ListElement::from(self.2),
+            ListElement::from(self.3),
+            ListElement::from(self.4),
         ]
     }
 }
 
-impl Boxable<ListElement> for ListElement {
-    fn to_box(self) -> Box<ListElement> { Box::new(self) }
-}
-
-impl ListElement {
-    pub fn singleton<T>(x: T) -> ListElement where T: ToAstNode { ListElement::Singleton(x.to_ast()) }
-    pub fn splat<T>(x: T) -> ListElement where T: ToAstNode { ListElement::Splat(x.to_ast()) }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MapElement {
@@ -285,13 +281,13 @@ pub enum MapElement {
 }
 
 impl MapElement {
-    pub fn free(&self) -> HashSet<Rc<String>> {
-        let mut free: HashSet<Rc<String>> = HashSet::new();
+    pub fn free(&self) -> HashSet<Key> {
+        let mut free: HashSet<Key> = HashSet::new();
         self.free_impl(&mut free);
         free
     }
 
-    pub fn free_impl(&self, free: &mut HashSet<Rc<String>>) {
+    pub fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
             MapElement::Singleton { key, value } => {
                 key.free_impl(free);
@@ -304,7 +300,7 @@ impl MapElement {
             },
             MapElement::Loop { binding, iterable, element } => {
                 iterable.free_impl(free);
-                let mut bound: HashSet<Rc<String>> = HashSet::new();
+                let mut bound: HashSet<Key> = HashSet::new();
                 binding.free_and_bound(free, &mut bound);
                 for ident in element.as_ref().free() {
                     if !bound.contains(&ident) {
@@ -317,28 +313,18 @@ impl MapElement {
 }
 
 
-pub trait ToMapElement {
-    fn to_map_element(self) -> MapElement;
-}
-
-impl ToMapElement for MapElement {
-    fn to_map_element(self) -> MapElement { self }
-}
-
-impl<S,T> ToMapElement for (S, T) where T: ToAstNode, S: ToAstNode {
-    fn to_map_element(self) -> MapElement {
-        MapElement::Singleton {
-            key: self.0.to_ast(),
-            value: self.1.to_ast(),
-        }
+impl<S,T> From<(S,T)> for MapElement where T: ToAstNode, S: ToAstNode {
+    fn from(x: (S,T)) -> Self {
+        MapElement::Singleton { key: x.0.to_ast(), value: x.1.to_ast() }
     }
 }
 
-impl<T> ToMapElement for Splat<T> where T: ToAstNode {
-    fn to_map_element(self) -> MapElement {
-        MapElement::Splat(self.object.to_ast())
+impl<T> From<Splat<T>> for MapElement where T: ToAstNode {
+    fn from(x: Splat<T>) -> Self {
+        MapElement::Splat(x.object.to_ast())
     }
 }
+
 
 pub trait ToMap {
     fn to_map(self) -> Vec<MapElement>;
@@ -354,30 +340,33 @@ impl ToMap for () {
 
 impl<A> ToMap for (A,)
 where
-    A: ToMapElement
+    MapElement: From<A>,
 {
     fn to_map(self) -> Vec<MapElement> {
-        vec![self.0.to_map_element()]
+        vec![
+            MapElement::from(self.0),
+        ]
     }
 }
 
 impl<A,B> ToMap for (A,B)
 where
-    A: ToMapElement,
-    B: ToMapElement
+    MapElement: From<A>,
+    MapElement: From<B>,
 {
     fn to_map(self) -> Vec<MapElement> {
         vec![
-            self.0.to_map_element(),
-            self.1.to_map_element(),
+            MapElement::from(self.0),
+            MapElement::from(self.1),
         ]
     }
 }
 
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ArgElement {
     Singleton(AstNode),
-    Keyword(Rc<String>, AstNode),
+    Keyword(Key, AstNode),
     Splat(AstNode),
 }
 
@@ -386,7 +375,7 @@ impl ArgElement {
         ArgElement::Keyword(Rc::new(key.to_string()), val)
     }
 
-    pub fn free_impl(&self, free: &mut HashSet<Rc<String>>) {
+    pub fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
             ArgElement::Singleton(expr) => { expr.free_impl(free); },
             ArgElement::Splat(expr) => { expr.free_impl(free); },
@@ -399,23 +388,30 @@ pub trait ToArg {
     fn to_arg(self) -> ArgElement;
 }
 
-impl<T> ToArg for T where T: ToAstNode {
+impl<T> ToArg for T where ArgElement: From<T> {
     fn to_arg(self) -> ArgElement {
-        ArgElement::Singleton(self.to_ast())
+        ArgElement::from(self)
     }
 }
 
-impl<S,T> ToArg for (S, T) where S: ToString, T: ToAstNode {
-    fn to_arg(self) -> ArgElement {
-        ArgElement::Keyword(Rc::new(self.0.to_string()), self.1.to_ast())
+impl<T> From<T> for ArgElement where T: ToAstNode {
+    fn from(x: T) -> Self {
+        ArgElement::Singleton(x.to_ast())
     }
 }
 
-impl<T> ToArg for Splat<T> where T: ToAstNode {
-    fn to_arg(self) -> ArgElement {
-        ArgElement::Splat(self.object.to_ast())
+impl<S,T> From<(S,T)> for ArgElement where S: ToString, T: ToAstNode {
+    fn from(x: (S,T)) -> Self {
+        ArgElement::Keyword(Rc::new(x.0.to_string()), x.1.to_ast())
     }
 }
+
+impl<T> From<Splat<T>> for ArgElement where T: ToAstNode {
+    fn from(x: Splat<T>) -> Self {
+        ArgElement::Splat(x.object.to_ast())
+    }
+}
+
 
 pub trait ToArgs {
     fn to_args(self) -> Vec<ArgElement>;
@@ -480,6 +476,7 @@ where
     }
 }
 
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnOp {
     ArithmeticalNegate,
@@ -534,7 +531,7 @@ impl Operator {
 pub enum AstNode {
     Literal(Object),
     String(Vec<StringElement>),
-    Identifier(Rc<String>),
+    Identifier(Key),
     List(Vec<ListElement>),
     Map(Vec<MapElement>),
     Let {
@@ -557,12 +554,8 @@ pub enum AstNode {
     }
 }
 
-impl Boxable<AstNode> for AstNode {
-    fn to_box(self) -> Box<AstNode> { Box::new(self) }
-}
-
 impl Splattable<AstNode> for AstNode {
-    fn splat(self) -> Splat<AstNode> { Splat::<AstNode> { object: self } }
+    fn splat(&self) -> Splat<AstNode> { Splat::<AstNode> { object: self.clone() } }
 }
 
 impl<T> ops::Add<T> for AstNode where T: ToAstNode {
@@ -640,13 +633,13 @@ impl AstNode {
         }
     }
 
-    pub fn free(&self) -> HashSet<Rc<String>> {
-        let mut free: HashSet<Rc<String>> = HashSet::new();
+    pub fn free(&self) -> HashSet<Key> {
+        let mut free: HashSet<Key> = HashSet::new();
         self.free_impl(&mut free);
         free
     }
 
-    pub fn free_impl(&self, free: &mut HashSet<Rc<String>>) {
+    pub fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
             AstNode::Literal(_) => {},
             AstNode::String(elements) => {
@@ -668,7 +661,7 @@ impl AstNode {
                 }
             },
             AstNode::Let { bindings, expression } => {
-                let mut bound: HashSet<Rc<String>> = HashSet::new();
+                let mut bound: HashSet<Key> = HashSet::new();
                 for (binding, expr) in bindings {
                     for id in expr.free() {
                         if !bound.contains(&id) {
@@ -701,7 +694,7 @@ impl AstNode {
                 false_branch.free_impl(free);
             },
             AstNode::Function { positional, keywords, expression } => {
-                let mut bound: HashSet<Rc<String>> = HashSet::new();
+                let mut bound: HashSet<Key> = HashSet::new();
                 positional.free_and_bound(free, &mut bound);
                 keywords.free_and_bound(free, &mut bound);
                 for id in expression.free() {
@@ -714,16 +707,21 @@ impl AstNode {
     }
 }
 
+
 pub trait ToAstNode {
     fn to_ast(self) -> AstNode;
 }
 
-impl<T> ToAstNode for T where T: ToObject {
-    fn to_ast(self) -> AstNode { self.to_object().literal() }
+impl<T> ToAstNode for T where AstNode: From<T> {
+    fn to_ast(self) -> AstNode {
+        AstNode::from(self)
+    }
 }
 
-impl ToAstNode for AstNode {
-    fn to_ast(self) -> AstNode { self }
+impl<T> From<T> for AstNode where Object: From<T> {
+    fn from(x: T) -> Self {
+        Object::from(x).literal()
+    }
 }
 
 pub trait IdAble {

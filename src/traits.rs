@@ -9,6 +9,10 @@ impl<T> Boxable<T> for Box<T> {
     fn to_box(self) -> Box<T> { self }
 }
 
+impl<T> Boxable<T> for T {
+    fn to_box(self) -> Box<T> { Box::new(self) }
+}
+
 
 // Splattable
 // ----------------------------------------------------------------
@@ -18,5 +22,5 @@ pub struct Splat<T> {
 }
 
 pub trait Splattable<T> {
-    fn splat(self) -> Splat<T>;
+    fn splat(&self) -> Splat<T>;
 }

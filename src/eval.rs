@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::cmp::Ordering;
 use std::ops::Neg;
 use std::rc::Rc;
@@ -10,7 +9,7 @@ use rug::ops::Pow;
 use crate::ast::{StringElement, ListBindingElement, ListElement, MapElement, Operator, UnOp, BinOp, ArgElement};
 
 use super::ast::{AstNode, Binding};
-use super::object::Object;
+use super::object::{Object, Function, Map, List};
 
 
 struct Arith<F,G,H,X,Y,Z>
@@ -83,22 +82,22 @@ fn power(x: Object, y: Object) -> Result<Object, String> {
 
 
 struct Namespace<'a> {
-    names: HashMap<Rc<String>, Object>,
+    names: Map,
     prev: Option<&'a Namespace<'a>>,
 }
 
 
 impl<'a> Namespace<'a> {
     pub fn new<'b>() -> Namespace<'b> {
-        Namespace { names: HashMap::new(), prev: None }
+        Namespace { names: Map::new(), prev: None }
     }
 
     pub fn subtend(&'a self) -> Namespace<'a> {
-        Namespace { names: HashMap::new(), prev: Some(self) }
+        Namespace { names: Map::new(), prev: Some(self) }
     }
 
-    pub fn subtend_with(&'a self, context: &HashMap<Rc<String>, Object>) -> Namespace<'a> {
-        let mut names: HashMap<Rc<String>, Object> = HashMap::new();
+    pub fn subtend_with(&'a self, context: &Map) -> Namespace<'a> {
+        let mut names: Map = Map::new();
         for (k, v) in context {
             names.insert(k.clone(), v.clone());
         }
@@ -147,7 +146,7 @@ impl<'a> Namespace<'a> {
                         ListBindingElement::Slurp => { return Ok(()) },
 
                         ListBindingElement::SlurpTo(name) => {
-                            let mut values: Vec<Object> = vec![];
+                            let mut values: List = vec![];
                             while let Some(val) = value_iter.next() {
                                 values.push(val.clone());
                             }
@@ -170,7 +169,7 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    fn fill_list(&self, element: &ListElement, values: &mut Vec<Object>) -> Result<(), String> {
+    fn fill_list(&self, element: &ListElement, values: &mut List) -> Result<(), String> {
         match element {
             ListElement::Singleton(node) => {
                 let val = self.eval(node)?;
@@ -211,7 +210,7 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    fn fill_map(&self, element: &MapElement, values: &mut HashMap<Rc<String>, Object>) -> Result<(), String> {
+    fn fill_map(&self, element: &MapElement, values: &mut Map) -> Result<(), String> {
         match element {
             MapElement::Singleton { key, value } => {
                 if let Object::String(k) = self.eval(key)? {
@@ -258,7 +257,7 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    fn fill_args(&self, element: &ArgElement, args: &mut Vec<Object>, kwargs: &mut HashMap<Rc<String>, Object>) -> Result<(), String> {
+    fn fill_args(&self, element: &ArgElement, args: &mut List, kwargs: &mut Map) -> Result<(), String> {
         match element {
             ArgElement::Singleton(node) => {
                 let val = self.eval(node)?;
@@ -347,16 +346,19 @@ impl<'a> Namespace<'a> {
                 }
             },
             Operator::FunCall(elements) => {
-                if let Object::Function(args_b, kwargs_b, closure, node) = value {
-                    let mut args: Vec<Object> = vec![];
-                    let mut kwargs: HashMap<Rc<String>, Object> = HashMap::new();
+                if let Object::Function(func) = value {
+                    let Function { args, kwargs, closure, expr } = func.as_ref();
+
+                    let mut call_args: List = vec![];
+                    let mut call_kwargs: Map = Map::new();
                     for element in elements {
-                        self.fill_args(element, &mut args, &mut kwargs)?;
+                        self.fill_args(element, &mut call_args, &mut call_kwargs)?;
                     }
+
                     let mut sub = self.subtend_with(&*closure);
-                    sub.bind(&args_b, Object::List(Rc::new(args)))?;
-                    sub.bind(&kwargs_b, Object::Map(Rc::new(kwargs)))?;
-                    sub.eval(&node)
+                    sub.bind(args, Object::List(Rc::new(call_args)))?;
+                    sub.bind(kwargs, Object::Map(Rc::new(call_kwargs)))?;
+                    sub.eval(expr)
                 } else {
                     Err("calling a non-function".to_string())
                 }
@@ -386,7 +388,7 @@ impl<'a> Namespace<'a> {
             AstNode::Identifier(name) => self.get(name),
 
             AstNode::List(elements) => {
-                let mut values: Vec<Object> = vec![];
+                let mut values: List = vec![];
                 for element in elements {
                     self.fill_list(element, &mut values)?;
                 }
@@ -394,7 +396,7 @@ impl<'a> Namespace<'a> {
             },
 
             AstNode::Map(elements) => {
-                let mut values: HashMap<Rc<String>, Object> = HashMap::new();
+                let mut values: Map = Map::new();
                 for element in elements {
                     self.fill_map(element, &mut values)?;
                 }
@@ -425,14 +427,17 @@ impl<'a> Namespace<'a> {
             },
 
             AstNode::Function { positional, keywords, expression } => {
-                let mut closure: HashMap<Rc<String>, Object> = HashMap::new();
+                let mut closure: Map = Map::new();
                 for ident in node.free() {
                     let val = self.get(&ident)?;
                     closure.insert(ident, val);
                 }
-                Ok(Object::Function(
-                    positional.clone(), keywords.clone(), Rc::new(closure), Rc::new((**expression).clone())
-                ))
+                Ok(Object::Function(Rc::new(Function {
+                    args: positional.clone(),
+                    kwargs: keywords.clone(),
+                    closure,
+                    expr: expression.as_ref().clone(),
+                })))
             },
         }
     }

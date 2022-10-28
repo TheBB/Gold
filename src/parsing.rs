@@ -1,4 +1,5 @@
 use std::num::ParseFloatError;
+use std::rc::Rc;
 
 use rug::{Integer, integer::ParseIntegerError};
 
@@ -692,12 +693,12 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
         |((name, binding), default)| {
             match binding {
                 None => MapBindingElement::Binding {
-                    key: name.to_string(),
+                    key: Rc::new(name.to_string()),
                     binding: Binding::id(name),
                     default,
                 },
                 Some(binding) => MapBindingElement::Binding {
-                    key: name.to_string(),
+                    key: Rc::new(name.to_string()),
                     binding,
                     default,
                 },

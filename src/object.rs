@@ -5,7 +5,7 @@ use std::rc::Rc;
 use rug::Integer;
 
 use super::ast::{Binding, AstNode};
-use super::traits::{Boxable, Splattable, Splat};
+use super::traits::{Splattable, Splat};
 
 
 fn escape(s: &str) -> String {
@@ -21,34 +21,45 @@ fn escape(s: &str) -> String {
 }
 
 
+pub type Key = Rc<String>;
+pub type List = Vec<Object>;
+pub type Map = HashMap<Key, Object>;
+
+
+#[derive(Debug, PartialEq)]
+pub struct Function {
+    pub args: Binding,
+    pub kwargs: Binding,
+    pub closure: Map,
+    pub expr: AstNode,
+}
+
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Object {
     Integer(i64),
     BigInteger(Rc<Integer>),
     Float(f64),
-    String(Rc<String>),
+    String(Key),
     Boolean(bool),
-    List(Rc<Vec<Object>>),
-    Map(Rc<HashMap<Rc<String>, Object>>),
-    Function(Binding, Binding, Rc<HashMap<Rc<String>, Object>>, Rc<AstNode>),
+    List(Rc<List>),
+    Map(Rc<Map>),
+    Function(Rc<Function>),
     Null,
 }
 
-impl Boxable<Object> for Object {
-    fn to_box(self) -> Box<Object> { Box::new(self) }
-}
-
 impl Splattable<Object> for Object {
-    fn splat(self) -> Splat<Object> { Splat::<Object> { object: self } }
+    fn splat(&self) -> Splat<Object> { Splat::<Object> { object: self.clone() } }
 }
 
 impl Object {
     pub fn string<T: ToString>(x: T) -> Object { Object::String(Rc::new(x.to_string())) }
-    pub fn literal(self) -> AstNode { AstNode::Literal(self) }
 
-    pub fn fmt(self) -> Result<String, String> {
+    pub fn literal(&self) -> AstNode { AstNode::Literal(self.clone()) }
+
+    pub fn fmt(&self) -> Result<String, String> {
         match self {
-            Object::String(r) => Ok((*r).clone()),
+            Object::String(r) => Ok(r.to_string()),
             Object::Integer(r) => Ok(r.to_string()),
             Object::BigInteger(r) => Ok(r.to_string()),
             Object::Float(r) => Ok(r.to_string()),
@@ -109,6 +120,14 @@ impl From<Integer> for Object {
     fn from(x: Integer) -> Object { Object::BigInteger(Rc::new(x)) }
 }
 
+impl From<&str> for Object {
+    fn from(x: &str) -> Object { Object::String(Rc::new(x.to_string())) }
+}
+
+impl From<bool> for Object {
+    fn from(x: bool) -> Object { Object::Boolean(x) }
+}
+
 impl TryInto<f64> for Object {
     type Error = ();
     fn try_into(self) -> Result<f64, Self::Error> {
@@ -137,36 +156,4 @@ impl ToString for Object {
             _ => "?".to_string(),
         }
     }
-}
-
-pub trait ToObject {
-    fn to_object(self) -> Object;
-}
-
-impl ToObject for &str {
-    fn to_object(self) -> Object { Object::String(Rc::new(self.to_string())) }
-}
-
-impl ToObject for String {
-    fn to_object(self) -> Object { Object::String(Rc::new(self)) }
-}
-
-impl ToObject for i32 {
-    fn to_object(self) -> Object { Object::Integer(self as i64) }
-}
-
-impl ToObject for i64 {
-    fn to_object(self) -> Object { Object::Integer(self) }
-}
-
-impl ToObject for f64 {
-    fn to_object(self) -> Object { Object::Float(self) }
-}
-
-impl ToObject for bool {
-    fn to_object(self) -> Object { Object::Boolean(self) }
-}
-
-impl ToObject for Object {
-    fn to_object(self) -> Object { self }
 }
