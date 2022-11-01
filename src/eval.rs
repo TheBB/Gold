@@ -7,8 +7,8 @@ use rug::Integer;
 use rug::ops::Pow;
 
 use crate::ast::*;
-use crate::object::{Object, Function, Key, Map, List};
-use crate::builtins;
+use crate::object::{Object, Function, Key, Map, List, Builtin};
+use crate::builtins::BUILTINS;
 
 
 struct Arith<F,G,H,X,Y,Z>
@@ -106,15 +106,21 @@ impl<'a> Namespace<'a> {
 
     pub fn get(&self, key: &Key) -> Result<Object, String> {
         match self {
-            Namespace::Empty => match key.as_str() {
-                "bool" => Ok(Object::Builtin(builtins::to_bool)),
-                "float" => Ok(Object::Builtin(builtins::to_float)),
-                "int" => Ok(Object::Builtin(builtins::to_int)),
-                "str" => Ok(Object::Builtin(builtins::to_str)),
-                "len" => Ok(Object::Builtin(builtins::len)),
-                "range" => Ok(Object::Builtin(builtins::range)),
-                _ => Err(format!("unknown name {}", key)),
-            },
+            Namespace::Empty => BUILTINS.get(key.as_str()).map(
+                |x| Object::Builtin(Builtin {
+                    name: key.clone(),
+                    func: *x,
+                })
+            ).ok_or_else(|| format!("unknown name {}", key)),
+            // match key.as_str() {
+            //     "bool" => Ok(Object::Builtin(builtins::to_bool)),
+            //     "float" => Ok(Object::Builtin(builtins::to_float)),
+            //     "int" => Ok(Object::Builtin(builtins::to_int)),
+            //     "str" => Ok(Object::Builtin(builtins::to_str)),
+            //     "len" => Ok(Object::Builtin(builtins::len)),
+            //     "range" => Ok(Object::Builtin(builtins::range)),
+            //     _ => Err(format!("unknown name {}", key)),
+            // },
             Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| format!("unknown name {}", key)),
             Namespace::Mutable { names, prev } => names.get(key).map(Object::clone).ok_or(()).or_else(|_| prev.get(key))
         }
@@ -417,7 +423,7 @@ impl<'a> Namespace<'a> {
                         sub.bind(kwargs, Object::Map(Rc::new(call_kwargs)))?;
                         sub.eval(expr)
                     },
-                    Object::Builtin(func) => {
+                    Object::Builtin(Builtin { func, .. }) => {
                         func(&call_args, &call_kwargs)
                     },
                     _ => Err("calling a non-function".to_string()),

@@ -1,8 +1,19 @@
 use std::{rc::Rc, str::FromStr};
 
+use phf::phf_map;
 use rug::Integer;
 
 use crate::object::*;
+
+
+pub static BUILTINS: phf::Map<&'static str, RFunc> = phf_map! {
+    "len" => len,
+    "range" => range,
+    "int" => to_int,
+    "float" => to_float,
+    "bool" => to_bool,
+    "str" => to_str,
+};
 
 
 pub fn len(args: &List, _: &Map) -> Result<Object, String> {

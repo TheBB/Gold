@@ -1,11 +1,16 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::io::{Read, Write};
 use std::rc::Rc;
 use std::str::FromStr;
 
+use rmp_serde::{decode, encode};
 use rug::Integer;
+use serde::de::Visitor;
+use serde::{Serialize, Serializer, Deserialize, Deserializer};
 
+use crate::builtins::BUILTINS;
 use crate::traits::{ToVec, ToMap};
 
 use super::ast::{Binding, AstNode};
@@ -28,10 +33,45 @@ fn escape(s: &str) -> String {
 pub type Key = Rc<String>;
 pub type List = Vec<Object>;
 pub type Map = HashMap<Key, Object>;
-type Builtin = fn(&List, &Map) -> Result<Object, String>;
+pub type RFunc = fn(&List, &Map) -> Result<Object, String>;
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone)]
+pub struct Builtin {
+    pub func: RFunc,
+    pub name: Rc<String>,
+}
+
+impl Serialize for Builtin {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.name.as_str())
+    }
+}
+
+struct BuiltinVisitor;
+
+impl<'a> Visitor<'a> for BuiltinVisitor {
+    type Value = Builtin;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a string")
+    }
+
+    fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        BUILTINS.get(v).ok_or(E::custom("unknown builtin name")).map(
+            |x| Builtin { name: Rc::new(v.to_string()), func: *x }
+        )
+    }
+}
+
+impl<'a> Deserialize<'a> for Builtin {
+    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> where {
+        deserializer.deserialize_str(BuiltinVisitor)
+    }
+}
+
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Function {
     pub args: Binding,
     pub kwargs: Binding,
@@ -40,7 +80,7 @@ pub struct Function {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum Object {
     Integer(i64),
     BigInteger(Rc<Integer>),
@@ -179,6 +219,7 @@ impl Object {
             (Object::String(x), Object::String(y)) => x.eq(y),
             (Object::Boolean(x), Object::Boolean(y)) => x.eq(y),
             (Object::Null, Object::Null) => true,
+            (Object::Builtin(x), Object::Builtin(y)) => x.name == y.name,
 
             // Composite objects => use user equality
             (Object::List(x), Object::List(y)) => {
@@ -212,6 +253,22 @@ impl Object {
             // Note: functions always compare false
             _ => false,
         }
+    }
+
+    pub fn serialize(&self) -> Option<Vec<u8>> {
+        encode::to_vec(self).ok()
+    }
+
+    pub fn serialize_write<T: Write + ?Sized>(&self, out: &mut T) -> Result<(), String> {
+        encode::write(out, self).map_err(|x| x.to_string())
+    }
+
+    pub fn deserialize(data: &Vec<u8>) -> Option<Object> {
+        decode::from_slice(data.as_slice()).ok()
+    }
+
+    pub fn deserialize_read<T: Read>(data: T) -> Result<Object, String> {
+        decode::from_read::<T, Object>(data).map_err(|x| x.to_string())
     }
 }
 

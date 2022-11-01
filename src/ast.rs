@@ -3,12 +3,13 @@ use std::ops;
 use std::rc::Rc;
 
 use rug::Integer;
+use serde::{Deserialize, Serialize};
 
 use super::object::{Object, Key};
 use super::traits::{Boxable, Splat, Splattable, ToVec};
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ListBindingElement {
     Binding {
         binding: Binding,
@@ -45,7 +46,7 @@ impl ListBindingElement {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MapBindingElement {
     Binding {
         key: Key,
@@ -99,7 +100,7 @@ fn binding_element_free_and_bound(
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Binding {
     Identifier(Key),
     List(Vec<ListBindingElement>),
@@ -159,7 +160,7 @@ impl Binding {
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StringElement {
     Raw(Key),
     Interpolate(AstNode),
@@ -180,7 +181,7 @@ impl StringElement {
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ListElement {
     Singleton(AstNode),
     Splat(AstNode),
@@ -257,7 +258,7 @@ impl<T> From<Splat<T>> for ListElement where T: ToAstNode {
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MapElement {
     Singleton {
         key: AstNode,
@@ -341,7 +342,7 @@ impl<T> From<Splat<T>> for MapElement where T: ToAstNode {
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ArgElement {
     Singleton(AstNode),
     Keyword(Key, AstNode),
@@ -390,14 +391,14 @@ impl<T> From<Splat<T>> for ArgElement where T: ToAstNode {
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum UnOp {
     Passthrough,
     ArithmeticalNegate,
     LogicalNegate,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum BinOp {
     Index,
     Power,
@@ -416,7 +417,7 @@ pub enum BinOp {
     Or,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Operator {
     UnOp(UnOp),
     BinOp(BinOp, Box<AstNode>),
@@ -454,7 +455,7 @@ impl Operator {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AstNode {
     Literal(Object),
     String(Vec<StringElement>),
