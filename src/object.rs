@@ -1,8 +1,12 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::rc::Rc;
+use std::str::FromStr;
 
 use rug::Integer;
+
+use crate::traits::{ToVec, ToMap};
 
 use super::ast::{Binding, AstNode};
 use super::traits::{Splattable, Splat};
@@ -24,6 +28,7 @@ fn escape(s: &str) -> String {
 pub type Key = Rc<String>;
 pub type List = Vec<Object>;
 pub type Map = HashMap<Key, Object>;
+type Builtin = fn(&List, &Map) -> Result<Object, String>;
 
 
 #[derive(Debug, PartialEq)]
@@ -35,7 +40,7 @@ pub struct Function {
 }
 
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone)]
 pub enum Object {
     Integer(i64),
     BigInteger(Rc<Integer>),
@@ -45,6 +50,7 @@ pub enum Object {
     List(Rc<List>),
     Map(Rc<Map>),
     Function(Rc<Function>),
+    Builtin(Builtin),
     Null,
 }
 
@@ -52,10 +58,77 @@ impl Splattable<Object> for Object {
     fn splat(&self) -> Splat<Object> { Splat::<Object> { object: self.clone() } }
 }
 
-impl Object {
-    pub fn string<T: ToString>(x: T) -> Object { Object::String(Rc::new(x.to_string())) }
+impl PartialEq<Object> for Object {
+    fn eq(&self, other: &Object) -> bool {
+        match (self, other) {
+            (Self::Integer(x), Self::Integer(y)) => x.eq(y),
+            (Self::BigInteger(x), Self::BigInteger(y)) => x.eq(y),
+            (Self::Float(x), Self::Float(y)) => x.eq(y),
+            (Self::String(x), Self::String(y)) => x.eq(y),
+            (Self::Boolean(x), Self::Boolean(y)) => x.eq(y),
+            (Self::List(x), Self::List(y)) => x.eq(y),
+            (Self::Map(x), Self::Map(y)) => x.eq(y),
+            (Self::Null, Self::Null) => true,
+            _ => false,
+        }
+    }
+}
 
-    pub fn literal(&self) -> AstNode { AstNode::Literal(self.clone()) }
+impl PartialOrd<Object> for Object {
+    fn partial_cmp(&self, other: &Object) -> Option<Ordering> {
+        match (self, other) {
+            (Object::Integer(x), Object::Integer(y)) => x.partial_cmp(y),
+            (Object::Integer(x), Object::BigInteger(y)) => x.partial_cmp(y.as_ref()),
+            (Object::Integer(x), Object::Float(y)) => (*x as f64).partial_cmp(y),
+            (Object::BigInteger(x), Object::Integer(y)) => x.as_ref().partial_cmp(y),
+            (Object::BigInteger(x), Object::BigInteger(y)) => x.as_ref().partial_cmp(y.as_ref()),
+            (Object::BigInteger(x), Object::Float(y)) => x.as_ref().partial_cmp(y),
+            (Object::Float(x), Object::Integer(y)) => x.partial_cmp(&(*y as f64)),
+            (Object::Float(x), Object::BigInteger(y)) => x.partial_cmp(y.as_ref()),
+            (Object::Float(x), Object::Float(y)) => x.partial_cmp(y),
+            (Object::String(x), Object::String(y)) => x.partial_cmp(y),
+            _ => None,
+        }
+    }
+}
+
+impl Debug for Object {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Integer(x) => f.debug_tuple("Object::Integer").field(x).finish(),
+            Self::BigInteger(x) => f.debug_tuple("Object::BigInteger").field(x).finish(),
+            Self::Float(x) => f.debug_tuple("Object::Float").field(x).finish(),
+            Self::String(x) => f.debug_tuple("Object::String").field(x).finish(),
+            Self::Boolean(x) => f.debug_tuple("Object::Boolean").field(x).finish(),
+            Self::List(x) => f.debug_tuple("Object::List").field(x.as_ref()).finish(),
+            Self::Map(x) => f.debug_tuple("Object::Map").field(x.as_ref()).finish(),
+            Self::Function(x) => f.debug_tuple("Object::Function").field(x.as_ref()).finish(),
+            Self::Builtin(_) => f.debug_tuple("Object::Builtin").finish(),
+            Self::Null => f.debug_tuple("Object::Null").finish(),
+        }
+    }
+}
+
+impl Object {
+    pub fn string<T: ToString>(x: T) -> Object {
+        Object::String(Rc::new(x.to_string()))
+    }
+
+    pub fn literal(&self) -> AstNode {
+        AstNode::Literal(self.clone())
+    }
+
+    pub fn list<T>(x: T) -> Object where T: ToVec<Object> {
+        Object::List(Rc::new(x.to_vec()))
+    }
+
+    pub fn map<T>(x: T) -> Object where T: ToMap<Key, Object> {
+        Object::Map(Rc::new(x.to_map()))
+    }
+
+    pub fn bigint(x: &str) -> Option<Object> {
+        Integer::from_str(x).ok().map(Object::from)
+    }
 
     pub fn fmt(&self) -> Result<String, String> {
         match self {
@@ -74,6 +147,8 @@ impl Object {
         match self {
             Object::Null => false,
             Object::Boolean(val) => *val,
+            Object::Integer(r) => *r != 0,
+            Object::Float(r) => *r != 0.0,
             _ => true,
         }
     }
@@ -85,21 +160,57 @@ impl Object {
             self
         }
     }
-}
 
-impl PartialOrd<Object> for Object {
-    fn partial_cmp(&self, other: &Object) -> Option<Ordering> {
+    pub fn user_eq(&self, other: &Object) -> bool {
         match (self, other) {
-            (Object::Integer(x), Object::Integer(y)) => x.partial_cmp(y),
-            (Object::Integer(x), Object::BigInteger(y)) => x.partial_cmp(y.as_ref()),
-            (Object::Integer(x), Object::Float(y)) => (*x as f64).partial_cmp(y),
-            (Object::BigInteger(x), Object::Integer(y)) => x.as_ref().partial_cmp(y),
-            (Object::BigInteger(x), Object::BigInteger(y)) => x.as_ref().partial_cmp(y.as_ref()),
-            (Object::BigInteger(x), Object::Float(y)) => x.as_ref().partial_cmp(y),
-            (Object::Float(x), Object::Integer(y)) => x.partial_cmp(&(*y as f64)),
-            (Object::Float(x), Object::BigInteger(y)) => x.partial_cmp(y.as_ref()),
-            (Object::Float(x), Object::Float(y)) => x.partial_cmp(y),
-            _ => None,
+
+            // Equality between disparate types
+            (Object::Integer(x), Object::BigInteger(y)) => y.as_ref().eq(x),
+            (Object::BigInteger(x), Object::Integer(y)) => x.as_ref().eq(y),
+            (Object::Float(x), Object::Integer(y)) => x.eq(&(*y as f64)),
+            (Object::Integer(x), Object::Float(y)) => y.eq(&(*x as f64)),
+            (Object::Float(x), Object::BigInteger(y)) => y.as_ref().eq(x),
+            (Object::BigInteger(x), Object::Float(y)) => x.as_ref().eq(y),
+
+            // Structural equality
+            (Object::Integer(x), Object::Integer(y)) => x.eq(y),
+            (Object::BigInteger(x), Object::BigInteger(y)) => x.eq(y),
+            (Object::Float(x), Object::Float(y)) => x.eq(y),
+            (Object::String(x), Object::String(y)) => x.eq(y),
+            (Object::Boolean(x), Object::Boolean(y)) => x.eq(y),
+            (Object::Null, Object::Null) => true,
+
+            // Composite objects => use user equality
+            (Object::List(x), Object::List(y)) => {
+                if x.len() != y.len() {
+                    return false
+                }
+                for (xx, yy) in x.iter().zip(y.as_ref()) {
+                    if !xx.user_eq(yy) {
+                        return false
+                    }
+                }
+                true
+            },
+
+            (Object::Map(x), Object::Map(y)) => {
+                if x.len() != y.len() {
+                    return false
+                }
+                for (xk, xv) in x.iter() {
+                    if let Some(yv) = y.get(xk) {
+                        if !xv.user_eq(yv) {
+                            return false
+                        }
+                    } else {
+                        return false
+                    }
+                }
+                true
+            },
+
+            // Note: functions always compare false
+            _ => false,
         }
     }
 }
@@ -112,8 +223,20 @@ impl From<i64> for Object {
     fn from(x: i64) -> Object { Object::Integer(x) }
 }
 
+impl From<i32> for Object {
+    fn from(x: i32) -> Object { Object::Integer(x as i64) }
+}
+
 impl From<f64> for Object {
     fn from(x: f64) -> Object { Object::Float(x) }
+}
+
+impl From<usize> for Object {
+    fn from(value: usize) -> Object {
+        i64::try_from(value).map(Object::from).unwrap_or_else(
+            |_| Object::from(Integer::from(value))
+        )
+    }
 }
 
 impl From<Integer> for Object {
@@ -150,9 +273,35 @@ impl ToString for Object {
             Object::Boolean(true) => "true".to_string(),
             Object::Boolean(false) => "false".to_string(),
             Object::Null => "null".to_string(),
+
             Object::List(elements) => {
-                "[".to_string() + &elements.iter().map(Object::to_string).collect::<Vec<String>>().join(", ") + "]"
+                let mut retval = "[".to_string();
+                let mut iter = elements.iter().peekable();
+                while let Some(element) = iter.next() {
+                    retval += &element.to_string();
+                    if iter.peek().is_some() {
+                        retval += ", ";
+                    }
+                }
+                retval += "]";
+                retval
             }
+
+            Object::Map(elements) => {
+                let mut retval = "{".to_string();
+                let mut iter = elements.iter().peekable();
+                while let Some((k, v)) = iter.next() {
+                    retval += k;
+                    retval += ": ";
+                    retval += &v.to_string();
+                    if iter.peek().is_some() {
+                        retval += ", ";
+                    }
+                }
+                retval += "}";
+                retval
+            }
+
             _ => "?".to_string(),
         }
     }

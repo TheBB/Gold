@@ -453,6 +453,7 @@ fn prefixed<'a, E: CompleteError<'a>>(
     map(
         tuple((
             many0(alt((
+                value(UnOp::Passthrough, postpad(tag("+"))),
                 value(UnOp::ArithmeticalNegate, postpad(tag("-"))),
                 value(UnOp::LogicalNegate, postpad(keyword("not"))),
             ))),
@@ -520,7 +521,6 @@ fn power<'a, E: CompleteError<'a>>(
         binop(
             alt((
                 value(Operator::power as OpCons, tag("^")),
-                value(Operator::multiply as OpCons, tag("*")),
             )),
             prefixed,
         ),
@@ -626,10 +626,16 @@ fn ident_binding<'a, E: CompleteError<'a>>(
 fn list_binding_element<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, ListBindingElement, E> {
-    map(
-        tuple((binding, opt(preceded(postpad(char('=')), expression)))),
-        |(b, e)| ListBindingElement::Binding { binding: b, default: e }
-    )(input)
+    alt((
+        map(
+            preceded(tag("..."), opt(identifier)),
+            |ident| ident.map(ListBindingElement::slurp_to).unwrap_or(ListBindingElement::Slurp),
+        ),
+        map(
+            tuple((binding, opt(preceded(postpad(char('=')), expression)))),
+            |(b, e)| ListBindingElement::Binding { binding: b, default: e },
+        ),
+    ))(input)
 }
 
 fn list_binding<'a, E: CompleteError<'a>>(
@@ -637,74 +643,65 @@ fn list_binding<'a, E: CompleteError<'a>>(
 ) -> IResult<&'a str, Binding, E> {
     map(
         terminated(
-            tuple((
-                separated_list0(
-                    postpad(char(',')),
-                    list_binding_element,
-                ),
-                opt(
-                    preceded(
-                        tuple((postpad(char(',')), postpad(tag("...")))),
-                        opt(identifier),
-                    ),
-                ),
-            )),
+            separated_list0(
+                postpad(char(',')),
+                list_binding_element,
+            ),
             opt(postpad(char(','))),
         ),
-        |(mut bindings, slurp)| {
-            match slurp {
-                Some(Some(name)) => bindings.push(ListBindingElement::slurp_to(name)),
-                Some(None) => bindings.push(ListBindingElement::Slurp),
-                _ => {}
-            };
-            Binding::List(bindings)
-        }
+        Binding::List,
     )(input)
 }
 
 fn map_binding_element<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, MapBindingElement, E> {
-    map(
-        tuple((
-            alt((
-                map(
-                    tuple((
+    alt((
+        map(
+            preceded(tag("..."), identifier),
+            MapBindingElement::slurp_to,
+        ),
+        map(
+            tuple((
+                alt((
+                    map(
+                        tuple((
+                            postpad(map_identifier),
+                            preceded(
+                                postpad(char(':')),
+                                binding,
+                            ),
+                        )),
+                        |(name, binding)| (name, Some(binding)),
+                    ),
+                    map(
                         postpad(map_identifier),
-                        preceded(
-                            postpad(char(':')),
-                            binding,
-                        ),
-                    )),
-                    |(name, binding)| (name, Some(binding)),
-                ),
-                map(
-                    postpad(map_identifier),
-                    |name: &str| (name, None),
+                        |name: &str| (name, None),
+                    ),
+                )),
+                opt(
+                    preceded(
+                        postpad(char('=')),
+                        expression,
+                    ),
                 ),
             )),
-            opt(
-                preceded(
-                    postpad(char('=')),
-                    expression,
-                ),
-            ),
-        )),
-        |((name, binding), default)| {
-            match binding {
-                None => MapBindingElement::Binding {
-                    key: Rc::new(name.to_string()),
-                    binding: Binding::id(name),
-                    default,
-                },
-                Some(binding) => MapBindingElement::Binding {
-                    key: Rc::new(name.to_string()),
-                    binding,
-                    default,
-                },
-            }
-        }
-    )(input)
+            |((name, binding), default)| {
+                match binding {
+                    None => MapBindingElement::Binding {
+                        key: Rc::new(name.to_string()),
+                        binding: Binding::id(name),
+                        default,
+                    },
+                    Some(binding) => MapBindingElement::Binding {
+                        key: Rc::new(name.to_string()),
+                        binding,
+                        default,
+                    },
+                }
+            },
+        ),
+    ))(input)
 }
 
 fn map_binding<'a, E: CompleteError<'a>>(
@@ -712,27 +709,13 @@ fn map_binding<'a, E: CompleteError<'a>>(
 ) -> IResult<&'a str, Binding, E> {
     map(
         terminated(
-            tuple((
-                separated_list0(
-                    postpad(char(',')),
-                    map_binding_element
-                ),
-                opt(
-                    preceded(
-                        tuple((postpad(char(',')), postpad(tag("...")))),
-                        postpad(identifier),
-                    ),
-                ),
-            )),
+            separated_list0(
+                postpad(char(',')),
+                map_binding_element,
+            ),
             opt(postpad(char(','))),
         ),
-        |(mut bindings, slurp)| {
-            match slurp {
-                Some(name) => bindings.push(MapBindingElement::slurp_to(name.to_string())),
-                _ => {}
-            };
-            Binding::Map(bindings)
-        },
+        Binding::Map,
     )(input)
 }
 
@@ -881,6 +864,7 @@ pub fn parse(input: &str) -> Result<AstNode, String> {
         |(remaining, node)| if remaining.len() > 0 {
             Err(format!("unconsumed input: {}", remaining))
         } else {
+            node.validate()?;
             Ok(node)
         }
     )

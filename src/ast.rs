@@ -5,7 +5,7 @@ use std::rc::Rc;
 use rug::Integer;
 
 use super::object::{Object, Key};
-use super::traits::{Boxable, Splat, Splattable};
+use super::traits::{Boxable, Splat, Splattable, ToVec};
 
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,6 +30,19 @@ impl ListBindingElement {
             _ => {},
         }
     }
+
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            ListBindingElement::Binding { binding, default } => {
+                binding.validate()?;
+                if let Some(node) = default {
+                    node.validate()?;
+                }
+            },
+            _ => {},
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -52,6 +65,19 @@ impl MapBindingElement {
             },
             MapBindingElement::SlurpTo(name) => { bound.insert(name.clone()); },
         }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            MapBindingElement::Binding { binding, default, .. } => {
+                binding.validate()?;
+                if let Some(node) = default {
+                    node.validate()?;
+                }
+            },
+            _ => {},
+        }
+        Ok(())
     }
 }
 
@@ -98,6 +124,38 @@ impl Binding {
             },
         }
     }
+
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            Binding::List(elements) => {
+                let mut found_slurp = false;
+                for element in elements {
+                    element.validate()?;
+                    if let ListBindingElement::Binding { .. } = element { }
+                    else {
+                        if found_slurp {
+                            return Err("multiple slurps in list binding".to_string())
+                        }
+                        found_slurp = true;
+                    }
+                }
+            },
+            Binding::Map(elements) => {
+                let mut found_slurp = false;
+                for element in elements {
+                    element.validate()?;
+                    if let MapBindingElement::SlurpTo(_) = element {
+                        if found_slurp {
+                            return Err("multiple slurps in map binding".to_string())
+                        }
+                        found_slurp = true;
+                    }
+                }
+            },
+            _ => {},
+        }
+        Ok(())
+    }
 }
 
 
@@ -110,6 +168,14 @@ pub enum StringElement {
 impl StringElement {
     pub fn raw<T>(val: T) -> StringElement where T: ToString {
         StringElement::Raw(Rc::new(val.to_string()))
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            StringElement::Interpolate(node) => { node.validate()?; }
+            _ => {},
+        }
+        Ok(())
     }
 }
 
@@ -159,6 +225,23 @@ impl ListElement {
 
     pub fn singleton<T>(x: T) -> ListElement where T: ToAstNode { ListElement::Singleton(x.to_ast()) }
     pub fn splat<T>(x: T) -> ListElement where T: ToAstNode { ListElement::Splat(x.to_ast()) }
+
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            ListElement::Singleton(node) => { node.validate()?; },
+            ListElement::Splat(node) => { node.validate()?; },
+            ListElement::Loop { binding, iterable, element } => {
+                binding.validate()?;
+                iterable.validate()?;
+                element.validate()?;
+            },
+            ListElement::Cond { condition, element } => {
+                condition.validate()?;
+                element.validate()?;
+            },
+        }
+        Ok(())
+    }
 }
 
 impl<T> From<T> for ListElement where T: ToAstNode {
@@ -170,94 +253,6 @@ impl<T> From<T> for ListElement where T: ToAstNode {
 impl<T> From<Splat<T>> for ListElement where T: ToAstNode {
     fn from(x: Splat<T>) -> ListElement {
         ListElement::Splat(x.object.to_ast())
-    }
-}
-
-
-pub trait ToList {
-    fn to_list(self) -> Vec<ListElement>;
-}
-
-impl ToList for Vec<ListElement> {
-    fn to_list(self) -> Vec<ListElement> { self }
-}
-
-impl ToList for () {
-    fn to_list(self) -> Vec<ListElement> { vec![] }
-}
-
-impl<A> ToList for (A,)
-where
-    ListElement: From<A>,
-{
-    fn to_list(self) -> Vec<ListElement> {
-        vec![
-            ListElement::from(self.0),
-        ]
-    }
-}
-
-impl<A,B,> ToList for (A,B)
-where
-    ListElement: From<A>,
-    ListElement: From<B>,
-{
-    fn to_list(self) -> Vec<ListElement> {
-        vec![
-            ListElement::from(self.0),
-            ListElement::from(self.1),
-        ]
-    }
-}
-
-impl<A,B,C> ToList for (A,B,C)
-where
-    ListElement: From<A>,
-    ListElement: From<B>,
-    ListElement: From<C>,
-{
-    fn to_list(self) -> Vec<ListElement> {
-        vec![
-            ListElement::from(self.0),
-            ListElement::from(self.1),
-            ListElement::from(self.2),
-        ]
-    }
-}
-
-impl<A,B,C,D> ToList for (A,B,C,D)
-where
-    ListElement: From<A>,
-    ListElement: From<B>,
-    ListElement: From<C>,
-    ListElement: From<D>,
-{
-    fn to_list(self) -> Vec<ListElement> {
-        vec![
-            ListElement::from(self.0),
-            ListElement::from(self.1),
-            ListElement::from(self.2),
-            ListElement::from(self.3),
-        ]
-    }
-}
-
-impl<A,B,C,D,E> ToList for (A,B,C,D,E)
-where
-    ListElement: From<A>,
-    ListElement: From<B>,
-    ListElement: From<C>,
-    ListElement: From<D>,
-    ListElement: From<E>,
-{
-    fn to_list(self) -> Vec<ListElement> {
-        vec![
-            ListElement::from(self.0),
-            ListElement::from(self.1),
-            ListElement::from(self.2),
-            ListElement::from(self.3),
-            ListElement::from(self.4),
-        ]
     }
 }
 
@@ -310,6 +305,26 @@ impl MapElement {
             }
         }
     }
+
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            MapElement::Singleton { key, value } => {
+                key.validate()?;
+                value.validate()?;
+            },
+            MapElement::Splat(node) => { node.validate()?; },
+            MapElement::Loop { binding, iterable, element } => {
+                binding.validate()?;
+                iterable.validate()?;
+                element.validate()?;
+            },
+            MapElement::Cond { condition, element } => {
+                condition.validate()?;
+                element.validate()?;
+            },
+        }
+        Ok(())
+    }
 }
 
 
@@ -322,43 +337,6 @@ impl<S,T> From<(S,T)> for MapElement where T: ToAstNode, S: ToAstNode {
 impl<T> From<Splat<T>> for MapElement where T: ToAstNode {
     fn from(x: Splat<T>) -> Self {
         MapElement::Splat(x.object.to_ast())
-    }
-}
-
-
-pub trait ToMap {
-    fn to_map(self) -> Vec<MapElement>;
-}
-
-impl ToMap for Vec<MapElement> {
-    fn to_map(self) -> Vec<MapElement> { self }
-}
-
-impl ToMap for () {
-    fn to_map(self) -> Vec<MapElement> { vec![] }
-}
-
-impl<A> ToMap for (A,)
-where
-    MapElement: From<A>,
-{
-    fn to_map(self) -> Vec<MapElement> {
-        vec![
-            MapElement::from(self.0),
-        ]
-    }
-}
-
-impl<A,B> ToMap for (A,B)
-where
-    MapElement: From<A>,
-    MapElement: From<B>,
-{
-    fn to_map(self) -> Vec<MapElement> {
-        vec![
-            MapElement::from(self.0),
-            MapElement::from(self.1),
-        ]
     }
 }
 
@@ -382,15 +360,14 @@ impl ArgElement {
             ArgElement::Keyword(_, expr) => { expr.free_impl(free); },
         }
     }
-}
 
-pub trait ToArg {
-    fn to_arg(self) -> ArgElement;
-}
-
-impl<T> ToArg for T where ArgElement: From<T> {
-    fn to_arg(self) -> ArgElement {
-        ArgElement::from(self)
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            ArgElement::Singleton(node) => { node.validate()?; },
+            ArgElement::Splat(node) => { node.validate()?; },
+            ArgElement::Keyword(_, value) => { value.validate()?; },
+        }
+        Ok(())
     }
 }
 
@@ -413,72 +390,9 @@ impl<T> From<Splat<T>> for ArgElement where T: ToAstNode {
 }
 
 
-pub trait ToArgs {
-    fn to_args(self) -> Vec<ArgElement>;
-}
-
-impl ToArgs for Vec<ArgElement> {
-    fn to_args(self) -> Vec<ArgElement> { self }
-}
-
-impl ToArgs for () {
-    fn to_args(self) -> Vec<ArgElement> { vec![] }
-}
-
-impl<A> ToArgs for (A,) where A: ToArg {
-    fn to_args(self) -> Vec<ArgElement> {
-        vec![self.0.to_arg()]
-    }
-}
-
-impl<A,B> ToArgs for (A,B)
-where
-    A: ToArg,
-    B: ToArg
-{
-    fn to_args(self) -> Vec<ArgElement> {
-        vec![
-            self.0.to_arg(),
-            self.1.to_arg(),
-        ]
-    }
-}
-
-impl<A,B,C> ToArgs for (A,B,C)
-where
-    A: ToArg,
-    B: ToArg,
-    C: ToArg
-{
-    fn to_args(self) -> Vec<ArgElement> {
-        vec![
-            self.0.to_arg(),
-            self.1.to_arg(),
-            self.2.to_arg(),
-        ]
-    }
-}
-
-impl<A,B,C,D> ToArgs for (A,B,C,D)
-where
-    A: ToArg,
-    B: ToArg,
-    C: ToArg,
-    D: ToArg
-{
-    fn to_args(self) -> Vec<ArgElement> {
-        vec![
-            self.0.to_arg(),
-            self.1.to_arg(),
-            self.2.to_arg(),
-            self.3.to_arg(),
-        ]
-    }
-}
-
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnOp {
+    Passthrough,
     ArithmeticalNegate,
     LogicalNegate,
 }
@@ -525,6 +439,19 @@ impl Operator {
     pub fn not_equal<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::NotEqual, x.to_box()) }
     pub fn and<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::And, x.to_box()) }
     pub fn or<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::Or, x.to_box()) }
+
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            Operator::BinOp(_, node) => { node.validate()?; },
+            Operator::FunCall(args) => {
+                for arg in args {
+                    arg.validate()?;
+                }
+            },
+            _ => {},
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -597,8 +524,8 @@ impl AstNode {
 
     pub fn id<T: ToString>(x: T) -> AstNode { AstNode::Identifier(Rc::new(x.to_string())) }
 
-    pub fn list<T>(x: T) -> AstNode where T: ToList { AstNode::List(x.to_list()) }
-    pub fn map<T>(x: T) -> AstNode where T: ToMap { AstNode::Map(x.to_map()) }
+    pub fn list<T>(x: T) -> AstNode where T: ToVec<ListElement> { AstNode::List(x.to_vec()) }
+    pub fn map<T>(x: T) -> AstNode where T: ToVec<MapElement> { AstNode::Map(x.to_vec()) }
 
     pub fn operate(self, op: Operator) -> AstNode {
         AstNode::Operator {
@@ -618,7 +545,7 @@ impl AstNode {
     pub fn or<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::or(rhs.to_ast())) }
     pub fn pow<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::power(rhs.to_ast())) }
     pub fn index<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::index(rhs.to_ast())) }
-    pub fn funcall<T>(self, args: T) -> AstNode where T: ToArgs { self.operate(Operator::FunCall(args.to_args())) }
+    pub fn funcall<T>(self, args: T) -> AstNode where T: ToVec<ArgElement> { self.operate(Operator::FunCall(args.to_vec())) }
 
     pub fn string(value: Vec<StringElement>) -> AstNode {
         if value.len() == 0 {
@@ -704,6 +631,49 @@ impl AstNode {
                 }
             }
         }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            AstNode::String(elements) => {
+                for element in elements {
+                    element.validate()?;
+                }
+            },
+            AstNode::List(elements) => {
+                for element in elements {
+                    element.validate()?;
+                }
+            },
+            AstNode::Map(elements) => {
+                for element in elements {
+                    element.validate()?;
+                }
+            },
+            AstNode::Let { bindings, expression } => {
+                for (binding, node) in bindings {
+                    binding.validate()?;
+                    node.validate()?;
+                }
+                expression.validate()?;
+            },
+            AstNode::Operator { operand, operator } => {
+                operand.validate()?;
+                operator.validate()?;
+            },
+            AstNode::Function { positional, keywords, expression } => {
+                positional.validate()?;
+                keywords.validate()?;
+                expression.validate()?;
+            },
+            AstNode::Branch { condition, true_branch, false_branch } => {
+                condition.validate()?;
+                true_branch.validate()?;
+                false_branch.validate()?;
+            }
+            _ => {},
+        }
+        Ok(())
     }
 }
 

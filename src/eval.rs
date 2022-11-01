@@ -6,10 +6,9 @@ use num_traits::checked_pow;
 use rug::Integer;
 use rug::ops::Pow;
 
-use crate::ast::{StringElement, ListBindingElement, ListElement, MapElement, Operator, UnOp, BinOp, ArgElement};
-
-use super::ast::{AstNode, Binding};
-use super::object::{Object, Function, Map, List};
+use crate::ast::*;
+use crate::object::{Object, Function, Key, Map, List};
+use crate::builtins;
 
 
 struct Arith<F,G,H,X,Y,Z>
@@ -42,9 +41,9 @@ where
             )
         ),
 
-        (Object::Integer(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&Integer::from(xx), &yy))),
-        (Object::BigInteger(xx), Object::Integer(yy)) => Ok(Object::from(bxb(&xx, &Integer::from(yy)))),
-        (Object::BigInteger(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&xx, &yy))),
+        (Object::Integer(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&Integer::from(xx), &yy)).numeric_normalize()),
+        (Object::BigInteger(xx), Object::Integer(yy)) => Ok(Object::from(bxb(&xx, &Integer::from(yy))).numeric_normalize()),
+        (Object::BigInteger(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&xx, &yy)).numeric_normalize()),
 
         (Object::Float(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx, yy))),
         (Object::Integer(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx as f64, yy))),
@@ -81,53 +80,57 @@ fn power(x: Object, y: Object) -> Result<Object, String> {
 }
 
 
-struct Namespace<'a> {
-    names: Map,
-    prev: Option<&'a Namespace<'a>>,
+enum Namespace<'a> {
+    Empty,
+    Frozen(&'a Map),
+    Mutable {
+        names: Map,
+        prev: &'a Namespace<'a>,
+    },
 }
 
 
 impl<'a> Namespace<'a> {
-    pub fn new<'b>() -> Namespace<'b> {
-        Namespace { names: Map::new(), prev: None }
-    }
-
     pub fn subtend(&'a self) -> Namespace<'a> {
-        Namespace { names: Map::new(), prev: Some(self) }
+        Namespace::Mutable { names: Map::new(), prev: self }
     }
 
-    pub fn subtend_with(&'a self, context: &Map) -> Namespace<'a> {
-        let mut names: Map = Map::new();
-        for (k, v) in context {
-            names.insert(k.clone(), v.clone());
+    pub fn set(&mut self, key: &Key, value: Object) -> Result<(), String> {
+        if let Namespace::Mutable { names, .. } = self {
+            names.insert(key.clone(), value);
+            Ok(())
+        } else {
+            Err("setting in frozen namespace".to_string())
         }
-        Namespace { names, prev: Some(self) }
     }
 
-    pub fn set(&mut self, key: &Rc<String>, value: Object) {
-        self.names.insert(key.clone(), value);
-    }
-
-    pub fn get(&self, key: &Rc<String>) -> Result<Object, String> {
-        self.names.get(key)
-            .map(Object::clone)
-            .ok_or_else(|| ())
-            .or_else(|_| {
-                self.prev
-                    .ok_or_else(|| format!("unknown name {}", key))
-                    .and_then(|ns| { ns.get(key) })
-            })
+    pub fn get(&self, key: &Key) -> Result<Object, String> {
+        match self {
+            Namespace::Empty => match key.as_str() {
+                "bool" => Ok(Object::Builtin(builtins::to_bool)),
+                "float" => Ok(Object::Builtin(builtins::to_float)),
+                "int" => Ok(Object::Builtin(builtins::to_int)),
+                "str" => Ok(Object::Builtin(builtins::to_str)),
+                "len" => Ok(Object::Builtin(builtins::len)),
+                "range" => Ok(Object::Builtin(builtins::range)),
+                _ => Err(format!("unknown name {}", key)),
+            },
+            Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| format!("unknown name {}", key)),
+            Namespace::Mutable { names, prev } => names.get(key).map(Object::clone).ok_or(()).or_else(|_| prev.get(key))
+        }
     }
 
     fn bind(&mut self, binding: &Binding, value: Object) -> Result<(), String> {
         match (binding, value) {
             (Binding::Identifier(key), val) => {
-                self.set(key, val);
+                self.set(key, val)?;
                 Ok(())
             },
 
             (Binding::List(bindings), Object::List(values)) => {
                 let mut value_iter = values.iter();
+                let nslurp = values.len() as i64 - bindings.len() as i64 + 1;
+
                 for binding_element in bindings {
                     match binding_element {
                         ListBindingElement::Binding { binding, default } => {
@@ -143,15 +146,23 @@ impl<'a> Namespace<'a> {
                             self.bind(binding, val)?;
                         },
 
-                        ListBindingElement::Slurp => { return Ok(()) },
+                        ListBindingElement::Slurp => {
+                            for _ in 0..nslurp {
+                                if let None = value_iter.next() {
+                                    return Err("??".to_string())
+                                }
+                            }
+                        },
 
                         ListBindingElement::SlurpTo(name) => {
                             let mut values: List = vec![];
-                            while let Some(val) = value_iter.next() {
-                                values.push(val.clone());
+                            for _ in 0..nslurp {
+                                match value_iter.next() {
+                                    None => return Err("???".to_string()),
+                                    Some(val) => values.push(val.clone()),
+                                }
                             }
-                            self.set(name, Object::List(Rc::new(values)));
-                            return Ok(())
+                            self.set(name, Object::List(Rc::new(values)))?;
                         }
                     }
                 }
@@ -161,6 +172,44 @@ impl<'a> Namespace<'a> {
                 } else {
                     Ok(())
                 }
+            },
+
+            (Binding::Map(bindings), Object::Map(values)) => {
+                let mut slurp_target: Option<&Key> = None;
+
+                for binding_element in bindings {
+                    match binding_element {
+                        MapBindingElement::Binding { key, binding, default } => {
+                            let val = values.get(key)
+                                .map(Object::clone)
+                                .ok_or_else(|| "zomg".to_string())
+                                .or_else(|_| {
+                                    default.as_ref()
+                                        .ok_or_else(|| "?????".to_string())
+                                        .and_then(|node| self.eval(&node))
+                                })?;
+
+                            self.bind(binding, val)?;
+                        },
+                        MapBindingElement::SlurpTo(target) => {
+                            slurp_target = Some(target);
+                        },
+                    }
+                }
+
+                if let Some(target) = slurp_target {
+                    let mut values: Map = values.as_ref().clone();
+
+                    for binding_element in bindings {
+                        if let MapBindingElement::Binding { key, .. } = binding_element {
+                            values.remove(key);
+                        }
+                    }
+
+                    self.set(target, Object::Map(Rc::new(values)))?;
+                }
+
+                Ok(())
             },
 
             _ => {
@@ -317,19 +366,26 @@ impl<'a> Namespace<'a> {
         };
 
         match operator {
-            Operator::UnOp(UnOp::LogicalNegate) => Ok(Object::Boolean(!value.truthy())),
-            Operator::UnOp(UnOp::ArithmeticalNegate) => match value {
-                Object::Integer(x) => Ok(Object::Integer(-x)),
-                Object::BigInteger(x) => Ok(Object::from((*x).clone().neg())),
-                Object::Float(x) => Ok(Object::Float(-x)),
-                _ => Err("type mismatch".to_string()),
-            },
+            Operator::UnOp(op) => match op {
+                UnOp::Passthrough => Ok(value),
+                UnOp::LogicalNegate => Ok(Object::Boolean(!value.truthy())),
+                UnOp::ArithmeticalNegate => match value {
+                    Object::Integer(x) => Ok(Object::Integer(-x)),
+                    Object::BigInteger(x) => Ok(Object::from((*x).clone().neg())),
+                    Object::Float(x) => Ok(Object::Float(-x)),
+                    _ => Err("type mismatch".to_string()),
+                },
+            }
             Operator::BinOp(BinOp::And, node) => if value.truthy() { self.eval(node) } else { Ok(value) },
             Operator::BinOp(BinOp::Or, node) => if value.truthy() { Ok(value) } else { self.eval(node) },
             Operator::BinOp(op, node) => {
                 let other = self.eval(node)?;
                 match (op, &value, &other) {
                     (BinOp::Index, Object::List(x), Object::Integer(y)) => Ok(x[*y as usize].clone()),
+                    (BinOp::Index, Object::Map(x), Object::String(y)) => x.get(y).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
+                    (BinOp::Add, Object::List(x), Object::List(y)) => Ok(
+                        Object::List(Rc::new(x.iter().chain(y.iter()).map(Object::clone).collect()))
+                    ),
                     (BinOp::Add, _, _) => arithmetic_operate(add, value, other),
                     (BinOp::Subtract, _, _) => arithmetic_operate(sub, value, other),
                     (BinOp::Multiply, _, _) => arithmetic_operate(mul, value, other),
@@ -340,27 +396,31 @@ impl<'a> Namespace<'a> {
                     (BinOp::LessEqual, _, _) => value.partial_cmp(&other).map(|x| Object::Boolean(x != Ordering::Greater)).ok_or_else(|| "err".to_string()),
                     (BinOp::Greater, _, _) => value.partial_cmp(&other).map(|x| Object::Boolean(x == Ordering::Greater)).ok_or_else(|| "err".to_string()),
                     (BinOp::GreaterEqual, _, _) => value.partial_cmp(&other).map(|x| Object::Boolean(x != Ordering::Less)).ok_or_else(|| "err".to_string()),
-                    (BinOp::Equal, _, _) => Ok(Object::Boolean(value == other)),
-                    (BinOp::NotEqual, _, _) => Ok(Object::Boolean(value != other)),
+                    (BinOp::Equal, _, _) => Ok(Object::from(value.user_eq(&other))),
+                    (BinOp::NotEqual, _, _) => Ok(Object::from(!value.user_eq(&other))),
                     _ => Err("unsupported operator".to_string()),
                 }
             },
             Operator::FunCall(elements) => {
-                if let Object::Function(func) = value {
-                    let Function { args, kwargs, closure, expr } = func.as_ref();
+                let mut call_args: List = vec![];
+                let mut call_kwargs: Map = Map::new();
+                for element in elements {
+                    self.fill_args(element, &mut call_args, &mut call_kwargs)?;
+                }
 
-                    let mut call_args: List = vec![];
-                    let mut call_kwargs: Map = Map::new();
-                    for element in elements {
-                        self.fill_args(element, &mut call_args, &mut call_kwargs)?;
-                    }
-
-                    let mut sub = self.subtend_with(&*closure);
-                    sub.bind(args, Object::List(Rc::new(call_args)))?;
-                    sub.bind(kwargs, Object::Map(Rc::new(call_kwargs)))?;
-                    sub.eval(expr)
-                } else {
-                    Err("calling a non-function".to_string())
+                match value {
+                    Object::Function(func) => {
+                        let Function { args, kwargs, closure, expr } = func.as_ref();
+                        let ns = Namespace::Frozen(closure);
+                        let mut sub = ns.subtend();
+                        sub.bind(args, Object::List(Rc::new(call_args)))?;
+                        sub.bind(kwargs, Object::Map(Rc::new(call_kwargs)))?;
+                        sub.eval(expr)
+                    },
+                    Object::Builtin(func) => {
+                        func(&call_args, &call_kwargs)
+                    },
+                    _ => Err("calling a non-function".to_string()),
                 }
             },
         }
@@ -445,5 +505,5 @@ impl<'a> Namespace<'a> {
 
 
 pub fn eval(node: &AstNode) -> Result<Object, String> {
-    Namespace::new().eval(node)
+    Namespace::Empty.eval(node)
 }

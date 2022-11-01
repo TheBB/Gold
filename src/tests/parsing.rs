@@ -377,6 +377,36 @@ fn let_blocks() {
     );
 
     assert_eq!(
+        parse("let [...a] = b in a"),
+        Ok(AstNode::Let {
+            bindings: vec![
+                (
+                    Binding::List(vec![
+                        ListBindingElement::slurp_to("a"),
+                    ]),
+                    "b".id(),
+                ),
+            ],
+            expression: "a".id().to_box(),
+        }),
+    );
+
+    assert_eq!(
+        parse("let [...a,] = b in a"),
+        Ok(AstNode::Let {
+            bindings: vec![
+                (
+                    Binding::List(vec![
+                        ListBindingElement::slurp_to("a"),
+                    ]),
+                    "b".id(),
+                ),
+            ],
+            expression: "a".id().to_box(),
+        }),
+    );
+
+    assert_eq!(
         parse("let {a} = x in a"),
         Ok(AstNode::Let {
             bindings: vec![
@@ -606,6 +636,21 @@ fn operators() {
     assert_eq!(
         parse("1 and 2 or 3"),
         Ok(1.to_ast().and(2).or(3)),
+    );
+
+    assert_eq!(
+        parse("2 // 2 * 2"),
+        Ok(2.to_ast().idiv(2).mul(2)),
+    );
+
+    assert_eq!(
+        parse("2 ^ 2 ^ 2"),
+        Ok(2.to_ast().pow(2.to_ast().pow(2))),
+    );
+
+    assert_eq!(
+        parse("-2 ^ 2 ^ 2"),
+        Ok(2.to_ast().pow(2.to_ast().pow(2)).neg()),
     );
 }
 

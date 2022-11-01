@@ -1,9 +1,11 @@
+#![feature(is_some_and)]
+
 mod ast;
+mod builtins;
 mod eval;
 mod object;
 mod parsing;
 mod traits;
-
 
 #[cfg(test)]
 mod tests;
