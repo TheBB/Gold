@@ -1,0 +1,25 @@
+let alice = {
+    name: "Alice",
+    age: 24,
+    admin: true,
+}
+
+let bob = {
+    name: "Bob",
+    age: 49,
+    admin: true,
+}
+
+let carlo = {
+    name: "Carlo",
+    age: 20,
+    admin: false,
+}
+
+let isAdmin = (person) => person.admin
+
+let filter = (pred, list) => [
+    for x in list: if pred(x): x
+]
+
+in filter(isAdmin, [alice, bob, carlo])
