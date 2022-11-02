@@ -1,0 +1,14 @@
+let educationalBook = (publisher, title) => {
+    category: "nonfiction",
+    department: "books",
+    publisher: publisher,
+    title: title,
+}
+
+let makeOreilly = (title) => educationalBook("O'Reilly Media", title)
+
+in [
+    makeOreilly("Microservices for Java Developers"),
+    educationalBook("Addison Wesley", "The Go Programming Language"),
+    makeOreilly("Parallel and Concurrent Programming in Haskell"),
+]

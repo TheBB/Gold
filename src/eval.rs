@@ -442,6 +442,9 @@ impl<'a> Namespace<'a> {
                     (BinOp::Add, Object::List(x), Object::List(y)) => Ok(
                         Object::List(Rc::new(x.iter().chain(y.iter()).map(Object::clone).collect()))
                     ),
+                    (BinOp::Add, Object::String(x), Object::String(y)) => Ok(
+                        Object::String(Rc::new(format!("{}{}", x.as_str(), y.as_str())))
+                    ),
                     (BinOp::Add, _, _) => arithmetic_operate(add, value, other),
                     (BinOp::Subtract, _, _) => arithmetic_operate(sub, value, other),
                     (BinOp::Multiply, _, _) => arithmetic_operate(mul, value, other),
