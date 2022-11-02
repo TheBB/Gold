@@ -1,4 +1,4 @@
-import "imported.gold" as {add: add_file}
-import "std" as {add: add_std}
+import "imported.gold" as imported
+import "std" as std
 
-[add_file(1, 2), add_std(3, 4)]
+[imported.add(1, 2), std.add(3, 4)]

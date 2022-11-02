@@ -126,8 +126,8 @@ fn list_bindings() {
 #[test]
 fn map_bindings() {
     assert_seq!(eval("let {a} = {a: 1} in a"), Object::from(1));
-    assert_seq!(eval("let {a: b} = {a: 1} in b"), Object::from(1));
-    assert_seq!(eval("let {a: a} = {a: 1} in a"), Object::from(1));
+    assert_seq!(eval("let {a as b} = {a: 1} in b"), Object::from(1));
+    assert_seq!(eval("let {a as a} = {a: 1} in a"), Object::from(1));
 
     assert_seq!(eval("let {a, ...x} = {a: 1} in a"), Object::from(1));
     assert_seq!(eval("let {a, ...x} = {a: 1} in x"), Object::map(()));
@@ -136,7 +136,7 @@ fn map_bindings() {
     assert_seq!(eval("let {a, ...x} = {a: 1, b: 2} in a"), Object::from(1));
 
     assert_seq!(eval("let {a = 1} = {} in a"), Object::from(1));
-    assert_seq!(eval("let {a: b = 1} = {} in b"), Object::from(1));
+    assert_seq!(eval("let {a as b = 1} = {} in b"), Object::from(1));
 
     assert!(eval("let {a} = {} in a").is_err());
     assert!(eval("let {a} = {b: 1} in a").is_err());

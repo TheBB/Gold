@@ -431,7 +431,7 @@ fn let_blocks() {
     );
 
     assert_eq!(
-        parse("let {a: b} = x in a"),
+        parse("let {a as b} = x in a"),
         Ok(Expr::Let {
             bindings: vec![
                 (
@@ -469,7 +469,7 @@ fn let_blocks() {
     );
 
     assert_eq!(
-        parse("let {a: b = y} = x in a"),
+        parse("let {a as b = y} = x in a"),
         Ok(Expr::Let {
             bindings: vec![
                 (

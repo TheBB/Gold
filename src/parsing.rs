@@ -45,7 +45,7 @@ where
     terminated(parser, multispace0)
 }
 
-static KEYWORDS: [&'static str; 12] = [
+static KEYWORDS: [&'static str; 14] = [
     "for",
     "if",
     "then",
@@ -58,6 +58,8 @@ static KEYWORDS: [&'static str; 12] = [
     "and",
     "or",
     "not",
+    "as",
+    "import",
 ];
 
 fn keyword<'a, E: ParseError<&'a str>>(
@@ -677,7 +679,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                         tuple((
                             postpad(map_identifier),
                             preceded(
-                                postpad(char(':')),
+                                postpad(tag("as")),
                                 binding,
                             ),
                         )),
