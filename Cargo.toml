@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+clap = { version = "4.0.18", features = ["derive"] }
+json = "0.12.4"
 nom = "7.1.1"
 num-traits = "0.2.15"
 phf = { version = "0.11.1", features = ["macros"] }

@@ -2,7 +2,7 @@ use crate::object::Object;
 
 
 fn check(x: Object) {
-    assert_eq!(x.serialize().map(|y| Object::deserialize(&y)).flatten(), Some(x))
+    assert_eq!(x.serialize().map(|y| Object::deserialize(&y)).flatten().map(|x| x.0), Some(x))
 }
 
 

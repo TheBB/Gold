@@ -1,0 +1,4 @@
+import "imported.gold" as {add: add_file}
+import "std" as {add: add_std}
+
+[add_file(1, 2), add_std(3, 4)]

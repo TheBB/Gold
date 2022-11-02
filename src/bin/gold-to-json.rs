@@ -1,22 +1,27 @@
-// use gold;
+use std::path::PathBuf;
+use std::process::exit;
 
-use std::rc::Rc;
-use std::collections::HashMap;
+use clap::Parser;
+use json::{JsonValue, stringify_pretty};
+
+use gold::eval_file;
+
+
+#[derive(Parser)]
+struct Cli {
+    path: PathBuf,
+}
+
 
 fn main() {
+    let args = Cli::parse();
+    let obj = eval_file(&args.path).and_then(JsonValue::try_from);
 
-    let a = Rc::new("a".to_string());
-    let b = Rc::new("a".to_string());
-
-    let mut c: HashMap<Rc<String>, i32> = HashMap::new();
-    c.insert(a.clone(), 1);
-    println!("{:?}", c.get(&b));
-    println!("{:?}", a);
-    // c[&a] = 1;
-
-
-    // gold::parse("320000000000000000000000000000000000000000000000000000000000000").map_or_else(
-    //     |err| eprintln!("{}", err),
-    //     |node| println!("{:?}", node),
-    // );
+    match obj {
+        Ok(val) => println!("{}", stringify_pretty(val, 4)),
+        Err(msg) => {
+            eprintln!("Error: {}", msg);
+            exit(1);
+        },
+    }
 }

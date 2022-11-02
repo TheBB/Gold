@@ -1,4 +1,4 @@
-use crate::eval;
+use crate::{eval_raw as eval};
 use crate::object::Object;
 
 

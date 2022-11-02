@@ -1,14 +1,73 @@
 use std::cmp::Ordering;
 use std::ops::Neg;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use num_traits::checked_pow;
 use rug::Integer;
 use rug::ops::Pow;
 
+use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::object::{Object, Function, Key, Map, List, Builtin};
 use crate::builtins::BUILTINS;
+
+
+const STDLIB: &str = include_str!("std.gold");
+
+
+pub trait ImportResolver {
+    fn resolve(&self, path: &str) -> Result<Object, String>;
+}
+
+
+pub struct StdResolver { }
+
+impl ImportResolver for StdResolver {
+    fn resolve(&self, path: &str) -> Result<Object, String> {
+        match path {
+            "std" => eval_str(STDLIB),
+            _ => Err("".to_string()),
+        }
+    }
+}
+
+
+pub struct FileResolver {
+    pub root: PathBuf,
+}
+
+impl ImportResolver for FileResolver {
+    fn resolve(&self, path: &str) -> Result<Object, String> {
+        let target = self.root.join(path);
+        eval_file(&target)
+    }
+}
+
+
+pub struct SeqResolver {
+    pub resolvers: Vec<Box<dyn ImportResolver>>,
+}
+
+impl ImportResolver for SeqResolver {
+    fn resolve(&self, path: &str) -> Result<Object, String> {
+        for resolver in &self.resolvers {
+            if let Ok(obj) = resolver.resolve(path) {
+                return Ok(obj)
+            }
+        }
+        Err("couldn't import".to_string())
+    }
+}
+
+
+pub struct NullResolver {}
+
+impl ImportResolver for NullResolver {
+    fn resolve(&self, _: &str) -> Result<Object, String> {
+        Err("no imports".to_string())
+    }
+}
 
 
 struct Arith<F,G,H,X,Y,Z>
@@ -112,15 +171,6 @@ impl<'a> Namespace<'a> {
                     func: *x,
                 })
             ).ok_or_else(|| format!("unknown name {}", key)),
-            // match key.as_str() {
-            //     "bool" => Ok(Object::Builtin(builtins::to_bool)),
-            //     "float" => Ok(Object::Builtin(builtins::to_float)),
-            //     "int" => Ok(Object::Builtin(builtins::to_int)),
-            //     "str" => Ok(Object::Builtin(builtins::to_str)),
-            //     "len" => Ok(Object::Builtin(builtins::len)),
-            //     "range" => Ok(Object::Builtin(builtins::range)),
-            //     _ => Err(format!("unknown name {}", key)),
-            // },
             Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| format!("unknown name {}", key)),
             Namespace::Mutable { names, prev } => names.get(key).map(Object::clone).ok_or(()).or_else(|_| prev.get(key))
         }
@@ -432,11 +482,24 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    pub fn eval(&self, node: &AstNode) -> Result<Object, String> {
-        match node {
-            AstNode::Literal(val) => Ok(val.clone()),
+    pub fn eval_file<T: ImportResolver>(&mut self, file: &File, importer: &T) -> Result<Object, String> {
+        let mut ns = self.subtend();
+        for statement in &file.statements {
+            match statement {
+                TopLevel::Import(path, binding) => {
+                    let object = importer.resolve(path.as_str())?;
+                    ns.bind(binding, object)?;
+                }
+            }
+        }
+        ns.eval(&file.expression)
+    }
 
-            AstNode::String(elements) => {
+    pub fn eval(&self, node: &Expr) -> Result<Object, String> {
+        match node {
+            Expr::Literal(val) => Ok(val.clone()),
+
+            Expr::String(elements) => {
                 let mut rval = String::new();
                 for element in elements {
                     match element {
@@ -451,9 +514,9 @@ impl<'a> Namespace<'a> {
                 Ok(Object::string(rval))
             },
 
-            AstNode::Identifier(name) => self.get(name),
+            Expr::Identifier(name) => self.get(name),
 
-            AstNode::List(elements) => {
+            Expr::List(elements) => {
                 let mut values: List = vec![];
                 for element in elements {
                     self.fill_list(element, &mut values)?;
@@ -461,7 +524,7 @@ impl<'a> Namespace<'a> {
                 Ok(Object::List(Rc::new(values)))
             },
 
-            AstNode::Map(elements) => {
+            Expr::Map(elements) => {
                 let mut values: Map = Map::new();
                 for element in elements {
                     self.fill_map(element, &mut values)?;
@@ -469,7 +532,7 @@ impl<'a> Namespace<'a> {
                 Ok(Object::Map(Rc::new(values)))
             }
 
-            AstNode::Let { bindings, expression } => {
+            Expr::Let { bindings, expression } => {
                 let mut sub = self.subtend();
                 for (binding, expr) in bindings {
                     let val = sub.eval(expr)?;
@@ -478,12 +541,12 @@ impl<'a> Namespace<'a> {
                 sub.eval(expression)
             },
 
-            AstNode::Operator { operand, operator } => {
+            Expr::Operator { operand, operator } => {
                 let x = self.eval(operand)?;
                 self.operate(operator, x)
             },
 
-            AstNode::Branch { condition, true_branch, false_branch } => {
+            Expr::Branch { condition, true_branch, false_branch } => {
                 let cond = self.eval(condition)?;
                 if cond.truthy() {
                     self.eval(true_branch)
@@ -492,7 +555,7 @@ impl<'a> Namespace<'a> {
                 }
             },
 
-            AstNode::Function { positional, keywords, expression } => {
+            Expr::Function { positional, keywords, expression } => {
                 let mut closure: Map = Map::new();
                 for ident in node.free() {
                     let val = self.get(&ident)?;
@@ -510,6 +573,19 @@ impl<'a> Namespace<'a> {
 }
 
 
-pub fn eval(node: &AstNode) -> Result<Object, String> {
-    Namespace::Empty.eval(node)
+pub fn eval_raw(file: &File) -> Result<Object, String> {
+    let resolver = NullResolver {};
+    Namespace::Empty.eval_file(file, &resolver)
+}
+
+
+pub fn eval_path(file: &File, path: &Path) -> Result<Object, String> {
+    let parent = path.parent().ok_or_else(|| "what the fsck".to_string())?;
+    let resolver = SeqResolver {
+        resolvers: vec![
+            Box::new(StdResolver {}),
+            Box::new(FileResolver { root: parent.to_owned() }),
+        ],
+    };
+    Namespace::Empty.eval_file(file, &resolver)
 }

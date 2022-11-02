@@ -32,7 +32,7 @@ where T:
     FromExternalError<&'a str, ParseFloatError> {}
 
 
-type OpCons = fn(AstNode) -> Operator;
+type OpCons = fn(Expr) -> Operator;
 
 fn postpad<I, O, E: ParseError<I>, F>(
     parser: F,
@@ -105,14 +105,14 @@ fn exponent<'a, E: CompleteError<'a>>(
 
 fn integer<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     map_res(
         decimal,
         |out: &'a str| {
             let s = out.replace("_", "");
             i64::from_str_radix(s.as_str(), 10).map_or_else(
-                |_| { Integer::from_str_radix(s.as_str(), 10).map(AstNode::big_integer) },
-                |val| Ok(AstNode::integer(val)),
+                |_| { Integer::from_str_radix(s.as_str(), 10).map(Expr::big_integer) },
+                |val| Ok(Expr::integer(val)),
             )
         }
     )(input)
@@ -120,7 +120,7 @@ fn integer<'a, E: CompleteError<'a>>(
 
 fn float<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     map_res(
         alt((
             recognize(tuple((
@@ -139,13 +139,13 @@ fn float<'a, E: CompleteError<'a>>(
                 exponent,
             ))),
         )),
-        |out: &str| { out.replace("_", "").parse::<f64>().map(AstNode::float) }
+        |out: &str| { out.replace("_", "").parse::<f64>().map(Expr::float) }
     )(input)
 }
 
-fn string_data<'a, E: CompleteError<'a>>(
+fn raw_string<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, StringElement, E> {
+) -> IResult<&'a str, String, E> {
     map(
         escaped_transform(
             recognize(many1(none_of("\"\\$"))),
@@ -155,7 +155,16 @@ fn string_data<'a, E: CompleteError<'a>>(
                 value("\\", tag("\\")),
             )),
         ),
-        StringElement::raw,
+        |x| x.to_string(),
+    )(input)
+}
+
+fn string_data<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, StringElement, E> {
+    map(
+        raw_string,
+        StringElement::raw
     )(input)
 }
 
@@ -176,7 +185,7 @@ fn string_interp<'a, E: CompleteError<'a>>(
 
 fn string<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     map(
         preceded(
             char('\"'),
@@ -185,28 +194,28 @@ fn string<'a, E: CompleteError<'a>>(
                 char('\"'),
             ),
         ),
-        AstNode::string
+        Expr::string
     )(input)
 }
 
 fn boolean<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     alt((
-        value(AstNode::boolean(true), keyword("true")),
-        value(AstNode::boolean(false), keyword("false")),
+        value(Expr::boolean(true), keyword("true")),
+        value(Expr::boolean(false), keyword("false")),
     ))(input)
 }
 
 fn null<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
-    value(AstNode::null(), keyword("null"))(input)
+) -> IResult<&'a str, Expr, E> {
+    value(Expr::null(), keyword("null"))(input)
 }
 
 fn atomic<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     alt((
         null,
         boolean,
@@ -252,7 +261,7 @@ fn list_element<'a, E: CompleteError<'a>>(
 
 fn list<'a, E: CompleteError<'a>>(
     input: &'a str
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     map(
         preceded(
             postpad(char('[')),
@@ -267,7 +276,7 @@ fn list<'a, E: CompleteError<'a>>(
                 )),
             ),
         ),
-        AstNode::List,
+        Expr::List,
     )(input)
 }
 
@@ -329,7 +338,7 @@ fn map_element<'a, E: CompleteError<'a>>(
 
 fn mapping<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     map(
         preceded(
             postpad(char('{')),
@@ -344,17 +353,17 @@ fn mapping<'a, E: CompleteError<'a>>(
                 )),
             ),
         ),
-        AstNode::Map,
+        Expr::Map,
     )(input)
 }
 
 fn postfixable<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     postpad(alt((
         delimited(postpad(char('(')), expression, postpad(char(')'))),
         atomic,
-        map(identifier, AstNode::id),
+        map(identifier, Expr::id),
         list,
         mapping,
     )))(input)
@@ -428,7 +437,7 @@ fn function_call<'a, E: CompleteError<'a>>(
 
 fn postfixed<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     map(
         tuple((
             postfixable,
@@ -441,7 +450,7 @@ fn postfixed<'a, E: CompleteError<'a>>(
         |(expr, ops)| {
             ops.into_iter().fold(
                 expr,
-                |expr, operator| AstNode::Operator { operand: Box::new(expr), operator },
+                |expr, operator| Expr::Operator { operand: Box::new(expr), operator },
             )
         },
     )(input)
@@ -449,7 +458,7 @@ fn postfixed<'a, E: CompleteError<'a>>(
 
 fn prefixed<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     map(
         tuple((
             many0(alt((
@@ -462,7 +471,7 @@ fn prefixed<'a, E: CompleteError<'a>>(
         |(ops, expr)| {
             ops.into_iter().rev().fold(
                 expr,
-                |expr, operator| AstNode::Operator { operand: Box::new(expr), operator: Operator::UnOp(operator) },
+                |expr, operator| Expr::Operator { operand: Box::new(expr), operator: Operator::UnOp(operator) },
             )
         },
     )(input)
@@ -476,7 +485,7 @@ where
     I: Clone + nom::InputTakeAtPosition,
     <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
     G: Parser<I, OpCons, E>,
-    H: Parser<I, AstNode, E>,
+    H: Parser<I, Expr, E>,
 {
     map(
         tuple((
@@ -491,12 +500,12 @@ fn binops<I, E: ParseError<I>, G, H>(
     operators: G,
     operand: H,
     right: bool,
-) -> impl FnMut(I) -> IResult<I, AstNode, E>
+) -> impl FnMut(I) -> IResult<I, Expr, E>
 where
     I: Clone + nom::InputTakeAtPosition + nom::InputLength,
     <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
     G: Parser<I, Operator, E>,
-    H: Parser<I, AstNode, E> + Copy,
+    H: Parser<I, Expr, E> + Copy,
 {
     map(
         tuple((
@@ -504,7 +513,7 @@ where
             many0(operators),
         )),
         move |(expr, ops)| {
-            let acc = |expr: AstNode, operator: Operator| AstNode::Operator { operand: Box::new(expr), operator };
+            let acc = |expr: Expr, operator: Operator| Expr::Operator { operand: Box::new(expr), operator };
             if right {
                 ops.into_iter().rev().fold(expr, acc)
             } else {
@@ -516,7 +525,7 @@ where
 
 fn power<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     binops(
         binop(
             alt((
@@ -532,19 +541,19 @@ fn power<'a, E: CompleteError<'a>>(
 fn lbinop<I, E: ParseError<I>, G, H>(
     operators: G,
     operands: H
-) -> impl FnMut(I) -> IResult<I, AstNode, E>
+) -> impl FnMut(I) -> IResult<I, Expr, E>
 where
     I: Clone + nom::InputTakeAtPosition + nom::InputLength,
     <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
     G: Parser<I, OpCons, E>,
-    H: Parser<I, AstNode, E> + Copy,
+    H: Parser<I, Expr, E> + Copy,
 {
     binops(binop(operators, operands), operands, false)
 }
 
 fn product<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     lbinop(
         alt((
             value(Operator::multiply as OpCons, tag("*")),
@@ -557,7 +566,7 @@ fn product<'a, E: CompleteError<'a>>(
 
 fn sum<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     lbinop(
         alt((
             value(Operator::add as OpCons, tag("+")),
@@ -569,7 +578,7 @@ fn sum<'a, E: CompleteError<'a>>(
 
 fn inequality<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     lbinop(
         alt((
             value(Operator::less_equal as OpCons, tag("<=")),
@@ -583,7 +592,7 @@ fn inequality<'a, E: CompleteError<'a>>(
 
 fn equality<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     lbinop(
         alt((
             value(Operator::equal as OpCons, tag("==")),
@@ -595,7 +604,7 @@ fn equality<'a, E: CompleteError<'a>>(
 
 fn conjunction<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     lbinop(
         alt((
             value(Operator::and as OpCons, tag("and")),
@@ -606,7 +615,7 @@ fn conjunction<'a, E: CompleteError<'a>>(
 
 fn disjunction<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     lbinop(
         alt((
             value(Operator::or as OpCons, tag("or")),
@@ -731,7 +740,7 @@ fn binding<'a, E: CompleteError<'a>>(
 
 fn function<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     map(
         tuple((
             delimited(
@@ -752,7 +761,7 @@ fn function<'a, E: CompleteError<'a>>(
                 expression,
             ),
         )),
-        |((posargs, kwargs), expr)| AstNode::Function {
+        |((posargs, kwargs), expr)| Expr::Function {
             positional: posargs,
             keywords: kwargs.unwrap_or_else(|| Binding::Map(vec![])),
             expression: Box::new(expr),
@@ -762,7 +771,7 @@ fn function<'a, E: CompleteError<'a>>(
 
 fn keyword_function<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     map(
         tuple((
             delimited(
@@ -775,7 +784,7 @@ fn keyword_function<'a, E: CompleteError<'a>>(
                 expression,
             ),
         )),
-        |(kwargs, expr)| AstNode::Function {
+        |(kwargs, expr)| Expr::Function {
             positional: Binding::List(vec![]),
             keywords: kwargs,
             expression: Box::new(expr),
@@ -785,7 +794,7 @@ fn keyword_function<'a, E: CompleteError<'a>>(
 
 fn let_block<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     map(
         tuple((
             many1(
@@ -805,13 +814,13 @@ fn let_block<'a, E: CompleteError<'a>>(
                 expression,
             ),
         )),
-        |(bindings, expr)| AstNode::Let { bindings, expression: Box::new(expr) },
+        |(bindings, expr)| Expr::Let { bindings, expression: Box::new(expr) },
     )(input)
 }
 
 fn branch<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     map(
         tuple((
             preceded(
@@ -827,7 +836,7 @@ fn branch<'a, E: CompleteError<'a>>(
                 expression,
             ),
         )),
-        |(condition, true_branch, false_branch)| AstNode::Branch {
+        |(condition, true_branch, false_branch)| Expr::Branch {
             condition: Box::new(condition),
             true_branch: Box::new(true_branch),
             false_branch: Box::new(false_branch),
@@ -837,7 +846,7 @@ fn branch<'a, E: CompleteError<'a>>(
 
 fn composite<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     alt((
         let_block,
         branch,
@@ -848,15 +857,48 @@ fn composite<'a, E: CompleteError<'a>>(
 
 fn expression<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, AstNode, E> {
+) -> IResult<&'a str, Expr, E> {
     alt((
         composite,
         disjunction,
     ))(input)
 }
 
-pub fn parse(input: &str) -> Result<AstNode, String> {
-    expression::<VerboseError<&str>>(input).map_or_else(
+fn import<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, TopLevel, E> {
+    map(
+        tuple((
+            preceded(
+                postpad(keyword("import")),
+                postpad(preceded(
+                    char('\"'),
+                    terminated(raw_string, char('\"'))
+                )),
+            ),
+            preceded(
+                postpad(keyword("as")),
+                postpad(binding),
+            )
+        )),
+        |(path, binding)| TopLevel::Import(path, binding),
+    )(input)
+}
+
+fn file<'a, E: CompleteError<'a>>(
+    input: &'a str,
+) -> IResult<&'a str, File, E> {
+    map(
+        tuple((
+            many0(postpad(import)),
+            expression,
+        )),
+        |(statements, expression)| File { statements, expression },
+    )(input)
+}
+
+pub fn parse(input: &str) -> Result<File, String> {
+    file::<VerboseError<&str>>(input).map_or_else(
         |err| match err {
             Incomplete(_) => Err("incomplete input".to_string()),
             Error(e) | Failure(e) => Err(format!("{:#?}", e)),

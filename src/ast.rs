@@ -13,7 +13,7 @@ use super::traits::{Boxable, Splat, Splattable, ToVec};
 pub enum ListBindingElement {
     Binding {
         binding: Binding,
-        default: Option<AstNode>,
+        default: Option<Expr>,
     },
     SlurpTo(Key),
     Slurp,
@@ -51,7 +51,7 @@ pub enum MapBindingElement {
     Binding {
         key: Key,
         binding: Binding,
-        default: Option<AstNode>,
+        default: Option<Expr>,
     },
     SlurpTo(Key),
 }
@@ -85,7 +85,7 @@ impl MapBindingElement {
 
 fn binding_element_free_and_bound(
     binding: &Binding,
-    default: &Option<AstNode>,
+    default: &Option<Expr>,
     free: &mut HashSet<Key>,
     bound: &mut HashSet<Key>,
 ) {
@@ -163,7 +163,7 @@ impl Binding {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StringElement {
     Raw(Key),
-    Interpolate(AstNode),
+    Interpolate(Expr),
 }
 
 impl StringElement {
@@ -183,15 +183,15 @@ impl StringElement {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ListElement {
-    Singleton(AstNode),
-    Splat(AstNode),
+    Singleton(Expr),
+    Splat(Expr),
     Loop {
         binding: Binding,
-        iterable: AstNode,
+        iterable: Expr,
         element: Box<ListElement>,
     },
     Cond {
-        condition: AstNode,
+        condition: Expr,
         element: Box<ListElement>,
     },
 }
@@ -261,17 +261,17 @@ impl<T> From<Splat<T>> for ListElement where T: ToAstNode {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MapElement {
     Singleton {
-        key: AstNode,
-        value: AstNode,
+        key: Expr,
+        value: Expr,
     },
-    Splat(AstNode),
+    Splat(Expr),
     Loop {
         binding: Binding,
-        iterable: AstNode,
+        iterable: Expr,
         element: Box<MapElement>,
     },
     Cond {
-        condition: AstNode,
+        condition: Expr,
         element: Box<MapElement>,
     },
 }
@@ -344,13 +344,13 @@ impl<T> From<Splat<T>> for MapElement where T: ToAstNode {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ArgElement {
-    Singleton(AstNode),
-    Keyword(Key, AstNode),
-    Splat(AstNode),
+    Singleton(Expr),
+    Keyword(Key, Expr),
+    Splat(Expr),
 }
 
 impl ArgElement {
-    pub fn keyword<T>(key: T, val: AstNode) -> ArgElement where T: ToString {
+    pub fn keyword<T>(key: T, val: Expr) -> ArgElement where T: ToString {
         ArgElement::Keyword(Rc::new(key.to_string()), val)
     }
 
@@ -420,26 +420,26 @@ pub enum BinOp {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Operator {
     UnOp(UnOp),
-    BinOp(BinOp, Box<AstNode>),
+    BinOp(BinOp, Box<Expr>),
     FunCall(Vec<ArgElement>),
 }
 
 impl Operator {
-    pub fn index<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::Index, x.to_box()) }
-    pub fn power<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::Power, x.to_box()) }
-    pub fn multiply<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::Multiply, x.to_box()) }
-    pub fn integer_divide<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::IntegerDivide, x.to_box()) }
-    pub fn divide<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::Divide, x.to_box()) }
-    pub fn add<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::Add, x.to_box()) }
-    pub fn subtract<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::Subtract, x.to_box()) }
-    pub fn less<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::Less, x.to_box()) }
-    pub fn greater<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::Greater, x.to_box()) }
-    pub fn less_equal<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::LessEqual, x.to_box()) }
-    pub fn greater_equal<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::GreaterEqual, x.to_box()) }
-    pub fn equal<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::Equal, x.to_box()) }
-    pub fn not_equal<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::NotEqual, x.to_box()) }
-    pub fn and<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::And, x.to_box()) }
-    pub fn or<T>(x: T) -> Operator where T: Boxable<AstNode> { Operator::BinOp(BinOp::Or, x.to_box()) }
+    pub fn index<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Index, x.to_box()) }
+    pub fn power<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Power, x.to_box()) }
+    pub fn multiply<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Multiply, x.to_box()) }
+    pub fn integer_divide<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::IntegerDivide, x.to_box()) }
+    pub fn divide<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Divide, x.to_box()) }
+    pub fn add<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Add, x.to_box()) }
+    pub fn subtract<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Subtract, x.to_box()) }
+    pub fn less<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Less, x.to_box()) }
+    pub fn greater<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Greater, x.to_box()) }
+    pub fn less_equal<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::LessEqual, x.to_box()) }
+    pub fn greater_equal<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::GreaterEqual, x.to_box()) }
+    pub fn equal<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Equal, x.to_box()) }
+    pub fn not_equal<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::NotEqual, x.to_box()) }
+    pub fn and<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::And, x.to_box()) }
+    pub fn or<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Or, x.to_box()) }
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
@@ -456,108 +456,108 @@ impl Operator {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum AstNode {
+pub enum Expr {
     Literal(Object),
     String(Vec<StringElement>),
     Identifier(Key),
     List(Vec<ListElement>),
     Map(Vec<MapElement>),
     Let {
-        bindings: Vec<(Binding, AstNode)>,
-        expression: Box<AstNode>,
+        bindings: Vec<(Binding, Expr)>,
+        expression: Box<Expr>,
     },
     Operator {
-        operand: Box<AstNode>,
+        operand: Box<Expr>,
         operator: Operator,
     },
     Function {
         positional: Binding,
         keywords: Binding,
-        expression: Box<AstNode>,
+        expression: Box<Expr>,
     },
     Branch {
-        condition: Box<AstNode>,
-        true_branch: Box<AstNode>,
-        false_branch: Box<AstNode>,
+        condition: Box<Expr>,
+        true_branch: Box<Expr>,
+        false_branch: Box<Expr>,
     }
 }
 
-impl Splattable<AstNode> for AstNode {
-    fn splat(&self) -> Splat<AstNode> { Splat::<AstNode> { object: self.clone() } }
+impl Splattable<Expr> for Expr {
+    fn splat(&self) -> Splat<Expr> { Splat::<Expr> { object: self.clone() } }
 }
 
-impl<T> ops::Add<T> for AstNode where T: ToAstNode {
-    type Output = AstNode;
-    fn add(self, rhs: T) -> AstNode { self.operate(Operator::add(rhs.to_ast())) }
+impl<T> ops::Add<T> for Expr where T: ToAstNode {
+    type Output = Expr;
+    fn add(self, rhs: T) -> Expr { self.operate(Operator::add(rhs.to_ast())) }
 }
 
-impl<T> ops::Sub<T> for AstNode where T: ToAstNode {
-    type Output = AstNode;
-    fn sub(self, rhs: T) -> AstNode { self.operate(Operator::subtract(rhs.to_ast())) }
+impl<T> ops::Sub<T> for Expr where T: ToAstNode {
+    type Output = Expr;
+    fn sub(self, rhs: T) -> Expr { self.operate(Operator::subtract(rhs.to_ast())) }
 }
 
-impl<T> ops::Mul<T> for AstNode where T: ToAstNode {
-    type Output = AstNode;
-    fn mul(self, rhs: T) -> AstNode { self.operate(Operator::multiply(rhs.to_ast())) }
+impl<T> ops::Mul<T> for Expr where T: ToAstNode {
+    type Output = Expr;
+    fn mul(self, rhs: T) -> Expr { self.operate(Operator::multiply(rhs.to_ast())) }
 }
 
-impl<T> ops::Div<T> for AstNode where T: ToAstNode {
-    type Output = AstNode;
-    fn div(self, rhs: T) -> AstNode { self.operate(Operator::divide(rhs.to_ast())) }
+impl<T> ops::Div<T> for Expr where T: ToAstNode {
+    type Output = Expr;
+    fn div(self, rhs: T) -> Expr { self.operate(Operator::divide(rhs.to_ast())) }
 }
 
-impl ops::Neg for AstNode {
-    type Output = AstNode;
-    fn neg(self) -> AstNode { self.operate(Operator::UnOp(UnOp::ArithmeticalNegate)) }
+impl ops::Neg for Expr {
+    type Output = Expr;
+    fn neg(self) -> Expr { self.operate(Operator::UnOp(UnOp::ArithmeticalNegate)) }
 }
 
-impl ops::Not for AstNode {
-    type Output = AstNode;
-    fn not(self) -> AstNode { self.operate(Operator::UnOp(UnOp::LogicalNegate)) }
+impl ops::Not for Expr {
+    type Output = Expr;
+    fn not(self) -> Expr { self.operate(Operator::UnOp(UnOp::LogicalNegate)) }
 }
 
-impl AstNode {
-    pub fn integer(value: i64) -> AstNode { AstNode::Literal(Object::Integer(value)) }
-    pub fn big_integer(value: Integer) -> AstNode { AstNode::Literal(Object::from(value)) }
-    pub fn float(value: f64) -> AstNode { AstNode::Literal(Object::Float(value)) }
-    pub fn boolean(value: bool) -> AstNode { AstNode::Literal(Object::Boolean(value)) }
-    pub fn null() -> AstNode { AstNode::Literal(Object::Null) }
+impl Expr {
+    pub fn integer(value: i64) -> Expr { Expr::Literal(Object::Integer(value)) }
+    pub fn big_integer(value: Integer) -> Expr { Expr::Literal(Object::from(value)) }
+    pub fn float(value: f64) -> Expr { Expr::Literal(Object::Float(value)) }
+    pub fn boolean(value: bool) -> Expr { Expr::Literal(Object::Boolean(value)) }
+    pub fn null() -> Expr { Expr::Literal(Object::Null) }
 
-    pub fn id<T: ToString>(x: T) -> AstNode { AstNode::Identifier(Rc::new(x.to_string())) }
+    pub fn id<T: ToString>(x: T) -> Expr { Expr::Identifier(Rc::new(x.to_string())) }
 
-    pub fn list<T>(x: T) -> AstNode where T: ToVec<ListElement> { AstNode::List(x.to_vec()) }
-    pub fn map<T>(x: T) -> AstNode where T: ToVec<MapElement> { AstNode::Map(x.to_vec()) }
+    pub fn list<T>(x: T) -> Expr where T: ToVec<ListElement> { Expr::List(x.to_vec()) }
+    pub fn map<T>(x: T) -> Expr where T: ToVec<MapElement> { Expr::Map(x.to_vec()) }
 
-    pub fn operate(self, op: Operator) -> AstNode {
-        AstNode::Operator {
+    pub fn operate(self, op: Operator) -> Expr {
+        Expr::Operator {
             operand: self.to_box(),
             operator: op,
         }
     }
 
-    pub fn idiv<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::integer_divide(rhs.to_ast())) }
-    pub fn lt<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::less(rhs.to_ast())) }
-    pub fn gt<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::greater(rhs.to_ast())) }
-    pub fn lte<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::less_equal(rhs.to_ast())) }
-    pub fn gte<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::greater_equal(rhs.to_ast())) }
-    pub fn eql<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::equal(rhs.to_ast())) }
-    pub fn neql<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::not_equal(rhs.to_ast())) }
-    pub fn and<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::and(rhs.to_ast())) }
-    pub fn or<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::or(rhs.to_ast())) }
-    pub fn pow<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::power(rhs.to_ast())) }
-    pub fn index<T>(self, rhs: T) -> AstNode where T: ToAstNode { self.operate(Operator::index(rhs.to_ast())) }
-    pub fn funcall<T>(self, args: T) -> AstNode where T: ToVec<ArgElement> { self.operate(Operator::FunCall(args.to_vec())) }
+    pub fn idiv<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::integer_divide(rhs.to_ast())) }
+    pub fn lt<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::less(rhs.to_ast())) }
+    pub fn gt<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::greater(rhs.to_ast())) }
+    pub fn lte<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::less_equal(rhs.to_ast())) }
+    pub fn gte<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::greater_equal(rhs.to_ast())) }
+    pub fn eql<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::equal(rhs.to_ast())) }
+    pub fn neql<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::not_equal(rhs.to_ast())) }
+    pub fn and<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::and(rhs.to_ast())) }
+    pub fn or<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::or(rhs.to_ast())) }
+    pub fn pow<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::power(rhs.to_ast())) }
+    pub fn index<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::index(rhs.to_ast())) }
+    pub fn funcall<T>(self, args: T) -> Expr where T: ToVec<ArgElement> { self.operate(Operator::FunCall(args.to_vec())) }
 
-    pub fn string(value: Vec<StringElement>) -> AstNode {
+    pub fn string(value: Vec<StringElement>) -> Expr {
         if value.len() == 0 {
-            AstNode::Literal(Object::String(Rc::new("".to_string())))
+            Expr::Literal(Object::String(Rc::new("".to_string())))
         } else if value.len() == 1 {
             match &value[0] {
-                StringElement::Raw(val) => AstNode::Literal(Object::String(val.clone())),
-                _ => AstNode::String(value)
+                StringElement::Raw(val) => Expr::Literal(Object::String(val.clone())),
+                _ => Expr::String(value)
             }
         } else {
-            AstNode::String(value)
+            Expr::String(value)
         }
     }
 
@@ -569,26 +569,26 @@ impl AstNode {
 
     pub fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
-            AstNode::Literal(_) => {},
-            AstNode::String(elements) => {
+            Expr::Literal(_) => {},
+            Expr::String(elements) => {
                 for element in elements {
                     if let StringElement::Interpolate(expr) = element {
                         expr.free_impl(free);
                     }
                 }
             },
-            AstNode::Identifier(name) => { free.insert(name.clone()); },
-            AstNode::List(elements) => {
+            Expr::Identifier(name) => { free.insert(name.clone()); },
+            Expr::List(elements) => {
                 for element in elements {
                     element.free_impl(free);
                 }
             },
-            AstNode::Map(elements) => {
+            Expr::Map(elements) => {
                 for element in elements {
                     element.free_impl(free);
                 }
             },
-            AstNode::Let { bindings, expression } => {
+            Expr::Let { bindings, expression } => {
                 let mut bound: HashSet<Key> = HashSet::new();
                 for (binding, expr) in bindings {
                     for id in expr.free() {
@@ -604,7 +604,7 @@ impl AstNode {
                     }
                 }
             },
-            AstNode::Operator { operand, operator } => {
+            Expr::Operator { operand, operator } => {
                 operand.free_impl(free);
                 match operator {
                     Operator::BinOp(_, expr) => expr.free_impl(free),
@@ -616,12 +616,12 @@ impl AstNode {
                     _ => {},
                 }
             },
-            AstNode::Branch { condition, true_branch, false_branch } => {
+            Expr::Branch { condition, true_branch, false_branch } => {
                 condition.free_impl(free);
                 true_branch.free_impl(free);
                 false_branch.free_impl(free);
             },
-            AstNode::Function { positional, keywords, expression } => {
+            Expr::Function { positional, keywords, expression } => {
                 let mut bound: HashSet<Key> = HashSet::new();
                 positional.free_and_bound(free, &mut bound);
                 keywords.free_and_bound(free, &mut bound);
@@ -636,38 +636,38 @@ impl AstNode {
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            AstNode::String(elements) => {
+            Expr::String(elements) => {
                 for element in elements {
                     element.validate()?;
                 }
             },
-            AstNode::List(elements) => {
+            Expr::List(elements) => {
                 for element in elements {
                     element.validate()?;
                 }
             },
-            AstNode::Map(elements) => {
+            Expr::Map(elements) => {
                 for element in elements {
                     element.validate()?;
                 }
             },
-            AstNode::Let { bindings, expression } => {
+            Expr::Let { bindings, expression } => {
                 for (binding, node) in bindings {
                     binding.validate()?;
                     node.validate()?;
                 }
                 expression.validate()?;
             },
-            AstNode::Operator { operand, operator } => {
+            Expr::Operator { operand, operator } => {
                 operand.validate()?;
                 operator.validate()?;
             },
-            AstNode::Function { positional, keywords, expression } => {
+            Expr::Function { positional, keywords, expression } => {
                 positional.validate()?;
                 keywords.validate()?;
                 expression.validate()?;
             },
-            AstNode::Branch { condition, true_branch, false_branch } => {
+            Expr::Branch { condition, true_branch, false_branch } => {
                 condition.validate()?;
                 true_branch.validate()?;
                 false_branch.validate()?;
@@ -680,25 +680,57 @@ impl AstNode {
 
 
 pub trait ToAstNode {
-    fn to_ast(self) -> AstNode;
+    fn to_ast(self) -> Expr;
 }
 
-impl<T> ToAstNode for T where AstNode: From<T> {
-    fn to_ast(self) -> AstNode {
-        AstNode::from(self)
+impl<T> ToAstNode for T where Expr: From<T> {
+    fn to_ast(self) -> Expr {
+        Expr::from(self)
     }
 }
 
-impl<T> From<T> for AstNode where Object: From<T> {
+impl<T> From<T> for Expr where Object: From<T> {
     fn from(x: T) -> Self {
         Object::from(x).literal()
     }
 }
 
 pub trait IdAble {
-    fn id(self) -> AstNode;
+    fn id(self) -> Expr;
 }
 
 impl<T> IdAble for T where T: ToString {
-    fn id(self) -> AstNode { AstNode::id(self.to_string()) }
+    fn id(self) -> Expr { Expr::id(self.to_string()) }
+}
+
+
+#[derive(Debug)]
+pub enum TopLevel {
+    Import(String, Binding),
+}
+
+impl TopLevel {
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::Import(_, binding) => { binding.validate()?; },
+        }
+        Ok(())
+    }
+}
+
+
+#[derive(Debug)]
+pub struct File {
+    pub statements: Vec<TopLevel>,
+    pub expression: Expr,
+}
+
+impl File {
+    pub fn validate(&self) -> Result<(), String> {
+        for statement in &self.statements {
+            statement.validate()?;
+        }
+        self.expression.validate()?;
+        Ok(())
+    }
 }

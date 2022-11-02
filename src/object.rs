@@ -4,7 +4,9 @@ use std::fmt::Debug;
 use std::io::{Read, Write};
 use std::rc::Rc;
 use std::str::FromStr;
+use std::time::SystemTime;
 
+use json::JsonValue;
 use rmp_serde::{decode, encode};
 use rug::Integer;
 use serde::de::Visitor;
@@ -13,7 +15,7 @@ use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use crate::builtins::BUILTINS;
 use crate::traits::{ToVec, ToMap};
 
-use super::ast::{Binding, AstNode};
+use super::ast::{Binding, Expr};
 use super::traits::{Splattable, Splat};
 
 
@@ -34,6 +36,9 @@ pub type Key = Rc<String>;
 pub type List = Vec<Object>;
 pub type Map = HashMap<Key, Object>;
 pub type RFunc = fn(&List, &Map) -> Result<Object, String>;
+
+
+const SERIALIZE_VERSION: i32 = 1;
 
 
 #[derive(Clone)]
@@ -76,7 +81,7 @@ pub struct Function {
     pub args: Binding,
     pub kwargs: Binding,
     pub closure: Map,
-    pub expr: AstNode,
+    pub expr: Expr,
 }
 
 
@@ -154,8 +159,8 @@ impl Object {
         Object::String(Rc::new(x.to_string()))
     }
 
-    pub fn literal(&self) -> AstNode {
-        AstNode::Literal(self.clone())
+    pub fn literal(&self) -> Expr {
+        Expr::Literal(self.clone())
     }
 
     pub fn list<T>(x: T) -> Object where T: ToVec<Object> {
@@ -256,19 +261,31 @@ impl Object {
     }
 
     pub fn serialize(&self) -> Option<Vec<u8>> {
-        encode::to_vec(self).ok()
+        let data = (SERIALIZE_VERSION, SystemTime::now(), self);
+        encode::to_vec(&data).ok()
     }
 
     pub fn serialize_write<T: Write + ?Sized>(&self, out: &mut T) -> Result<(), String> {
-        encode::write(out, self).map_err(|x| x.to_string())
+        let data = (SERIALIZE_VERSION, SystemTime::now(), self);
+        encode::write(out, &data).map_err(|x| x.to_string())
     }
 
-    pub fn deserialize(data: &Vec<u8>) -> Option<Object> {
-        decode::from_slice(data.as_slice()).ok()
+    pub fn deserialize(data: &Vec<u8>) -> Option<(Object, SystemTime)> {
+        let (version, time, retval) = decode::from_slice::<(i32, SystemTime, Object)>(data.as_slice()).ok()?;
+        if version < SERIALIZE_VERSION {
+            None
+        } else {
+            Some((retval, time))
+        }
     }
 
-    pub fn deserialize_read<T: Read>(data: T) -> Result<Object, String> {
-        decode::from_read::<T, Object>(data).map_err(|x| x.to_string())
+    pub fn deserialize_read<T: Read>(data: T) -> Result<(Object, SystemTime), String> {
+        let (version, time, retval) = decode::from_read::<T, (i32, SystemTime, Object)>(data).map_err(|x| x.to_string())?;
+        if version < SERIALIZE_VERSION {
+            Err("wrong version".to_string())
+        } else {
+            Ok((retval, time))
+        }
     }
 }
 
@@ -360,6 +377,36 @@ impl ToString for Object {
             }
 
             _ => "?".to_string(),
+        }
+    }
+}
+
+impl TryFrom<Object> for JsonValue {
+    type Error = String;
+
+    fn try_from(value: Object) -> Result<Self, Self::Error> {
+        match value {
+            Object::Integer(x) => Ok(JsonValue::from(x)),
+            Object::BigInteger(_) => Err("too big number".to_string()),
+            Object::Float(x) => Ok(JsonValue::from(x)),
+            Object::String(x) => Ok(JsonValue::from(x.as_str())),
+            Object::Boolean(x) => Ok(JsonValue::from(x)),
+            Object::List(x) => {
+                let mut val = JsonValue::new_array();
+                for element in x.as_ref() {
+                    val.push(JsonValue::try_from(element.clone())?).map_err(|x| x.to_string())?;
+                }
+                Ok(val)
+            },
+            Object::Map(x) => {
+                let mut val = JsonValue::new_object();
+                for (key, element) in x.as_ref() {
+                    val[key.as_ref()] = JsonValue::try_from(element.clone())?;
+                }
+                Ok(val)
+            },
+            Object::Null => Ok(JsonValue::Null),
+            _ => Err("uncovertible type".to_string()),
         }
     }
 }

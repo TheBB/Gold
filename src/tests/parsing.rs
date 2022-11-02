@@ -5,8 +5,13 @@ use rug::Integer;
 
 use crate::ast::*;
 use crate::object::{Object};
-use crate::parsing::parse;
+use crate::parsing::{parse as parse_file};
 use crate::traits::{Boxable, Splattable};
+
+
+fn parse(input: &str) -> Result<Expr, String> {
+    parse_file(input).map(|x| x.expression)
+}
 
 
 #[test]
@@ -50,7 +55,7 @@ fn strings() {
 
     assert_eq!(
         parse("\"dingbob${a}\""),
-        Ok(AstNode::String(vec![
+        Ok(Expr::String(vec![
             StringElement::raw("dingbob"),
             StringElement::Interpolate("a".id()),
         ])),
@@ -58,7 +63,7 @@ fn strings() {
 
     assert_eq!(
         parse("\"dingbob${ a}\""),
-        Ok(AstNode::String(vec![
+        Ok(Expr::String(vec![
             StringElement::raw("dingbob"),
             StringElement::Interpolate("a".id()),
         ])),
@@ -76,57 +81,57 @@ fn identifiers() {
 fn lists() {
     assert_eq!(
         parse("[]"),
-        Ok(AstNode::list(())),
+        Ok(Expr::list(())),
     );
 
     assert_eq!(
         parse("[   ]"),
-        Ok(AstNode::list(()))
+        Ok(Expr::list(()))
     );
 
     assert_eq!(
         parse("[true]"),
-        Ok(AstNode::list((true,)))
+        Ok(Expr::list((true,)))
     );
 
     assert_eq!(
         parse("[\"\"]"),
-        Ok(AstNode::list(("",)))
+        Ok(Expr::list(("",)))
     );
 
     assert_eq!(
         parse("[1,]"),
-        Ok(AstNode::list((1,))),
+        Ok(Expr::list((1,))),
     );
 
     assert_eq!(
         parse("[  1   ,  ]"),
-        Ok(AstNode::list((1,))),
+        Ok(Expr::list((1,))),
     );
 
     assert_eq!(
         parse("[  1   ,2  ]"),
-        Ok(AstNode::list((1,2))),
+        Ok(Expr::list((1,2))),
     );
 
     assert_eq!(
         parse("[  1   ,2  ,]"),
-        Ok(AstNode::list((1,2))),
+        Ok(Expr::list((1,2))),
     );
 
     assert_eq!(
         parse("[1, false, 2.3, \"fable\", lel]"),
-        Ok(AstNode::list((1, false, 2.3, "fable", "lel".id()))),
+        Ok(Expr::list((1, false, 2.3, "fable", "lel".id()))),
     );
 
     assert_eq!(
         parse("[1, ...x, y]"),
-        Ok(AstNode::list((1, "x".id().splat(), "y".id()))),
+        Ok(Expr::list((1, "x".id().splat(), "y".id()))),
     );
 
     assert_eq!(
         parse("[1, for x in y: x, 2]"),
-        Ok(AstNode::list((
+        Ok(Expr::list((
             1,
             ListElement::Loop {
                 binding: Binding::id("x"),
@@ -139,7 +144,7 @@ fn lists() {
 
     assert_eq!(
         parse("[if f(x): x]"),
-        Ok(AstNode::list((
+        Ok(Expr::list((
             ListElement::Cond {
                 condition:"f".id().funcall(("x".id(),)),
                 element: ListElement::singleton("x".id()).to_box(),
@@ -152,12 +157,12 @@ fn lists() {
 fn nested_lists() {
     assert_eq!(
         parse("[[]]"),
-        Ok(AstNode::list((AstNode::list(()),))),
+        Ok(Expr::list((Expr::list(()),))),
     );
 
     assert_eq!(
         parse("[1, [2]]"),
-        Ok(AstNode::list((1, AstNode::list((2,))))),
+        Ok(Expr::list((1, Expr::list((2,))))),
     );
 }
 
@@ -165,38 +170,38 @@ fn nested_lists() {
 fn maps() {
     assert_eq!(
         parse("{}"),
-        Ok(AstNode::map(())),
+        Ok(Expr::map(())),
     );
 
     assert_eq!(
         parse("{  }"),
-        Ok(AstNode::map(())),
+        Ok(Expr::map(())),
     );
 
     assert_eq!(
         parse("{a: 1}"),
-        Ok(AstNode::map((
+        Ok(Expr::map((
             ("a", 1),
         ))),
     );
 
     assert_eq!(
         parse("{a: 1,}"),
-        Ok(AstNode::map((
+        Ok(Expr::map((
             ("a", 1),
         ))),
     );
 
     assert_eq!(
         parse("{  a :1,}"),
-        Ok(AstNode::map((
+        Ok(Expr::map((
             ("a", 1),
         ))),
     );
 
     assert_eq!(
         parse("{a: 1  ,b:2}"),
-        Ok(AstNode::map((
+        Ok(Expr::map((
             ("a", 1),
             ("b", 2),
         ))),
@@ -204,14 +209,14 @@ fn maps() {
 
     assert_eq!(
         parse("{che9: false}"),
-        Ok(AstNode::map((
+        Ok(Expr::map((
             ("che9", false),
         ))),
     );
 
     assert_eq!(
         parse("{fable: \"fable\"}"),
-        Ok(AstNode::Map(vec![
+        Ok(Expr::Map(vec![
             MapElement::Singleton {
                 key: Object::string("fable").literal(),
                 value: Object::string("fable").literal(),
@@ -221,7 +226,7 @@ fn maps() {
 
     assert_eq!(
         parse("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}"),
-        Ok(AstNode::Map(vec![
+        Ok(Expr::Map(vec![
             MapElement::Singleton {
                 key: Object::string("a").literal(),
                 value: Object::Integer(1).literal(),
@@ -247,7 +252,7 @@ fn maps() {
 
     assert_eq!(
         parse("{ident-with-hyphen: 1}"),
-        Ok(AstNode::Map(vec![
+        Ok(Expr::Map(vec![
             MapElement::Singleton {
                 key: "ident-with-hyphen".to_ast(),
                 value: 1.to_ast(),
@@ -257,7 +262,7 @@ fn maps() {
 
     assert_eq!(
         parse("{$z: y}"),
-        Ok(AstNode::Map(vec![
+        Ok(Expr::Map(vec![
             MapElement::Singleton {
                 key: "z".id(),
                 value: "y".id(),
@@ -267,7 +272,7 @@ fn maps() {
 
     assert_eq!(
         parse("{$(z): y}"),
-        Ok(AstNode::Map(vec![
+        Ok(Expr::Map(vec![
             MapElement::Singleton {
                 key: "z".id(),
                 value: "y".id(),
@@ -277,7 +282,7 @@ fn maps() {
 
     assert_eq!(
         parse("{...y, x: 1}"),
-        Ok(AstNode::Map(vec![
+        Ok(Expr::Map(vec![
             MapElement::Splat("y".id()),
             MapElement::Singleton {
                 key: Object::string("x").literal(),
@@ -288,7 +293,7 @@ fn maps() {
 
     assert_eq!(
         parse("{for [x,y] in z: x: y}"),
-        Ok(AstNode::Map(vec![
+        Ok(Expr::Map(vec![
             MapElement::Loop {
                 binding: Binding::List(vec![
                     ListBindingElement::Binding { binding: Binding::id("x"), default: None },
@@ -305,7 +310,7 @@ fn maps() {
 
     assert_eq!(
         parse("{if f(x): z: y}"),
-        Ok(AstNode::Map(vec![
+        Ok(Expr::Map(vec![
             MapElement::Cond {
                 condition:"f".id().funcall(("x".id(),)),
                 element: Box::new(MapElement::Singleton {
@@ -321,7 +326,7 @@ fn maps() {
 fn let_blocks() {
     assert_eq!(
         parse("let a = \"b\" in 1"),
-        Ok(AstNode::Let {
+        Ok(Expr::Let {
             bindings: vec![
                 (Binding::id("a"), "b".to_ast()),
             ],
@@ -331,7 +336,7 @@ fn let_blocks() {
 
     assert_eq!(
         parse("let a = 1 let b = 2 in a"),
-        Ok(AstNode::Let {
+        Ok(Expr::Let {
             bindings: vec![
                 (Binding::id("a"), 1.to_ast()),
                 (Binding::id("b"), 2.to_ast()),
@@ -342,7 +347,7 @@ fn let_blocks() {
 
     assert_eq!(
         parse("let [a, b=1, ...] = c in [a, b]"),
-        Ok(AstNode::Let {
+        Ok(Expr::Let {
             bindings: vec![
                 (
                     Binding::List(vec![
@@ -353,7 +358,7 @@ fn let_blocks() {
                     "c".id(),
                 ),
             ],
-            expression: Box::new(AstNode::List(vec![
+            expression: Box::new(Expr::List(vec![
                 ListElement::Singleton("a".id()),
                 ListElement::Singleton("b".id()),
             ])),
@@ -362,7 +367,7 @@ fn let_blocks() {
 
     assert_eq!(
         parse("let [_, ...rest] = list in rest"),
-        Ok(AstNode::Let {
+        Ok(Expr::Let {
             bindings: vec![
                 (
                     Binding::List(vec![
@@ -378,7 +383,7 @@ fn let_blocks() {
 
     assert_eq!(
         parse("let [...a] = b in a"),
-        Ok(AstNode::Let {
+        Ok(Expr::Let {
             bindings: vec![
                 (
                     Binding::List(vec![
@@ -393,7 +398,7 @@ fn let_blocks() {
 
     assert_eq!(
         parse("let [...a,] = b in a"),
-        Ok(AstNode::Let {
+        Ok(Expr::Let {
             bindings: vec![
                 (
                     Binding::List(vec![
@@ -408,7 +413,7 @@ fn let_blocks() {
 
     assert_eq!(
         parse("let {a} = x in a"),
-        Ok(AstNode::Let {
+        Ok(Expr::Let {
             bindings: vec![
                 (
                     Binding::Map(vec![
@@ -427,7 +432,7 @@ fn let_blocks() {
 
     assert_eq!(
         parse("let {a: b} = x in a"),
-        Ok(AstNode::Let {
+        Ok(Expr::Let {
             bindings: vec![
                 (
                     Binding::Map(vec![
@@ -446,7 +451,7 @@ fn let_blocks() {
 
     assert_eq!(
         parse("let {a = y} = x in a"),
-        Ok(AstNode::Let {
+        Ok(Expr::Let {
             bindings: vec![
                 (
                     Binding::Map(vec![
@@ -465,7 +470,7 @@ fn let_blocks() {
 
     assert_eq!(
         parse("let {a: b = y} = x in a"),
-        Ok(AstNode::Let {
+        Ok(Expr::Let {
             bindings: vec![
                 (
                     Binding::Map(vec![
@@ -487,7 +492,7 @@ fn let_blocks() {
 fn branching() {
     assert_eq!(
         parse("if a then b else c"),
-        Ok(AstNode::Branch {
+        Ok(Expr::Branch {
             condition: Box::new("a".id()),
             true_branch: Box::new("b".id()),
             false_branch: Box::new("c".id()),
@@ -548,7 +553,7 @@ fn funcall() {
     assert_eq!(
         parse("((x,y) => x+y)(1,2)"),
         Ok(
-            AstNode::Function {
+            Expr::Function {
                 positional: Binding::List(vec![
                     ListBindingElement::Binding { binding: Binding::id("x"), default: None },
                     ListBindingElement::Binding { binding: Binding::id("y"), default: None },
@@ -658,7 +663,7 @@ fn operators() {
 fn functions() {
     assert_eq!(
         parse("() => 1"),
-        Ok(AstNode::Function {
+        Ok(Expr::Function {
             positional: Binding::List(vec![]),
             keywords: Binding::Map(vec![]),
             expression: 1.to_ast().to_box(),
@@ -667,7 +672,7 @@ fn functions() {
 
     assert_eq!(
         parse("(;) => 1"),
-        Ok(AstNode::Function {
+        Ok(Expr::Function {
             positional: Binding::List(vec![]),
             keywords: Binding::Map(vec![]),
             expression: 1.to_ast().to_box(),
@@ -676,7 +681,7 @@ fn functions() {
 
     assert_eq!(
         parse("{} => 1"),
-        Ok(AstNode::Function {
+        Ok(Expr::Function {
             positional: Binding::List(vec![]),
             keywords: Binding::Map(vec![]),
             expression: 1.to_ast().to_box(),
@@ -685,12 +690,12 @@ fn functions() {
 
     assert_eq!(
         parse("(a) => let b = a in b"),
-        Ok(AstNode::Function {
+        Ok(Expr::Function {
             positional: Binding::List(vec![
                 ListBindingElement::Binding { binding: Binding::id("a"), default: None },
             ]),
             keywords: Binding::Map(vec![]),
-            expression: Box::new(AstNode::Let {
+            expression: Box::new(Expr::Let {
                 bindings: vec![
                     (
                         Binding::id("b"),
@@ -704,7 +709,7 @@ fn functions() {
 
     assert_eq!(
         parse("{x=1, y=2} => x + y"),
-        Ok(AstNode::Function {
+        Ok(Expr::Function {
             positional: Binding::List(vec![]),
             keywords: Binding::Map(vec![
                 MapBindingElement::Binding {
