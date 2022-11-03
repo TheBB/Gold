@@ -1,4 +1,0 @@
-import "imported.gold" as imported
-import "std" as std
-
-[imported.add(1, 2), std.add(3, 4)]
