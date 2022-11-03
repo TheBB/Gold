@@ -1,4 +1,5 @@
-use std::{rc::Rc, str::FromStr};
+use std::str::FromStr;
+use std::sync::Arc;
 
 use phf::phf_map;
 use rug::Integer;
@@ -29,9 +30,9 @@ pub fn len(args: &List, _: &Map) -> Result<Object, String> {
 pub fn range(args: &List, _: &Map) -> Result<Object, String> {
     match &args[..] {
         [Object::Integer(start), Object::Integer(stop)] =>
-            Ok(Object::List(Rc::new((*start..*stop).map(Object::from).collect()))),
+            Ok(Object::List(Arc::new((*start..*stop).map(Object::from).collect()))),
         [Object::Integer(stop)] =>
-            Ok(Object::List(Rc::new((0..*stop).map(Object::from).collect()))),
+            Ok(Object::List(Arc::new((0..*stop).map(Object::from).collect()))),
         _ => Err("???".to_string()),
     }
 }

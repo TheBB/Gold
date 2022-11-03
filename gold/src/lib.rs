@@ -3,9 +3,10 @@
 mod ast;
 mod builtins;
 mod eval;
-mod object;
 mod parsing;
 mod traits;
+
+pub mod object;
 
 #[cfg(test)]
 mod tests;

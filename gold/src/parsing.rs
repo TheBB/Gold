@@ -1,5 +1,4 @@
 use std::num::ParseFloatError;
-use std::rc::Rc;
 
 use rug::{Integer, integer::ParseIntegerError};
 
@@ -16,7 +15,8 @@ use nom::{
 };
 
 use super::ast::*;
-use super::object::Object;
+use super::object::{Object, Key};
+
 
 trait CompleteError<'a>:
     ParseError<&'a str> +
@@ -700,12 +700,12 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
             |((name, binding), default)| {
                 match binding {
                     None => MapBindingElement::Binding {
-                        key: Rc::new(name.to_string()),
+                        key: Key::new(name.to_string()),
                         binding: Binding::id(name),
                         default,
                     },
                     Some(binding) => MapBindingElement::Binding {
-                        key: Rc::new(name.to_string()),
+                        key: Key::new(name.to_string()),
                         binding,
                         default,
                     },

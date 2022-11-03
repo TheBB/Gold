@@ -1,4 +1,6 @@
-use std::{collections::HashMap, hash::Hash, rc::Rc};
+use std::collections::HashMap;
+use std::hash::Hash;
+use std::sync::Arc;
 
 
 // Boxable
@@ -131,21 +133,21 @@ impl<K,V> ToMap<K,V> for () {
     }
 }
 
-impl<Ak,Av,K,V> ToMap<Rc<K>,V> for ((Ak,Av),)
+impl<Ak,Av,K,V> ToMap<Arc<K>,V> for ((Ak,Av),)
 where
     K: From<Ak>,
     V: From<Av>,
     K: Eq,
     K: Hash,
 {
-    fn to_map(self) -> HashMap<Rc<K>,V> {
+    fn to_map(self) -> HashMap<Arc<K>,V> {
         let mut ret = HashMap::new();
-        ret.insert(Rc::new(K::from(self.0.0)), V::from(self.0.1));
+        ret.insert(Arc::new(K::from(self.0.0)), V::from(self.0.1));
         ret
     }
 }
 
-impl<Ak,Av,Bk,Bv,K,V> ToMap<Rc<K>,V> for ((Ak,Av), (Bk,Bv))
+impl<Ak,Av,Bk,Bv,K,V> ToMap<Arc<K>,V> for ((Ak,Av), (Bk,Bv))
 where
     K: From<Ak>,
     V: From<Av>,
@@ -154,15 +156,15 @@ where
     K: Eq,
     K: Hash,
 {
-    fn to_map(self) -> HashMap<Rc<K>,V> {
+    fn to_map(self) -> HashMap<Arc<K>,V> {
         let mut ret = HashMap::new();
-        ret.insert(Rc::new(K::from(self.0.0)), V::from(self.0.1));
-        ret.insert(Rc::new(K::from(self.1.0)), V::from(self.1.1));
+        ret.insert(Arc::new(K::from(self.0.0)), V::from(self.0.1));
+        ret.insert(Arc::new(K::from(self.1.0)), V::from(self.1.1));
         ret
     }
 }
 
-impl<Ak,Av,Bk,Bv,Ck,Cv,K,V> ToMap<Rc<K>,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv))
+impl<Ak,Av,Bk,Bv,Ck,Cv,K,V> ToMap<Arc<K>,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv))
 where
     K: From<Ak>,
     V: From<Av>,
@@ -173,16 +175,16 @@ where
     K: Eq,
     K: Hash,
 {
-    fn to_map(self) -> HashMap<Rc<K>,V> {
+    fn to_map(self) -> HashMap<Arc<K>,V> {
         let mut ret = HashMap::new();
-        ret.insert(Rc::new(K::from(self.0.0)), V::from(self.0.1));
-        ret.insert(Rc::new(K::from(self.1.0)), V::from(self.1.1));
-        ret.insert(Rc::new(K::from(self.2.0)), V::from(self.2.1));
+        ret.insert(Arc::new(K::from(self.0.0)), V::from(self.0.1));
+        ret.insert(Arc::new(K::from(self.1.0)), V::from(self.1.1));
+        ret.insert(Arc::new(K::from(self.2.0)), V::from(self.2.1));
         ret
     }
 }
 
-impl<Ak,Av,Bk,Bv,Ck,Cv,Dk,Dv,K,V> ToMap<Rc<K>,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv), (Dk,Dv))
+impl<Ak,Av,Bk,Bv,Ck,Cv,Dk,Dv,K,V> ToMap<Arc<K>,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv), (Dk,Dv))
 where
     K: From<Ak>,
     V: From<Av>,
@@ -195,17 +197,17 @@ where
     K: Eq,
     K: Hash,
 {
-    fn to_map(self) -> HashMap<Rc<K>,V> {
+    fn to_map(self) -> HashMap<Arc<K>,V> {
         let mut ret = HashMap::new();
-        ret.insert(Rc::new(K::from(self.0.0)), V::from(self.0.1));
-        ret.insert(Rc::new(K::from(self.1.0)), V::from(self.1.1));
-        ret.insert(Rc::new(K::from(self.2.0)), V::from(self.2.1));
-        ret.insert(Rc::new(K::from(self.3.0)), V::from(self.3.1));
+        ret.insert(Arc::new(K::from(self.0.0)), V::from(self.0.1));
+        ret.insert(Arc::new(K::from(self.1.0)), V::from(self.1.1));
+        ret.insert(Arc::new(K::from(self.2.0)), V::from(self.2.1));
+        ret.insert(Arc::new(K::from(self.3.0)), V::from(self.3.1));
         ret
     }
 }
 
-impl<Ak,Av,Bk,Bv,Ck,Cv,Dk,Dv,Ek,Ev,K,V> ToMap<Rc<K>,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv), (Dk,Dv), (Ek,Ev))
+impl<Ak,Av,Bk,Bv,Ck,Cv,Dk,Dv,Ek,Ev,K,V> ToMap<Arc<K>,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv), (Dk,Dv), (Ek,Ev))
 where
     K: From<Ak>,
     V: From<Av>,
@@ -220,13 +222,13 @@ where
     K: Eq,
     K: Hash,
 {
-    fn to_map(self) -> HashMap<Rc<K>,V> {
+    fn to_map(self) -> HashMap<Arc<K>,V> {
         let mut ret = HashMap::new();
-        ret.insert(Rc::new(K::from(self.0.0)), V::from(self.0.1));
-        ret.insert(Rc::new(K::from(self.1.0)), V::from(self.1.1));
-        ret.insert(Rc::new(K::from(self.2.0)), V::from(self.2.1));
-        ret.insert(Rc::new(K::from(self.3.0)), V::from(self.3.1));
-        ret.insert(Rc::new(K::from(self.4.0)), V::from(self.4.1));
+        ret.insert(Arc::new(K::from(self.0.0)), V::from(self.0.1));
+        ret.insert(Arc::new(K::from(self.1.0)), V::from(self.1.1));
+        ret.insert(Arc::new(K::from(self.2.0)), V::from(self.2.1));
+        ret.insert(Arc::new(K::from(self.3.0)), V::from(self.3.1));
+        ret.insert(Arc::new(K::from(self.4.0)), V::from(self.4.1));
         ret
     }
 }
