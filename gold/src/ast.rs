@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::ops;
-use std::rc::Rc;
 
 use rug::Integer;
 use serde::{Deserialize, Serialize};
@@ -20,9 +19,9 @@ pub enum ListBindingElement {
 }
 
 impl ListBindingElement {
-    pub fn slurp_to<T: ToString>(x: T) -> ListBindingElement { ListBindingElement::SlurpTo(Rc::new(x.to_string())) }
+    pub fn slurp_to<T: ToString>(x: T) -> ListBindingElement { ListBindingElement::SlurpTo(Key::new(x.to_string())) }
 
-    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Rc<String>>) {
+    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             ListBindingElement::Binding { binding, default } => {
                 binding_element_free_and_bound(binding, default, free, bound);
@@ -57,9 +56,9 @@ pub enum MapBindingElement {
 }
 
 impl MapBindingElement {
-    pub fn slurp_to<T: ToString>(x: T) -> MapBindingElement { MapBindingElement::SlurpTo(Rc::new(x.to_string())) }
+    pub fn slurp_to<T: ToString>(x: T) -> MapBindingElement { MapBindingElement::SlurpTo(Key::new(x.to_string())) }
 
-    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Rc<String>>) {
+    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             MapBindingElement::Binding { key: _, binding, default } => {
                 binding_element_free_and_bound(binding, default, free, bound);
@@ -108,9 +107,9 @@ pub enum Binding {
 }
 
 impl Binding {
-    pub fn id<T: ToString>(x: T) -> Binding { Binding::Identifier(Rc::new(x.to_string())) }
+    pub fn id<T: ToString>(x: T) -> Binding { Binding::Identifier(Key::new(x.to_string())) }
 
-    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Rc<String>>) {
+    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             Binding::Identifier(name) => { bound.insert(name.clone()); },
             Binding::List(elements) => {
@@ -168,7 +167,7 @@ pub enum StringElement {
 
 impl StringElement {
     pub fn raw<T>(val: T) -> StringElement where T: ToString {
-        StringElement::Raw(Rc::new(val.to_string()))
+        StringElement::Raw(Key::new(val.to_string()))
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -351,7 +350,7 @@ pub enum ArgElement {
 
 impl ArgElement {
     pub fn keyword<T>(key: T, val: Expr) -> ArgElement where T: ToString {
-        ArgElement::Keyword(Rc::new(key.to_string()), val)
+        ArgElement::Keyword(Key::new(key.to_string()), val)
     }
 
     pub fn free_impl(&self, free: &mut HashSet<Key>) {
@@ -380,7 +379,7 @@ impl<T> From<T> for ArgElement where T: ToAstNode {
 
 impl<S,T> From<(S,T)> for ArgElement where S: ToString, T: ToAstNode {
     fn from(x: (S,T)) -> Self {
-        ArgElement::Keyword(Rc::new(x.0.to_string()), x.1.to_ast())
+        ArgElement::Keyword(Key::new(x.0.to_string()), x.1.to_ast())
     }
 }
 
@@ -523,7 +522,7 @@ impl Expr {
     pub fn boolean(value: bool) -> Expr { Expr::Literal(Object::Boolean(value)) }
     pub fn null() -> Expr { Expr::Literal(Object::Null) }
 
-    pub fn id<T: ToString>(x: T) -> Expr { Expr::Identifier(Rc::new(x.to_string())) }
+    pub fn id<T: ToString>(x: T) -> Expr { Expr::Identifier(Key::new(x.to_string())) }
 
     pub fn list<T>(x: T) -> Expr where T: ToVec<ListElement> { Expr::List(x.to_vec()) }
     pub fn map<T>(x: T) -> Expr where T: ToVec<MapElement> { Expr::Map(x.to_vec()) }
@@ -550,7 +549,7 @@ impl Expr {
 
     pub fn string(value: Vec<StringElement>) -> Expr {
         if value.len() == 0 {
-            Expr::Literal(Object::String(Rc::new("".to_string())))
+            Expr::Literal(Object::string(""))
         } else if value.len() == 1 {
             match &value[0] {
                 StringElement::Raw(val) => Expr::Literal(Object::String(val.clone())),

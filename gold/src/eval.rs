@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::ops::Neg;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use num_traits::checked_pow;
 use rug::Integer;
@@ -218,7 +218,7 @@ impl<'a> Namespace<'a> {
                                     Some(val) => values.push(val.clone()),
                                 }
                             }
-                            self.set(name, Object::List(Rc::new(values)))?;
+                            self.set(name, Object::List(Arc::new(values)))?;
                         }
                     }
                 }
@@ -262,7 +262,7 @@ impl<'a> Namespace<'a> {
                         }
                     }
 
-                    self.set(target, Object::Map(Rc::new(values)))?;
+                    self.set(target, Object::Map(Arc::new(values)))?;
                 }
 
                 Ok(())
@@ -440,10 +440,10 @@ impl<'a> Namespace<'a> {
                     (BinOp::Index, Object::List(x), Object::Integer(y)) => Ok(x[*y as usize].clone()),
                     (BinOp::Index, Object::Map(x), Object::String(y)) => x.get(y).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
                     (BinOp::Add, Object::List(x), Object::List(y)) => Ok(
-                        Object::List(Rc::new(x.iter().chain(y.iter()).map(Object::clone).collect()))
+                        Object::List(Arc::new(x.iter().chain(y.iter()).map(Object::clone).collect()))
                     ),
                     (BinOp::Add, Object::String(x), Object::String(y)) => Ok(
-                        Object::String(Rc::new(format!("{}{}", x.as_str(), y.as_str())))
+                        Object::String(Key::new(format!("{}{}", x.as_str(), y.as_str())))
                     ),
                     (BinOp::Add, _, _) => arithmetic_operate(add, value, other),
                     (BinOp::Subtract, _, _) => arithmetic_operate(sub, value, other),
@@ -472,8 +472,8 @@ impl<'a> Namespace<'a> {
                         let Function { args, kwargs, closure, expr } = func.as_ref();
                         let ns = Namespace::Frozen(closure);
                         let mut sub = ns.subtend();
-                        sub.bind(args, Object::List(Rc::new(call_args)))?;
-                        sub.bind(kwargs, Object::Map(Rc::new(call_kwargs)))?;
+                        sub.bind(args, Object::List(Arc::new(call_args)))?;
+                        sub.bind(kwargs, Object::Map(Arc::new(call_kwargs)))?;
                         sub.eval(expr)
                     },
                     Object::Builtin(Builtin { func, .. }) => {
@@ -524,7 +524,7 @@ impl<'a> Namespace<'a> {
                 for element in elements {
                     self.fill_list(element, &mut values)?;
                 }
-                Ok(Object::List(Rc::new(values)))
+                Ok(Object::List(Arc::new(values)))
             },
 
             Expr::Map(elements) => {
@@ -532,7 +532,7 @@ impl<'a> Namespace<'a> {
                 for element in elements {
                     self.fill_map(element, &mut values)?;
                 }
-                Ok(Object::Map(Rc::new(values)))
+                Ok(Object::Map(Arc::new(values)))
             }
 
             Expr::Let { bindings, expression } => {
@@ -564,7 +564,7 @@ impl<'a> Namespace<'a> {
                     let val = self.get(&ident)?;
                     closure.insert(ident, val);
                 }
-                Ok(Object::Function(Rc::new(Function {
+                Ok(Object::Function(Arc::new(Function {
                     args: positional.clone(),
                     kwargs: keywords.clone(),
                     closure,

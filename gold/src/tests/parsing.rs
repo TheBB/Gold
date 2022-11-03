@@ -1,5 +1,5 @@
 use std::ops::{Add, Div, Mul, Neg, Not, Sub};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use rug::Integer;
 
@@ -418,7 +418,7 @@ fn let_blocks() {
                 (
                     Binding::Map(vec![
                         MapBindingElement::Binding {
-                            key: Rc::new("a".to_string()),
+                            key: Arc::new("a".to_string()),
                             binding: Binding::id("a"),
                             default: None,
                         },
@@ -437,7 +437,7 @@ fn let_blocks() {
                 (
                     Binding::Map(vec![
                         MapBindingElement::Binding {
-                            key: Rc::new("a".to_string()),
+                            key: Arc::new("a".to_string()),
                             binding: Binding::id("b"),
                             default: None,
                         },
@@ -456,7 +456,7 @@ fn let_blocks() {
                 (
                     Binding::Map(vec![
                         MapBindingElement::Binding {
-                            key: Rc::new("a".to_string()),
+                            key: Arc::new("a".to_string()),
                             binding: Binding::id("a"),
                             default: Some("y".id()),
                         },
@@ -475,7 +475,7 @@ fn let_blocks() {
                 (
                     Binding::Map(vec![
                         MapBindingElement::Binding {
-                            key: Rc::new("a".to_string()),
+                            key: Arc::new("a".to_string()),
                             binding: Binding::id("b"),
                             default: Some("y".id()),
                         },
@@ -713,12 +713,12 @@ fn functions() {
             positional: Binding::List(vec![]),
             keywords: Binding::Map(vec![
                 MapBindingElement::Binding {
-                    key: Rc::new("x".to_string()),
+                    key: Arc::new("x".to_string()),
                     binding: Binding::id("x"),
                     default: Some(1.to_ast()),
                 },
                 MapBindingElement::Binding {
-                    key: Rc::new("y".to_string()),
+                    key: Arc::new("y".to_string()),
                     binding: Binding::id("y"),
                     default: Some(2.to_ast()),
                 },

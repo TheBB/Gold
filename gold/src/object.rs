@@ -2,8 +2,8 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{Read, Write};
-use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use json::JsonValue;
@@ -32,7 +32,7 @@ fn escape(s: &str) -> String {
 }
 
 
-pub type Key = Rc<String>;
+pub type Key = Arc<String>;
 pub type List = Vec<Object>;
 pub type Map = HashMap<Key, Object>;
 pub type RFunc = fn(&List, &Map) -> Result<Object, String>;
@@ -44,7 +44,7 @@ const SERIALIZE_VERSION: i32 = 1;
 #[derive(Clone)]
 pub struct Builtin {
     pub func: RFunc,
-    pub name: Rc<String>,
+    pub name: Key,
 }
 
 impl Serialize for Builtin {
@@ -64,7 +64,7 @@ impl<'a> Visitor<'a> for BuiltinVisitor {
 
     fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
         BUILTINS.get(v).ok_or(E::custom("unknown builtin name")).map(
-            |x| Builtin { name: Rc::new(v.to_string()), func: *x }
+            |x| Builtin { name: Key::new(v.to_string()), func: *x }
         )
     }
 }
@@ -88,13 +88,13 @@ pub struct Function {
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Object {
     Integer(i64),
-    BigInteger(Rc<Integer>),
+    BigInteger(Arc<Integer>),
     Float(f64),
     String(Key),
     Boolean(bool),
-    List(Rc<List>),
-    Map(Rc<Map>),
-    Function(Rc<Function>),
+    List(Arc<List>),
+    Map(Arc<Map>),
+    Function(Arc<Function>),
     Builtin(Builtin),
     Null,
 }
@@ -156,7 +156,7 @@ impl Debug for Object {
 
 impl Object {
     pub fn string<T: ToString>(x: T) -> Object {
-        Object::String(Rc::new(x.to_string()))
+        Object::String(Arc::new(x.to_string()))
     }
 
     pub fn literal(&self) -> Expr {
@@ -164,11 +164,11 @@ impl Object {
     }
 
     pub fn list<T>(x: T) -> Object where T: ToVec<Object> {
-        Object::List(Rc::new(x.to_vec()))
+        Object::List(Arc::new(x.to_vec()))
     }
 
     pub fn map<T>(x: T) -> Object where T: ToMap<Key, Object> {
-        Object::Map(Rc::new(x.to_map()))
+        Object::Map(Arc::new(x.to_map()))
     }
 
     pub fn bigint(x: &str) -> Option<Object> {
@@ -314,11 +314,11 @@ impl From<usize> for Object {
 }
 
 impl From<Integer> for Object {
-    fn from(x: Integer) -> Object { Object::BigInteger(Rc::new(x)) }
+    fn from(x: Integer) -> Object { Object::BigInteger(Arc::new(x)) }
 }
 
 impl From<&str> for Object {
-    fn from(x: &str) -> Object { Object::String(Rc::new(x.to_string())) }
+    fn from(x: &str) -> Object { Object::String(Key::new(x.to_string())) }
 }
 
 impl From<bool> for Object {
