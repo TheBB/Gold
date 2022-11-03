@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+
+  rutest:
+    name: Test Rust
+    strategy:
+      matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+    runs-on: ${{ matrix.os }}
+    steps:
+
+      - uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+
+      - run: cargo check
+      - run: cargo test
+
+  pytest:
+    name: Test Python
+    needs: rutest
+    strategy:
+      matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        py: ["3.7", "3.8", "3.9", "3.10", "3.11"]
+    runs-on: ${{ matrix.os }}
+    steps:
+
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.py }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+
+      - name: Install and test
+        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macos-latest' }}
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          echo "VIRTUAL_ENV: $VIRTUAL_ENV"
+          python -m pip install --upgrade pip
+          pip install -r goldpy/requirements.txt
+          maturin develop -m goldpy/Cargo.toml
+          pytest goldpy/test
+
+      - name: Install and test (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: |
+          python -m venv venv
+          venv/Scripts/Activate.ps1
+          Write-Host "VIRTUAL_ENV: $env:VIRTUAL_ENV"
+          python -m pip install --upgrade pip
+          pip install -r goldpy/requirements.txt
+          maturin develop -m goldpy/Cargo.toml
+          pytest goldpy/test
+
+
+  build-wheels:
+    name: Build wheels
+    if: "startsWith(github.ref, 'refs/tags/')"
+    needs: pytest
+    strategy:
+      matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+    runs-on: ${{ matrix.os }}
+    steps:
+
+      - uses: actions/checkout@v3
+
+      - uses: messense/maturin-action@v1
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        with:
+          manylinux: auto
+          rust-toolchain: nightly
+          command: build
+          args: --release --sdist -o dist --find-interpreter -m goldpy/Cargo.toml
+
+      - uses: messense/maturin-action@v1
+        if: ${{ matrix.os == 'windows-latest' }}
+        with:
+          manylinux: auto
+          rust-toolchain: nightly
+          command: build
+          args: --release -o dist --find-interpreter -m goldpy/Cargo.toml
+
+      - uses: messense/maturin-action@v1
+        if: ${{ matrix.os == 'macos-latest' }}
+        with:
+          manylinux: auto
+          rust-toolchain: nightly
+          command: build
+          args: --release -o dist --universal2 --find-interpreter -m goldpy/Cargo.toml
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: dist
+
+  release:
+    name: Release
+    if: "startsWith(github.ref, 'refs/tags/')"
+    needs: build-wheels
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: wheels
+      - name: Publish to PyPI
+        uses: messense/maturin-action@v1
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        with:
+          command: upload
+          args: --skip-existing *
