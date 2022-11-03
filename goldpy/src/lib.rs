@@ -73,7 +73,7 @@ impl pyo3::IntoPy<PyObject> for ObjectWrapper {
 
 
 #[pyfunction]
-fn eval(x: String) -> PyResult<ObjectWrapper> {
+fn evaluate_string(x: String) -> PyResult<ObjectWrapper> {
     eval_raw(x.as_str()).map_err(
         |err| PyErr::new::<PyValueError, _>(err)
     ).map(ObjectWrapper)
@@ -84,6 +84,6 @@ fn eval(x: String) -> PyResult<ObjectWrapper> {
 fn goldpy(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Function>()?;
     m.add_class::<Builtin>()?;
-    m.add_function(wrap_pyfunction!(eval, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_string, m)?)?;
     Ok(())
 }
