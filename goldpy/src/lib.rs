@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use num_bigint::BigInt;
+
 use pyo3::types::{PyList, PyDict};
 use pyo3::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError};
@@ -26,6 +28,8 @@ impl<'s> FromPyObject<'s> for ObjectWrapper {
         } else if let Ok(Builtin(x)) = obj.extract::<Builtin>() {
             Ok(ObjectWrapper(Object::Builtin(x)))
         } else if let Ok(x) = obj.extract::<i64>() {
+            Ok(ObjectWrapper(Object::from(x)))
+        } else if let Ok(x) = obj.extract::<BigInt>() {
             Ok(ObjectWrapper(Object::from(x)))
         } else if let Ok(x) = obj.extract::<f64>() {
             Ok(ObjectWrapper(Object::from(x)))
@@ -53,6 +57,7 @@ impl pyo3::IntoPy<PyObject> for ObjectWrapper {
     fn into_py(self, py: Python<'_>) -> PyObject {
         match self.0 {
             Object::Integer(x) => x.into_py(py),
+            Object::BigInteger(x) => x.as_ref().clone().into_py(py),
             Object::Float(x) => x.into_py(py),
             Object::String(x) => x.as_ref().into_py(py),
             Object::Boolean(x) => x.into_py(py),

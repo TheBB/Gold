@@ -10,4 +10,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 gold = { path = "../gold" }
-pyo3 = { version = "0.17.1", features = ["extension-module"] }
+num-bigint = "0.4.3"
+pyo3 = { version = "0.17.1", features = ["extension-module", "num-bigint"] }

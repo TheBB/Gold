@@ -5,6 +5,7 @@ mod builtins;
 mod eval;
 mod parsing;
 mod traits;
+pub mod util;
 
 pub mod object;
 

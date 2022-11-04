@@ -1,12 +1,15 @@
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
+use std::ops::Neg;
 use std::sync::Arc;
 
+use num_bigint::BigInt;
 use num_traits::checked_pow;
 
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::object::{Object, Function, Key, Map, List, Builtin};
+use crate::util;
 use crate::builtins::BUILTINS;
 
 
@@ -67,30 +70,47 @@ impl ImportResolver for NullResolver {
 }
 
 
-struct Arith<F,H,X,Z>
+struct Arith<F,G,H,X,Y,Z>
 where
     F: Fn(i64, i64) -> Option<X>,
+    G: Fn(&BigInt, &BigInt) -> Y,
     H: Fn(f64, f64) -> Z,
 {
     ixi: F,
+    bxb: G,
     fxf: H,
 }
 
 
-fn arithmetic_operate<F,H,X,Z>(ops: Arith<F,H,X,Z>, x: Object, y: Object) -> Result<Object, String>
+fn arithmetic_operate<F,G,H,X,Y,Z>(ops: Arith<F,G,H,X,Y,Z>, x: Object, y: Object) -> Result<Object, String>
 where
     F: Fn(i64, i64) -> Option<X>,
+    G: Fn(&BigInt, &BigInt) -> Y,
     H: Fn(f64, f64) -> Z,
     Object: From<X>,
+    Object: From<Y>,
     Object: From<Z>,
 {
-    let Arith { ixi, fxf } = ops;
+    let Arith { ixi, bxb, fxf } = ops;
 
     match (x, y) {
-        (Object::Integer(xx), Object::Integer(yy)) => ixi(xx, yy).map(Object::from).ok_or_else(|| "overflow".to_string()),
+        (Object::Integer(xx), Object::Integer(yy)) => Ok(
+            ixi(xx, yy).map(Object::from).unwrap_or_else(
+                || Object::from(bxb(&BigInt::from(xx), &BigInt::from(yy))).numeric_normalize()
+            )
+        ),
+
+        (Object::Integer(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&BigInt::from(xx), &yy)).numeric_normalize()),
+        (Object::BigInteger(xx), Object::Integer(yy)) => Ok(Object::from(bxb(&xx, &BigInt::from(yy))).numeric_normalize()),
+        (Object::BigInteger(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&xx, &yy)).numeric_normalize()),
+
         (Object::Float(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx, yy))),
         (Object::Integer(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx as f64, yy))),
         (Object::Float(xx), Object::Integer(yy)) => Ok(Object::from(fxf(xx, yy as f64))),
+
+        (Object::Float(xx), Object::BigInteger(yy)) => Ok(Object::from(fxf(xx, util::big_to_f64(yy.as_ref())))),
+        (Object::BigInteger(xx), Object::Float(yy)) => Ok(Object::from(fxf(util::big_to_f64(xx.as_ref()), yy))),
+
         _ => Err("unsupported types for arithmetic".to_string()),
     }
 }
@@ -100,7 +120,14 @@ fn power(x: Object, y: Object) -> Result<Object, String> {
     match (&x, &y) {
         (Object::Integer(x), Object::Integer(y)) if *y >= 0 => {
             let yy: u32 = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
-            checked_pow(*x, yy as usize).map(Object::from).ok_or_else(|| "overflow".to_string())
+            Ok(checked_pow(*x, yy as usize).map(Object::from).unwrap_or_else(
+                || Object::from(BigInt::from(*x).pow(yy))
+            ))
+        },
+
+        (Object::BigInteger(x), Object::Integer(y)) if *y >= 0 => {
+            let yy: u32 = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
+            Ok(Object::from(x.as_ref().pow(yy)))
         },
 
         _ => {
@@ -370,22 +397,27 @@ impl<'a> Namespace<'a> {
     fn operate(&self, operator: &Operator, value: Object) -> Result<Object, String> {
         let add = Arith {
             ixi: i64::checked_add,
+            bxb: |x,y| x + y,
             fxf: |x,y| x + y,
         };
         let sub = Arith {
             ixi: i64::checked_sub,
+            bxb: |x,y| x - y,
             fxf: |x,y| x - y,
         };
         let mul = Arith {
             ixi: i64::checked_mul,
+            bxb: |x,y| x * y,
             fxf: |x,y| x * y,
         };
         let div = Arith {
             ixi: |x,y| Some((x as f64) / (y as f64)),
+            bxb: |x,y| util::big_to_f64(x) / util::big_to_f64(y),
             fxf: |x,y| x / y,
         };
         let idiv = Arith {
             ixi: i64::checked_div,
+            bxb: |x,y| x / y,
             fxf: |x,y| (x / y).floor() as f64,
         };
 
@@ -395,6 +427,7 @@ impl<'a> Namespace<'a> {
                 UnOp::LogicalNegate => Ok(Object::Boolean(!value.truthy())),
                 UnOp::ArithmeticalNegate => match value {
                     Object::Integer(x) => Ok(Object::Integer(-x)),
+                    Object::BigInteger(x) => Ok(Object::from(x.as_ref().neg())),
                     Object::Float(x) => Ok(Object::Float(-x)),
                     _ => Err("type mismatch".to_string()),
                 },
@@ -476,7 +509,7 @@ impl<'a> Namespace<'a> {
                         StringElement::Raw(val) => rval += val,
                         StringElement::Interpolate(expr) => {
                             let val = self.eval(expr)?;
-                            let text = val.fmt()?;
+                            let text = val.format()?;
                             rval += &text;
                         }
                     }

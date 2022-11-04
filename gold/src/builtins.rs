@@ -1,9 +1,11 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
+use num_bigint::BigInt;
+
 use phf::phf_map;
 
-use crate::object::*;
+use crate::{object::*, util};
 
 
 pub static BUILTINS: phf::Map<&'static str, RFunc> = phf_map! {
@@ -18,9 +20,9 @@ pub static BUILTINS: phf::Map<&'static str, RFunc> = phf_map! {
 
 pub fn len(args: &List, _: &Map) -> Result<Object, String> {
     match &args[..] {
-        [Object::String(x)] => Ok(Object::from(x.chars().count() as i64)),
-        [Object::List(x)] => Ok(Object::from(x.len() as i64)),
-        [Object::Map(x)] => Ok(Object::from(x.len() as i64)),
+        [Object::String(x)] => Ok(Object::from(x.chars().count() as usize)),
+        [Object::List(x)] => Ok(Object::from(x.len() as usize)),
+        [Object::Map(x)] => Ok(Object::from(x.len() as usize)),
         _ => Err("???".to_string()),
     }
 }
@@ -40,9 +42,11 @@ pub fn range(args: &List, _: &Map) -> Result<Object, String> {
 pub fn to_int(args: &List, _: &Map) -> Result<Object, String> {
     match &args[..] {
         [Object::Integer(_)] => Ok(args[0].clone()),
+        [Object::BigInteger(_)] => Ok(args[0].clone()),
         [Object::Float(x)] => Ok(Object::Integer(x.round() as i64)),
         [Object::Boolean(x)] => Ok(Object::from(if *x { 1 } else { 0 })),
-        [Object::String(x)] => i64::from_str(x.as_str()).map_err(|_| "???".to_string()).map(Object::from),
+        [Object::String(x)] =>
+            BigInt::from_str(x.as_str()).map_err(|_| "???".to_string()).map(Object::from).map(Object::numeric_normalize),
         _ => Err("???".to_string()),
     }
 }
@@ -51,6 +55,7 @@ pub fn to_int(args: &List, _: &Map) -> Result<Object, String> {
 pub fn to_float(args: &List, _: &Map) -> Result<Object, String> {
     match &args[..] {
         [Object::Integer(x)] => Ok(Object::from(*x as f64)),
+        [Object::BigInteger(x)] => Ok(Object::from(util::big_to_f64(x))),
         [Object::Float(_)] => Ok(args[0].clone()),
         [Object::Boolean(x)] => Ok(Object::from(if *x { 1.0 } else { 0.0 })),
         [Object::String(x)] => f64::from_str(x).map_err(|_| "???".to_string()).map(Object::from),
