@@ -1,8 +1,6 @@
 use std::ops::{Add, Div, Mul, Neg, Not, Sub};
 use std::sync::Arc;
 
-use rug::Integer;
-
 use crate::ast::*;
 use crate::object::{Object};
 use crate::parsing::{parse as parse_file};
@@ -26,10 +24,8 @@ fn integers() {
     assert_eq!(parse("0"), Ok(0.to_ast()));
     assert_eq!(parse("1"), Ok(1.to_ast()));
     assert_eq!(parse("9223372036854775807"), Ok(9223372036854775807i64.to_ast()));
-    assert_eq!(
-        parse("9223372036854775808"),
-        Ok(Object::from(Integer::from_str_radix("9223372036854775808", 10).unwrap()).literal()),
-    );
+
+    assert!(parse("9223372036854776000").is_err());
 }
 
 #[test]

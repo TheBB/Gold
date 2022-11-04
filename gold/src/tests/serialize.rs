@@ -17,7 +17,6 @@ fn integers() {
     check(Object::from(1));
     check(Object::from(9223372036854775807_i64));
     check(Object::from(-9223372036854775807_i64));
-    check(Object::bigint("9223372036854775808").unwrap());
 }
 
 

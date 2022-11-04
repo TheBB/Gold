@@ -43,7 +43,6 @@ fn strings() {
     assert_seq!(eval("\"simsalabim ${0} abracadabra\""), Object::from("simsalabim 0 abracadabra"));
     assert_seq!(eval("\"simsalabim ${1} abracadabra\""), Object::from("simsalabim 1 abracadabra"));
     assert_seq!(eval("\"simsalabim ${9223372036854775807} abracadabra\""), Object::from("simsalabim 9223372036854775807 abracadabra"));
-    assert_seq!(eval("\"simsalabim ${9223372036854776000} abracadabra\""), Object::from("simsalabim 9223372036854776000 abracadabra"));
 }
 
 
@@ -281,10 +280,6 @@ fn arithmetic() {
     assert_seq!(eval("-2 ^ 3 ^ 3"), Object::from(-134217728));
     assert_seq!(eval("(-2 ^ 3) ^ 3"), Object::from(-512));
     assert_seq!(eval("-(2 ^ 3) ^ 3"), Object::from(-512));
-
-    assert_seq!(eval("(9999999999999999999999999 + 1) - 9999999999999999999999999"), Object::from(1));
-    assert_seq!(eval("9223372036854775800 + 9223372036854775800 - 9223372036854775800"), Object::from(9223372036854775800_i64));
-    assert_seq!(eval("(-9999999999999999999999999 - 1) + 9999999999999999999999999"), Object::from(-1));
 }
 
 

@@ -1,17 +1,15 @@
-use std::num::ParseFloatError;
-
-use rug::{Integer, integer::ParseIntegerError};
+use std::num::{ParseFloatError, ParseIntError};
 
 use nom::{
     IResult, Parser,
     Err::{Incomplete, Error, Failure},
     branch::alt,
     bytes::complete::{escaped_transform, is_not, tag},
-    character::complete::{char, none_of, one_of, multispace0},
+    character::{complete::{alpha1, char, none_of, one_of, multispace0}},
     combinator::{map, map_res, opt, recognize, value, verify},
     error::{ParseError, FromExternalError, ContextError, VerboseError},
     multi::{many0, many1, separated_list0},
-    sequence::{delimited, preceded, terminated, tuple},
+    sequence::{delimited, preceded, terminated, tuple, pair},
 };
 
 use super::ast::*;
@@ -21,14 +19,14 @@ use super::object::{Object, Key};
 trait CompleteError<'a>:
     ParseError<&'a str> +
     ContextError<&'a str> +
-    FromExternalError<&'a str, ParseIntegerError> +
+    FromExternalError<&'a str, ParseIntError> +
     FromExternalError<&'a str, ParseFloatError> {}
 
 impl<'a, T> CompleteError<'a> for T
 where T:
     ParseError<&'a str> +
     ContextError<&'a str> +
-    FromExternalError<&'a str, ParseIntegerError> +
+    FromExternalError<&'a str, ParseIntError> +
     FromExternalError<&'a str, ParseFloatError> {}
 
 
@@ -75,7 +73,10 @@ fn identifier<'a, E: CompleteError<'a>>(
     input: &'a str,
 ) -> IResult<&'a str, &'a str, E> {
     verify(
-        is_not("=.,:;-+/*[](){}\"\' \t\n\r"),
+        recognize(pair(
+            alt((alpha1, tag("_"))),
+            opt(is_not("=.,:;-+/*[](){}\"\' \t\n\r")),
+        )),
         |out: &str| !KEYWORDS.contains(&out),
     )(input)
 }
@@ -112,10 +113,7 @@ fn integer<'a, E: CompleteError<'a>>(
         decimal,
         |out: &'a str| {
             let s = out.replace("_", "");
-            i64::from_str_radix(s.as_str(), 10).map_or_else(
-                |_| { Integer::from_str_radix(s.as_str(), 10).map(Expr::big_integer) },
-                |val| Ok(Expr::integer(val)),
-            )
+            i64::from_str_radix(s.as_str(), 10).map(|x| x.to_ast())
         }
     )(input)
 }

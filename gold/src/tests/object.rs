@@ -5,7 +5,6 @@ use crate::object::Object;
 fn to_string() {
     assert_eq!(Object::from(1).to_string(), "1");
     assert_eq!(Object::from(-1).to_string(), "-1");
-    assert_eq!(Object::bigint("9223372036854775808").unwrap().to_string(), "9223372036854775808");
 
     assert_eq!(Object::from(1.2).to_string(), "1.2");
     assert_eq!(Object::from(1.0).to_string(), "1");

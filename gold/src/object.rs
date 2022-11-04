@@ -2,13 +2,11 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::{Read, Write};
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
 
 use json::JsonValue;
 use rmp_serde::{decode, encode};
-use rug::Integer;
 use serde::de::Visitor;
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
 
@@ -88,7 +86,6 @@ pub struct Function {
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Object {
     Integer(i64),
-    BigInteger(Arc<Integer>),
     Float(f64),
     String(Key),
     Boolean(bool),
@@ -107,7 +104,6 @@ impl PartialEq<Object> for Object {
     fn eq(&self, other: &Object) -> bool {
         match (self, other) {
             (Self::Integer(x), Self::Integer(y)) => x.eq(y),
-            (Self::BigInteger(x), Self::BigInteger(y)) => x.eq(y),
             (Self::Float(x), Self::Float(y)) => x.eq(y),
             (Self::String(x), Self::String(y)) => x.eq(y),
             (Self::Boolean(x), Self::Boolean(y)) => x.eq(y),
@@ -123,13 +119,8 @@ impl PartialOrd<Object> for Object {
     fn partial_cmp(&self, other: &Object) -> Option<Ordering> {
         match (self, other) {
             (Object::Integer(x), Object::Integer(y)) => x.partial_cmp(y),
-            (Object::Integer(x), Object::BigInteger(y)) => x.partial_cmp(y.as_ref()),
             (Object::Integer(x), Object::Float(y)) => (*x as f64).partial_cmp(y),
-            (Object::BigInteger(x), Object::Integer(y)) => x.as_ref().partial_cmp(y),
-            (Object::BigInteger(x), Object::BigInteger(y)) => x.as_ref().partial_cmp(y.as_ref()),
-            (Object::BigInteger(x), Object::Float(y)) => x.as_ref().partial_cmp(y),
             (Object::Float(x), Object::Integer(y)) => x.partial_cmp(&(*y as f64)),
-            (Object::Float(x), Object::BigInteger(y)) => x.partial_cmp(y.as_ref()),
             (Object::Float(x), Object::Float(y)) => x.partial_cmp(y),
             (Object::String(x), Object::String(y)) => x.partial_cmp(y),
             _ => None,
@@ -141,7 +132,6 @@ impl Debug for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Integer(x) => f.debug_tuple("Object::Integer").field(x).finish(),
-            Self::BigInteger(x) => f.debug_tuple("Object::BigInteger").field(x).finish(),
             Self::Float(x) => f.debug_tuple("Object::Float").field(x).finish(),
             Self::String(x) => f.debug_tuple("Object::String").field(x).finish(),
             Self::Boolean(x) => f.debug_tuple("Object::Boolean").field(x).finish(),
@@ -171,15 +161,10 @@ impl Object {
         Object::Map(Arc::new(x.to_map()))
     }
 
-    pub fn bigint(x: &str) -> Option<Object> {
-        Integer::from_str(x).ok().map(Object::from)
-    }
-
     pub fn fmt(&self) -> Result<String, String> {
         match self {
             Object::String(r) => Ok(r.to_string()),
             Object::Integer(r) => Ok(r.to_string()),
-            Object::BigInteger(r) => Ok(r.to_string()),
             Object::Float(r) => Ok(r.to_string()),
             Object::Boolean(true) => Ok("true".to_string()),
             Object::Boolean(false) => Ok("false".to_string()),
@@ -198,28 +183,15 @@ impl Object {
         }
     }
 
-    pub fn numeric_normalize(self) -> Object {
-        if let Object::BigInteger(x) = &self {
-            x.to_i64().map(Object::from).unwrap_or(self)
-        } else {
-            self
-        }
-    }
-
     pub fn user_eq(&self, other: &Object) -> bool {
         match (self, other) {
 
             // Equality between disparate types
-            (Object::Integer(x), Object::BigInteger(y)) => y.as_ref().eq(x),
-            (Object::BigInteger(x), Object::Integer(y)) => x.as_ref().eq(y),
             (Object::Float(x), Object::Integer(y)) => x.eq(&(*y as f64)),
             (Object::Integer(x), Object::Float(y)) => y.eq(&(*x as f64)),
-            (Object::Float(x), Object::BigInteger(y)) => y.as_ref().eq(x),
-            (Object::BigInteger(x), Object::Float(y)) => x.as_ref().eq(y),
 
             // Structural equality
             (Object::Integer(x), Object::Integer(y)) => x.eq(y),
-            (Object::BigInteger(x), Object::BigInteger(y)) => x.eq(y),
             (Object::Float(x), Object::Float(y)) => x.eq(y),
             (Object::String(x), Object::String(y)) => x.eq(y),
             (Object::Boolean(x), Object::Boolean(y)) => x.eq(y),
@@ -305,18 +277,6 @@ impl From<f64> for Object {
     fn from(x: f64) -> Object { Object::Float(x) }
 }
 
-impl From<usize> for Object {
-    fn from(value: usize) -> Object {
-        i64::try_from(value).map(Object::from).unwrap_or_else(
-            |_| Object::from(Integer::from(value))
-        )
-    }
-}
-
-impl From<Integer> for Object {
-    fn from(x: Integer) -> Object { Object::BigInteger(Arc::new(x)) }
-}
-
 impl From<&str> for Object {
     fn from(x: &str) -> Object { Object::String(Key::new(x.to_string())) }
 }
@@ -331,7 +291,6 @@ impl TryInto<f64> for Object {
         match self {
             Object::Integer(x) => Ok(x as f64),
             Object::Float(x) => Ok(x),
-            Object::BigInteger(x) => Ok(x.to_f64()),
             _ => Err(()),
         }
     }
@@ -342,7 +301,6 @@ impl ToString for Object {
         match self {
             Object::String(r) => format!("\"{}\"", escape(r)),
             Object::Integer(r) => r.to_string(),
-            Object::BigInteger(r) => r.to_string(),
             Object::Float(r) => r.to_string(),
             Object::Boolean(true) => "true".to_string(),
             Object::Boolean(false) => "false".to_string(),
@@ -387,7 +345,6 @@ impl TryFrom<Object> for JsonValue {
     fn try_from(value: Object) -> Result<Self, Self::Error> {
         match value {
             Object::Integer(x) => Ok(JsonValue::from(x)),
-            Object::BigInteger(_) => Err("too big number".to_string()),
             Object::Float(x) => Ok(JsonValue::from(x)),
             Object::String(x) => Ok(JsonValue::from(x.as_str())),
             Object::Boolean(x) => Ok(JsonValue::from(x)),

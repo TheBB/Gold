@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::ops;
 
-use rug::Integer;
 use serde::{Deserialize, Serialize};
 
 use super::object::{Object, Key};
@@ -517,7 +516,6 @@ impl ops::Not for Expr {
 
 impl Expr {
     pub fn integer(value: i64) -> Expr { Expr::Literal(Object::Integer(value)) }
-    pub fn big_integer(value: Integer) -> Expr { Expr::Literal(Object::from(value)) }
     pub fn float(value: f64) -> Expr { Expr::Literal(Object::Float(value)) }
     pub fn boolean(value: bool) -> Expr { Expr::Literal(Object::Boolean(value)) }
     pub fn null() -> Expr { Expr::Literal(Object::Null) }
