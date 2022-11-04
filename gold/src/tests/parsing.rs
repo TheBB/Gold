@@ -24,8 +24,7 @@ fn integers() {
     assert_eq!(parse("0"), Ok(0.to_ast()));
     assert_eq!(parse("1"), Ok(1.to_ast()));
     assert_eq!(parse("9223372036854775807"), Ok(9223372036854775807i64.to_ast()));
-
-    assert!(parse("9223372036854776000").is_err());
+    assert_eq!(parse("9223372036854776000"), Ok(Object::bigint("9223372036854776000").unwrap().literal()));
 }
 
 #[test]

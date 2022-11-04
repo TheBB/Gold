@@ -1,4 +1,7 @@
 use std::num::{ParseFloatError, ParseIntError};
+use std::str::FromStr;
+
+use num_bigint::{BigInt, ParseBigIntError};
 
 use nom::{
     IResult, Parser,
@@ -20,6 +23,7 @@ trait CompleteError<'a>:
     ParseError<&'a str> +
     ContextError<&'a str> +
     FromExternalError<&'a str, ParseIntError> +
+    FromExternalError<&'a str, ParseBigIntError> +
     FromExternalError<&'a str, ParseFloatError> {}
 
 impl<'a, T> CompleteError<'a> for T
@@ -27,6 +31,7 @@ where T:
     ParseError<&'a str> +
     ContextError<&'a str> +
     FromExternalError<&'a str, ParseIntError> +
+    FromExternalError<&'a str, ParseBigIntError> +
     FromExternalError<&'a str, ParseFloatError> {}
 
 
@@ -113,7 +118,10 @@ fn integer<'a, E: CompleteError<'a>>(
         decimal,
         |out: &'a str| {
             let s = out.replace("_", "");
-            i64::from_str_radix(s.as_str(), 10).map(|x| x.to_ast())
+            i64::from_str_radix(s.as_str(), 10).map_or_else(
+                |_| { BigInt::from_str(s.as_str()).map(Expr::big_integer) },
+                |val| Ok(Expr::integer(val)),
+            )
         }
     )(input)
 }
