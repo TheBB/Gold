@@ -2,10 +2,10 @@
 
 mod ast;
 mod builtins;
-mod eval;
+pub mod eval;
 mod parsing;
 mod traits;
-pub mod util;
+mod util;
 
 pub mod object;
 
@@ -36,4 +36,9 @@ pub fn eval_raw(input: &str) -> Result<Object, String> {
 pub fn eval_file(input: &Path) -> Result<Object, String> {
     let contents = read_to_string(input).map_err(|x| x.to_string())?;
     eval(&contents, Some(input))
+}
+
+
+pub fn call_obj(func: &Object, call_args: Object, call_kwargs: Object) -> Result<Object, String> {
+    eval::call_obj(func, call_args, call_kwargs)
 }

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use num_bigint::BigInt;
 
-use pyo3::types::{PyList, PyDict};
+use pyo3::types::{PyList, PyDict, PyTuple};
 use pyo3::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 
@@ -16,9 +16,69 @@ struct ObjectWrapper(Object);
 #[derive(Clone)]
 struct Function(Arc<object::Function>);
 
+#[pymethods]
+impl Function {
+    #[args(args = "*", kwargs = "**")]
+    fn __call__(&self, py: Python<'_>, args: &PyTuple, kwargs: Option<&PyDict>) -> PyResult<Py<PyAny>> {
+        let gargs: ObjectWrapper = args.extract()?;
+        let gkwargs: ObjectWrapper = if let Some(pykwargs) = kwargs {
+            pykwargs.extract()?
+        } else {
+            ObjectWrapper(Object::map(()))
+        };
+
+        let result = gold::call_obj(&Object::Function(self.0.clone()), gargs.0, gkwargs.0)
+            .map_err(|err| PyErr::new::<PyValueError, _>(err))?;
+
+        Ok(ObjectWrapper(result).into_py(py))
+    }
+}
+
+
 #[pyclass]
 #[derive(Clone)]
 struct Builtin(object::Builtin);
+
+#[pymethods]
+impl Builtin {
+    #[args(args = "*", kwargs = "**")]
+    fn __call__(&self, py: Python<'_>, args: &PyTuple, kwargs: Option<&PyDict>) -> PyResult<Py<PyAny>> {
+        let gargs: ObjectWrapper = args.extract()?;
+        let gkwargs: ObjectWrapper = if let Some(pykwargs) = kwargs {
+            pykwargs.extract()?
+        } else {
+            ObjectWrapper(Object::map(()))
+        };
+
+        let result = gold::call_obj(&Object::Builtin(self.0.clone()), gargs.0, gkwargs.0)
+            .map_err(|err| PyErr::new::<PyValueError, _>(err))?;
+
+        Ok(ObjectWrapper(result).into_py(py))
+    }
+}
+
+
+#[pyclass]
+#[derive(Clone)]
+struct Closure(object::Closure);
+
+#[pymethods]
+impl Closure {
+    #[args(args = "*", kwargs = "**")]
+    fn __call__(&self, py: Python<'_>, args: &PyTuple, kwargs: Option<&PyDict>) -> PyResult<Py<PyAny>> {
+        let gargs: ObjectWrapper = args.extract()?;
+        let gkwargs: ObjectWrapper = if let Some(pykwargs) = kwargs {
+            pykwargs.extract()?
+        } else {
+            ObjectWrapper(Object::map(()))
+        };
+
+        let result = gold::call_obj(&Object::Closure(self.0.clone()), gargs.0, gkwargs.0)
+            .map_err(|err| PyErr::new::<PyValueError, _>(err))?;
+
+        Ok(ObjectWrapper(result).into_py(py))
+    }
+}
 
 
 impl<'s> FromPyObject<'s> for ObjectWrapper {
@@ -47,6 +107,23 @@ impl<'s> FromPyObject<'s> for ObjectWrapper {
             Ok(ObjectWrapper(Object::Map(Arc::new(map))))
         } else if obj.is_none() {
             Ok(ObjectWrapper(Object::Null))
+        } else if obj.is_callable() {
+            let func: Py<PyAny> = obj.into();
+            let closure: object::Closure = object::Closure(Arc::new(
+                move |args: &object::List, kwargs: &object::Map| {
+                    let result = Python::with_gil(|py| {
+                        let a = PyTuple::new(py, args.iter().map(|x| ObjectWrapper(x.clone()).into_py(py)));
+                        let b = PyDict::new(py);
+                        for (k, v) in kwargs {
+                            b.set_item(k.as_ref(), ObjectWrapper(v.clone()).into_py(py))?;
+                        }
+                        let result = func.call(py, a, Some(b))?.extract::<ObjectWrapper>(py)?;
+                        Ok(result.0)
+                    });
+                    result.map_err(|err: PyErr| err.to_string())
+                }
+            ));
+            Ok(ObjectWrapper(Object::Closure(closure)))
         } else {
             Err(PyErr::new::<PyTypeError, _>("what the fuck"))
         }
@@ -72,6 +149,7 @@ impl pyo3::IntoPy<PyObject> for ObjectWrapper {
             Object::Null => (None as Option<bool>).into_py(py),
             Object::Function(x) => Function(x).into_py(py),
             Object::Builtin(x) => Builtin(x).into_py(py),
+            Object::Closure(x) => Closure(x).into_py(py),
         }
     }
 }

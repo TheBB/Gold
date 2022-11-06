@@ -87,6 +87,10 @@ pub struct Function {
 }
 
 
+#[derive(Clone)]
+pub struct Closure(pub Arc<dyn Fn(&List, &Map) -> Result<Object, String> + Send + Sync>);
+
+
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Object {
     Integer(i64),
@@ -99,6 +103,9 @@ pub enum Object {
     Function(Arc<Function>),
     Builtin(Builtin),
     Null,
+
+    #[serde(skip)]
+    Closure(Closure),
 }
 
 impl Splattable<Object> for Object {
@@ -161,6 +168,7 @@ impl Debug for Object {
             Self::Function(x) => f.debug_tuple("Object::Function").field(x.as_ref()).finish(),
             Self::Builtin(_) => f.debug_tuple("Object::Builtin").finish(),
             Self::Null => f.debug_tuple("Object::Null").finish(),
+            Self::Closure(_) => f.debug_tuple("Object::Closure").finish(),
         }
     }
 }
