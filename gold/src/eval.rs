@@ -45,11 +45,26 @@ impl ImportResolver for FileResolver {
 }
 
 
-pub struct SeqResolver {
-    pub resolvers: Vec<Box<dyn ImportResolver>>,
+pub struct ResolveFunc(
+    pub Arc<dyn Fn(&str) -> Result<Object, String> + Send + Sync>
+);
+
+pub struct CallableResolver {
+    pub resolver: ResolveFunc,
 }
 
-impl ImportResolver for SeqResolver {
+impl ImportResolver for CallableResolver {
+    fn resolve(&self, path: &str) -> Result<Object, String> {
+        self.resolver.0.as_ref()(path)
+    }
+}
+
+
+pub struct SeqResolver<'a> {
+    pub resolvers: Vec<Box<&'a dyn ImportResolver>>,
+}
+
+impl<'a> ImportResolver for SeqResolver<'a> {
     fn resolve(&self, path: &str) -> Result<Object, String> {
         for resolver in &self.resolvers {
             if let Ok(obj) = resolver.resolve(path) {
@@ -563,18 +578,25 @@ impl<'a> Namespace<'a> {
 }
 
 
-pub fn eval_raw(file: &File) -> Result<Object, String> {
-    let resolver = NullResolver {};
+pub fn eval_raw<T: ImportResolver>(file: &File, resolver: &T) -> Result<Object, String> {
+    let resolver = SeqResolver {
+        resolvers: vec![
+            Box::new(&StdResolver {}),
+            Box::new(resolver),
+        ],
+    };
     Namespace::Empty.eval_file(file, &resolver)
 }
 
 
-pub fn eval_path(file: &File, path: &Path) -> Result<Object, String> {
+pub fn eval_path<T: ImportResolver>(file: &File, path: &Path, resolver: &T) -> Result<Object, String> {
     let parent = path.parent().ok_or_else(|| "what the fsck".to_string())?;
+    let file_resolver = FileResolver { root: parent.to_owned() };
     let resolver = SeqResolver {
         resolvers: vec![
-            Box::new(StdResolver {}),
-            Box::new(FileResolver { root: parent.to_owned() }),
+            Box::new(&StdResolver {}),
+            Box::new(resolver),
+            Box::new(&file_resolver),
         ],
     };
     Namespace::Empty.eval_file(file, &resolver)

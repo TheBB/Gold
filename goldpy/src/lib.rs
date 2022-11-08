@@ -1,16 +1,20 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use num_bigint::BigInt;
 
-use pyo3::types::{PyList, PyDict, PyTuple};
+use pyo3::types::{PyList, PyDict, PyTuple, PyString};
 use pyo3::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 
-use gold::{object, Object, eval_raw};
+use gold::{object, Object};
+use gold::eval::{CallableResolver, ResolveFunc};
 
 
 struct ObjectWrapper(Object);
+
+struct CallableResolverWrapper(CallableResolver);
 
 #[pyclass]
 #[derive(Clone)]
@@ -77,6 +81,29 @@ impl Closure {
             .map_err(|err| PyErr::new::<PyValueError, _>(err))?;
 
         Ok(ObjectWrapper(result).into_py(py))
+    }
+}
+
+
+impl<'s> FromPyObject<'s> for CallableResolverWrapper {
+    fn extract(obj: &'s PyAny) -> PyResult<Self> {
+        if obj.is_callable() {
+            let func: Py<PyAny> = obj.into();
+            let closure = ResolveFunc(Arc::new(
+                move |path: &str| {
+                    let result = Python::with_gil(|py| {
+                        let s = PyString::new(py, path);
+                        let a = PyTuple::new(py, vec![s]);
+                        let result = func.call(py, a, None).ok()?.extract::<Option<ObjectWrapper>>(py).ok()?;
+                        result.map(|x| x.0)
+                    });
+                    result.ok_or_else(|| "dingbob".to_string())
+                }
+            ));
+            Ok(CallableResolverWrapper(CallableResolver { resolver: closure }))
+        } else {
+            Err(PyErr::new::<PyTypeError, _>("what the fck"))
+        }
     }
 }
 
@@ -156,8 +183,32 @@ impl pyo3::IntoPy<PyObject> for ObjectWrapper {
 
 
 #[pyfunction]
-fn evaluate_string(x: String) -> PyResult<ObjectWrapper> {
-    eval_raw(x.as_str()).map_err(
+fn eval(x: String, path: Option<String>, resolver: CallableResolverWrapper) -> PyResult<ObjectWrapper> {
+    gold::eval(
+        x.as_ref(),
+        path.map(PathBuf::from).as_ref().map(PathBuf::as_ref),
+        &resolver.0,
+    ).map_err(
+        |err| PyErr::new::<PyValueError, _>(err)
+    ).map(ObjectWrapper)
+}
+
+
+#[pyfunction]
+fn eval_raw(x: String) -> PyResult<ObjectWrapper> {
+    gold::eval_raw(
+        x.as_str(),
+    ).map_err(
+        |err| PyErr::new::<PyValueError, _>(err)
+    ).map(ObjectWrapper)
+}
+
+
+#[pyfunction]
+fn eval_file(x: String) -> PyResult<ObjectWrapper> {
+    gold::eval_file(
+        &PathBuf::from(x)
+    ).map_err(
         |err| PyErr::new::<PyValueError, _>(err)
     ).map(ObjectWrapper)
 }
@@ -167,6 +218,8 @@ fn evaluate_string(x: String) -> PyResult<ObjectWrapper> {
 fn goldpy(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Function>()?;
     m.add_class::<Builtin>()?;
-    m.add_function(wrap_pyfunction!(evaluate_string, m)?)?;
+    m.add_function(wrap_pyfunction!(eval, m)?)?;
+    m.add_function(wrap_pyfunction!(eval_raw, m)?)?;
+    m.add_function(wrap_pyfunction!(eval_file, m)?)?;
     Ok(())
 }

@@ -1,3 +1,6 @@
 {
-    add: (x, y) => x + y,
+    info: {
+        distribution: "gold",
+        version: "0.1.0",
+    },
 }
