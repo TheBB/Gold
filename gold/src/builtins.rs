@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use std::sync::Arc;
+// use std::sync::Arc;
 
 use num_bigint::BigInt;
 
@@ -31,9 +31,9 @@ pub fn len(args: &List, _: &Map) -> Result<Object, String> {
 pub fn range(args: &List, _: &Map) -> Result<Object, String> {
     match &args[..] {
         [Object::Integer(start), Object::Integer(stop)] =>
-            Ok(Object::List(Arc::new((*start..*stop).map(Object::from).collect()))),
+            Ok(Object::from((*start..*stop).map(Object::from).collect::<List>())),
         [Object::Integer(stop)] =>
-            Ok(Object::List(Arc::new((0..*stop).map(Object::from).collect()))),
+            Ok(Object::from((0..*stop).map(Object::from).collect::<List>())),
         _ => Err("???".to_string()),
     }
 }

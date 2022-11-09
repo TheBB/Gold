@@ -349,6 +349,24 @@ impl From<bool> for Object {
     fn from(x: bool) -> Object { Object::Boolean(x) }
 }
 
+impl From<List> for Object {
+    fn from(value: List) -> Self {
+        Object::List(Arc::new(value))
+    }
+}
+
+impl From<Map> for Object {
+    fn from(value: Map) -> Self {
+        Object::Map(Arc::new(value))
+    }
+}
+
+impl From<Function> for Object {
+    fn from(value: Function) -> Self {
+        Object::Function(Arc::new(value))
+    }
+}
+
 impl TryInto<f64> for Object {
     type Error = ();
     fn try_into(self) -> Result<f64, Self::Error> {
