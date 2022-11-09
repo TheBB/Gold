@@ -8,7 +8,7 @@ use std::time::SystemTime;
 
 use symbol_table::GlobalSymbol;
 use num_bigint::BigInt;
-use num_traits::ToPrimitive;
+use num_traits::{ToPrimitive, checked_pow};
 use json::JsonValue;
 use rmp_serde::{decode, encode};
 use serde::de::Visitor;
@@ -32,6 +32,52 @@ fn escape(s: &str) -> String {
         }
     }
     r
+}
+
+
+struct Arith<F,G,H,X,Y,Z>
+where
+    F: Fn(i64, i64) -> Option<X>,
+    G: Fn(&BigInt, &BigInt) -> Y,
+    H: Fn(f64, f64) -> Z,
+{
+    ixi: F,
+    bxb: G,
+    fxf: H,
+}
+
+
+fn arithmetic_operate<F,G,H,X,Y,Z>(ops: Arith<F,G,H,X,Y,Z>, x: Object, y: Object) -> Result<Object, String>
+where
+    F: Fn(i64, i64) -> Option<X>,
+    G: Fn(&BigInt, &BigInt) -> Y,
+    H: Fn(f64, f64) -> Z,
+    Object: From<X>,
+    Object: From<Y>,
+    Object: From<Z>,
+{
+    let Arith { ixi, bxb, fxf } = ops;
+
+    match (x, y) {
+        (Object::Integer(xx), Object::Integer(yy)) => Ok(
+            ixi(xx, yy).map(Object::from).unwrap_or_else(
+                || Object::from(bxb(&BigInt::from(xx), &BigInt::from(yy))).numeric_normalize()
+            )
+        ),
+
+        (Object::Integer(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&BigInt::from(xx), &yy)).numeric_normalize()),
+        (Object::BigInteger(xx), Object::Integer(yy)) => Ok(Object::from(bxb(&xx, &BigInt::from(yy))).numeric_normalize()),
+        (Object::BigInteger(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&xx, &yy)).numeric_normalize()),
+
+        (Object::Float(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx, yy))),
+        (Object::Integer(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx as f64, yy))),
+        (Object::Float(xx), Object::Integer(yy)) => Ok(Object::from(fxf(xx, yy as f64))),
+
+        (Object::Float(xx), Object::BigInteger(yy)) => Ok(Object::from(fxf(xx, util::big_to_f64(yy.as_ref())))),
+        (Object::BigInteger(xx), Object::Float(yy)) => Ok(Object::from(fxf(util::big_to_f64(xx.as_ref()), yy))),
+
+        _ => Err("unsupported types for arithmetic".to_string()),
+    }
 }
 
 
@@ -320,6 +366,103 @@ impl Object {
             Err("wrong version".to_string())
         } else {
             Ok((retval, time))
+        }
+    }
+
+    pub fn neg(&self) -> Result<Object, String> {
+        match self {
+            Object::Integer(x) => {
+                if let Some(y) = x.checked_neg() {
+                    Ok(Object::from(y))
+                } else {
+                    Object::from(BigInt::from(*x)).neg()
+                }
+            },
+            Object::BigInteger(x) => Ok(Object::from(-x.as_ref()).numeric_normalize()),
+            Object::Float(x) => Ok(Object::from(-x)),
+            _ => Err("type mismatch".to_string()),
+        }
+    }
+
+    pub fn add(self, other: Object) -> Result<Object, String> {
+        match (&self, &other) {
+            (Object::List(x), Object::List(y)) => Ok(Object::from(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())),
+            (Object::IntString(x), Object::IntString(y)) => Ok(Object::nat_string(format!("{}{}", x.as_str(), y.as_str()))),
+            (Object::NatString(x), Object::IntString(y)) => Ok(Object::nat_string(format!("{}{}", x.as_str(), y.as_str()))),
+            (Object::IntString(x), Object::NatString(y)) => Ok(Object::nat_string(format!("{}{}", x.as_str(), y.as_str()))),
+            (Object::NatString(x), Object::NatString(y)) => Ok(Object::nat_string(format!("{}{}", x.as_str(), y.as_str()))),
+            _ => arithmetic_operate(Arith {
+                ixi: i64::checked_add,
+                bxb: |x,y| x + y,
+                fxf: |x,y| x + y,
+            }, self, other),
+        }
+    }
+
+    pub fn sub(self, other: Object) -> Result<Object, String> {
+        arithmetic_operate(Arith {
+            ixi: i64::checked_sub,
+            bxb: |x,y| x - y,
+            fxf: |x,y| x - y,
+        }, self, other)
+    }
+
+    pub fn mul(self, other: Object) -> Result<Object, String> {
+        arithmetic_operate(Arith {
+            ixi: i64::checked_mul,
+            bxb: |x,y| x * y,
+            fxf: |x,y| x * y,
+        }, self, other)
+    }
+
+    pub fn div(self, other: Object) -> Result<Object, String> {
+        arithmetic_operate(Arith {
+            ixi: |x,y| Some((x as f64) / (y as f64)),
+            bxb: |x,y| util::big_to_f64(x) / util::big_to_f64(y),
+            fxf: |x,y| x / y,
+        }, self, other)
+    }
+
+    pub fn idiv(self, other: Object) -> Result<Object, String> {
+        arithmetic_operate(Arith {
+            ixi: i64::checked_div,
+            bxb: |x,y| x / y,
+            fxf: |x,y| (x / y).floor() as f64,
+        }, self, other)
+    }
+
+    pub fn pow(self, other: Object) -> Result<Object, String> {
+        match (&self, &other) {
+            (Object::Integer(x), Object::Integer(y)) if *y >= 0 => {
+                let yy: u32 = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
+                Ok(checked_pow(*x, yy as usize).map(Object::from).unwrap_or_else(
+                    || Object::from(BigInt::from(*x).pow(yy))
+                ))
+            },
+
+            (Object::BigInteger(x), Object::Integer(y)) if *y >= 0 => {
+                let yy: u32 = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
+                Ok(Object::from(x.as_ref().pow(yy)))
+            },
+
+            _ => {
+                let xx: f64 = self.try_into().map_err(|_| "wrong type for power".to_string())?;
+                let yy: f64 = other.try_into().map_err(|_| "wrong type for power".to_string())?;
+                Ok(Object::from(xx.powf(yy)))
+            },
+        }
+    }
+
+    pub fn cmp_bool(&self, other: &Object, ordering: Ordering) -> Result<bool, String> {
+        self.partial_cmp(other).map(|x| x == ordering).ok_or_else(|| "err".to_string())
+    }
+
+    pub fn index(&self, other: &Object) -> Result<Object, String> {
+        match (self, other) {
+            (Object::List(x), Object::Integer(y)) => Ok(x[*y as usize].clone()),
+            (Object::Map(x), Object::IntString(y)) => x.get(y).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
+            (Object::Map(x), Object::NatString(y)) => x.get(&GlobalSymbol::new(y.as_ref())).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
+            _ => Err("unsupported types for indexing".to_string()),
         }
     }
 }
