@@ -17,6 +17,7 @@ use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use crate::builtins::BUILTINS;
 use crate::traits::{ToVec, ToMap};
 
+use super::eval::Namespace;
 use super::util;
 use super::ast::{Binding, Expr};
 use super::traits::{Splattable, Splat};
@@ -84,7 +85,7 @@ where
 pub type Key = GlobalSymbol;
 pub type List = Vec<Object>;
 pub type Map = HashMap<Key, Object>;
-pub type RFunc = fn(&List, &Map) -> Result<Object, String>;
+pub type RFunc = fn(&List, Option<&Map>) -> Result<Object, String>;
 
 
 const SERIALIZE_VERSION: i32 = 1;
@@ -133,7 +134,7 @@ pub struct Function {
 
 
 #[derive(Clone)]
-pub struct Closure(pub Arc<dyn Fn(&List, &Map) -> Result<Object, String> + Send + Sync>);
+pub struct Closure(pub Arc<dyn Fn(&List, Option<&Map>) -> Result<Object, String> + Send + Sync>);
 
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -463,6 +464,40 @@ impl Object {
             (Object::Map(x), Object::IntString(y)) => x.get(y).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
             (Object::Map(x), Object::NatString(y)) => x.get(&GlobalSymbol::new(y.as_ref())).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
             _ => Err("unsupported types for indexing".to_string()),
+        }
+    }
+
+    pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, String> {
+        match self {
+            Object::Function(func) => {
+                let Function { args: fargs, kwargs: fkwargs, closure, expr } = func.as_ref();
+                let ns = Namespace::Frozen(closure);
+                let mut sub = ns.subtend();
+                sub.bind(fargs, Object::from(args.clone()))?;
+                kwargs.map(|x| sub.bind(fkwargs, Object::from(x.clone())));
+                sub.eval(expr)
+            },
+            Object::Builtin(Builtin { func, .. }) => {
+                func(args, kwargs)
+            },
+            Object::Closure(Closure(func)) => {
+                func(args, kwargs)
+            }
+            _ => Err("calling a non-function".to_string()),
+        }
+    }
+
+    pub fn get_list<'a>(&'a self) -> Option<&'a List> {
+        match self {
+            Self::List(x) => Some(x.as_ref()),
+            _ => None
+        }
+    }
+
+    pub fn get_map<'a>(&'a self) -> Option<&'a Map> {
+        match self {
+            Self::Map(x) => Some(x.as_ref()),
+            _ => None
         }
     }
 }

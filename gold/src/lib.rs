@@ -41,8 +41,3 @@ pub fn eval_file(input: &Path) -> Result<Object, String> {
     let contents = read_to_string(input).map_err(|x| x.to_string())?;
     eval(&contents, Some(input), &NullResolver {})
 }
-
-
-pub fn call_obj(func: &Object, call_args: Object, call_kwargs: Object) -> Result<Object, String> {
-    eval::call_obj(func, call_args, call_kwargs)
-}
