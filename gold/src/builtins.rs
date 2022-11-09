@@ -1,21 +1,36 @@
 use std::str::FromStr;
-// use std::sync::Arc;
+use std::collections::HashMap;
 
 use num_bigint::BigInt;
-
-use phf::phf_map;
 
 use crate::{object::*, util};
 
 
-pub static BUILTINS: phf::Map<&'static str, RFunc> = phf_map! {
-    "len" => len,
-    "range" => range,
-    "int" => to_int,
-    "float" => to_float,
-    "bool" => to_bool,
-    "str" => to_str,
-};
+macro_rules! builtin {
+    ($m: ident, $e: ident) => {
+        $m.insert(
+            stringify!($e),
+            Builtin {
+                func: $e,
+                name: Key::new(stringify!($e).to_string()),
+            },
+        )
+    };
+}
+
+
+lazy_static! {
+    pub static ref BUILTINS: HashMap<&'static str, Builtin> = {
+        let mut m = HashMap::new();
+        builtin!(m, len);
+        builtin!(m, range);
+        builtin!(m, int);
+        builtin!(m, float);
+        builtin!(m, bool);
+        builtin!(m, str);
+        m
+    };
+}
 
 
 pub fn len(args: &List, _: &Map) -> Result<Object, String> {
@@ -39,7 +54,7 @@ pub fn range(args: &List, _: &Map) -> Result<Object, String> {
 }
 
 
-pub fn to_int(args: &List, _: &Map) -> Result<Object, String> {
+pub fn int(args: &List, _: &Map) -> Result<Object, String> {
     match &args[..] {
         [Object::Integer(_)] => Ok(args[0].clone()),
         [Object::BigInteger(_)] => Ok(args[0].clone()),
@@ -52,7 +67,7 @@ pub fn to_int(args: &List, _: &Map) -> Result<Object, String> {
 }
 
 
-pub fn to_float(args: &List, _: &Map) -> Result<Object, String> {
+pub fn float(args: &List, _: &Map) -> Result<Object, String> {
     match &args[..] {
         [Object::Integer(x)] => Ok(Object::from(*x as f64)),
         [Object::BigInteger(x)] => Ok(Object::from(util::big_to_f64(x))),
@@ -64,7 +79,7 @@ pub fn to_float(args: &List, _: &Map) -> Result<Object, String> {
 }
 
 
-pub fn to_bool(args: &List, _: &Map) -> Result<Object, String> {
+pub fn bool(args: &List, _: &Map) -> Result<Object, String> {
     match &args[..] {
         [x] => Ok(Object::from(x.truthy())),
         _ => Err("???".to_string()),
@@ -72,7 +87,7 @@ pub fn to_bool(args: &List, _: &Map) -> Result<Object, String> {
 }
 
 
-pub fn to_str(args: &List, _: &Map) -> Result<Object, String> {
+pub fn str(args: &List, _: &Map) -> Result<Object, String> {
     match &args[..] {
         [Object::String(_)] => Ok(args[0].clone()),
         _ => Ok(Object::from(args[0].to_string().as_str())),
