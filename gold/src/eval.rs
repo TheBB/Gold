@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::ops::Neg;
 use std::sync::Arc;
 
+use symbol_table::GlobalSymbol;
 use num_bigint::BigInt;
 use num_traits::checked_pow;
 
@@ -328,7 +329,7 @@ impl<'a> Namespace<'a> {
     fn fill_map(&self, element: &MapElement, values: &mut Map) -> Result<(), String> {
         match element {
             MapElement::Singleton { key, value } => {
-                if let Object::String(k) = self.eval(key)? {
+                if let Object::IntString(k) = self.eval(key)? {
                     let v = self.eval(value)?;
                     values.insert(k, v);
                     Ok(())
@@ -448,12 +449,13 @@ impl<'a> Namespace<'a> {
                 let other = self.eval(node)?;
                 match (op, &value, &other) {
                     (BinOp::Index, Object::List(x), Object::Integer(y)) => Ok(x[*y as usize].clone()),
-                    (BinOp::Index, Object::Map(x), Object::String(y)) => x.get(y).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
+                    (BinOp::Index, Object::Map(x), Object::IntString(y)) => x.get(y).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
+                    (BinOp::Index, Object::Map(x), Object::NatString(y)) => x.get(&GlobalSymbol::new(y.as_ref())).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
                     (BinOp::Add, Object::List(x), Object::List(y)) => Ok(
                         Object::from(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())
                     ),
-                    (BinOp::Add, Object::String(x), Object::String(y)) => Ok(
-                        Object::String(Key::new(format!("{}{}", x.as_str(), y.as_str())))
+                    (BinOp::Add, Object::IntString(x), Object::IntString(y)) => Ok(
+                        Object::IntString(Key::new(format!("{}{}", x.as_str(), y.as_str())))
                     ),
                     (BinOp::Add, _, _) => arithmetic_operate(add, value, other),
                     (BinOp::Subtract, _, _) => arithmetic_operate(sub, value, other),
@@ -503,7 +505,7 @@ impl<'a> Namespace<'a> {
                 let mut rval = String::new();
                 for element in elements {
                     match element {
-                        StringElement::Raw(val) => rval += val.as_str(),
+                        StringElement::Raw(val) => rval += val.as_ref(),
                         StringElement::Interpolate(expr) => {
                             let val = self.eval(expr)?;
                             let text = val.format()?;
@@ -511,7 +513,7 @@ impl<'a> Namespace<'a> {
                         }
                     }
                 }
-                Ok(Object::string(rval))
+                Ok(Object::nat_string(rval))
             },
 
             Expr::Identifier(name) => self.get(name),

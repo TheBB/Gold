@@ -212,48 +212,27 @@ fn maps() {
 
     assert_eq!(
         parse("{fable: \"fable\"}"),
-        Ok(Expr::Map(vec![
-            MapElement::Singleton {
-                key: Object::string("fable").literal(),
-                value: Object::string("fable").literal(),
-            },
-        ])),
+        Ok(Expr::map((
+            ("fable", "fable"),
+        ))),
     );
 
     assert_eq!(
         parse("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}"),
-        Ok(Expr::Map(vec![
-            MapElement::Singleton {
-                key: Object::string("a").literal(),
-                value: Object::Integer(1).literal(),
-            },
-            MapElement::Singleton {
-                key: Object::string("b").literal(),
-                value: Object::Boolean(true).literal(),
-            },
-            MapElement::Singleton {
-                key: Object::string("c").literal(),
-                value: Object::Float(20.0).literal(),
-            },
-            MapElement::Singleton {
-                key: Object::string("d").literal(),
-                value: Object::string("hoho").literal(),
-            },
-            MapElement::Singleton {
-                key: Object::string("e").literal(),
-                value: Object::Float(10.0).literal(),
-            },
-        ])),
+        Ok(Expr::map((
+            ("a", 1),
+            ("b", true),
+            ("c", 20.0),
+            ("d", "hoho"),
+            ("e", 10.0),
+        ))),
     );
 
     assert_eq!(
         parse("{ident-with-hyphen: 1}"),
-        Ok(Expr::Map(vec![
-            MapElement::Singleton {
-                key: "ident-with-hyphen".to_ast(),
-                value: 1.to_ast(),
-            }
-        ])),
+        Ok(Expr::map((
+            ("ident-with-hyphen", 1),
+        ))),
     );
 
     assert_eq!(
@@ -281,7 +260,7 @@ fn maps() {
         Ok(Expr::Map(vec![
             MapElement::Splat("y".id()),
             MapElement::Singleton {
-                key: Object::string("x").literal(),
+                key: Object::int_string("x").literal(),
                 value: Object::Integer(1).literal(),
             },
         ])),
@@ -297,7 +276,7 @@ fn maps() {
                 ]),
                 iterable: "z".id(),
                 element: Box::new(MapElement::Singleton {
-                    key: Object::string("x").literal(),
+                    key: Object::int_string("x").literal(),
                     value: "y".id(),
                 }),
             },
@@ -310,7 +289,7 @@ fn maps() {
             MapElement::Cond {
                 condition:"f".id().funcall(("x".id(),)),
                 element: Box::new(MapElement::Singleton {
-                    key: Object::string("z").literal(),
+                    key: Object::int_string("z").literal(),
                     value: "y".id(),
                 }),
             },
@@ -500,7 +479,7 @@ fn branching() {
 fn indexing() {
     assert_eq!{
         parse("a.b"),
-        Ok("a".id().index(Object::string("b").literal())),
+        Ok("a".id().index(Object::int_string("b").literal())),
     };
 
     assert_eq!(

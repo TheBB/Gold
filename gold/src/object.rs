@@ -95,7 +95,10 @@ pub enum Object {
     Integer(i64),
     BigInteger(Arc<BigInt>),
     Float(f64),
-    String(GlobalSymbol),
+
+    IntString(GlobalSymbol),
+    NatString(Arc<String>),
+
     Boolean(bool),
     List(Arc<List>),
     Map(Arc<Map>),
@@ -117,7 +120,8 @@ impl PartialEq<Object> for Object {
             (Self::Integer(x), Self::Integer(y)) => x.eq(y),
             (Self::BigInteger(x), Self::BigInteger(y)) => x.eq(y),
             (Self::Float(x), Self::Float(y)) => x.eq(y),
-            (Self::String(x), Self::String(y)) => x.eq(y),
+            (Self::IntString(x), Self::IntString(y)) => x.eq(y),
+            (Self::NatString(x), Self::NatString(y)) => x.eq(y),
             (Self::Boolean(x), Self::Boolean(y)) => x.eq(y),
             (Self::List(x), Self::List(y)) => x.eq(y),
             (Self::Map(x), Self::Map(y)) => x.eq(y),
@@ -148,7 +152,10 @@ impl PartialOrd<Object> for Object {
             (Object::Float(x), Object::Integer(y)) => x.partial_cmp(&(*y as f64)),
             (Object::Float(_), Object::BigInteger(_)) => other.partial_cmp(self).map(Ordering::reverse),
             (Object::Float(x), Object::Float(y)) => x.partial_cmp(y),
-            (Object::String(x), Object::String(y)) => x.as_str().partial_cmp(y.as_str()),
+            (Object::IntString(x), Object::IntString(y)) => x.as_str().partial_cmp(y.as_str()),
+            (Object::NatString(x), Object::IntString(y)) => x.as_str().partial_cmp(y.as_str()),
+            (Object::IntString(x), Object::NatString(y)) => x.as_str().partial_cmp(y.as_str()),
+            (Object::NatString(x), Object::NatString(y)) => x.as_str().partial_cmp(y.as_str()),
             _ => None,
         }
     }
@@ -160,7 +167,8 @@ impl Debug for Object {
             Self::Integer(x) => f.debug_tuple("Object::Integer").field(x).finish(),
             Self::BigInteger(x) => f.debug_tuple("Object::BigInteger").field(x).finish(),
             Self::Float(x) => f.debug_tuple("Object::Float").field(x).finish(),
-            Self::String(x) => f.debug_tuple("Object::String").field(x).finish(),
+            Self::IntString(x) => f.debug_tuple("Object::IntString").field(x).finish(),
+            Self::NatString(x) => f.debug_tuple("Object::NatString").field(x).finish(),
             Self::Boolean(x) => f.debug_tuple("Object::Boolean").field(x).finish(),
             Self::List(x) => f.debug_tuple("Object::List").field(x.as_ref()).finish(),
             Self::Map(x) => f.debug_tuple("Object::Map").field(x.as_ref()).finish(),
@@ -173,8 +181,12 @@ impl Debug for Object {
 }
 
 impl Object {
-    pub fn string<T: AsRef<str>>(x: T) -> Object {
-        Object::String(GlobalSymbol::new(x))
+    pub fn int_string<T: AsRef<str>>(x: T) -> Object {
+        Object::IntString(GlobalSymbol::new(x))
+    }
+
+    pub fn nat_string<T: AsRef<str>>(x: T) -> Object {
+        Object::NatString(Arc::new(x.as_ref().to_string()))
     }
 
     pub fn bigint(x: &str) -> Option<Object> {
@@ -195,7 +207,7 @@ impl Object {
 
     pub fn format(&self) -> Result<String, String> {
         match self {
-            Object::String(r) => Ok(r.to_string()),
+            Object::IntString(r) => Ok(r.to_string()),
             Object::Integer(r) => Ok(r.to_string()),
             Object::BigInteger(r) => Ok(r.to_string()),
             Object::Float(r) => Ok(r.to_string()),
@@ -244,7 +256,7 @@ impl Object {
             // Structural equality
             (Object::Integer(x), Object::Integer(y)) => x.eq(y),
             (Object::Float(x), Object::Float(y)) => x.eq(y),
-            (Object::String(x), Object::String(y)) => x.eq(y),
+            (Object::IntString(x), Object::IntString(y)) => x.eq(y),
             (Object::Boolean(x), Object::Boolean(y)) => x.eq(y),
             (Object::Null, Object::Null) => true,
             (Object::Builtin(x), Object::Builtin(y)) => x.name == y.name,
@@ -341,7 +353,13 @@ impl From<BigInt> for Object {
 }
 
 impl From<&str> for Object {
-    fn from(x: &str) -> Object { Object::String(Key::new(x.to_string())) }
+    fn from(x: &str) -> Object {
+        if x.len() < 20 {
+            Object::int_string(x)
+        } else {
+            Object::nat_string(x)
+        }
+    }
 }
 
 impl From<bool> for Object {
@@ -387,7 +405,7 @@ impl TryInto<f64> for Object {
 impl ToString for Object {
     fn to_string(&self) -> String {
         match self {
-            Object::String(r) => format!("\"{}\"", escape(r.as_str())),
+            Object::IntString(r) => format!("\"{}\"", escape(r.as_str())),
             Object::Integer(r) => r.to_string(),
             Object::BigInteger(r) => r.to_string(),
             Object::Float(r) => r.to_string(),
@@ -436,7 +454,7 @@ impl TryFrom<Object> for JsonValue {
             Object::Integer(x) => Ok(JsonValue::from(x)),
             Object::BigInteger(_) => Err("too big number".to_string()),
             Object::Float(x) => Ok(JsonValue::from(x)),
-            Object::String(x) => Ok(JsonValue::from(x.as_str())),
+            Object::IntString(x) => Ok(JsonValue::from(x.as_str())),
             Object::Boolean(x) => Ok(JsonValue::from(x)),
             Object::List(x) => {
                 let mut val = JsonValue::new_array();
