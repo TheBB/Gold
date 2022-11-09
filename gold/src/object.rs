@@ -470,12 +470,15 @@ impl Object {
     pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, String> {
         match self {
             Object::Function(func) => {
-                let Function { args: fargs, kwargs: fkwargs, closure, expr } = func.as_ref();
-                let ns = Namespace::Frozen(closure);
-                let mut sub = ns.subtend();
-                sub.bind(fargs, Object::from(args.clone()))?;
-                kwargs.map(|x| sub.bind(fkwargs, Object::from(x.clone())));
-                sub.eval(expr)
+                if let Function { args: Binding::List(fargs), kwargs: Binding::Map(fkwargs), closure, expr } = func.as_ref() {
+                    let ns = Namespace::Frozen(closure);
+                    let mut sub = ns.subtend();
+                    sub.bind_list(fargs, args)?;
+                    kwargs.map(|x| sub.bind_map(fkwargs, x));
+                    sub.eval(expr)
+                } else {
+                    Err("unreachable".to_string())
+                }
             },
             Object::Builtin(Builtin { func, .. }) => {
                 func(args, kwargs)
@@ -576,18 +579,6 @@ impl From<Builtin> for Object {
         Object::Builtin(value)
     }
 }
-
-// impl TryInto<f64> for Object {
-//     type Error = ();
-//     fn try_into(self) -> Result<f64, Self::Error> {
-//         match self {
-//             Object::Integer(x) => Ok(x as f64),
-//             Object::BigInteger(x) => Ok(util::big_to_f64(x.as_ref())),
-//             Object::Float(x) => Ok(x),
-//             _ => Err(()),
-//         }
-//     }
-// }
 
 impl ToString for Object {
     fn to_string(&self) -> String {
