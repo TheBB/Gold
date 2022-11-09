@@ -1,5 +1,8 @@
 #![feature(is_some_and)]
 
+#[macro_use]
+extern crate lazy_static;
+
 mod ast;
 mod builtins;
 pub mod eval;

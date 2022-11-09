@@ -65,9 +65,7 @@ impl<'a> Visitor<'a> for BuiltinVisitor {
     }
 
     fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        BUILTINS.get(v).ok_or(E::custom("unknown builtin name")).map(
-            |x| Builtin { name: Key::new(v.to_string()), func: *x }
-        )
+        BUILTINS.get(v).ok_or(E::custom("unknown builtin name")).cloned()
     }
 }
 
@@ -364,6 +362,12 @@ impl From<Map> for Object {
 impl From<Function> for Object {
     fn from(value: Function) -> Self {
         Object::Function(Arc::new(value))
+    }
+}
+
+impl From<Builtin> for Object {
+    fn from(value: Builtin) -> Self {
+        Object::Builtin(value)
     }
 }
 

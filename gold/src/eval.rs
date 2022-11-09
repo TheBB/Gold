@@ -180,12 +180,7 @@ impl<'a> Namespace<'a> {
 
     pub fn get(&self, key: &Key) -> Result<Object, String> {
         match self {
-            Namespace::Empty => BUILTINS.get(key.as_str()).map(
-                |x| Object::Builtin(Builtin {
-                    name: key.clone(),
-                    func: *x,
-                })
-            ).ok_or_else(|| format!("unknown name {}", key)),
+            Namespace::Empty => BUILTINS.get(key.as_str()).cloned().map(Object::from).ok_or_else(|| format!("unknown name {}", key)),
             Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| format!("unknown name {}", key)),
             Namespace::Mutable { names, prev } => names.get(key).map(Object::clone).ok_or(()).or_else(|_| prev.get(key))
         }
