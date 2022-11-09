@@ -12,3 +12,4 @@ num-bigint = { version = "0.4.3", features = ["serde"] }
 num-traits = "0.2.15"
 rmp-serde = "1.1.1"
 serde = { version = "1.0.147", features = ["rc", "serde_derive"] }
+symbol_table = { version = "0.3.0", features = ["global", "serde"] }

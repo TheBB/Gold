@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::hash::Hash;
-use std::sync::Arc;
+
+use symbol_table::GlobalSymbol;
 
 
 // Boxable
@@ -133,102 +133,92 @@ impl<K,V> ToMap<K,V> for () {
     }
 }
 
-impl<Ak,Av,K,V> ToMap<Arc<K>,V> for ((Ak,Av),)
+impl<Ak,Av,V> ToMap<GlobalSymbol,V> for ((Ak,Av),)
 where
-    K: From<Ak>,
+    Ak: AsRef<str>,
     V: From<Av>,
-    K: Eq,
-    K: Hash,
 {
-    fn to_map(self) -> HashMap<Arc<K>,V> {
+    fn to_map(self) -> HashMap<GlobalSymbol,V> {
         let mut ret = HashMap::new();
-        ret.insert(Arc::new(K::from(self.0.0)), V::from(self.0.1));
+        ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
         ret
     }
 }
 
-impl<Ak,Av,Bk,Bv,K,V> ToMap<Arc<K>,V> for ((Ak,Av), (Bk,Bv))
+impl<Ak,Av,Bk,Bv,V> ToMap<GlobalSymbol,V> for ((Ak,Av), (Bk,Bv))
 where
-    K: From<Ak>,
+    Ak: AsRef<str>,
+    Bk: AsRef<str>,
     V: From<Av>,
-    K: From<Bk>,
     V: From<Bv>,
-    K: Eq,
-    K: Hash,
 {
-    fn to_map(self) -> HashMap<Arc<K>,V> {
+    fn to_map(self) -> HashMap<GlobalSymbol,V> {
         let mut ret = HashMap::new();
-        ret.insert(Arc::new(K::from(self.0.0)), V::from(self.0.1));
-        ret.insert(Arc::new(K::from(self.1.0)), V::from(self.1.1));
+        ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
+        ret.insert(GlobalSymbol::new(self.1.0), V::from(self.1.1));
         ret
     }
 }
 
-impl<Ak,Av,Bk,Bv,Ck,Cv,K,V> ToMap<Arc<K>,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv))
+impl<Ak,Av,Bk,Bv,Ck,Cv,V> ToMap<GlobalSymbol,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv))
 where
-    K: From<Ak>,
+    Ak: AsRef<str>,
+    Bk: AsRef<str>,
+    Ck: AsRef<str>,
     V: From<Av>,
-    K: From<Bk>,
     V: From<Bv>,
-    K: From<Ck>,
     V: From<Cv>,
-    K: Eq,
-    K: Hash,
 {
-    fn to_map(self) -> HashMap<Arc<K>,V> {
+    fn to_map(self) -> HashMap<GlobalSymbol,V> {
         let mut ret = HashMap::new();
-        ret.insert(Arc::new(K::from(self.0.0)), V::from(self.0.1));
-        ret.insert(Arc::new(K::from(self.1.0)), V::from(self.1.1));
-        ret.insert(Arc::new(K::from(self.2.0)), V::from(self.2.1));
+        ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
+        ret.insert(GlobalSymbol::new(self.1.0), V::from(self.1.1));
+        ret.insert(GlobalSymbol::new(self.2.0), V::from(self.2.1));
         ret
     }
 }
 
-impl<Ak,Av,Bk,Bv,Ck,Cv,Dk,Dv,K,V> ToMap<Arc<K>,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv), (Dk,Dv))
+impl<Ak,Av,Bk,Bv,Ck,Cv,Dk,Dv,V> ToMap<GlobalSymbol,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv), (Dk,Dv))
 where
-    K: From<Ak>,
+    Ak: AsRef<str>,
+    Bk: AsRef<str>,
+    Ck: AsRef<str>,
+    Dk: AsRef<str>,
     V: From<Av>,
-    K: From<Bk>,
     V: From<Bv>,
-    K: From<Ck>,
     V: From<Cv>,
-    K: From<Dk>,
     V: From<Dv>,
-    K: Eq,
-    K: Hash,
 {
-    fn to_map(self) -> HashMap<Arc<K>,V> {
+    fn to_map(self) -> HashMap<GlobalSymbol,V> {
         let mut ret = HashMap::new();
-        ret.insert(Arc::new(K::from(self.0.0)), V::from(self.0.1));
-        ret.insert(Arc::new(K::from(self.1.0)), V::from(self.1.1));
-        ret.insert(Arc::new(K::from(self.2.0)), V::from(self.2.1));
-        ret.insert(Arc::new(K::from(self.3.0)), V::from(self.3.1));
+        ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
+        ret.insert(GlobalSymbol::new(self.1.0), V::from(self.1.1));
+        ret.insert(GlobalSymbol::new(self.2.0), V::from(self.2.1));
+        ret.insert(GlobalSymbol::new(self.3.0), V::from(self.3.1));
         ret
     }
 }
 
-impl<Ak,Av,Bk,Bv,Ck,Cv,Dk,Dv,Ek,Ev,K,V> ToMap<Arc<K>,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv), (Dk,Dv), (Ek,Ev))
+impl<Ak,Av,Bk,Bv,Ck,Cv,Dk,Dv,Ek,Ev,V> ToMap<GlobalSymbol,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv), (Dk,Dv), (Ek,Ev))
 where
-    K: From<Ak>,
+    Ak: AsRef<str>,
+    Bk: AsRef<str>,
+    Ck: AsRef<str>,
+    Dk: AsRef<str>,
+    Ek: AsRef<str>,
     V: From<Av>,
-    K: From<Bk>,
     V: From<Bv>,
-    K: From<Ck>,
     V: From<Cv>,
-    K: From<Dk>,
     V: From<Dv>,
-    K: From<Ek>,
     V: From<Ev>,
-    K: Eq,
-    K: Hash,
 {
-    fn to_map(self) -> HashMap<Arc<K>,V> {
+    fn to_map(self) -> HashMap<GlobalSymbol,V> {
         let mut ret = HashMap::new();
-        ret.insert(Arc::new(K::from(self.0.0)), V::from(self.0.1));
-        ret.insert(Arc::new(K::from(self.1.0)), V::from(self.1.1));
-        ret.insert(Arc::new(K::from(self.2.0)), V::from(self.2.1));
-        ret.insert(Arc::new(K::from(self.3.0)), V::from(self.3.1));
-        ret.insert(Arc::new(K::from(self.4.0)), V::from(self.4.1));
+        ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
+        ret.insert(GlobalSymbol::new(self.1.0), V::from(self.1.1));
+        ret.insert(GlobalSymbol::new(self.2.0), V::from(self.2.1));
+        ret.insert(GlobalSymbol::new(self.3.0), V::from(self.3.1));
+        ret.insert(GlobalSymbol::new(self.4.0), V::from(self.4.1));
         ret
     }
 }
