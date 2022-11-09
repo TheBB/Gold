@@ -503,7 +503,7 @@ impl<'a> Namespace<'a> {
                 let mut rval = String::new();
                 for element in elements {
                     match element {
-                        StringElement::Raw(val) => rval += val,
+                        StringElement::Raw(val) => rval += val.as_str(),
                         StringElement::Interpolate(expr) => {
                             let val = self.eval(expr)?;
                             let text = val.format()?;

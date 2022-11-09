@@ -1,5 +1,6 @@
 use std::ops::{Add, Div, Mul, Neg, Not, Sub};
-use std::sync::Arc;
+
+use symbol_table::GlobalSymbol;
 
 use crate::ast::*;
 use crate::object::{Object};
@@ -413,7 +414,7 @@ fn let_blocks() {
                 (
                     Binding::Map(vec![
                         MapBindingElement::Binding {
-                            key: Arc::new("a".to_string()),
+                            key: GlobalSymbol::new("a"),
                             binding: Binding::id("a"),
                             default: None,
                         },
@@ -432,7 +433,7 @@ fn let_blocks() {
                 (
                     Binding::Map(vec![
                         MapBindingElement::Binding {
-                            key: Arc::new("a".to_string()),
+                            key: GlobalSymbol::new("a"),
                             binding: Binding::id("b"),
                             default: None,
                         },
@@ -451,7 +452,7 @@ fn let_blocks() {
                 (
                     Binding::Map(vec![
                         MapBindingElement::Binding {
-                            key: Arc::new("a".to_string()),
+                            key: GlobalSymbol::new("a"),
                             binding: Binding::id("a"),
                             default: Some("y".id()),
                         },
@@ -470,7 +471,7 @@ fn let_blocks() {
                 (
                     Binding::Map(vec![
                         MapBindingElement::Binding {
-                            key: Arc::new("a".to_string()),
+                            key: GlobalSymbol::new("a"),
                             binding: Binding::id("b"),
                             default: Some("y".id()),
                         },
@@ -708,12 +709,12 @@ fn functions() {
             positional: Binding::List(vec![]),
             keywords: Binding::Map(vec![
                 MapBindingElement::Binding {
-                    key: Arc::new("x".to_string()),
+                    key: GlobalSymbol::new("x"),
                     binding: Binding::id("x"),
                     default: Some(1.to_ast()),
                 },
                 MapBindingElement::Binding {
-                    key: Arc::new("y".to_string()),
+                    key: GlobalSymbol::new("y"),
                     binding: Binding::id("y"),
                     default: Some(2.to_ast()),
                 },

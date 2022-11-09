@@ -129,7 +129,7 @@ impl<'s> FromPyObject<'s> for ObjectWrapper {
         } else if let Ok(x) = obj.extract::<HashMap<String, ObjectWrapper>>() {
             let mut map = object::Map::new();
             for (k, v) in x {
-                map.insert(Arc::new(k), v.0.clone());
+                map.insert(object::Key::new(k), v.0.clone());
             }
             Ok(ObjectWrapper(Object::Map(Arc::new(map))))
         } else if obj.is_none() {
@@ -142,7 +142,7 @@ impl<'s> FromPyObject<'s> for ObjectWrapper {
                         let a = PyTuple::new(py, args.iter().map(|x| ObjectWrapper(x.clone()).into_py(py)));
                         let b = PyDict::new(py);
                         for (k, v) in kwargs {
-                            b.set_item(k.as_ref(), ObjectWrapper(v.clone()).into_py(py))?;
+                            b.set_item(k.as_str(), ObjectWrapper(v.clone()).into_py(py))?;
                         }
                         let result = func.call(py, a, Some(b))?.extract::<ObjectWrapper>(py)?;
                         Ok(result.0)
@@ -163,13 +163,13 @@ impl pyo3::IntoPy<PyObject> for ObjectWrapper {
             Object::Integer(x) => x.into_py(py),
             Object::BigInteger(x) => x.as_ref().clone().into_py(py),
             Object::Float(x) => x.into_py(py),
-            Object::String(x) => x.as_ref().into_py(py),
+            Object::String(x) => x.as_str().into_py(py),
             Object::Boolean(x) => x.into_py(py),
             Object::List(x) => PyList::new(py, x.iter().map(|x| ObjectWrapper(x.clone()).into_py(py))).into(),
             Object::Map(x) => {
                 let r = PyDict::new(py);
                 for (k, v) in x.as_ref() {
-                    r.set_item(k.as_ref(), ObjectWrapper(v.clone()).into_py(py)).unwrap();
+                    r.set_item(k.as_str(), ObjectWrapper(v.clone()).into_py(py)).unwrap();
                 }
                 r.into()
             },

@@ -6,6 +6,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
 
+use symbol_table::GlobalSymbol;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use json::JsonValue;
@@ -34,7 +35,7 @@ fn escape(s: &str) -> String {
 }
 
 
-pub type Key = Arc<String>;
+pub type Key = GlobalSymbol;
 pub type List = Vec<Object>;
 pub type Map = HashMap<Key, Object>;
 pub type RFunc = fn(&List, &Map) -> Result<Object, String>;
@@ -94,7 +95,7 @@ pub enum Object {
     Integer(i64),
     BigInteger(Arc<BigInt>),
     Float(f64),
-    String(Key),
+    String(GlobalSymbol),
     Boolean(bool),
     List(Arc<List>),
     Map(Arc<Map>),
@@ -147,7 +148,7 @@ impl PartialOrd<Object> for Object {
             (Object::Float(x), Object::Integer(y)) => x.partial_cmp(&(*y as f64)),
             (Object::Float(_), Object::BigInteger(_)) => other.partial_cmp(self).map(Ordering::reverse),
             (Object::Float(x), Object::Float(y)) => x.partial_cmp(y),
-            (Object::String(x), Object::String(y)) => x.partial_cmp(y),
+            (Object::String(x), Object::String(y)) => x.as_str().partial_cmp(y.as_str()),
             _ => None,
         }
     }
@@ -172,8 +173,8 @@ impl Debug for Object {
 }
 
 impl Object {
-    pub fn string<T: ToString>(x: T) -> Object {
-        Object::String(Arc::new(x.to_string()))
+    pub fn string<T: AsRef<str>>(x: T) -> Object {
+        Object::String(GlobalSymbol::new(x))
     }
 
     pub fn bigint(x: &str) -> Option<Object> {
@@ -386,7 +387,7 @@ impl TryInto<f64> for Object {
 impl ToString for Object {
     fn to_string(&self) -> String {
         match self {
-            Object::String(r) => format!("\"{}\"", escape(r)),
+            Object::String(r) => format!("\"{}\"", escape(r.as_str())),
             Object::Integer(r) => r.to_string(),
             Object::BigInteger(r) => r.to_string(),
             Object::Float(r) => r.to_string(),
@@ -411,7 +412,7 @@ impl ToString for Object {
                 let mut retval = "{".to_string();
                 let mut iter = elements.iter().peekable();
                 while let Some((k, v)) = iter.next() {
-                    retval += k;
+                    retval += k.as_str();
                     retval += ": ";
                     retval += &v.to_string();
                     if iter.peek().is_some() {
@@ -447,7 +448,7 @@ impl TryFrom<Object> for JsonValue {
             Object::Map(x) => {
                 let mut val = JsonValue::new_object();
                 for (key, element) in x.as_ref() {
-                    val[key.as_ref()] = JsonValue::try_from(element.clone())?;
+                    val[key.as_str()] = JsonValue::try_from(element.clone())?;
                 }
                 Ok(val)
             },
