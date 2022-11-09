@@ -233,7 +233,7 @@ impl<'a> Namespace<'a> {
                                     Some(val) => values.push(val.clone()),
                                 }
                             }
-                            self.set(name, Object::List(Arc::new(values)))?;
+                            self.set(name, Object::from(values))?;
                         }
                     }
                 }
@@ -277,7 +277,7 @@ impl<'a> Namespace<'a> {
                         }
                     }
 
-                    self.set(target, Object::Map(Arc::new(values)))?;
+                    self.set(target, Object::from(values))?;
                 }
 
                 Ok(())
@@ -455,7 +455,7 @@ impl<'a> Namespace<'a> {
                     (BinOp::Index, Object::List(x), Object::Integer(y)) => Ok(x[*y as usize].clone()),
                     (BinOp::Index, Object::Map(x), Object::String(y)) => x.get(y).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
                     (BinOp::Add, Object::List(x), Object::List(y)) => Ok(
-                        Object::List(Arc::new(x.iter().chain(y.iter()).map(Object::clone).collect()))
+                        Object::from(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())
                     ),
                     (BinOp::Add, Object::String(x), Object::String(y)) => Ok(
                         Object::String(Key::new(format!("{}{}", x.as_str(), y.as_str())))
@@ -482,7 +482,7 @@ impl<'a> Namespace<'a> {
                     self.fill_args(element, &mut call_args, &mut call_kwargs)?;
                 }
 
-                call_obj(&value, Object::List(Arc::new(call_args)), Object::Map(Arc::new(call_kwargs)))
+                call_obj(&value, Object::from(call_args), Object::from(call_kwargs))
             },
         }
     }
@@ -526,7 +526,7 @@ impl<'a> Namespace<'a> {
                 for element in elements {
                     self.fill_list(element, &mut values)?;
                 }
-                Ok(Object::List(Arc::new(values)))
+                Ok(Object::from(values))
             },
 
             Expr::Map(elements) => {
@@ -534,7 +534,7 @@ impl<'a> Namespace<'a> {
                 for element in elements {
                     self.fill_map(element, &mut values)?;
                 }
-                Ok(Object::Map(Arc::new(values)))
+                Ok(Object::from(values))
             }
 
             Expr::Let { bindings, expression } => {
@@ -566,12 +566,12 @@ impl<'a> Namespace<'a> {
                     let val = self.get(&ident)?;
                     closure.insert(ident, val);
                 }
-                Ok(Object::Function(Arc::new(Function {
+                Ok(Object::from(Function {
                     args: positional.clone(),
                     kwargs: keywords.clone(),
                     closure,
                     expr: expression.as_ref().clone(),
-                })))
+                }))
             },
         }
     }
