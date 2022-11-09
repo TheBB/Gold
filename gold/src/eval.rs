@@ -113,101 +113,100 @@ impl<'a> Namespace<'a> {
         }
     }
 
+    pub fn bind_list(&mut self, bindings: &Vec<ListBindingElement>, values: &List) -> Result<(), String> {
+        let mut value_iter = values.iter();
+        let nslurp = values.len() as i64 - bindings.len() as i64 + 1;
+
+        for binding_element in bindings {
+            match binding_element {
+                ListBindingElement::Binding { binding, default } => {
+                    let val = value_iter.next()
+                        .map(Object::clone)
+                        .ok_or_else(|| "not enough elements".to_string())
+                        .or_else(|_| {
+                            default.as_ref()
+                                .ok_or_else(|| "not enough elements, missing default".to_string())
+                                .and_then(|node| self.eval(&node))
+                        })?;
+
+                    self.bind(binding, val)?;
+                },
+
+                ListBindingElement::Slurp => {
+                    for _ in 0..nslurp {
+                        if let None = value_iter.next() {
+                            return Err("??".to_string())
+                        }
+                    }
+                },
+
+                ListBindingElement::SlurpTo(name) => {
+                    let mut values: List = vec![];
+                    for _ in 0..nslurp {
+                        match value_iter.next() {
+                            None => return Err("???".to_string()),
+                            Some(val) => values.push(val.clone()),
+                        }
+                    }
+                    self.set(name, Object::from(values))?;
+                }
+            }
+        }
+
+        if let Some(_) = value_iter.next() {
+            Err("unhandled elements in list".to_string())
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn bind_map(&mut self, bindings: &Vec<MapBindingElement>, values: &Map) -> Result<(), String> {
+        let mut slurp_target: Option<&Key> = None;
+
+        for binding_element in bindings {
+            match binding_element {
+                MapBindingElement::Binding { key, binding, default } => {
+                    let val = values.get(key)
+                        .map(Object::clone)
+                        .ok_or_else(|| "zomg".to_string())
+                        .or_else(|_| {
+                            default.as_ref()
+                                .ok_or_else(|| "?????".to_string())
+                                .and_then(|node| self.eval(&node))
+                        })?;
+
+                    self.bind(binding, val)?;
+                },
+                MapBindingElement::SlurpTo(target) => {
+                    slurp_target = Some(target);
+                },
+            }
+        }
+
+        if let Some(target) = slurp_target {
+            let mut values: Map = values.clone();
+
+            for binding_element in bindings {
+                if let MapBindingElement::Binding { key, .. } = binding_element {
+                    values.remove(key);
+                }
+            }
+
+            self.set(target, Object::from(values))?;
+        }
+
+        Ok(())
+    }
+
     pub fn bind(&mut self, binding: &Binding, value: Object) -> Result<(), String> {
         match (binding, value) {
             (Binding::Identifier(key), val) => {
                 self.set(key, val)?;
                 Ok(())
             },
-
-            (Binding::List(bindings), Object::List(values)) => {
-                let mut value_iter = values.iter();
-                let nslurp = values.len() as i64 - bindings.len() as i64 + 1;
-
-                for binding_element in bindings {
-                    match binding_element {
-                        ListBindingElement::Binding { binding, default } => {
-                            let val = value_iter.next()
-                                .map(Object::clone)
-                                .ok_or_else(|| "not enough elements".to_string())
-                                .or_else(|_| {
-                                    default.as_ref()
-                                        .ok_or_else(|| "not enough elements, missing default".to_string())
-                                        .and_then(|node| self.eval(&node))
-                                })?;
-
-                            self.bind(binding, val)?;
-                        },
-
-                        ListBindingElement::Slurp => {
-                            for _ in 0..nslurp {
-                                if let None = value_iter.next() {
-                                    return Err("??".to_string())
-                                }
-                            }
-                        },
-
-                        ListBindingElement::SlurpTo(name) => {
-                            let mut values: List = vec![];
-                            for _ in 0..nslurp {
-                                match value_iter.next() {
-                                    None => return Err("???".to_string()),
-                                    Some(val) => values.push(val.clone()),
-                                }
-                            }
-                            self.set(name, Object::from(values))?;
-                        }
-                    }
-                }
-
-                if let Some(_) = value_iter.next() {
-                    Err("unhandled elements in list".to_string())
-                } else {
-                    Ok(())
-                }
-            },
-
-            (Binding::Map(bindings), Object::Map(values)) => {
-                let mut slurp_target: Option<&Key> = None;
-
-                for binding_element in bindings {
-                    match binding_element {
-                        MapBindingElement::Binding { key, binding, default } => {
-                            let val = values.get(key)
-                                .map(Object::clone)
-                                .ok_or_else(|| "zomg".to_string())
-                                .or_else(|_| {
-                                    default.as_ref()
-                                        .ok_or_else(|| "?????".to_string())
-                                        .and_then(|node| self.eval(&node))
-                                })?;
-
-                            self.bind(binding, val)?;
-                        },
-                        MapBindingElement::SlurpTo(target) => {
-                            slurp_target = Some(target);
-                        },
-                    }
-                }
-
-                if let Some(target) = slurp_target {
-                    let mut values: Map = values.as_ref().clone();
-
-                    for binding_element in bindings {
-                        if let MapBindingElement::Binding { key, .. } = binding_element {
-                            values.remove(key);
-                        }
-                    }
-
-                    self.set(target, Object::from(values))?;
-                }
-
-                Ok(())
-            },
-
-            _ => {
-                Err("unsupported binding".to_string())
-            },
+            (Binding::List(bindings), Object::List(values)) => self.bind_list(bindings, values.as_ref()),
+            (Binding::Map(bindings), Object::Map(values)) => self.bind_map(bindings, values.as_ref()),
+            _ => Err("unsupported binding".to_string()),
         }
     }
 
