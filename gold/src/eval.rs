@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
-use crate::object::{Object, Function, Key, Map, List, Builtin, Closure};
+use crate::object::{Object, Function, Key, Map, List};
 use crate::builtins::BUILTINS;
 
 
@@ -81,7 +81,7 @@ impl ImportResolver for NullResolver {
 }
 
 
-enum Namespace<'a> {
+pub enum Namespace<'a> {
     Empty,
     Frozen(&'a Map),
     Mutable {
@@ -113,7 +113,7 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    fn bind(&mut self, binding: &Binding, value: Object) -> Result<(), String> {
+    pub fn bind(&mut self, binding: &Binding, value: Object) -> Result<(), String> {
         match (binding, value) {
             (Binding::Identifier(key), val) => {
                 self.set(key, val)?;
@@ -357,8 +357,7 @@ impl<'a> Namespace<'a> {
                 for element in elements {
                     self.fill_args(element, &mut call_args, &mut call_kwargs)?;
                 }
-
-                call_obj(&value, Object::from(call_args), Object::from(call_kwargs))
+                value.call(&call_args, Some(&call_kwargs))
             },
         }
     }
@@ -476,33 +475,4 @@ pub fn eval_path<T: ImportResolver>(file: &File, path: &Path, resolver: &T) -> R
         ],
     };
     Namespace::Empty.eval_file(file, &resolver)
-}
-
-
-pub fn call_obj(func: &Object, call_args: Object, call_kwargs: Object) -> Result<Object, String> {
-    match func {
-        Object::Function(func) => {
-            let Function { args, kwargs, closure, expr } = func.as_ref();
-            let ns = Namespace::Frozen(closure);
-            let mut sub = ns.subtend();
-            sub.bind(args, call_args)?;
-            sub.bind(kwargs, call_kwargs)?;
-            sub.eval(expr)
-        },
-        Object::Builtin(Builtin { func, .. }) => {
-            if let (Object::List(x), Object::Map(y)) = (call_args, call_kwargs) {
-                func(x.as_ref(), y.as_ref())
-            } else {
-                Err("incorrect arguments".to_string())
-            }
-        },
-        Object::Closure(Closure(func)) => {
-            if let (Object::List(x), Object::Map(y)) = (call_args, call_kwargs) {
-                func(x.as_ref(), y.as_ref())
-            } else {
-                Err("incorrect arguments".to_string())
-            }
-        }
-        _ => Err("calling a non-function".to_string()),
-    }
 }
