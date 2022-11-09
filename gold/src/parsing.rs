@@ -337,7 +337,7 @@ fn map_element<'a, E: CompleteError<'a>>(
                 expression,
             )),
             |(key, value)| MapElement::Singleton {
-                key: Object::string(key).literal(),
+                key: Object::int_string(key).literal(),
                 value,
             },
         ),
@@ -385,7 +385,7 @@ fn object_access<'a, E: CompleteError<'a>>(
             postpad(char('.')),
             identifier,
         ),
-        |out: &str| Operator::BinOp(BinOp::Index, Box::new(Object::string(out).literal())),
+        |out: &str| Operator::BinOp(BinOp::Index, Box::new(Object::int_string(out).literal())),
     )(input)
 }
 

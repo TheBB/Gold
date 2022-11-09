@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::ops;
 
 use num_bigint::BigInt;
@@ -162,13 +163,13 @@ impl Binding {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StringElement {
-    Raw(Key),
+    Raw(Arc<str>),
     Interpolate(Expr),
 }
 
 impl StringElement {
-    pub fn raw<T>(val: T) -> StringElement where T: ToString {
-        StringElement::Raw(Key::new(val.to_string()))
+    pub fn raw<T: AsRef<str>>(val: T) -> StringElement {
+        StringElement::Raw(Arc::from(val.as_ref()))
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -523,7 +524,7 @@ impl Expr {
     pub fn boolean(value: bool) -> Expr { Expr::Literal(Object::Boolean(value)) }
     pub fn null() -> Expr { Expr::Literal(Object::Null) }
 
-    pub fn id<T: ToString>(x: T) -> Expr { Expr::Identifier(Key::new(x.to_string())) }
+    pub fn id<T: AsRef<str>>(x: T) -> Expr { Expr::Identifier(Key::new(x)) }
 
     pub fn list<T>(x: T) -> Expr where T: ToVec<ListElement> { Expr::List(x.to_vec()) }
     pub fn map<T>(x: T) -> Expr where T: ToVec<MapElement> { Expr::Map(x.to_vec()) }
@@ -550,10 +551,11 @@ impl Expr {
 
     pub fn string(value: Vec<StringElement>) -> Expr {
         if value.len() == 0 {
-            Expr::Literal(Object::string(""))
+            Expr::Literal(Object::int_string(""))
         } else if value.len() == 1 {
             match &value[0] {
-                StringElement::Raw(val) => Expr::Literal(Object::String(val.clone())),
+                StringElement::Raw(val) if val.len() < 20 => Object::int_string(val.as_ref()).literal(),
+                StringElement::Raw(val) => Object::nat_string(val).literal(),
                 _ => Expr::String(value)
             }
         } else {
@@ -699,8 +701,8 @@ pub trait IdAble {
     fn id(self) -> Expr;
 }
 
-impl<T> IdAble for T where T: ToString {
-    fn id(self) -> Expr { Expr::id(self.to_string()) }
+impl<T> IdAble for T where T: AsRef<str> {
+    fn id(self) -> Expr { Expr::id(self) }
 }
 
 

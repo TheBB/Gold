@@ -35,7 +35,7 @@ lazy_static! {
 
 pub fn len(args: &List, _: &Map) -> Result<Object, String> {
     match &args[..] {
-        [Object::String(x)] => Ok(Object::from(x.as_str().chars().count() as usize)),
+        [Object::IntString(x)] => Ok(Object::from(x.as_str().chars().count() as usize)),
         [Object::List(x)] => Ok(Object::from(x.len() as usize)),
         [Object::Map(x)] => Ok(Object::from(x.len() as usize)),
         _ => Err("???".to_string()),
@@ -60,7 +60,7 @@ pub fn int(args: &List, _: &Map) -> Result<Object, String> {
         [Object::BigInteger(_)] => Ok(args[0].clone()),
         [Object::Float(x)] => Ok(Object::Integer(x.round() as i64)),
         [Object::Boolean(x)] => Ok(Object::from(if *x { 1 } else { 0 })),
-        [Object::String(x)] =>
+        [Object::IntString(x)] =>
             BigInt::from_str(x.as_str()).map_err(|_| "???".to_string()).map(Object::from).map(Object::numeric_normalize),
         _ => Err("???".to_string()),
     }
@@ -73,7 +73,7 @@ pub fn float(args: &List, _: &Map) -> Result<Object, String> {
         [Object::BigInteger(x)] => Ok(Object::from(util::big_to_f64(x))),
         [Object::Float(_)] => Ok(args[0].clone()),
         [Object::Boolean(x)] => Ok(Object::from(if *x { 1.0 } else { 0.0 })),
-        [Object::String(x)] => f64::from_str(x.as_str()).map_err(|_| "???".to_string()).map(Object::from),
+        [Object::IntString(x)] => f64::from_str(x.as_str()).map_err(|_| "???".to_string()).map(Object::from),
         _ => Err("???".to_string()),
     }
 }
@@ -89,7 +89,7 @@ pub fn bool(args: &List, _: &Map) -> Result<Object, String> {
 
 pub fn str(args: &List, _: &Map) -> Result<Object, String> {
     match &args[..] {
-        [Object::String(_)] => Ok(args[0].clone()),
+        [Object::IntString(_)] => Ok(args[0].clone()),
         _ => Ok(Object::from(args[0].to_string().as_str())),
     }
 }
