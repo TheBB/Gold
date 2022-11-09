@@ -48,7 +48,7 @@ where
 }
 
 
-fn arithmetic_operate<F,G,H,X,Y,Z>(ops: Arith<F,G,H,X,Y,Z>, x: Object, y: Object) -> Result<Object, String>
+fn arithmetic_operate<F,G,H,X,Y,Z>(ops: Arith<F,G,H,X,Y,Z>, x: &Object, y: &Object) -> Result<Object, String>
 where
     F: Fn(i64, i64) -> Option<X>,
     G: Fn(&BigInt, &BigInt) -> Y,
@@ -61,21 +61,21 @@ where
 
     match (x, y) {
         (Object::Integer(xx), Object::Integer(yy)) => Ok(
-            ixi(xx, yy).map(Object::from).unwrap_or_else(
-                || Object::from(bxb(&BigInt::from(xx), &BigInt::from(yy))).numeric_normalize()
+            ixi(*xx, *yy).map(Object::from).unwrap_or_else(
+                || Object::from(bxb(&BigInt::from(*xx), &BigInt::from(*yy))).numeric_normalize()
             )
         ),
 
-        (Object::Integer(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&BigInt::from(xx), &yy)).numeric_normalize()),
-        (Object::BigInteger(xx), Object::Integer(yy)) => Ok(Object::from(bxb(&xx, &BigInt::from(yy))).numeric_normalize()),
-        (Object::BigInteger(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&xx, &yy)).numeric_normalize()),
+        (Object::Integer(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&BigInt::from(*xx), yy.as_ref())).numeric_normalize()),
+        (Object::BigInteger(xx), Object::Integer(yy)) => Ok(Object::from(bxb(xx.as_ref(), &BigInt::from(*yy))).numeric_normalize()),
+        (Object::BigInteger(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(xx.as_ref(), yy.as_ref())).numeric_normalize()),
 
-        (Object::Float(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx, yy))),
-        (Object::Integer(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx as f64, yy))),
-        (Object::Float(xx), Object::Integer(yy)) => Ok(Object::from(fxf(xx, yy as f64))),
+        (Object::Float(xx), Object::Float(yy)) => Ok(Object::from(fxf(*xx, *yy))),
+        (Object::Integer(xx), Object::Float(yy)) => Ok(Object::from(fxf(*xx as f64, *yy))),
+        (Object::Float(xx), Object::Integer(yy)) => Ok(Object::from(fxf(*xx, *yy as f64))),
 
-        (Object::Float(xx), Object::BigInteger(yy)) => Ok(Object::from(fxf(xx, util::big_to_f64(yy.as_ref())))),
-        (Object::BigInteger(xx), Object::Float(yy)) => Ok(Object::from(fxf(util::big_to_f64(xx.as_ref()), yy))),
+        (Object::Float(xx), Object::BigInteger(yy)) => Ok(Object::from(fxf(*xx, util::big_to_f64(yy.as_ref())))),
+        (Object::BigInteger(xx), Object::Float(yy)) => Ok(Object::from(fxf(util::big_to_f64(xx.as_ref()), *yy))),
 
         _ => Err("unsupported types for arithmetic".to_string()),
     }
@@ -385,7 +385,7 @@ impl Object {
         }
     }
 
-    pub fn add(self, other: Object) -> Result<Object, String> {
+    pub fn add(&self, other: &Object) -> Result<Object, String> {
         match (&self, &other) {
             (Object::List(x), Object::List(y)) => Ok(Object::from(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())),
             (Object::IntString(x), Object::IntString(y)) => Ok(Object::nat_string(format!("{}{}", x.as_str(), y.as_str()))),
@@ -400,7 +400,7 @@ impl Object {
         }
     }
 
-    pub fn sub(self, other: Object) -> Result<Object, String> {
+    pub fn sub(&self, other: &Object) -> Result<Object, String> {
         arithmetic_operate(Arith {
             ixi: i64::checked_sub,
             bxb: |x,y| x - y,
@@ -408,7 +408,7 @@ impl Object {
         }, self, other)
     }
 
-    pub fn mul(self, other: Object) -> Result<Object, String> {
+    pub fn mul(&self, other: &Object) -> Result<Object, String> {
         arithmetic_operate(Arith {
             ixi: i64::checked_mul,
             bxb: |x,y| x * y,
@@ -416,7 +416,7 @@ impl Object {
         }, self, other)
     }
 
-    pub fn div(self, other: Object) -> Result<Object, String> {
+    pub fn div(&self, other: &Object) -> Result<Object, String> {
         arithmetic_operate(Arith {
             ixi: |x,y| Some((x as f64) / (y as f64)),
             bxb: |x,y| util::big_to_f64(x) / util::big_to_f64(y),
@@ -429,11 +429,11 @@ impl Object {
             ixi: i64::checked_div,
             bxb: |x,y| x / y,
             fxf: |x,y| (x / y).floor() as f64,
-        }, self, other)
+        }, &self, &other)
     }
 
-    pub fn pow(self, other: Object) -> Result<Object, String> {
-        match (&self, &other) {
+    pub fn pow(&self, other: &Object) -> Result<Object, String> {
+        match (self, other) {
             (Object::Integer(x), Object::Integer(y)) if *y >= 0 => {
                 let yy: u32 = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
                 Ok(checked_pow(*x, yy as usize).map(Object::from).unwrap_or_else(
@@ -447,8 +447,8 @@ impl Object {
             },
 
             _ => {
-                let xx: f64 = self.try_into().map_err(|_| "wrong type for power".to_string())?;
-                let yy: f64 = other.try_into().map_err(|_| "wrong type for power".to_string())?;
+                let xx: f64 = self.to_f64().ok_or_else(|| "wrong type for power".to_string())?;
+                let yy: f64 = other.to_f64().ok_or_else(|| "wrong type for power".to_string())?;
                 Ok(Object::from(xx.powf(yy)))
             },
         }
@@ -498,6 +498,15 @@ impl Object {
         match self {
             Self::Map(x) => Some(x.as_ref()),
             _ => None
+        }
+    }
+
+    pub fn to_f64(&self) -> Option<f64> {
+        match self {
+            Object::Integer(x) => Some(*x as f64),
+            Object::BigInteger(x) => Some(util::big_to_f64(x.as_ref())),
+            Object::Float(x) => Some(*x),
+            _ => None,
         }
     }
 }
@@ -568,17 +577,17 @@ impl From<Builtin> for Object {
     }
 }
 
-impl TryInto<f64> for Object {
-    type Error = ();
-    fn try_into(self) -> Result<f64, Self::Error> {
-        match self {
-            Object::Integer(x) => Ok(x as f64),
-            Object::BigInteger(x) => Ok(util::big_to_f64(x.as_ref())),
-            Object::Float(x) => Ok(x),
-            _ => Err(()),
-        }
-    }
-}
+// impl TryInto<f64> for Object {
+//     type Error = ();
+//     fn try_into(self) -> Result<f64, Self::Error> {
+//         match self {
+//             Object::Integer(x) => Ok(x as f64),
+//             Object::BigInteger(x) => Ok(util::big_to_f64(x.as_ref())),
+//             Object::Float(x) => Ok(x),
+//             _ => Err(()),
+//         }
+//     }
+// }
 
 impl ToString for Object {
     fn to_string(&self) -> String {
