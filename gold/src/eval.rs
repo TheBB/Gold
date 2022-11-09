@@ -1,16 +1,11 @@
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
-use std::ops::Neg;
+use std::ops::Not;
 use std::sync::Arc;
-
-use symbol_table::GlobalSymbol;
-use num_bigint::BigInt;
-use num_traits::checked_pow;
 
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::object::{Object, Function, Key, Map, List, Builtin, Closure};
-use crate::util;
 use crate::builtins::BUILTINS;
 
 
@@ -82,75 +77,6 @@ pub struct NullResolver {}
 impl ImportResolver for NullResolver {
     fn resolve(&self, _: &str) -> Result<Object, String> {
         Err("no imports".to_string())
-    }
-}
-
-
-struct Arith<F,G,H,X,Y,Z>
-where
-    F: Fn(i64, i64) -> Option<X>,
-    G: Fn(&BigInt, &BigInt) -> Y,
-    H: Fn(f64, f64) -> Z,
-{
-    ixi: F,
-    bxb: G,
-    fxf: H,
-}
-
-
-fn arithmetic_operate<F,G,H,X,Y,Z>(ops: Arith<F,G,H,X,Y,Z>, x: Object, y: Object) -> Result<Object, String>
-where
-    F: Fn(i64, i64) -> Option<X>,
-    G: Fn(&BigInt, &BigInt) -> Y,
-    H: Fn(f64, f64) -> Z,
-    Object: From<X>,
-    Object: From<Y>,
-    Object: From<Z>,
-{
-    let Arith { ixi, bxb, fxf } = ops;
-
-    match (x, y) {
-        (Object::Integer(xx), Object::Integer(yy)) => Ok(
-            ixi(xx, yy).map(Object::from).unwrap_or_else(
-                || Object::from(bxb(&BigInt::from(xx), &BigInt::from(yy))).numeric_normalize()
-            )
-        ),
-
-        (Object::Integer(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&BigInt::from(xx), &yy)).numeric_normalize()),
-        (Object::BigInteger(xx), Object::Integer(yy)) => Ok(Object::from(bxb(&xx, &BigInt::from(yy))).numeric_normalize()),
-        (Object::BigInteger(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&xx, &yy)).numeric_normalize()),
-
-        (Object::Float(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx, yy))),
-        (Object::Integer(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx as f64, yy))),
-        (Object::Float(xx), Object::Integer(yy)) => Ok(Object::from(fxf(xx, yy as f64))),
-
-        (Object::Float(xx), Object::BigInteger(yy)) => Ok(Object::from(fxf(xx, util::big_to_f64(yy.as_ref())))),
-        (Object::BigInteger(xx), Object::Float(yy)) => Ok(Object::from(fxf(util::big_to_f64(xx.as_ref()), yy))),
-
-        _ => Err("unsupported types for arithmetic".to_string()),
-    }
-}
-
-
-fn power(x: Object, y: Object) -> Result<Object, String> {
-    match (&x, &y) {
-        (Object::Integer(x), Object::Integer(y)) if *y >= 0 => {
-            let yy: u32 = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
-            Ok(checked_pow(*x, yy as usize).map(Object::from).unwrap_or_else(
-                || Object::from(BigInt::from(*x).pow(yy))
-            ))
-        },
-
-        (Object::BigInteger(x), Object::Integer(y)) if *y >= 0 => {
-            let yy: u32 = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
-            Ok(Object::from(x.as_ref().pow(yy)))
-        },
-
-        _ => {
-            let xx: f64 = x.try_into().map_err(|_| "wrong type for power".to_string())?;
-            let yy: f64 = y.try_into().map_err(|_| "wrong type for power".to_string())?;
-            Ok(Object::from(xx.powf(yy)))
-        },
     }
 }
 
@@ -406,72 +332,25 @@ impl<'a> Namespace<'a> {
     }
 
     fn operate(&self, operator: &Operator, value: Object) -> Result<Object, String> {
-        let add = Arith {
-            ixi: i64::checked_add,
-            bxb: |x,y| x + y,
-            fxf: |x,y| x + y,
-        };
-        let sub = Arith {
-            ixi: i64::checked_sub,
-            bxb: |x,y| x - y,
-            fxf: |x,y| x - y,
-        };
-        let mul = Arith {
-            ixi: i64::checked_mul,
-            bxb: |x,y| x * y,
-            fxf: |x,y| x * y,
-        };
-        let div = Arith {
-            ixi: |x,y| Some((x as f64) / (y as f64)),
-            bxb: |x,y| util::big_to_f64(x) / util::big_to_f64(y),
-            fxf: |x,y| x / y,
-        };
-        let idiv = Arith {
-            ixi: i64::checked_div,
-            bxb: |x,y| x / y,
-            fxf: |x,y| (x / y).floor() as f64,
-        };
-
         match operator {
-            Operator::UnOp(op) => match op {
-                UnOp::Passthrough => Ok(value),
-                UnOp::LogicalNegate => Ok(Object::Boolean(!value.truthy())),
-                UnOp::ArithmeticalNegate => match value {
-                    Object::Integer(x) => Ok(Object::Integer(-x)),
-                    Object::BigInteger(x) => Ok(Object::from(x.as_ref().neg())),
-                    Object::Float(x) => Ok(Object::Float(-x)),
-                    _ => Err("type mismatch".to_string()),
-                },
-            }
+            Operator::UnOp(UnOp::Passthrough) => Ok(value),
+            Operator::UnOp(UnOp::LogicalNegate) => Ok(Object::from(!value.truthy())),
+            Operator::UnOp(UnOp::ArithmeticalNegate) => value.neg(),
             Operator::BinOp(BinOp::And, node) => if value.truthy() { self.eval(node) } else { Ok(value) },
             Operator::BinOp(BinOp::Or, node) => if value.truthy() { Ok(value) } else { self.eval(node) },
-            Operator::BinOp(op, node) => {
-                let other = self.eval(node)?;
-                match (op, &value, &other) {
-                    (BinOp::Index, Object::List(x), Object::Integer(y)) => Ok(x[*y as usize].clone()),
-                    (BinOp::Index, Object::Map(x), Object::IntString(y)) => x.get(y).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
-                    (BinOp::Index, Object::Map(x), Object::NatString(y)) => x.get(&GlobalSymbol::new(y.as_ref())).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
-                    (BinOp::Add, Object::List(x), Object::List(y)) => Ok(
-                        Object::from(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())
-                    ),
-                    (BinOp::Add, Object::IntString(x), Object::IntString(y)) => Ok(
-                        Object::IntString(Key::new(format!("{}{}", x.as_str(), y.as_str())))
-                    ),
-                    (BinOp::Add, _, _) => arithmetic_operate(add, value, other),
-                    (BinOp::Subtract, _, _) => arithmetic_operate(sub, value, other),
-                    (BinOp::Multiply, _, _) => arithmetic_operate(mul, value, other),
-                    (BinOp::Divide, _, _) => arithmetic_operate(div, value, other),
-                    (BinOp::IntegerDivide, _, _) => arithmetic_operate(idiv, value, other),
-                    (BinOp::Power, _, _) => power(value, other),
-                    (BinOp::Less, _, _) => value.partial_cmp(&other).map(|x| Object::Boolean(x == Ordering::Less)).ok_or_else(|| "err".to_string()),
-                    (BinOp::LessEqual, _, _) => value.partial_cmp(&other).map(|x| Object::Boolean(x != Ordering::Greater)).ok_or_else(|| "err".to_string()),
-                    (BinOp::Greater, _, _) => value.partial_cmp(&other).map(|x| Object::Boolean(x == Ordering::Greater)).ok_or_else(|| "err".to_string()),
-                    (BinOp::GreaterEqual, _, _) => value.partial_cmp(&other).map(|x| Object::Boolean(x != Ordering::Less)).ok_or_else(|| "err".to_string()),
-                    (BinOp::Equal, _, _) => Ok(Object::from(value.user_eq(&other))),
-                    (BinOp::NotEqual, _, _) => Ok(Object::from(!value.user_eq(&other))),
-                    _ => Err("unsupported operator".to_string()),
-                }
-            },
+            Operator::BinOp(BinOp::Add, node) => value.add(self.eval(node)?),
+            Operator::BinOp(BinOp::Subtract, node) => value.sub(self.eval(node)?),
+            Operator::BinOp(BinOp::Multiply, node) => value.mul(self.eval(node)?),
+            Operator::BinOp(BinOp::Divide, node) => value.div(self.eval(node)?),
+            Operator::BinOp(BinOp::IntegerDivide, node) => value.idiv(self.eval(node)?),
+            Operator::BinOp(BinOp::Power, node) => value.pow(self.eval(node)?),
+            Operator::BinOp(BinOp::Less, node) => value.cmp_bool(&self.eval(node)?, Ordering::Less).map(Object::from),
+            Operator::BinOp(BinOp::LessEqual, node) => value.cmp_bool(&self.eval(node)?, Ordering::Greater).map(bool::not).map(Object::from),
+            Operator::BinOp(BinOp::Greater, node) => value.cmp_bool(&self.eval(node)?, Ordering::Greater).map(Object::from),
+            Operator::BinOp(BinOp::GreaterEqual, node) => value.cmp_bool(&self.eval(node)?, Ordering::Less).map(bool::not).map(Object::from),
+            Operator::BinOp(BinOp::Equal, node) => Ok(Object::from(value.user_eq(&self.eval(node)?))),
+            Operator::BinOp(BinOp::NotEqual, node) => Ok(Object::from(!value.user_eq(&self.eval(node)?))),
+            Operator::BinOp(BinOp::Index, node) => value.index(&self.eval(node)?),
             Operator::FunCall(elements) => {
                 let mut call_args: List = vec![];
                 let mut call_kwargs: Map = Map::new();
