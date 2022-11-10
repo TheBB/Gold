@@ -2,7 +2,7 @@ use std::num::{ParseFloatError, ParseIntError};
 use std::str::FromStr;
 
 use num_bigint::{BigInt, ParseBigIntError};
-use nom_locate::{LocatedSpan};
+use nom_locate::{LocatedSpan, position};
 
 use nom::{
     IResult, Parser,
@@ -15,20 +15,13 @@ use nom::{
     multi::{many0, many1, separated_list0},
     sequence::{delimited, preceded, terminated, tuple, pair},
 };
-use serde::{Serialize, Deserialize};
 
 use super::ast::*;
+use super::error::{Location, Tagged, Taggable};
 use super::object::{Object, Key};
 
 
 type Span<'a> = LocatedSpan<&'a str>;
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Location {
-    pub offset: usize,
-    pub line: u32,
-    pub length: usize,
-}
 
 impl<'a> From<Span<'a>> for Location {
     fn from(value: Span<'a>) -> Self {
@@ -149,8 +142,10 @@ fn integer<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Expr, E> {
     map_res(
-        decimal,
-        |out: &'a str| {
+        tuple((position, decimal)),
+        // decimal,
+        |(pos, out)| {
+            println!("{:#?}", pos);
             let s = out.replace("_", "");
             i64::from_str_radix(s.as_str(), 10).map_or_else(
                 |_| { BigInt::from_str(s.as_str()).map(Expr::big_integer) },
@@ -676,15 +671,15 @@ fn ident_binding<'a, E: CompleteError<'a>>(
 
 fn list_binding_element<'a, E: CompleteError<'a>>(
     input: Span<'a>,
-) -> IResult<Span<'a>, ListBindingElement, E> {
+) -> IResult<Span<'a>, Tagged<ListBindingElement>, E> {
     alt((
         map(
-            preceded(tag("..."), opt(identifier)),
-            |ident| ident.map(ListBindingElement::slurp_to).unwrap_or(ListBindingElement::Slurp),
+            tuple((position, preceded(tag("..."), opt(identifier)))),
+            |(p, ident)| ident.map(ListBindingElement::slurp_to).unwrap_or(ListBindingElement::Slurp).tag(p),
         ),
         map(
-            tuple((binding, opt(preceded(postpad(char('=')), expression)))),
-            |(b, e)| ListBindingElement::Binding { binding: b, default: e },
+            tuple((position, binding, opt(preceded(postpad(char('=')), expression)))),
+            |(p, b, e)| ListBindingElement::Binding { binding: b, default: e }.tag(p),
         ),
     ))(input)
 }
@@ -706,14 +701,15 @@ fn list_binding<'a, E: CompleteError<'a>>(
 
 fn map_binding_element<'a, E: CompleteError<'a>>(
     input: Span<'a>,
-) -> IResult<Span<'a>, MapBindingElement, E> {
+) -> IResult<Span<'a>, Tagged<MapBindingElement>, E> {
     alt((
         map(
-            preceded(tag("..."), identifier),
-            MapBindingElement::slurp_to,
+            tuple((position, preceded(tag("..."), identifier))),
+            |(p, i)| MapBindingElement::slurp_to(i).tag(p),
         ),
         map(
             tuple((
+                position,
                 alt((
                     map(
                         tuple((
@@ -737,18 +733,18 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                     ),
                 ),
             )),
-            |((name, binding), default)| {
+            |(p, (name, binding), default)| {
                 match binding {
                     None => MapBindingElement::Binding {
                         key: Key::new(name.to_string()),
                         binding: Binding::id(name),
                         default,
-                    },
+                    }.tag(p),
                     Some(binding) => MapBindingElement::Binding {
                         key: Key::new(name.to_string()),
                         binding,
                         default,
-                    },
+                    }.tag(p),
                 }
             },
         ),
@@ -933,7 +929,7 @@ fn file<'a, E: CompleteError<'a>>(
     map(
         tuple((
             many0(postpad(import)),
-            expression,
+            preceded(multispace0, expression),
         )),
         |(statements, expression)| File { statements, expression },
     )(input)

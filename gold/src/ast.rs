@@ -6,6 +6,7 @@ use num_bigint::BigInt;
 
 use serde::{Deserialize, Serialize};
 
+use super::error::Tagged;
 use super::object::{Object, Key};
 use super::traits::{Boxable, Splat, Splattable, ToVec};
 
@@ -46,6 +47,7 @@ impl ListBindingElement {
         Ok(())
     }
 }
+
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MapBindingElement {
@@ -102,20 +104,20 @@ fn binding_element_free_and_bound(
 
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ListBinding(pub Vec<ListBindingElement>);
+pub struct ListBinding(pub Vec<Tagged<ListBindingElement>>);
 
 impl ListBinding {
     pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         for element in &self.0 {
-            element.free_and_bound(free, bound);
+            element.as_ref().free_and_bound(free, bound);
         }
     }
 
     pub fn validate(&self) -> Result<(), String> {
         let mut found_slurp = false;
         for element in &self.0 {
-            element.validate()?;
-            if let ListBindingElement::Binding { .. } = element { }
+            element.as_ref().validate()?;
+            if let ListBindingElement::Binding { .. } = element.as_ref() { }
             else {
                 if found_slurp {
                     return Err("multiple slurps in list binding".to_string())
@@ -129,20 +131,20 @@ impl ListBinding {
 
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MapBinding(pub Vec<MapBindingElement>);
+pub struct MapBinding(pub Vec<Tagged<MapBindingElement>>);
 
 impl MapBinding {
     pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         for element in &self.0 {
-            element.free_and_bound(free, bound);
+            element.as_ref().free_and_bound(free, bound);
         }
     }
 
     pub fn validate<'a>(&'a self) -> Result<(), String> {
         let mut found_slurp = false;
         for element in &self.0 {
-            element.validate()?;
-            if let MapBindingElement::SlurpTo(_) = element {
+            element.as_ref().validate()?;
+            if let MapBindingElement::SlurpTo(_) = element.as_ref() {
                 if found_slurp {
                     return Err("multiple slurps in map binding".to_string())
                 }
