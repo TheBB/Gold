@@ -127,7 +127,7 @@ impl<'a> Deserialize<'a> for Builtin {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Function {
     pub args: ListBinding,
-    pub kwargs: MapBinding,
+    pub kwargs: Option<MapBinding>,
     pub closure: Map,
     pub expr: Expr,
 }
@@ -471,10 +471,17 @@ impl Object {
         match self {
             Object::Function(func) => {
                 let Function { args: fargs, kwargs: fkwargs, closure, expr } = func.as_ref();
+
                 let ns = Namespace::Frozen(closure);
                 let mut sub = ns.subtend();
                 sub.bind_list(&fargs.0, args)?;
-                kwargs.map(|x| sub.bind_map(&fkwargs.0, x));
+
+                match (fkwargs, kwargs) {
+                    (Some(b), Some(k)) => { sub.bind_map(&b.0, k)?; },
+                    (Some(b), None) => { sub.bind_map(&b.0, &Map::new())?; },
+                    _ => {},
+                }
+
                 sub.eval(expr)
             },
             Object::Builtin(Builtin { func, .. }) => {

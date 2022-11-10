@@ -533,7 +533,7 @@ fn funcall() {
                     ListBindingElement::Binding { binding: Binding::id("x"), default: None },
                     ListBindingElement::Binding { binding: Binding::id("y"), default: None },
                 ]),
-                keywords: MapBinding(vec![]),
+                keywords: None,
                 expression: "x".id().add("y".id()).to_box(),
             }.funcall((1, 2))
         ),
@@ -640,7 +640,7 @@ fn functions() {
         parse("() => 1"),
         Ok(Expr::Function {
             positional: ListBinding(vec![]),
-            keywords: MapBinding(vec![]),
+            keywords: None,
             expression: 1.to_ast().to_box(),
         }),
     );
@@ -649,7 +649,7 @@ fn functions() {
         parse("(;) => 1"),
         Ok(Expr::Function {
             positional: ListBinding(vec![]),
-            keywords: MapBinding(vec![]),
+            keywords: Some(MapBinding(vec![])),
             expression: 1.to_ast().to_box(),
         }),
     );
@@ -658,7 +658,7 @@ fn functions() {
         parse("{} => 1"),
         Ok(Expr::Function {
             positional: ListBinding(vec![]),
-            keywords: MapBinding(vec![]),
+            keywords: Some(MapBinding(vec![])),
             expression: 1.to_ast().to_box(),
         }),
     );
@@ -669,7 +669,7 @@ fn functions() {
             positional: ListBinding(vec![
                 ListBindingElement::Binding { binding: Binding::id("a"), default: None },
             ]),
-            keywords: MapBinding(vec![]),
+            keywords: None,
             expression: Box::new(Expr::Let {
                 bindings: vec![
                     (
@@ -686,7 +686,7 @@ fn functions() {
         parse("{x=1, y=2} => x + y"),
         Ok(Expr::Function {
             positional: ListBinding(vec![]),
-            keywords: MapBinding(vec![
+            keywords: Some(MapBinding(vec![
                 MapBindingElement::Binding {
                     key: GlobalSymbol::new("x"),
                     binding: Binding::id("x"),
@@ -697,7 +697,7 @@ fn functions() {
                     binding: Binding::id("y"),
                     default: Some(2.to_ast()),
                 },
-            ]),
+            ])),
             expression: "x".id().add("y".id()).to_box(),
         }),
     );

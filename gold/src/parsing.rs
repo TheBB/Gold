@@ -771,7 +771,7 @@ fn function<'a, E: CompleteError<'a>>(
         )),
         |((posargs, kwargs), expr)| Expr::Function {
             positional: posargs,
-            keywords: kwargs.unwrap_or_else(|| MapBinding(vec![])),
+            keywords: kwargs,
             expression: Box::new(expr),
         },
     )(input)
@@ -794,7 +794,7 @@ fn keyword_function<'a, E: CompleteError<'a>>(
         )),
         |(kwargs, expr)| Expr::Function {
             positional: ListBinding(vec![]),
-            keywords: kwargs,
+            keywords: Some(kwargs),
             expression: Box::new(expr),
         },
     )(input)
