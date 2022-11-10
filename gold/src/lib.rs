@@ -5,6 +5,7 @@ extern crate lazy_static;
 
 mod ast;
 mod builtins;
+mod error;
 pub mod eval;
 mod parsing;
 mod traits;

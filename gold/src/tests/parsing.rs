@@ -3,6 +3,7 @@ use std::ops::{Add, Div, Mul, Neg, Not, Sub};
 use symbol_table::GlobalSymbol;
 
 use crate::ast::*;
+use crate::error::Taggable;
 use crate::object::{Object};
 use crate::parsing::{parse as parse_file};
 use crate::traits::{Boxable, Splattable};
@@ -271,8 +272,8 @@ fn maps() {
         Ok(Expr::Map(vec![
             MapElement::Loop {
                 binding: Binding::List(ListBinding(vec![
-                    ListBindingElement::Binding { binding: Binding::id("x"), default: None },
-                    ListBindingElement::Binding { binding: Binding::id("y"), default: None },
+                    ListBindingElement::Binding { binding: Binding::id("x"), default: None }.tag((6, 1, 0)),
+                    ListBindingElement::Binding { binding: Binding::id("y"), default: None }.tag((8, 1, 0)),
                 ])),
                 iterable: "z".id(),
                 element: Box::new(MapElement::Singleton {
@@ -326,9 +327,9 @@ fn let_blocks() {
             bindings: vec![
                 (
                     Binding::List(ListBinding(vec![
-                        ListBindingElement::Binding { binding: Binding::id("a"), default: None },
-                        ListBindingElement::Binding { binding: Binding::id("b"), default: Some(1.to_ast()) },
-                        ListBindingElement::Slurp,
+                        ListBindingElement::Binding { binding: Binding::id("a"), default: None }.tag((5, 1, 0)),
+                        ListBindingElement::Binding { binding: Binding::id("b"), default: Some(1.to_ast()) }.tag((8, 1, 0)),
+                        ListBindingElement::Slurp.tag((13, 1, 0)),
                     ])),
                     "c".id(),
                 ),
@@ -346,8 +347,8 @@ fn let_blocks() {
             bindings: vec![
                 (
                     Binding::List(ListBinding(vec![
-                        ListBindingElement::Binding { binding: Binding::id("_"), default: None },
-                        ListBindingElement::slurp_to("rest"),
+                        ListBindingElement::Binding { binding: Binding::id("_"), default: None }.tag((5, 1, 0)),
+                        ListBindingElement::slurp_to("rest").tag((8, 1, 0)),
                     ])),
                     "list".id(),
                 ),
@@ -362,7 +363,7 @@ fn let_blocks() {
             bindings: vec![
                 (
                     Binding::List(ListBinding(vec![
-                        ListBindingElement::slurp_to("a"),
+                        ListBindingElement::slurp_to("a").tag((5, 1, 0)),
                     ])),
                     "b".id(),
                 ),
@@ -377,7 +378,7 @@ fn let_blocks() {
             bindings: vec![
                 (
                     Binding::List(ListBinding(vec![
-                        ListBindingElement::slurp_to("a"),
+                        ListBindingElement::slurp_to("a").tag((5, 1, 0)),
                     ])),
                     "b".id(),
                 ),
@@ -396,7 +397,7 @@ fn let_blocks() {
                             key: GlobalSymbol::new("a"),
                             binding: Binding::id("a"),
                             default: None,
-                        },
+                        }.tag((5, 1, 0)),
                     ])),
                     "x".id(),
                 ),
@@ -415,7 +416,7 @@ fn let_blocks() {
                             key: GlobalSymbol::new("a"),
                             binding: Binding::id("b"),
                             default: None,
-                        },
+                        }.tag((5, 1, 0)),
                     ])),
                     "x".id(),
                 ),
@@ -434,7 +435,7 @@ fn let_blocks() {
                             key: GlobalSymbol::new("a"),
                             binding: Binding::id("a"),
                             default: Some("y".id()),
-                        },
+                        }.tag((5, 1, 0)),
                     ])),
                     "x".id(),
                 ),
@@ -453,7 +454,7 @@ fn let_blocks() {
                             key: GlobalSymbol::new("a"),
                             binding: Binding::id("b"),
                             default: Some("y".id()),
-                        },
+                        }.tag((5, 1, 0)),
                     ])),
                     "x".id(),
                 ),
@@ -530,8 +531,8 @@ fn funcall() {
         Ok(
             Expr::Function {
                 positional: ListBinding(vec![
-                    ListBindingElement::Binding { binding: Binding::id("x"), default: None },
-                    ListBindingElement::Binding { binding: Binding::id("y"), default: None },
+                    ListBindingElement::Binding { binding: Binding::id("x"), default: None }.tag((2, 1, 0)),
+                    ListBindingElement::Binding { binding: Binding::id("y"), default: None }.tag((4, 1, 0)),
                 ]),
                 keywords: None,
                 expression: "x".id().add("y".id()).to_box(),
@@ -667,7 +668,7 @@ fn functions() {
         parse("(a) => let b = a in b"),
         Ok(Expr::Function {
             positional: ListBinding(vec![
-                ListBindingElement::Binding { binding: Binding::id("a"), default: None },
+                ListBindingElement::Binding { binding: Binding::id("a"), default: None }.tag((1, 1, 0)),
             ]),
             keywords: None,
             expression: Box::new(Expr::Let {
@@ -691,12 +692,12 @@ fn functions() {
                     key: GlobalSymbol::new("x"),
                     binding: Binding::id("x"),
                     default: Some(1.to_ast()),
-                },
+                }.tag((1, 1, 0)),
                 MapBindingElement::Binding {
                     key: GlobalSymbol::new("y"),
                     binding: Binding::id("y"),
                     default: Some(2.to_ast()),
-                },
+                }.tag((6, 1, 0)),
             ])),
             expression: "x".id().add("y".id()).to_box(),
         }),

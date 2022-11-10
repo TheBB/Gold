@@ -113,12 +113,12 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    pub fn bind_list(&mut self, bindings: &Vec<ListBindingElement>, values: &List) -> Result<(), String> {
+    pub fn bind_list<T: AsRef<ListBindingElement>>(&mut self, bindings: &Vec<T>, values: &List) -> Result<(), String> {
         let mut value_iter = values.iter();
         let nslurp = values.len() as i64 - bindings.len() as i64 + 1;
 
         for binding_element in bindings {
-            match binding_element {
+            match binding_element.as_ref() {
                 ListBindingElement::Binding { binding, default } => {
                     let val = value_iter.next()
                         .map(Object::clone)
@@ -160,11 +160,11 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    pub fn bind_map(&mut self, bindings: &Vec<MapBindingElement>, values: &Map) -> Result<(), String> {
+    pub fn bind_map<T: AsRef<MapBindingElement>>(&mut self, bindings: &Vec<T>, values: &Map) -> Result<(), String> {
         let mut slurp_target: Option<&Key> = None;
 
         for binding_element in bindings {
-            match binding_element {
+            match binding_element.as_ref() {
                 MapBindingElement::Binding { key, binding, default } => {
                     let val = values.get(key)
                         .map(Object::clone)
@@ -187,7 +187,7 @@ impl<'a> Namespace<'a> {
             let mut values: Map = values.clone();
 
             for binding_element in bindings {
-                if let MapBindingElement::Binding { key, .. } = binding_element {
+                if let MapBindingElement::Binding { key, .. } = binding_element.as_ref() {
                     values.remove(key);
                 }
             }
