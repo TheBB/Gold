@@ -204,8 +204,8 @@ impl<'a> Namespace<'a> {
                 self.set(key, val)?;
                 Ok(())
             },
-            (Binding::List(bindings), Object::List(values)) => self.bind_list(bindings, values.as_ref()),
-            (Binding::Map(bindings), Object::Map(values)) => self.bind_map(bindings, values.as_ref()),
+            (Binding::List(bindings), Object::List(values)) => self.bind_list(&bindings.0, values.as_ref()),
+            (Binding::Map(bindings), Object::Map(values)) => self.bind_map(&bindings.0, values.as_ref()),
             _ => Err("unsupported binding".to_string()),
         }
     }

@@ -102,10 +102,63 @@ fn binding_element_free_and_bound(
 
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ListBinding(pub Vec<ListBindingElement>);
+
+impl ListBinding {
+    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+        for element in &self.0 {
+            element.free_and_bound(free, bound);
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        let mut found_slurp = false;
+        for element in &self.0 {
+            element.validate()?;
+            if let ListBindingElement::Binding { .. } = element { }
+            else {
+                if found_slurp {
+                    return Err("multiple slurps in list binding".to_string())
+                }
+                found_slurp = true;
+            }
+        }
+        Ok(())
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MapBinding(pub Vec<MapBindingElement>);
+
+impl MapBinding {
+    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+        for element in &self.0 {
+            element.free_and_bound(free, bound);
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        let mut found_slurp = false;
+        for element in &self.0 {
+            element.validate()?;
+            if let MapBindingElement::SlurpTo(_) = element {
+                if found_slurp {
+                    return Err("multiple slurps in map binding".to_string())
+                }
+                found_slurp = true;
+            }
+        }
+        Ok(())
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Binding {
     Identifier(Key),
-    List(Vec<ListBindingElement>),
-    Map(Vec<MapBindingElement>),
+    List(ListBinding),
+    Map(MapBinding),
 }
 
 impl Binding {
@@ -114,49 +167,17 @@ impl Binding {
     pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             Binding::Identifier(name) => { bound.insert(name.clone()); },
-            Binding::List(elements) => {
-                for element in elements {
-                    element.free_and_bound(free, bound);
-                }
-            },
-            Binding::Map(elements) => {
-                for element in elements {
-                    element.free_and_bound(free, bound);
-                }
-            },
+            Binding::List(elements) => elements.free_and_bound(free, bound),
+            Binding::Map(elements) => elements.free_and_bound(free, bound),
         }
     }
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            Binding::List(elements) => {
-                let mut found_slurp = false;
-                for element in elements {
-                    element.validate()?;
-                    if let ListBindingElement::Binding { .. } = element { }
-                    else {
-                        if found_slurp {
-                            return Err("multiple slurps in list binding".to_string())
-                        }
-                        found_slurp = true;
-                    }
-                }
-            },
-            Binding::Map(elements) => {
-                let mut found_slurp = false;
-                for element in elements {
-                    element.validate()?;
-                    if let MapBindingElement::SlurpTo(_) = element {
-                        if found_slurp {
-                            return Err("multiple slurps in map binding".to_string())
-                        }
-                        found_slurp = true;
-                    }
-                }
-            },
-            _ => {},
+            Binding::List(elements) => elements.validate(),
+            Binding::Map(elements) => elements.validate(),
+            _ => Ok(()),
         }
-        Ok(())
     }
 }
 
@@ -472,8 +493,8 @@ pub enum Expr {
         operator: Operator,
     },
     Function {
-        positional: Binding,
-        keywords: Binding,
+        positional: ListBinding,
+        keywords: MapBinding,
         expression: Box<Expr>,
     },
     Branch {

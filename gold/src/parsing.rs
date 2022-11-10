@@ -657,7 +657,7 @@ fn list_binding_element<'a, E: CompleteError<'a>>(
 
 fn list_binding<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, Binding, E> {
+) -> IResult<&'a str, ListBinding, E> {
     map(
         terminated(
             separated_list0(
@@ -666,7 +666,7 @@ fn list_binding<'a, E: CompleteError<'a>>(
             ),
             opt(postpad(char(','))),
         ),
-        Binding::List,
+        |x| ListBinding(x),
     )(input)
 }
 
@@ -723,7 +723,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
 
 fn map_binding<'a, E: CompleteError<'a>>(
     input: &'a str,
-) -> IResult<&'a str, Binding, E> {
+) -> IResult<&'a str, MapBinding, E> {
     map(
         terminated(
             separated_list0(
@@ -732,7 +732,7 @@ fn map_binding<'a, E: CompleteError<'a>>(
             ),
             opt(postpad(char(','))),
         ),
-        Binding::Map,
+        |x| MapBinding(x),
     )(input)
 }
 
@@ -741,8 +741,8 @@ fn binding<'a, E: CompleteError<'a>>(
 ) -> IResult<&'a str, Binding, E> {
     alt((
         ident_binding,
-        delimited(postpad(char('[')), list_binding, postpad(char(']'))),
-        delimited(postpad(char('{')), map_binding, postpad(char('}'))),
+        map(delimited(postpad(char('[')), list_binding, postpad(char(']'))), Binding::List),
+        map(delimited(postpad(char('{')), map_binding, postpad(char('}'))), Binding::Map),
     ))(input)
 }
 
@@ -771,7 +771,7 @@ fn function<'a, E: CompleteError<'a>>(
         )),
         |((posargs, kwargs), expr)| Expr::Function {
             positional: posargs,
-            keywords: kwargs.unwrap_or_else(|| Binding::Map(vec![])),
+            keywords: kwargs.unwrap_or_else(|| MapBinding(vec![])),
             expression: Box::new(expr),
         },
     )(input)
@@ -793,7 +793,7 @@ fn keyword_function<'a, E: CompleteError<'a>>(
             ),
         )),
         |(kwargs, expr)| Expr::Function {
-            positional: Binding::List(vec![]),
+            positional: ListBinding(vec![]),
             keywords: kwargs,
             expression: Box::new(expr),
         },

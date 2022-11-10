@@ -19,7 +19,7 @@ use crate::traits::{ToVec, ToMap};
 
 use super::eval::Namespace;
 use super::util;
-use super::ast::{Binding, Expr};
+use super::ast::{ListBinding, MapBinding, Expr};
 use super::traits::{Splattable, Splat};
 
 
@@ -126,8 +126,8 @@ impl<'a> Deserialize<'a> for Builtin {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Function {
-    pub args: Binding,
-    pub kwargs: Binding,
+    pub args: ListBinding,
+    pub kwargs: MapBinding,
     pub closure: Map,
     pub expr: Expr,
 }
@@ -470,15 +470,12 @@ impl Object {
     pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, String> {
         match self {
             Object::Function(func) => {
-                if let Function { args: Binding::List(fargs), kwargs: Binding::Map(fkwargs), closure, expr } = func.as_ref() {
-                    let ns = Namespace::Frozen(closure);
-                    let mut sub = ns.subtend();
-                    sub.bind_list(fargs, args)?;
-                    kwargs.map(|x| sub.bind_map(fkwargs, x));
-                    sub.eval(expr)
-                } else {
-                    Err("unreachable".to_string())
-                }
+                let Function { args: fargs, kwargs: fkwargs, closure, expr } = func.as_ref();
+                let ns = Namespace::Frozen(closure);
+                let mut sub = ns.subtend();
+                sub.bind_list(&fargs.0, args)?;
+                kwargs.map(|x| sub.bind_map(&fkwargs.0, x));
+                sub.eval(expr)
             },
             Object::Builtin(Builtin { func, .. }) => {
                 func(args, kwargs)
