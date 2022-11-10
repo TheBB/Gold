@@ -23,12 +23,12 @@ use super::object::{Object, Key};
 
 type Span<'a> = LocatedSpan<&'a str>;
 
-impl<'a> From<Span<'a>> for Location {
-    fn from(value: Span<'a>) -> Self {
+impl<'a> From<(Span<'a>, Span<'a>)> for Location {
+    fn from((l, r): (Span<'a>, Span<'a>)) -> Self {
         Self {
-            offset: value.location_offset(),
-            line: value.location_line(),
-            length: value.fragment().len(),
+            offset: l.location_offset(),
+            line: l.location_line(),
+            length: r.location_offset() - l.location_offset(),
         }
     }
 }
@@ -61,6 +61,21 @@ where
     <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
 {
     terminated(parser, multispace0)
+}
+
+fn positioned<I, O, E: ParseError<I>, F>(
+    parser: F
+) -> impl FnMut(I) -> IResult<I, Tagged<O>, E>
+where
+    F: Parser<I, O, E>,
+    I: nom::InputTake + nom::InputIter + Clone,
+    O: Taggable,
+    Location: From<(I, I)>,
+{
+    map(
+        tuple((position, parser, position)),
+        |(l, o, r)| o.tag((l, r)),
+    )
 }
 
 static KEYWORDS: [&'static str; 14] = [
@@ -672,16 +687,16 @@ fn ident_binding<'a, E: CompleteError<'a>>(
 fn list_binding_element<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<ListBindingElement>, E> {
-    alt((
+    positioned(alt((
         map(
-            tuple((position, preceded(tag("..."), opt(identifier)))),
-            |(p, ident)| ident.map(ListBindingElement::slurp_to).unwrap_or(ListBindingElement::Slurp).tag(p),
+            preceded(tag("..."), opt(identifier)),
+            |ident| ident.map(ListBindingElement::slurp_to).unwrap_or(ListBindingElement::Slurp),
         ),
         map(
-            tuple((position, binding, opt(preceded(postpad(char('=')), expression)))),
-            |(p, b, e)| ListBindingElement::Binding { binding: b, default: e }.tag(p),
+            tuple((binding, opt(preceded(postpad(char('=')), expression)))),
+            |(b, e)| ListBindingElement::Binding { binding: b, default: e },
         ),
-    ))(input)
+    )))(input)
 }
 
 fn list_binding<'a, E: CompleteError<'a>>(
@@ -702,14 +717,13 @@ fn list_binding<'a, E: CompleteError<'a>>(
 fn map_binding_element<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<MapBindingElement>, E> {
-    alt((
+    positioned(alt((
         map(
-            tuple((position, preceded(tag("..."), identifier))),
-            |(p, i)| MapBindingElement::slurp_to(i).tag(p),
+            preceded(tag("..."), identifier),
+            |i| MapBindingElement::slurp_to(i),
         ),
         map(
             tuple((
-                position,
                 alt((
                     map(
                         tuple((
@@ -733,22 +747,22 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                     ),
                 ),
             )),
-            |(p, (name, binding), default)| {
+            |((name, binding), default)| {
                 match binding {
                     None => MapBindingElement::Binding {
                         key: Key::new(name.to_string()),
                         binding: Binding::id(name),
                         default,
-                    }.tag(p),
+                    },
                     Some(binding) => MapBindingElement::Binding {
                         key: Key::new(name.to_string()),
                         binding,
                         default,
-                    }.tag(p),
+                    },
                 }
             },
         ),
-    ))(input)
+    )))(input)
 }
 
 fn map_binding<'a, E: CompleteError<'a>>(
