@@ -138,7 +138,7 @@ impl MapBinding {
         }
     }
 
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate<'a>(&'a self) -> Result<(), String> {
         let mut found_slurp = false;
         for element in &self.0 {
             element.validate()?;
@@ -494,7 +494,7 @@ pub enum Expr {
     },
     Function {
         positional: ListBinding,
-        keywords: MapBinding,
+        keywords: Option<MapBinding>,
         expression: Box<Expr>,
     },
     Branch {
@@ -647,7 +647,7 @@ impl Expr {
             Expr::Function { positional, keywords, expression } => {
                 let mut bound: HashSet<Key> = HashSet::new();
                 positional.free_and_bound(free, &mut bound);
-                keywords.free_and_bound(free, &mut bound);
+                keywords.as_ref().map(|x| x.free_and_bound(free, &mut bound));
                 for id in expression.free() {
                     if !bound.contains(&id) {
                         free.insert(id);
@@ -687,7 +687,7 @@ impl Expr {
             },
             Expr::Function { positional, keywords, expression } => {
                 positional.validate()?;
-                keywords.validate()?;
+                keywords.as_ref().map(MapBinding::validate).transpose()?;
                 expression.validate()?;
             },
             Expr::Branch { condition, true_branch, false_branch } => {
