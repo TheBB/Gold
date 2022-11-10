@@ -8,6 +8,7 @@ clap = { version = "4.0.18", features = ["derive"] }
 json = "0.12.4"
 lazy_static = "1.4.0"
 nom = "7.1.1"
+nom_locate = "4.0.0"
 num-bigint = { version = "0.4.3", features = ["serde"] }
 num-traits = "0.2.15"
 rmp-serde = "1.1.1"

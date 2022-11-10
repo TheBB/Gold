@@ -2,6 +2,7 @@ use std::num::{ParseFloatError, ParseIntError};
 use std::str::FromStr;
 
 use num_bigint::{BigInt, ParseBigIntError};
+use nom_locate::{LocatedSpan};
 
 use nom::{
     IResult, Parser,
@@ -14,25 +15,46 @@ use nom::{
     multi::{many0, many1, separated_list0},
     sequence::{delimited, preceded, terminated, tuple, pair},
 };
+use serde::{Serialize, Deserialize};
 
 use super::ast::*;
 use super::object::{Object, Key};
 
 
+type Span<'a> = LocatedSpan<&'a str>;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Location {
+    pub offset: usize,
+    pub line: u32,
+    pub length: usize,
+}
+
+impl<'a> From<Span<'a>> for Location {
+    fn from(value: Span<'a>) -> Self {
+        Self {
+            offset: value.location_offset(),
+            line: value.location_line(),
+            length: value.fragment().len(),
+        }
+    }
+}
+
+
 trait CompleteError<'a>:
-    ParseError<&'a str> +
-    ContextError<&'a str> +
-    FromExternalError<&'a str, ParseIntError> +
-    FromExternalError<&'a str, ParseBigIntError> +
-    FromExternalError<&'a str, ParseFloatError> {}
+    ParseError<Span<'a>> +
+    ContextError<Span<'a>> +
+    FromExternalError<Span<'a>, ParseIntError> +
+    FromExternalError<Span<'a>, ParseBigIntError> +
+    FromExternalError<Span<'a>, ParseFloatError> {}
 
 impl<'a, T> CompleteError<'a> for T
 where T:
-    ParseError<&'a str> +
-    ContextError<&'a str> +
-    FromExternalError<&'a str, ParseIntError> +
-    FromExternalError<&'a str, ParseBigIntError> +
-    FromExternalError<&'a str, ParseFloatError> {}
+    ParseError<Span<'a>> +
+    ContextError<Span<'a>> +
+    FromExternalError<Span<'a>, ParseIntError> +
+    FromExternalError<Span<'a>, ParseBigIntError> +
+    FromExternalError<Span<'a>, ParseFloatError> {}
 
 
 type OpCons = fn(Expr) -> Operator;
@@ -65,55 +87,67 @@ static KEYWORDS: [&'static str; 14] = [
     "import",
 ];
 
-fn keyword<'a, E: ParseError<&'a str>>(
-    value: &'static str
-) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
+fn keyword<'a, E: ParseError<Span<'a>>>(
+    value: &'a str,
+) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, Span<'a>, E> {
     verify(
         is_not("=,;.:-+/*[](){}\"\' \t\n\r"),
-        move |out: &str| out == value,
+        move |out: &Span<'a>| { *out.fragment() == value },
     )
 }
 
 fn identifier<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, &'a str, E> {
-    verify(
-        recognize(pair(
-            alt((alpha1, tag("_"))),
-            opt(is_not("=.,:;-+/*[](){}\"\' \t\n\r")),
-        )),
-        |out: &str| !KEYWORDS.contains(&out),
+    input: Span<'a>,
+) -> IResult<Span<'a>, &'a str, E> {
+    map(
+        verify(
+            recognize(pair(
+                alt((alpha1::<Span<'a>, E>, tag("_"))),
+                opt(is_not("=.,:;-+/*[](){}\"\' \t\n\r")),
+            )),
+            |out: &Span<'a>| !KEYWORDS.contains(out.fragment()),
+        ),
+        |x| *x.fragment(),
     )(input)
 }
 
 fn map_identifier<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, &'a str, E> {
-    is_not(",=:$}()\"\' \t\n\r")(input)
+    input: Span<'a>,
+) -> IResult<Span<'a>, &'a str, E> {
+    map(
+        is_not(",=:$}()\"\' \t\n\r"),
+        |x: Span<'a>| *x.fragment(),
+    )(input)
 }
 
 fn decimal<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, &'a str, E> {
-    recognize(tuple((
-        one_of("0123456789"),
-        many0(one_of("0123456789_")),
-    )))(input)
+    input: Span<'a>,
+) -> IResult<Span<'a>, &'a str, E> {
+    map(
+        recognize(tuple((
+            one_of("0123456789"),
+            many0(one_of("0123456789_")),
+        ))),
+        |x: Span<'a>| *x.fragment(),
+    )(input)
 }
 
 fn exponent<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&str, &str, E> {
-    recognize(tuple((
-        one_of("eE"),
-        opt(one_of("+-")),
-        decimal,
-    )))(input)
+    input: Span<'a>,
+) -> IResult<Span<'a>, &str, E> {
+    map(
+        recognize(tuple((
+            one_of("eE"),
+            opt(one_of("+-")),
+            decimal,
+        ))),
+        |x: Span<'a>| *x.fragment(),
+    )(input)
 }
 
 fn integer<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     map_res(
         decimal,
         |out: &'a str| {
@@ -127,8 +161,8 @@ fn integer<'a, E: CompleteError<'a>>(
 }
 
 fn float<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     map_res(
         alt((
             recognize(tuple((
@@ -147,13 +181,13 @@ fn float<'a, E: CompleteError<'a>>(
                 exponent,
             ))),
         )),
-        |out: &str| { out.replace("_", "").parse::<f64>().map(Expr::float) }
+        |out: Span<'a>| { (*out.fragment()).replace("_", "").parse::<f64>().map(Expr::float) }
     )(input)
 }
 
 fn raw_string<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, String, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, String, E> {
     map(
         escaped_transform(
             recognize(many1(none_of("\"\\$"))),
@@ -168,8 +202,8 @@ fn raw_string<'a, E: CompleteError<'a>>(
 }
 
 fn string_data<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, StringElement, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, StringElement, E> {
     map(
         raw_string,
         StringElement::raw
@@ -177,8 +211,8 @@ fn string_data<'a, E: CompleteError<'a>>(
 }
 
 fn string_interp<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, StringElement, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, StringElement, E> {
     map(
         preceded(
             postpad(tag("${")),
@@ -192,8 +226,8 @@ fn string_interp<'a, E: CompleteError<'a>>(
 }
 
 fn string<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     map(
         preceded(
             char('\"'),
@@ -207,8 +241,8 @@ fn string<'a, E: CompleteError<'a>>(
 }
 
 fn boolean<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     alt((
         value(Expr::boolean(true), keyword("true")),
         value(Expr::boolean(false), keyword("false")),
@@ -216,14 +250,14 @@ fn boolean<'a, E: CompleteError<'a>>(
 }
 
 fn null<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     value(Expr::null(), keyword("null"))(input)
 }
 
 fn atomic<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     alt((
         null,
         boolean,
@@ -234,8 +268,8 @@ fn atomic<'a, E: CompleteError<'a>>(
 }
 
 fn list_element<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, ListElement, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, ListElement, E> {
     alt((
         map(
             preceded(postpad(tag("...")), expression),
@@ -268,8 +302,8 @@ fn list_element<'a, E: CompleteError<'a>>(
 }
 
 fn list<'a, E: CompleteError<'a>>(
-    input: &'a str
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     map(
         preceded(
             postpad(char('[')),
@@ -289,8 +323,8 @@ fn list<'a, E: CompleteError<'a>>(
 }
 
 fn map_element<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, MapElement, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, MapElement, E> {
     alt((
         map(
             preceded(postpad(tag("...")), expression),
@@ -345,8 +379,8 @@ fn map_element<'a, E: CompleteError<'a>>(
 }
 
 fn mapping<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     map(
         preceded(
             postpad(char('{')),
@@ -366,8 +400,8 @@ fn mapping<'a, E: CompleteError<'a>>(
 }
 
 fn postfixable<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     postpad(alt((
         delimited(postpad(char('(')), expression, postpad(char(')'))),
         atomic,
@@ -378,8 +412,8 @@ fn postfixable<'a, E: CompleteError<'a>>(
 }
 
 fn object_access<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Operator, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Operator, E> {
     map(
         preceded(
             postpad(char('.')),
@@ -390,8 +424,8 @@ fn object_access<'a, E: CompleteError<'a>>(
 }
 
 fn object_index<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Operator, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Operator, E> {
     map(
         delimited(
             postpad(char('[')),
@@ -403,8 +437,8 @@ fn object_index<'a, E: CompleteError<'a>>(
 }
 
 fn function_arg<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, ArgElement, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, ArgElement, E> {
     alt((
         map(
             preceded(postpad(tag("...")), expression),
@@ -428,8 +462,8 @@ fn function_arg<'a, E: CompleteError<'a>>(
 }
 
 fn function_call<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Operator, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Operator, E> {
     map(
         delimited(
             postpad(char('(')),
@@ -444,8 +478,8 @@ fn function_call<'a, E: CompleteError<'a>>(
 }
 
 fn postfixed<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     map(
         tuple((
             postfixable,
@@ -465,8 +499,8 @@ fn postfixed<'a, E: CompleteError<'a>>(
 }
 
 fn prefixed<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     map(
         tuple((
             many0(alt((
@@ -532,8 +566,8 @@ where
 }
 
 fn power<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     binops(
         binop(
             alt((
@@ -560,8 +594,8 @@ where
 }
 
 fn product<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     lbinop(
         alt((
             value(Operator::multiply as OpCons, tag("*")),
@@ -573,8 +607,8 @@ fn product<'a, E: CompleteError<'a>>(
 }
 
 fn sum<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     lbinop(
         alt((
             value(Operator::add as OpCons, tag("+")),
@@ -585,8 +619,8 @@ fn sum<'a, E: CompleteError<'a>>(
 }
 
 fn inequality<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     lbinop(
         alt((
             value(Operator::less_equal as OpCons, tag("<=")),
@@ -599,8 +633,8 @@ fn inequality<'a, E: CompleteError<'a>>(
 }
 
 fn equality<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     lbinop(
         alt((
             value(Operator::equal as OpCons, tag("==")),
@@ -611,8 +645,8 @@ fn equality<'a, E: CompleteError<'a>>(
 }
 
 fn conjunction<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     lbinop(
         alt((
             value(Operator::and as OpCons, tag("and")),
@@ -622,8 +656,8 @@ fn conjunction<'a, E: CompleteError<'a>>(
 }
 
 fn disjunction<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     lbinop(
         alt((
             value(Operator::or as OpCons, tag("or")),
@@ -633,16 +667,16 @@ fn disjunction<'a, E: CompleteError<'a>>(
 }
 
 fn ident_binding<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Binding, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Binding, E> {
     postpad(alt((
         map(identifier, |out: &str| Binding::id(out)),
     )))(input)
 }
 
 fn list_binding_element<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, ListBindingElement, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, ListBindingElement, E> {
     alt((
         map(
             preceded(tag("..."), opt(identifier)),
@@ -656,8 +690,8 @@ fn list_binding_element<'a, E: CompleteError<'a>>(
 }
 
 fn list_binding<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, ListBinding, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, ListBinding, E> {
     map(
         terminated(
             separated_list0(
@@ -671,8 +705,8 @@ fn list_binding<'a, E: CompleteError<'a>>(
 }
 
 fn map_binding_element<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, MapBindingElement, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, MapBindingElement, E> {
     alt((
         map(
             preceded(tag("..."), identifier),
@@ -722,8 +756,8 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
 }
 
 fn map_binding<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, MapBinding, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, MapBinding, E> {
     map(
         terminated(
             separated_list0(
@@ -737,8 +771,8 @@ fn map_binding<'a, E: CompleteError<'a>>(
 }
 
 fn binding<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Binding, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Binding, E> {
     alt((
         ident_binding,
         map(delimited(postpad(char('[')), list_binding, postpad(char(']'))), Binding::List),
@@ -747,8 +781,8 @@ fn binding<'a, E: CompleteError<'a>>(
 }
 
 fn function<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     map(
         tuple((
             delimited(
@@ -778,8 +812,8 @@ fn function<'a, E: CompleteError<'a>>(
 }
 
 fn keyword_function<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     map(
         tuple((
             delimited(
@@ -801,8 +835,8 @@ fn keyword_function<'a, E: CompleteError<'a>>(
 }
 
 fn let_block<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     map(
         tuple((
             many1(
@@ -827,8 +861,8 @@ fn let_block<'a, E: CompleteError<'a>>(
 }
 
 fn branch<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     map(
         tuple((
             preceded(
@@ -853,8 +887,8 @@ fn branch<'a, E: CompleteError<'a>>(
 }
 
 fn composite<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     alt((
         let_block,
         branch,
@@ -864,8 +898,8 @@ fn composite<'a, E: CompleteError<'a>>(
 }
 
 fn expression<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, Expr, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, Expr, E> {
     alt((
         composite,
         disjunction,
@@ -873,8 +907,8 @@ fn expression<'a, E: CompleteError<'a>>(
 }
 
 fn import<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, TopLevel, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, TopLevel, E> {
     map(
         tuple((
             preceded(
@@ -894,8 +928,8 @@ fn import<'a, E: CompleteError<'a>>(
 }
 
 fn file<'a, E: CompleteError<'a>>(
-    input: &'a str,
-) -> IResult<&'a str, File, E> {
+    input: Span<'a>,
+) -> IResult<Span<'a>, File, E> {
     map(
         tuple((
             many0(postpad(import)),
@@ -906,7 +940,8 @@ fn file<'a, E: CompleteError<'a>>(
 }
 
 pub fn parse(input: &str) -> Result<File, String> {
-    file::<VerboseError<&str>>(input).map_or_else(
+    let span = Span::new(input);
+    file::<VerboseError<Span>>(span).map_or_else(
         |err| match err {
             Incomplete(_) => Err("incomplete input".to_string()),
             Error(e) | Failure(e) => Err(format!("{:#?}", e)),
