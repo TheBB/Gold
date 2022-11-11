@@ -157,10 +157,8 @@ fn integer<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Expr, E> {
     map_res(
-        tuple((position, decimal)),
-        // decimal,
-        |(pos, out)| {
-            println!("{:#?}", pos);
+        decimal,
+        |out| {
             let s = out.replace("_", "");
             i64::from_str_radix(s.as_str(), 10).map_or_else(
                 |_| { BigInt::from_str(s.as_str()).map(Expr::big_integer) },
@@ -678,9 +676,9 @@ fn disjunction<'a, E: CompleteError<'a>>(
 
 fn ident_binding<'a, E: CompleteError<'a>>(
     input: Span<'a>,
-) -> IResult<Span<'a>, Binding, E> {
+) -> IResult<Span<'a>, Tagged<Binding>, E> {
     postpad(alt((
-        map(identifier, |out: &str| Binding::id(out)),
+        map(positioned(identifier), |out: Tagged<&str>| Binding::id(out.as_ref()).tag(out)),
     )))(input)
 }
 
@@ -750,12 +748,12 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
             |((name, binding), default)| {
                 match binding {
                     None => MapBindingElement::Binding {
-                        key: Key::new(name.to_string()),
-                        binding: Binding::id(name),
+                        key: Key::new(name),
+                        binding: Binding::id(name).tag((0, 0, 0)),          // TODO
                         default,
                     },
                     Some(binding) => MapBindingElement::Binding {
-                        key: Key::new(name.to_string()),
+                        key: Key::new(name),
                         binding,
                         default,
                     },
@@ -782,11 +780,11 @@ fn map_binding<'a, E: CompleteError<'a>>(
 
 fn binding<'a, E: CompleteError<'a>>(
     input: Span<'a>,
-) -> IResult<Span<'a>, Binding, E> {
+) -> IResult<Span<'a>, Tagged<Binding>, E> {
     alt((
         ident_binding,
-        map(delimited(postpad(char('[')), list_binding, postpad(char(']'))), Binding::List),
-        map(delimited(postpad(char('{')), map_binding, postpad(char('}'))), Binding::Map),
+        postpad(positioned(map(delimited(postpad(char('[')), list_binding, char(']')), Binding::List))),
+        postpad(positioned(map(delimited(postpad(char('{')), map_binding, char('}')), Binding::Map))),
     ))(input)
 }
 

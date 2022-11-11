@@ -14,6 +14,12 @@ impl From<(usize, u32, usize)> for Location {
     }
 }
 
+impl<T> From<Tagged<T>> for Location {
+    fn from(value: Tagged<T>) -> Self {
+        value.location
+    }
+}
+
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Tagged<T> {
