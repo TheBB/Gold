@@ -166,7 +166,7 @@ impl<'a> Namespace<'a> {
         for binding_element in bindings {
             match binding_element.as_ref() {
                 MapBindingElement::Binding { key, binding, default } => {
-                    let val = values.get(key)
+                    let val = values.get(key.as_ref())
                         .map(Object::clone)
                         .ok_or_else(|| "zomg".to_string())
                         .or_else(|_| {
@@ -188,7 +188,7 @@ impl<'a> Namespace<'a> {
 
             for binding_element in bindings {
                 if let MapBindingElement::Binding { key, .. } = binding_element.as_ref() {
-                    values.remove(key);
+                    values.remove(key.as_ref());
                 }
             }
 

@@ -409,8 +409,8 @@ fn let_blocks() {
                 (
                     Binding::Map(MapBinding(vec![
                         MapBindingElement::Binding {
-                            key: GlobalSymbol::new("a"),
-                            binding: Binding::id("a").tag((0, 0, 0)),
+                            key: GlobalSymbol::new("a").tag((5, 1, 1)),
+                            binding: Binding::id("a").tag((5, 1, 1)),
                             default: None,
                         }.tag((5, 1, 1)),
                     ])).tag((4, 1, 3)),
@@ -428,7 +428,7 @@ fn let_blocks() {
                 (
                     Binding::Map(MapBinding(vec![
                         MapBindingElement::Binding {
-                            key: GlobalSymbol::new("a"),
+                            key: GlobalSymbol::new("a").tag((5, 1, 1)),
                             binding: Binding::id("b").tag((10, 1, 1)),
                             default: None,
                         }.tag((5, 1, 6)),
@@ -447,8 +447,8 @@ fn let_blocks() {
                 (
                     Binding::Map(MapBinding(vec![
                         MapBindingElement::Binding {
-                            key: GlobalSymbol::new("a"),
-                            binding: Binding::id("a").tag((0, 0, 0)),
+                            key: GlobalSymbol::new("a").tag((5, 1, 1)),
+                            binding: Binding::id("a").tag((5, 1, 1)),
                             default: Some("y".id()),
                         }.tag((5, 1, 5)),
                     ])).tag((4, 1, 7)),
@@ -466,7 +466,7 @@ fn let_blocks() {
                 (
                     Binding::Map(MapBinding(vec![
                         MapBindingElement::Binding {
-                            key: GlobalSymbol::new("a"),
+                            key: GlobalSymbol::new("a").tag((5, 1, 1)),
                             binding: Binding::id("b").tag((10, 1, 1)),
                             default: Some("y".id()),
                         }.tag((5, 1, 10)),
@@ -713,13 +713,13 @@ fn functions() {
             positional: ListBinding(vec![]),
             keywords: Some(MapBinding(vec![
                 MapBindingElement::Binding {
-                    key: GlobalSymbol::new("x"),
-                    binding: Binding::id("x").tag((0, 0, 0)),
+                    key: GlobalSymbol::new("x").tag((1, 1, 1)),
+                    binding: Binding::id("x").tag((1, 1, 1)),
                     default: Some(1.to_ast()),
                 }.tag((1, 1, 3)),
                 MapBindingElement::Binding {
-                    key: GlobalSymbol::new("y"),
-                    binding: Binding::id("y").tag((0, 0, 0)),
+                    key: GlobalSymbol::new("y").tag((6, 1, 1)),
+                    binding: Binding::id("y").tag((6, 1, 1)),
                     default: Some(2.to_ast()),
                 }.tag((6, 1, 3)),
             ])),

@@ -121,10 +121,10 @@ fn identifier<'a, E: CompleteError<'a>>(
 
 fn map_identifier<'a, E: CompleteError<'a>>(
     input: Span<'a>,
-) -> IResult<Span<'a>, &'a str, E> {
+) -> IResult<Span<'a>, Tagged<Key>, E> {
     map(
-        is_not(",=:$}()\"\' \t\n\r"),
-        |x: Span<'a>| *x.fragment(),
+        positioned(is_not(",=:$}()\"\' \t\n\r")),
+        |x| Key::new(x.as_ref().fragment()).tag(x),
     )(input)
 }
 
@@ -379,7 +379,7 @@ fn map_element<'a, E: CompleteError<'a>>(
                 expression,
             )),
             |(key, value)| MapElement::Singleton {
-                key: Object::int_string(key).literal(),
+                key: Object::from(*key.as_ref()).literal(),
                 value,
             },
         ),
@@ -735,7 +735,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                     ),
                     map(
                         postpad(map_identifier),
-                        |name: &str| (name, None),
+                        |name| (name, None),
                     ),
                 )),
                 opt(
@@ -748,12 +748,12 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
             |((name, binding), default)| {
                 match binding {
                     None => MapBindingElement::Binding {
-                        key: Key::new(name),
-                        binding: Binding::id(name).tag((0, 0, 0)),          // TODO
+                        key: name,
+                        binding: Binding::id(name.as_ref()).tag(name),
                         default,
                     },
                     Some(binding) => MapBindingElement::Binding {
-                        key: Key::new(name),
+                        key: name,
                         binding,
                         default,
                     },

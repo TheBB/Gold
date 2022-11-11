@@ -556,6 +556,12 @@ impl From<&str> for Object {
     }
 }
 
+impl From<Key> for Object where {
+    fn from(value: Key) -> Self {
+        Object::IntString(value)
+    }
+}
+
 impl From<bool> for Object {
     fn from(x: bool) -> Object { Object::Boolean(x) }
 }
