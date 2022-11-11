@@ -148,7 +148,7 @@ impl<'a> Namespace<'a> {
                             Some(val) => values.push(val.clone()),
                         }
                     }
-                    self.set(name, Object::from(values))?;
+                    self.set(name.as_ref(), Object::from(values))?;
                 }
             }
         }
@@ -178,7 +178,7 @@ impl<'a> Namespace<'a> {
                     self.bind(binding.as_ref(), val)?;
                 },
                 MapBindingElement::SlurpTo(target) => {
-                    slurp_target = Some(target);
+                    slurp_target = Some(target.as_ref());
                 },
             }
         }
@@ -201,7 +201,7 @@ impl<'a> Namespace<'a> {
     pub fn bind(&mut self, binding: &Binding, value: Object) -> Result<(), String> {
         match (binding, value) {
             (Binding::Identifier(key), val) => {
-                self.set(key, val)?;
+                self.set(key.as_ref(), val)?;
                 Ok(())
             },
             (Binding::List(bindings), Object::List(values)) => self.bind_list(&bindings.0, values.as_ref()),
@@ -324,7 +324,7 @@ impl<'a> Namespace<'a> {
             },
 
             ArgElement::Keyword(key, value) => {
-                kwargs.insert(key.clone(), self.eval(value)?);
+                kwargs.insert(*key.as_ref(), self.eval(value)?);
                 Ok(())
             }
         }
@@ -393,7 +393,7 @@ impl<'a> Namespace<'a> {
                 Ok(Object::nat_string(rval))
             },
 
-            Expr::Identifier(name) => self.get(name),
+            Expr::Identifier(name) => self.get(name.as_ref()),
 
             Expr::List(elements) => {
                 let mut values: List = vec![];

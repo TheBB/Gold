@@ -106,8 +106,8 @@ fn keyword<'a, E: ParseError<Span<'a>>>(
 
 fn identifier<'a, E: CompleteError<'a>>(
     input: Span<'a>,
-) -> IResult<Span<'a>, &'a str, E> {
-    map(
+) -> IResult<Span<'a>, Tagged<Key>, E> {
+    positioned(map(
         verify(
             recognize(pair(
                 alt((alpha1::<Span<'a>, E>, tag("_"))),
@@ -115,8 +115,8 @@ fn identifier<'a, E: CompleteError<'a>>(
             )),
             |out: &Span<'a>| !KEYWORDS.contains(out.fragment()),
         ),
-        |x| *x.fragment(),
-    )(input)
+        |x| Key::new(*x.fragment()),
+    ))(input)
 }
 
 fn map_identifier<'a, E: CompleteError<'a>>(
@@ -413,7 +413,7 @@ fn postfixable<'a, E: CompleteError<'a>>(
     postpad(alt((
         delimited(postpad(char('(')), expression, postpad(char(')'))),
         atomic,
-        map(identifier, Expr::id),
+        map(identifier, Expr::Identifier),
         list,
         mapping,
     )))(input)
@@ -427,7 +427,7 @@ fn object_access<'a, E: CompleteError<'a>>(
             postpad(char('.')),
             identifier,
         ),
-        |out: &str| Operator::BinOp(BinOp::Index, Box::new(Object::int_string(out).literal())),
+        |out| Operator::BinOp(BinOp::Index, Box::new(Object::IntString(*out.as_ref()).literal())),
     )(input)
 }
 
@@ -460,7 +460,7 @@ fn function_arg<'a, E: CompleteError<'a>>(
                     expression,
                 ),
             )),
-            |(name, expr)| ArgElement::keyword(name, expr),
+            |(name, expr)| ArgElement::Keyword(name, expr),
         ),
         map(
             expression,
@@ -680,7 +680,7 @@ fn ident_binding<'a, E: CompleteError<'a>>(
     postpad(alt((
         map(
             positioned(identifier),
-            |out| out.map(Binding::id),
+            |out| out.map(Binding::Identifier),
         ),
     )))(input)
 }
@@ -691,7 +691,7 @@ fn list_binding_element<'a, E: CompleteError<'a>>(
     positioned(alt((
         map(
             preceded(tag("..."), opt(identifier)),
-            |ident| ident.map(ListBindingElement::slurp_to).unwrap_or(ListBindingElement::Slurp),
+            |ident| ident.map(ListBindingElement::SlurpTo).unwrap_or(ListBindingElement::Slurp),
         ),
         map(
             tuple((binding, opt(preceded(postpad(char('=')), expression)))),
@@ -721,7 +721,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
     positioned(alt((
         map(
             preceded(tag("..."), identifier),
-            |i| MapBindingElement::slurp_to(i),
+            |i| MapBindingElement::SlurpTo(i),
         ),
         map(
             tuple((
@@ -752,7 +752,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                 match binding {
                     None => MapBindingElement::Binding {
                         key: name,
-                        binding: name.map(Binding::Identifier),
+                        binding: Binding::Identifier(name).tag(name),
                         default,
                     },
                     Some(binding) => MapBindingElement::Binding {
