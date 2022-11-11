@@ -786,8 +786,8 @@ fn binding<'a, E: CompleteError<'a>>(
 ) -> IResult<Span<'a>, Tagged<Binding>, E> {
     alt((
         ident_binding,
-        postpad(positioned(map(delimited(postpad(char('[')), list_binding, char(']')), Binding::List))),
-        postpad(positioned(map(delimited(postpad(char('{')), map_binding, char('}')), Binding::Map))),
+        postpad(positioned(map(positioned(delimited(postpad(char('[')), list_binding, char(']'))), Binding::List))),
+        postpad(positioned(map(positioned(delimited(postpad(char('{')), map_binding, char('}'))), Binding::Map))),
     ))(input)
 }
 

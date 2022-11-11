@@ -308,7 +308,7 @@ fn maps() {
                         binding: "y".bid((8, 1, 1)),
                         default: None
                     }.tag((8, 1, 1)),
-                ])).tag((5, 1, 5)),
+                ]).tag((5, 1, 5))).tag((5, 1, 5)),
                 iterable: "z".id((14, 1, 1)),
                 element: Box::new(MapElement::Singleton {
                     key: Object::int_string("x").literal(),
@@ -370,7 +370,7 @@ fn let_blocks() {
                             default: Some(1.to_ast())
                         }.tag((8, 1, 3)),
                         ListBindingElement::Slurp.tag((13, 1, 3)),
-                    ])).tag((4, 1, 13)),
+                    ]).tag((4, 1, 13))).tag((4, 1, 13)),
                     "c".id((20, 1, 1)),
                 ),
             ],
@@ -392,7 +392,7 @@ fn let_blocks() {
                             default: None
                         }.tag((5, 1, 1)),
                         ListBindingElement::SlurpTo("rest".key((11, 1, 4))).tag((8, 1, 7)),
-                    ])).tag((4, 1, 12)),
+                    ]).tag((4, 1, 12))).tag((4, 1, 12)),
                     "list".id((19, 1, 4)),
                 ),
             ],
@@ -407,7 +407,7 @@ fn let_blocks() {
                 (
                     Binding::List(ListBinding(vec![
                         ListBindingElement::SlurpTo("a".key((8, 1, 1))).tag((5, 1, 4)),
-                    ])).tag((4, 1, 6)),
+                    ]).tag((4, 1, 6))).tag((4, 1, 6)),
                     "b".id((13, 1, 1)),
                 ),
             ],
@@ -422,7 +422,7 @@ fn let_blocks() {
                 (
                     Binding::List(ListBinding(vec![
                         ListBindingElement::SlurpTo("a".key((8, 1, 1))).tag((5, 1, 4)),
-                    ])).tag((4, 1, 7)),
+                    ]).tag((4, 1, 7))).tag((4, 1, 7)),
                     "b".id((14, 1, 1)),
                 ),
             ],
@@ -441,7 +441,7 @@ fn let_blocks() {
                             binding: "a".bid((5, 1, 1)),
                             default: None,
                         }.tag((5, 1, 1)),
-                    ])).tag((4, 1, 3)),
+                    ]).tag((4, 1, 3))).tag((4, 1, 3)),
                     "x".id((10, 1, 1)),
                 ),
             ],
@@ -460,7 +460,7 @@ fn let_blocks() {
                             binding: "b".bid((10, 1, 1)),
                             default: None,
                         }.tag((5, 1, 6)),
-                    ])).tag((4, 1, 8)),
+                    ]).tag((4, 1, 8))).tag((4, 1, 8)),
                     "x".id((15, 1, 1)),
                 ),
             ],
@@ -479,7 +479,7 @@ fn let_blocks() {
                             binding: "a".bid((5, 1, 1)),
                             default: Some("y".id((9, 1, 1))),
                         }.tag((5, 1, 5)),
-                    ])).tag((4, 1, 7)),
+                    ]).tag((4, 1, 7))).tag((4, 1, 7)),
                     "x".id((14, 1, 1)),
                 ),
             ],
@@ -498,7 +498,7 @@ fn let_blocks() {
                             binding: "b".bid((10, 1, 1)),
                             default: Some("y".id((14, 1, 1))),
                         }.tag((5, 1, 10)),
-                    ])).tag((4, 1, 12)),
+                    ]).tag((4, 1, 12))).tag((4, 1, 12)),
                     "x".id((19, 1, 1)),
                 ),
             ],
