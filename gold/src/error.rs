@@ -14,17 +14,20 @@ impl From<(usize, u32, usize)> for Location {
     }
 }
 
-impl<T> From<Tagged<T>> for Location {
-    fn from(value: Tagged<T>) -> Self {
-        value.location
-    }
-}
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Tagged<T> {
     location: Location,
     contents: T,
+}
+
+impl<T> Tagged<T> {
+    pub fn map<F, U>(self, f: F) -> Tagged<U> where F: FnOnce(T) -> U {
+        Tagged::<U> {
+            location: self.location,
+            contents: f(self.contents),
+        }
+    }
 }
 
 impl<T> AsRef<T> for Tagged<T> {
