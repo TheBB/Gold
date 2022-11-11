@@ -155,23 +155,23 @@ impl MapBinding {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Binding {
     Identifier(Tagged<Key>),
-    List(ListBinding),
-    Map(MapBinding),
+    List(Tagged<ListBinding>),
+    Map(Tagged<MapBinding>),
 }
 
 impl Binding {
     pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             Binding::Identifier(name) => { bound.insert(*name.as_ref()); },
-            Binding::List(elements) => elements.free_and_bound(free, bound),
-            Binding::Map(elements) => elements.free_and_bound(free, bound),
+            Binding::List(elements) => elements.as_ref().free_and_bound(free, bound),
+            Binding::Map(elements) => elements.as_ref().free_and_bound(free, bound),
         }
     }
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            Binding::List(elements) => elements.validate(),
-            Binding::Map(elements) => elements.validate(),
+            Binding::List(elements) => elements.as_ref().validate(),
+            Binding::Map(elements) => elements.as_ref().validate(),
             _ => Ok(()),
         }
     }
@@ -537,8 +537,6 @@ impl Expr {
     pub fn float(value: f64) -> Expr { Expr::Literal(Object::Float(value)) }
     pub fn boolean(value: bool) -> Expr { Expr::Literal(Object::Boolean(value)) }
     pub fn null() -> Expr { Expr::Literal(Object::Null) }
-
-    // pub fn id<T: AsRef<str>>(x: T) -> Expr { Expr::Identifier(Key::new(x).tag((0, 0, 0))) }         // TODO
 
     pub fn list<T>(x: T) -> Expr where T: ToVec<ListElement> { Expr::List(x.to_vec()) }
     pub fn map<T>(x: T) -> Expr where T: ToVec<MapElement> { Expr::Map(x.to_vec()) }
