@@ -124,7 +124,7 @@ fn map_identifier<'a, E: CompleteError<'a>>(
 ) -> IResult<Span<'a>, Tagged<Key>, E> {
     map(
         positioned(is_not(",=:$}()\"\' \t\n\r")),
-        |x| Key::new(x.as_ref().fragment()).tag(x),
+        |x| x.map(|x| Key::new(x.fragment()))
     )(input)
 }
 
@@ -678,7 +678,10 @@ fn ident_binding<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<Binding>, E> {
     postpad(alt((
-        map(positioned(identifier), |out: Tagged<&str>| Binding::id(out.as_ref()).tag(out)),
+        map(
+            positioned(identifier),
+            |out| out.map(Binding::id),
+        ),
     )))(input)
 }
 
@@ -749,7 +752,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                 match binding {
                     None => MapBindingElement::Binding {
                         key: name,
-                        binding: Binding::id(name.as_ref()).tag(name),
+                        binding: name.map(Binding::Identifier),
                         default,
                     },
                     Some(binding) => MapBindingElement::Binding {

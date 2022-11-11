@@ -164,7 +164,7 @@ pub enum Binding {
 }
 
 impl Binding {
-    pub fn id<T: ToString>(x: T) -> Binding { Binding::Identifier(Key::new(x.to_string())) }
+    pub fn id<T: AsRef<str>>(x: T) -> Binding { Binding::Identifier(Key::new(x)) }
 
     pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
