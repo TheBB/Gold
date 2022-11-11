@@ -17,19 +17,17 @@ pub enum ListBindingElement {
         binding: Tagged<Binding>,
         default: Option<Expr>,
     },
-    SlurpTo(Key),
+    SlurpTo(Tagged<Key>),
     Slurp,
 }
 
 impl ListBindingElement {
-    pub fn slurp_to<T: ToString>(x: T) -> ListBindingElement { ListBindingElement::SlurpTo(Key::new(x.to_string())) }
-
     pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             ListBindingElement::Binding { binding, default } => {
                 binding_element_free_and_bound(binding.as_ref(), default, free, bound);
             },
-            ListBindingElement::SlurpTo(name) => { bound.insert(name.clone()); },
+            ListBindingElement::SlurpTo(name) => { bound.insert(*name.as_ref()); },
             _ => {},
         }
     }
@@ -56,18 +54,16 @@ pub enum MapBindingElement {
         binding: Tagged<Binding>,
         default: Option<Expr>,
     },
-    SlurpTo(Key),
+    SlurpTo(Tagged<Key>),
 }
 
 impl MapBindingElement {
-    pub fn slurp_to<T: ToString>(x: T) -> MapBindingElement { MapBindingElement::SlurpTo(Key::new(x.to_string())) }
-
     pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             MapBindingElement::Binding { key: _, binding, default } => {
                 binding_element_free_and_bound(binding.as_ref(), default, free, bound);
             },
-            MapBindingElement::SlurpTo(name) => { bound.insert(name.clone()); },
+            MapBindingElement::SlurpTo(name) => { bound.insert(*name.as_ref()); },
         }
     }
 
@@ -158,17 +154,15 @@ impl MapBinding {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Binding {
-    Identifier(Key),
+    Identifier(Tagged<Key>),
     List(ListBinding),
     Map(MapBinding),
 }
 
 impl Binding {
-    pub fn id<T: AsRef<str>>(x: T) -> Binding { Binding::Identifier(Key::new(x)) }
-
     pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
-            Binding::Identifier(name) => { bound.insert(name.clone()); },
+            Binding::Identifier(name) => { bound.insert(*name.as_ref()); },
             Binding::List(elements) => elements.free_and_bound(free, bound),
             Binding::Map(elements) => elements.free_and_bound(free, bound),
         }
@@ -369,15 +363,11 @@ impl<T> From<Splat<T>> for MapElement where T: ToAstNode {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ArgElement {
     Singleton(Expr),
-    Keyword(Key, Expr),
+    Keyword(Tagged<Key>, Expr),
     Splat(Expr),
 }
 
 impl ArgElement {
-    pub fn keyword<T>(key: T, val: Expr) -> ArgElement where T: ToString {
-        ArgElement::Keyword(Key::new(key.to_string()), val)
-    }
-
     pub fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
             ArgElement::Singleton(expr) => { expr.free_impl(free); },
@@ -402,9 +392,9 @@ impl<T> From<T> for ArgElement where T: ToAstNode {
     }
 }
 
-impl<S,T> From<(S,T)> for ArgElement where S: ToString, T: ToAstNode {
-    fn from(x: (S,T)) -> Self {
-        ArgElement::Keyword(Key::new(x.0.to_string()), x.1.to_ast())
+impl<T> From<(Tagged<Key> ,T)> for ArgElement where T: ToAstNode {
+    fn from(x: (Tagged<Key> ,T)) -> Self {
+        ArgElement::Keyword(x.0, x.1.to_ast())
     }
 }
 
@@ -484,7 +474,7 @@ impl Operator {
 pub enum Expr {
     Literal(Object),
     String(Vec<StringElement>),
-    Identifier(Key),
+    Identifier(Tagged<Key>),
     List(Vec<ListElement>),
     Map(Vec<MapElement>),
     Let {
@@ -548,7 +538,7 @@ impl Expr {
     pub fn boolean(value: bool) -> Expr { Expr::Literal(Object::Boolean(value)) }
     pub fn null() -> Expr { Expr::Literal(Object::Null) }
 
-    pub fn id<T: AsRef<str>>(x: T) -> Expr { Expr::Identifier(Key::new(x)) }
+    // pub fn id<T: AsRef<str>>(x: T) -> Expr { Expr::Identifier(Key::new(x).tag((0, 0, 0))) }         // TODO
 
     pub fn list<T>(x: T) -> Expr where T: ToVec<ListElement> { Expr::List(x.to_vec()) }
     pub fn map<T>(x: T) -> Expr where T: ToVec<MapElement> { Expr::Map(x.to_vec()) }
@@ -603,7 +593,7 @@ impl Expr {
                     }
                 }
             },
-            Expr::Identifier(name) => { free.insert(name.clone()); },
+            Expr::Identifier(name) => { free.insert(*name.as_ref()); },
             Expr::List(elements) => {
                 for element in elements {
                     element.free_impl(free);
@@ -719,14 +709,6 @@ impl<T> From<T> for Expr where Object: From<T> {
     fn from(x: T) -> Self {
         Object::from(x).literal()
     }
-}
-
-pub trait IdAble {
-    fn id(self) -> Expr;
-}
-
-impl<T> IdAble for T where T: AsRef<str> {
-    fn id(self) -> Expr { Expr::id(self) }
 }
 
 
