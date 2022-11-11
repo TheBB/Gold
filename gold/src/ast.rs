@@ -52,7 +52,7 @@ impl ListBindingElement {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MapBindingElement {
     Binding {
-        key: Key,
+        key: Tagged<Key>,
         binding: Tagged<Binding>,
         default: Option<Expr>,
     },
