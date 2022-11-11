@@ -129,7 +129,7 @@ impl<'a> Namespace<'a> {
                                 .and_then(|node| self.eval(&node))
                         })?;
 
-                    self.bind(binding, val)?;
+                    self.bind(binding.as_ref(), val)?;
                 },
 
                 ListBindingElement::Slurp => {
@@ -175,7 +175,7 @@ impl<'a> Namespace<'a> {
                                 .and_then(|node| self.eval(&node))
                         })?;
 
-                    self.bind(binding, val)?;
+                    self.bind(binding.as_ref(), val)?;
                 },
                 MapBindingElement::SlurpTo(target) => {
                     slurp_target = Some(target);
@@ -240,7 +240,7 @@ impl<'a> Namespace<'a> {
                 if let Object::List(from_values) = self.eval(iterable)? {
                     let mut sub = self.subtend();
                     for entry in &*from_values {
-                        sub.bind(binding, entry.clone())?;
+                        sub.bind(binding.as_ref(), entry.clone())?;
                         sub.fill_list(element.as_ref(), values)?;
                     }
                     Ok(())
@@ -287,7 +287,7 @@ impl<'a> Namespace<'a> {
                 if let Object::List(from_values) = self.eval(iterable)? {
                     let mut sub = self.subtend();
                     for entry in &*from_values {
-                        sub.bind(binding, entry.clone())?;
+                        sub.bind(binding.as_ref(), entry.clone())?;
                         sub.fill_map(element.as_ref(), values)?;
                     }
                     Ok(())
@@ -367,7 +367,7 @@ impl<'a> Namespace<'a> {
             match statement {
                 TopLevel::Import(path, binding) => {
                     let object = importer.resolve(path.as_str())?;
-                    ns.bind(binding, object)?;
+                    ns.bind(binding.as_ref(), object)?;
                 }
             }
         }
@@ -415,7 +415,7 @@ impl<'a> Namespace<'a> {
                 let mut sub = self.subtend();
                 for (binding, expr) in bindings {
                     let val = sub.eval(expr)?;
-                    sub.bind(binding, val)?;
+                    sub.bind(binding.as_ref(), val)?;
                 }
                 sub.eval(expression)
             },

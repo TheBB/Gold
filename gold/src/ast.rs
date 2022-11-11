@@ -14,7 +14,7 @@ use super::traits::{Boxable, Splat, Splattable, ToVec};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ListBindingElement {
     Binding {
-        binding: Binding,
+        binding: Tagged<Binding>,
         default: Option<Expr>,
     },
     SlurpTo(Key),
@@ -27,7 +27,7 @@ impl ListBindingElement {
     pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             ListBindingElement::Binding { binding, default } => {
-                binding_element_free_and_bound(binding, default, free, bound);
+                binding_element_free_and_bound(binding.as_ref(), default, free, bound);
             },
             ListBindingElement::SlurpTo(name) => { bound.insert(name.clone()); },
             _ => {},
@@ -37,7 +37,7 @@ impl ListBindingElement {
     pub fn validate(&self) -> Result<(), String> {
         match self {
             ListBindingElement::Binding { binding, default } => {
-                binding.validate()?;
+                binding.as_ref().validate()?;
                 if let Some(node) = default {
                     node.validate()?;
                 }
@@ -53,7 +53,7 @@ impl ListBindingElement {
 pub enum MapBindingElement {
     Binding {
         key: Key,
-        binding: Binding,
+        binding: Tagged<Binding>,
         default: Option<Expr>,
     },
     SlurpTo(Key),
@@ -65,7 +65,7 @@ impl MapBindingElement {
     pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             MapBindingElement::Binding { key: _, binding, default } => {
-                binding_element_free_and_bound(binding, default, free, bound);
+                binding_element_free_and_bound(binding.as_ref(), default, free, bound);
             },
             MapBindingElement::SlurpTo(name) => { bound.insert(name.clone()); },
         }
@@ -74,7 +74,7 @@ impl MapBindingElement {
     pub fn validate(&self) -> Result<(), String> {
         match self {
             MapBindingElement::Binding { binding, default, .. } => {
-                binding.validate()?;
+                binding.as_ref().validate()?;
                 if let Some(node) = default {
                     node.validate()?;
                 }
@@ -210,7 +210,7 @@ pub enum ListElement {
     Singleton(Expr),
     Splat(Expr),
     Loop {
-        binding: Binding,
+        binding: Tagged<Binding>,
         iterable: Expr,
         element: Box<ListElement>,
     },
@@ -238,7 +238,7 @@ impl ListElement {
             ListElement::Loop { binding, iterable, element } => {
                 iterable.free_impl(free);
                 let mut bound: HashSet<Key> = HashSet::new();
-                binding.free_and_bound(free, &mut bound);
+                binding.as_ref().free_and_bound(free, &mut bound);
                 for ident in element.free() {
                     if !bound.contains(&ident) {
                         free.insert(ident);
@@ -256,7 +256,7 @@ impl ListElement {
             ListElement::Singleton(node) => { node.validate()?; },
             ListElement::Splat(node) => { node.validate()?; },
             ListElement::Loop { binding, iterable, element } => {
-                binding.validate()?;
+                binding.as_ref().validate()?;
                 iterable.validate()?;
                 element.validate()?;
             },
@@ -290,7 +290,7 @@ pub enum MapElement {
     },
     Splat(Expr),
     Loop {
-        binding: Binding,
+        binding: Tagged<Binding>,
         iterable: Expr,
         element: Box<MapElement>,
     },
@@ -321,7 +321,7 @@ impl MapElement {
             MapElement::Loop { binding, iterable, element } => {
                 iterable.free_impl(free);
                 let mut bound: HashSet<Key> = HashSet::new();
-                binding.free_and_bound(free, &mut bound);
+                binding.as_ref().free_and_bound(free, &mut bound);
                 for ident in element.as_ref().free() {
                     if !bound.contains(&ident) {
                         free.insert(ident);
@@ -339,7 +339,7 @@ impl MapElement {
             },
             MapElement::Splat(node) => { node.validate()?; },
             MapElement::Loop { binding, iterable, element } => {
-                binding.validate()?;
+                binding.as_ref().validate()?;
                 iterable.validate()?;
                 element.validate()?;
             },
@@ -488,7 +488,7 @@ pub enum Expr {
     List(Vec<ListElement>),
     Map(Vec<MapElement>),
     Let {
-        bindings: Vec<(Binding, Expr)>,
+        bindings: Vec<(Tagged<Binding>, Expr)>,
         expression: Box<Expr>,
     },
     Operator {
@@ -622,7 +622,7 @@ impl Expr {
                             free.insert(id);
                         }
                     }
-                    binding.free_and_bound(free, &mut bound);
+                    binding.as_ref().free_and_bound(free, &mut bound);
                 }
                 for id in expression.free() {
                     if !bound.contains(&id) {
@@ -679,7 +679,7 @@ impl Expr {
             },
             Expr::Let { bindings, expression } => {
                 for (binding, node) in bindings {
-                    binding.validate()?;
+                    binding.as_ref().validate()?;
                     node.validate()?;
                 }
                 expression.validate()?;
@@ -732,13 +732,13 @@ impl<T> IdAble for T where T: AsRef<str> {
 
 #[derive(Debug)]
 pub enum TopLevel {
-    Import(String, Binding),
+    Import(String, Tagged<Binding>),
 }
 
 impl TopLevel {
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            Self::Import(_, binding) => { binding.validate()?; },
+            Self::Import(_, binding) => { binding.as_ref().validate()?; },
         }
         Ok(())
     }
