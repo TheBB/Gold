@@ -693,28 +693,28 @@ fn funcall() {
         )).tag((0, 1, 16))),
     );
 
-    // assert_eq!(
-    //     parse("((x,y) => x+y)(1,2)"),
-    //     Ok(
-    //         Expr::Function {
-    //             positional: ListBinding(vec![
-    //                 ListBindingElement::Binding {
-    //                     binding: "x".bid((2, 1, 1)),
-    //                     default: None
-    //                 }.tag((2, 1, 1)),
-    //                 ListBindingElement::Binding {
-    //                     binding: "y".bid((4, 1, 1)),
-    //                     default: None
-    //                 }.tag((4, 1, 1)),
-    //             ]),
-    //             keywords: None,
-    //             expression: "x".id((10, 1, 1)).add("y".id((12, 1, 1))).to_box(),
-    //         }.tag((1, 1, 12)).funcall((
-    //             1.expr((15, 1, 1)).wraptag(ArgElement::Singleton),
-    //             2.expr((17, 1, 1)).wraptag(ArgElement::Singleton),
-    //         )).tag((1, 1, 18))
-    //     ),
-    // );
+    assert_eq!(
+        parse("((x,y) => x+y)(1,2)"),
+        Ok(
+            Expr::Function {
+                positional: ListBinding(vec![
+                    ListBindingElement::Binding {
+                        binding: "x".bid((2, 1, 1)),
+                        default: None
+                    }.tag((2, 1, 1)),
+                    ListBindingElement::Binding {
+                        binding: "y".bid((4, 1, 1)),
+                        default: None
+                    }.tag((4, 1, 1)),
+                ]),
+                keywords: None,
+                expression: "x".id((10, 1, 1)).add("y".id((12, 1, 1))).tag((10, 1, 3)).to_box(),
+            }.tag((1, 1, 12)).funcall((
+                1.expr((15, 1, 1)).wraptag(ArgElement::Singleton),
+                2.expr((17, 1, 1)).wraptag(ArgElement::Singleton),
+            )).tag((0, 1, 19))
+        ),
+    );
 
     assert_eq!(
         parse("func(1, ...y, z: 2, ...q)"),
@@ -882,6 +882,15 @@ fn operators() {
                 .pow(2.expr((9, 1, 1))).tag((5, 1, 5))
             ).tag((1, 1, 9))
             .neg().tag((0, 1, 10))
+        ),
+    );
+
+    assert_eq!(
+        parse("(1 + 2) * 5"),
+        Ok(
+            1.expr((1, 1, 1))
+            .add(2.expr((5, 1, 1))).tag((1, 1, 5))
+            .mul(5.expr((10, 1, 1))).tag((0, 1, 11))
         ),
     );
 }
