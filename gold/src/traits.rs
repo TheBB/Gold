@@ -1,6 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use symbol_table::GlobalSymbol;
+
+use crate::error::{Location, Tagged};
+use crate::object::Key;
 
 
 // Boxable
@@ -19,6 +22,46 @@ impl<T> Boxable<T> for T {
 }
 
 
+// Free
+// ----------------------------------------------------------------
+
+pub trait Free {
+    fn free(&self) -> HashSet<Key>;
+}
+
+pub trait FreeImpl {
+    fn free_impl(&self, free: &mut HashSet<Key>);
+}
+
+impl<T: FreeImpl> FreeImpl for Tagged<T> {
+    fn free_impl(&self, free: &mut HashSet<Key>) {
+        self.as_ref().free_impl(free)
+    }
+}
+
+impl<T: FreeImpl> Free for T {
+    fn free(&self) -> HashSet<Key> {
+        let mut free: HashSet<Key> = HashSet::new();
+        self.free_impl(&mut free);
+        free
+    }
+}
+
+
+// FreeAndBound
+// ----------------------------------------------------------------
+
+pub trait FreeAndBound {
+    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>);
+}
+
+impl<T: FreeAndBound> FreeAndBound for Tagged<T> {
+    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+        self.as_ref().free_and_bound(free, bound)
+    }
+}
+
+
 // Splattable
 // ----------------------------------------------------------------
 
@@ -31,11 +74,50 @@ pub trait Splattable<T> {
 }
 
 
+// Taggable
+// ----------------------------------------------------------------
+
+pub trait Taggable: Sized {
+    fn tag<T>(self, loc: T) -> Tagged<Self> where Location: From<T>;
+    fn direct_tag(self, loc: Location) -> Tagged<Self>;
+}
+
+impl<T> Taggable for T where T: Sized {
+    fn direct_tag(self, loc: Location) -> Tagged<Self> {
+        Tagged::<Self>::new(loc, self)
+    }
+
+    fn tag<U>(self, loc: U) -> Tagged<Self> where Location: From<U> {
+        Tagged::<Self>::new(Location::from(loc), self)
+    }
+}
+
+
+// Validatable
+// ----------------------------------------------------------------
+
+pub trait Validatable {
+    fn validate(&self) -> Result<(), String>;
+}
+
+impl<T: Validatable> Validatable for Tagged<T> {
+    fn validate(&self) -> Result<(), String> {
+        self.as_ref().validate()
+    }
+}
+
+
 // ToVec
 // ----------------------------------------------------------------
 
 pub trait ToVec<T> {
     fn to_vec(self) -> Vec<T>;
+}
+
+impl<T> ToVec<T> for Vec<T> {
+    fn to_vec(self) -> Vec<T> {
+        self
+    }
 }
 
 impl<T> ToVec<T> for () {
