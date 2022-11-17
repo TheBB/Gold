@@ -34,16 +34,6 @@ impl<'a> From<Span<'a>> for Location {
     }
 }
 
-// impl<'a> From<(Span<'a>, Span<'a>)> for Location {
-//     fn from((l, r): (Span<'a>, Span<'a>)) -> Self {
-//         Self {
-//             offset: l.location_offset(),
-//             line: l.location_line(),
-//             length: r.location_offset() - l.location_offset(),
-//         }
-//     }
-// }
-
 
 enum PExpr {
     Naked(Tagged<Expr>),
@@ -65,12 +55,6 @@ impl PExpr {
         }
     }
 }
-
-// impl From<(&PExpr, &PExpr)> for Location {
-//     fn from(value: (&PExpr, &PExpr)) -> Self {
-//         Location::from((value.0.outer(), value.1.outer()))
-//     }
-// }
 
 
 trait CompleteError<'a>:
