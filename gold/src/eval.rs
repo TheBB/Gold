@@ -5,8 +5,10 @@ use std::sync::Arc;
 
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
-use crate::object::{Object, Function, Key, Map, List};
 use crate::builtins::BUILTINS;
+use crate::error::Tagged;
+use crate::object::{Object, Function, Key, Map, List};
+use crate::traits::Free;
 
 
 const STDLIB: &str = include_str!("std.gold");
@@ -126,7 +128,7 @@ impl<'a> Namespace<'a> {
                         .or_else(|_| {
                             default.as_ref()
                                 .ok_or_else(|| "not enough elements, missing default".to_string())
-                                .and_then(|node| self.eval(&node))
+                                .and_then(|node| self.eval(node))
                         })?;
 
                     self.bind(binding.as_ref(), val)?;
@@ -172,7 +174,7 @@ impl<'a> Namespace<'a> {
                         .or_else(|_| {
                             default.as_ref()
                                 .ok_or_else(|| "?????".to_string())
-                                .and_then(|node| self.eval(&node))
+                                .and_then(|node| self.eval(node))
                         })?;
 
                     self.bind(binding.as_ref(), val)?;
@@ -230,7 +232,7 @@ impl<'a> Namespace<'a> {
 
             ListElement::Cond { condition, element } => {
                 if self.eval(condition)?.truthy() {
-                    self.fill_list(element, values)
+                    self.fill_list(element.as_ref().as_ref(), values)
                 } else {
                     Ok(())
                 }
@@ -241,7 +243,7 @@ impl<'a> Namespace<'a> {
                     let mut sub = self.subtend();
                     for entry in &*from_values {
                         sub.bind(binding.as_ref(), entry.clone())?;
-                        sub.fill_list(element.as_ref(), values)?;
+                        sub.fill_list(element.as_ref().as_ref(), values)?;
                     }
                     Ok(())
                 } else {
@@ -251,8 +253,8 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    fn fill_map(&self, element: &MapElement, values: &mut Map) -> Result<(), String> {
-        match element {
+    fn fill_map(&self, element: &Tagged<MapElement>, values: &mut Map) -> Result<(), String> {
+        match element.as_ref() {
             MapElement::Singleton { key, value } => {
                 if let Object::IntString(k) = self.eval(key)? {
                     let v = self.eval(value)?;
@@ -298,8 +300,8 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    fn fill_args(&self, element: &ArgElement, args: &mut List, kwargs: &mut Map) -> Result<(), String> {
-        match element {
+    fn fill_args(&self, element: &Tagged<ArgElement>, args: &mut List, kwargs: &mut Map) -> Result<(), String> {
+        match element.as_ref() {
             ArgElement::Singleton(node) => {
                 let val = self.eval(node)?;
                 args.push(val);
@@ -374,8 +376,8 @@ impl<'a> Namespace<'a> {
         ns.eval(&file.expression)
     }
 
-    pub fn eval(&self, node: &Expr) -> Result<Object, String> {
-        match node {
+    pub fn eval(&self, node: &Tagged<Expr>) -> Result<Object, String> {
+        match node.as_ref() {
             Expr::Literal(val) => Ok(val.clone()),
 
             Expr::String(elements) => {
@@ -398,7 +400,7 @@ impl<'a> Namespace<'a> {
             Expr::List(elements) => {
                 let mut values: List = vec![];
                 for element in elements {
-                    self.fill_list(element, &mut values)?;
+                    self.fill_list(element.as_ref(), &mut values)?;
                 }
                 Ok(Object::from(values))
             },

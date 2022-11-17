@@ -17,10 +17,11 @@ use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use crate::builtins::BUILTINS;
 use crate::traits::{ToVec, ToMap};
 
-use super::eval::Namespace;
-use super::util;
-use super::ast::{ListBinding, MapBinding, Expr};
-use super::traits::{Splattable, Splat};
+use crate::ast::{ListBinding, MapBinding, Expr};
+use crate::error::Tagged;
+use crate::eval::Namespace;
+use crate::traits::{Splattable, Splat};
+use crate::util;
 
 
 fn escape(s: &str) -> String {
@@ -129,7 +130,7 @@ pub struct Function {
     pub args: ListBinding,
     pub kwargs: Option<MapBinding>,
     pub closure: Map,
-    pub expr: Expr,
+    pub expr: Tagged<Expr>,
 }
 
 

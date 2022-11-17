@@ -8,83 +8,12 @@ use serde::{Deserialize, Serialize};
 
 use super::error::Tagged;
 use super::object::{Object, Key};
-use super::traits::{Boxable, Splat, Splattable, ToVec};
+use super::traits::{Boxable, Free, FreeImpl, FreeAndBound, Splat, Splattable, Validatable, ToVec};
 
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum ListBindingElement {
-    Binding {
-        binding: Tagged<Binding>,
-        default: Option<Expr>,
-    },
-    SlurpTo(Tagged<Key>),
-    Slurp,
-}
-
-impl ListBindingElement {
-    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
-        match self {
-            ListBindingElement::Binding { binding, default } => {
-                binding_element_free_and_bound(binding.as_ref(), default, free, bound);
-            },
-            ListBindingElement::SlurpTo(name) => { bound.insert(*name.as_ref()); },
-            _ => {},
-        }
-    }
-
-    pub fn validate(&self) -> Result<(), String> {
-        match self {
-            ListBindingElement::Binding { binding, default } => {
-                binding.as_ref().validate()?;
-                if let Some(node) = default {
-                    node.validate()?;
-                }
-            },
-            _ => {},
-        }
-        Ok(())
-    }
-}
-
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum MapBindingElement {
-    Binding {
-        key: Tagged<Key>,
-        binding: Tagged<Binding>,
-        default: Option<Expr>,
-    },
-    SlurpTo(Tagged<Key>),
-}
-
-impl MapBindingElement {
-    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
-        match self {
-            MapBindingElement::Binding { key: _, binding, default } => {
-                binding_element_free_and_bound(binding.as_ref(), default, free, bound);
-            },
-            MapBindingElement::SlurpTo(name) => { bound.insert(*name.as_ref()); },
-        }
-    }
-
-    pub fn validate(&self) -> Result<(), String> {
-        match self {
-            MapBindingElement::Binding { binding, default, .. } => {
-                binding.as_ref().validate()?;
-                if let Some(node) = default {
-                    node.validate()?;
-                }
-            },
-            _ => {},
-        }
-        Ok(())
-    }
-}
-
-
-fn binding_element_free_and_bound(
-    binding: &Binding,
-    default: &Option<Expr>,
+fn binding_element_free_and_bound<T: Free, U: FreeAndBound>(
+    binding: &U,
+    default: Option<&T>,
     free: &mut HashSet<Key>,
     bound: &mut HashSet<Key>,
 ) {
@@ -99,20 +28,106 @@ fn binding_element_free_and_bound(
 }
 
 
+// ListBindingElement
+// ----------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ListBindingElement {
+    Binding {
+        binding: Tagged<Binding>,
+        default: Option<Tagged<Expr>>,
+    },
+    SlurpTo(Tagged<Key>),
+    Slurp,
+}
+
+impl Validatable for ListBindingElement {
+    fn validate(&self) -> Result<(), String> {
+        match self {
+            ListBindingElement::Binding { binding, default } => {
+                binding.validate()?;
+                if let Some(node) = default {
+                    node.validate()?;
+                }
+            },
+            _ => {},
+        }
+        Ok(())
+    }
+}
+
+impl FreeAndBound for ListBindingElement {
+    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+        match self {
+            ListBindingElement::Binding { binding, default } => {
+                binding_element_free_and_bound(binding, default.as_ref(), free, bound);
+            },
+            ListBindingElement::SlurpTo(name) => { bound.insert(*name.as_ref()); },
+            _ => {},
+        }
+    }
+}
+
+
+// MapBindingElement
+// ----------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum MapBindingElement {
+    Binding {
+        key: Tagged<Key>,
+        binding: Tagged<Binding>,
+        default: Option<Tagged<Expr>>,
+    },
+    SlurpTo(Tagged<Key>),
+}
+
+impl FreeAndBound for MapBindingElement {
+    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+        match self {
+            MapBindingElement::Binding { key: _, binding, default } => {
+                binding_element_free_and_bound(binding, default.as_ref(), free, bound);
+            },
+            MapBindingElement::SlurpTo(name) => { bound.insert(*name.as_ref()); },
+        }
+    }
+}
+
+impl Validatable for MapBindingElement {
+    fn validate(&self) -> Result<(), String> {
+        match self {
+            MapBindingElement::Binding { binding, default, .. } => {
+                binding.validate()?;
+                if let Some(node) = default {
+                    node.validate()?;
+                }
+            },
+            _ => {},
+        }
+        Ok(())
+    }
+}
+
+
+// ListBinding
+// ----------------------------------------------------------------
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListBinding(pub Vec<Tagged<ListBindingElement>>);
 
-impl ListBinding {
-    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+impl FreeAndBound for ListBinding {
+    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         for element in &self.0 {
-            element.as_ref().free_and_bound(free, bound);
+            element.free_and_bound(free, bound);
         }
     }
+}
 
-    pub fn validate(&self) -> Result<(), String> {
+impl Validatable for ListBinding {
+    fn validate(&self) -> Result<(), String> {
         let mut found_slurp = false;
         for element in &self.0 {
-            element.as_ref().validate()?;
+            element.validate()?;
             if let ListBindingElement::Binding { .. } = element.as_ref() { }
             else {
                 if found_slurp {
@@ -126,20 +141,25 @@ impl ListBinding {
 }
 
 
+// MapBinding
+// ----------------------------------------------------------------
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MapBinding(pub Vec<Tagged<MapBindingElement>>);
 
-impl MapBinding {
-    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+impl FreeAndBound for MapBinding {
+    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         for element in &self.0 {
-            element.as_ref().free_and_bound(free, bound);
+            element.free_and_bound(free, bound);
         }
     }
+}
 
-    pub fn validate<'a>(&'a self) -> Result<(), String> {
+impl Validatable for MapBinding {
+    fn validate<'a>(&'a self) -> Result<(), String> {
         let mut found_slurp = false;
         for element in &self.0 {
-            element.as_ref().validate()?;
+            element.validate()?;
             if let MapBindingElement::SlurpTo(_) = element.as_ref() {
                 if found_slurp {
                     return Err("multiple slurps in map binding".to_string())
@@ -152,6 +172,9 @@ impl MapBinding {
 }
 
 
+// Binding
+// ----------------------------------------------------------------
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Binding {
     Identifier(Tagged<Key>),
@@ -159,39 +182,46 @@ pub enum Binding {
     Map(Tagged<MapBinding>),
 }
 
-impl Binding {
-    pub fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+impl FreeAndBound for Binding {
+    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             Binding::Identifier(name) => { bound.insert(*name.as_ref()); },
-            Binding::List(elements) => elements.as_ref().free_and_bound(free, bound),
-            Binding::Map(elements) => elements.as_ref().free_and_bound(free, bound),
+            Binding::List(elements) => elements.free_and_bound(free, bound),
+            Binding::Map(elements) => elements.free_and_bound(free, bound),
         }
     }
+}
 
-    pub fn validate(&self) -> Result<(), String> {
+impl Validatable for Binding {
+    fn validate(&self) -> Result<(), String> {
         match self {
-            Binding::List(elements) => elements.as_ref().validate(),
-            Binding::Map(elements) => elements.as_ref().validate(),
+            Binding::List(elements) => elements.validate(),
+            Binding::Map(elements) => elements.validate(),
             _ => Ok(()),
         }
     }
 }
 
 
+// StringElement
+// ----------------------------------------------------------------
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StringElement {
     Raw(Arc<str>),
-    Interpolate(Expr),
+    Interpolate(Tagged<Expr>),
 }
 
 impl StringElement {
     pub fn raw<T: AsRef<str>>(val: T) -> StringElement {
         StringElement::Raw(Arc::from(val.as_ref()))
     }
+}
 
-    pub fn validate(&self) -> Result<(), String> {
+impl Validatable for StringElement {
+    fn validate(&self) -> Result<(), String> {
         match self {
-            StringElement::Interpolate(node) => { node.validate()?; }
+            StringElement::Interpolate(node) => { node.as_ref().validate()?; }
             _ => {},
         }
         Ok(())
@@ -199,41 +229,38 @@ impl StringElement {
 }
 
 
+// ListElement
+// ----------------------------------------------------------------
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ListElement {
-    Singleton(Expr),
-    Splat(Expr),
+    Singleton(Tagged<Expr>),
+    Splat(Tagged<Expr>),
     Loop {
         binding: Tagged<Binding>,
-        iterable: Expr,
-        element: Box<ListElement>,
+        iterable: Tagged<Expr>,
+        element: Box<Tagged<ListElement>>,
     },
     Cond {
-        condition: Expr,
-        element: Box<ListElement>,
+        condition: Tagged<Expr>,
+        element: Box<Tagged<ListElement>>,
     },
 }
 
-impl ListElement {
-    pub fn free(&self) -> HashSet<Key> {
-        let mut free: HashSet<Key> = HashSet::new();
-        self.free_impl(&mut free);
-        free
-    }
-
-    pub fn free_impl(&self, free: &mut HashSet<Key>) {
+impl FreeImpl for ListElement {
+    fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
-            ListElement::Singleton(expr) => expr.free_impl(free),
-            ListElement::Splat(expr) => expr.free_impl(free),
+            ListElement::Singleton(expr) => expr.as_ref().free_impl(free),
+            ListElement::Splat(expr) => expr.as_ref().free_impl(free),
             ListElement::Cond { condition, element } => {
-                condition.free_impl(free);
-                element.free_impl(free);
+                condition.as_ref().free_impl(free);
+                element.as_ref().as_ref().free_impl(free);
             },
             ListElement::Loop { binding, iterable, element } => {
-                iterable.free_impl(free);
+                iterable.as_ref().free_impl(free);
                 let mut bound: HashSet<Key> = HashSet::new();
                 binding.as_ref().free_and_bound(free, &mut bound);
-                for ident in element.free() {
+                for ident in element.as_ref().as_ref().free() {
                     if !bound.contains(&ident) {
                         free.insert(ident);
                     }
@@ -241,82 +268,66 @@ impl ListElement {
             }
         }
     }
+}
 
-    pub fn singleton<T>(x: T) -> ListElement where T: ToAstNode { ListElement::Singleton(x.to_ast()) }
-    pub fn splat<T>(x: T) -> ListElement where T: ToAstNode { ListElement::Splat(x.to_ast()) }
-
-    pub fn validate(&self) -> Result<(), String> {
+impl Validatable for ListElement {
+    fn validate(&self) -> Result<(), String> {
         match self {
-            ListElement::Singleton(node) => { node.validate()?; },
-            ListElement::Splat(node) => { node.validate()?; },
+            ListElement::Singleton(node) => { node.as_ref().validate()?; },
+            ListElement::Splat(node) => { node.as_ref().validate()?; },
             ListElement::Loop { binding, iterable, element } => {
                 binding.as_ref().validate()?;
-                iterable.validate()?;
-                element.validate()?;
+                iterable.as_ref().validate()?;
+                element.as_ref().as_ref().validate()?;
             },
             ListElement::Cond { condition, element } => {
-                condition.validate()?;
-                element.validate()?;
+                condition.as_ref().validate()?;
+                element.as_ref().as_ref().validate()?;
             },
         }
         Ok(())
     }
 }
 
-impl<T> From<T> for ListElement where T: ToAstNode {
-    fn from(x: T) -> ListElement {
-        ListElement::Singleton(x.to_ast())
-    }
-}
 
-impl<T> From<Splat<T>> for ListElement where T: ToAstNode {
-    fn from(x: Splat<T>) -> ListElement {
-        ListElement::Splat(x.object.to_ast())
-    }
-}
-
+// MapElement
+// ----------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MapElement {
     Singleton {
-        key: Expr,
-        value: Expr,
+        key: Tagged<Expr>,
+        value: Tagged<Expr>,
     },
-    Splat(Expr),
+    Splat(Tagged<Expr>),
     Loop {
         binding: Tagged<Binding>,
-        iterable: Expr,
-        element: Box<MapElement>,
+        iterable: Tagged<Expr>,
+        element: Box<Tagged<MapElement>>
     },
     Cond {
-        condition: Expr,
-        element: Box<MapElement>,
+        condition: Tagged<Expr>,
+        element: Box<Tagged<MapElement>>,
     },
 }
 
-impl MapElement {
-    pub fn free(&self) -> HashSet<Key> {
-        let mut free: HashSet<Key> = HashSet::new();
-        self.free_impl(&mut free);
-        free
-    }
-
-    pub fn free_impl(&self, free: &mut HashSet<Key>) {
+impl FreeImpl for MapElement {
+    fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
             MapElement::Singleton { key, value } => {
-                key.free_impl(free);
-                value.free_impl(free);
+                key.as_ref().free_impl(free);
+                value.as_ref().free_impl(free);
             },
-            MapElement::Splat(expr) => expr.free_impl(free),
+            MapElement::Splat(expr) => expr.as_ref().free_impl(free),
             MapElement::Cond { condition, element } => {
-                condition.free_impl(free);
-                element.free_impl(free);
+                condition.as_ref().free_impl(free);
+                element.as_ref().as_ref().free_impl(free);
             },
             MapElement::Loop { binding, iterable, element } => {
-                iterable.free_impl(free);
+                iterable.as_ref().free_impl(free);
                 let mut bound: HashSet<Key> = HashSet::new();
                 binding.as_ref().free_and_bound(free, &mut bound);
-                for ident in element.as_ref().free() {
+                for ident in element.as_ref().as_ref().free() {
                     if !bound.contains(&ident) {
                         free.insert(ident);
                     }
@@ -324,22 +335,24 @@ impl MapElement {
             }
         }
     }
+}
 
-    pub fn validate(&self) -> Result<(), String> {
+impl Validatable for MapElement {
+    fn validate(&self) -> Result<(), String> {
         match self {
             MapElement::Singleton { key, value } => {
-                key.validate()?;
-                value.validate()?;
+                key.as_ref().validate()?;
+                value.as_ref().validate()?;
             },
-            MapElement::Splat(node) => { node.validate()?; },
+            MapElement::Splat(node) => { node.as_ref().validate()?; },
             MapElement::Loop { binding, iterable, element } => {
                 binding.as_ref().validate()?;
-                iterable.validate()?;
-                element.validate()?;
+                iterable.as_ref().validate()?;
+                element.as_ref().as_ref().validate()?;
             },
             MapElement::Cond { condition, element } => {
-                condition.validate()?;
-                element.validate()?;
+                condition.as_ref().validate()?;
+                element.as_ref().as_ref().validate()?;
             },
         }
         Ok(())
@@ -347,63 +360,40 @@ impl MapElement {
 }
 
 
-impl<S,T> From<(S,T)> for MapElement where T: ToAstNode, S: ToAstNode {
-    fn from(x: (S,T)) -> Self {
-        MapElement::Singleton { key: x.0.to_ast(), value: x.1.to_ast() }
-    }
-}
-
-impl<T> From<Splat<T>> for MapElement where T: ToAstNode {
-    fn from(x: Splat<T>) -> Self {
-        MapElement::Splat(x.object.to_ast())
-    }
-}
-
+// ArgElement
+// ----------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ArgElement {
-    Singleton(Expr),
-    Keyword(Tagged<Key>, Expr),
-    Splat(Expr),
+    Singleton(Tagged<Expr>),
+    Keyword(Tagged<Key>, Tagged<Expr>),
+    Splat(Tagged<Expr>),
 }
 
-impl ArgElement {
-    pub fn free_impl(&self, free: &mut HashSet<Key>) {
+impl FreeImpl for ArgElement {
+    fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
-            ArgElement::Singleton(expr) => { expr.free_impl(free); },
-            ArgElement::Splat(expr) => { expr.free_impl(free); },
-            ArgElement::Keyword(_, expr) => { expr.free_impl(free); },
+            ArgElement::Singleton(expr) => { expr.as_ref().free_impl(free); },
+            ArgElement::Splat(expr) => { expr.as_ref().free_impl(free); },
+            ArgElement::Keyword(_, expr) => { expr.as_ref().free_impl(free); },
         }
     }
+}
 
-    pub fn validate(&self) -> Result<(), String> {
+impl Validatable for ArgElement {
+    fn validate(&self) -> Result<(), String> {
         match self {
-            ArgElement::Singleton(node) => { node.validate()?; },
-            ArgElement::Splat(node) => { node.validate()?; },
-            ArgElement::Keyword(_, value) => { value.validate()?; },
+            ArgElement::Singleton(node) => { node.as_ref().validate()?; },
+            ArgElement::Splat(node) => { node.as_ref().validate()?; },
+            ArgElement::Keyword(_, value) => { value.as_ref().validate()?; },
         }
         Ok(())
     }
 }
 
-impl<T> From<T> for ArgElement where T: ToAstNode {
-    fn from(x: T) -> Self {
-        ArgElement::Singleton(x.to_ast())
-    }
-}
 
-impl<T> From<(Tagged<Key> ,T)> for ArgElement where T: ToAstNode {
-    fn from(x: (Tagged<Key> ,T)) -> Self {
-        ArgElement::Keyword(x.0, x.1.to_ast())
-    }
-}
-
-impl<T> From<Splat<T>> for ArgElement where T: ToAstNode {
-    fn from(x: Splat<T>) -> Self {
-        ArgElement::Splat(x.object.to_ast())
-    }
-}
-
+// Operator
+// ----------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum UnOp {
@@ -434,33 +424,35 @@ pub enum BinOp {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Operator {
     UnOp(UnOp),
-    BinOp(BinOp, Box<Expr>),
-    FunCall(Vec<ArgElement>),
+    BinOp(BinOp, Box<Tagged<Expr>>),
+    FunCall(Vec<Tagged<ArgElement>>),
 }
 
 impl Operator {
-    pub fn index<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Index, x.to_box()) }
-    pub fn power<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Power, x.to_box()) }
-    pub fn multiply<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Multiply, x.to_box()) }
-    pub fn integer_divide<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::IntegerDivide, x.to_box()) }
-    pub fn divide<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Divide, x.to_box()) }
-    pub fn add<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Add, x.to_box()) }
-    pub fn subtract<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Subtract, x.to_box()) }
-    pub fn less<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Less, x.to_box()) }
-    pub fn greater<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Greater, x.to_box()) }
-    pub fn less_equal<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::LessEqual, x.to_box()) }
-    pub fn greater_equal<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::GreaterEqual, x.to_box()) }
-    pub fn equal<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Equal, x.to_box()) }
-    pub fn not_equal<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::NotEqual, x.to_box()) }
-    pub fn and<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::And, x.to_box()) }
-    pub fn or<T>(x: T) -> Operator where T: Boxable<Expr> { Operator::BinOp(BinOp::Or, x.to_box()) }
+    pub fn index<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Index, x.to_box()) }
+    pub fn power<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Power, x.to_box()) }
+    pub fn multiply<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Multiply, x.to_box()) }
+    pub fn integer_divide<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::IntegerDivide, x.to_box()) }
+    pub fn divide<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Divide, x.to_box()) }
+    pub fn add<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Add, x.to_box()) }
+    pub fn subtract<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Subtract, x.to_box()) }
+    pub fn less<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Less, x.to_box()) }
+    pub fn greater<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Greater, x.to_box()) }
+    pub fn less_equal<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::LessEqual, x.to_box()) }
+    pub fn greater_equal<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::GreaterEqual, x.to_box()) }
+    pub fn equal<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Equal, x.to_box()) }
+    pub fn not_equal<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::NotEqual, x.to_box()) }
+    pub fn and<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::And, x.to_box()) }
+    pub fn or<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Or, x.to_box()) }
+}
 
-    pub fn validate(&self) -> Result<(), String> {
+impl Validatable for Operator {
+    fn validate(&self) -> Result<(), String> {
         match self {
-            Operator::BinOp(_, node) => { node.validate()?; },
+            Operator::BinOp(_, node) => { node.as_ref().as_ref().validate()?; },
             Operator::FunCall(args) => {
                 for arg in args {
-                    arg.validate()?;
+                    arg.as_ref().validate()?;
                 }
             },
             _ => {},
@@ -470,65 +462,102 @@ impl Operator {
 }
 
 
+// Expr
+// ----------------------------------------------------------------
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Expr {
     Literal(Object),
     String(Vec<StringElement>),
     Identifier(Tagged<Key>),
-    List(Vec<ListElement>),
-    Map(Vec<MapElement>),
+    List(Vec<Tagged<ListElement>>),
+    Map(Vec<Tagged<MapElement>>),
     Let {
-        bindings: Vec<(Tagged<Binding>, Expr)>,
-        expression: Box<Expr>,
+        bindings: Vec<(Tagged<Binding>, Tagged<Expr>)>,
+        expression: Box<Tagged<Expr>>,
     },
     Operator {
-        operand: Box<Expr>,
+        operand: Box<Tagged<Expr>>,
         operator: Operator,
     },
     Function {
         positional: ListBinding,
         keywords: Option<MapBinding>,
-        expression: Box<Expr>,
+        expression: Box<Tagged<Expr>>,
     },
     Branch {
-        condition: Box<Expr>,
-        true_branch: Box<Expr>,
-        false_branch: Box<Expr>,
+        condition: Box<Tagged<Expr>>,
+        true_branch: Box<Tagged<Expr>>,
+        false_branch: Box<Tagged<Expr>>,
     }
 }
 
-impl Splattable<Expr> for Expr {
-    fn splat(&self) -> Splat<Expr> { Splat::<Expr> { object: self.clone() } }
+impl Splattable<Tagged<Expr>> for Tagged<Expr> {
+    fn splat(&self) -> Splat<Tagged<Expr>> { Splat::<Tagged<Expr>> { object: self.clone() } }
 }
 
-impl<T> ops::Add<T> for Expr where T: ToAstNode {
+impl ops::Add<Tagged<Expr>> for Tagged<Expr> {
     type Output = Expr;
-    fn add(self, rhs: T) -> Expr { self.operate(Operator::add(rhs.to_ast())) }
+    fn add(self, rhs: Tagged<Expr>) -> Expr {
+        self.operate(Operator::add(rhs))
+    }
 }
 
-impl<T> ops::Sub<T> for Expr where T: ToAstNode {
+impl ops::Sub<Tagged<Expr>> for Tagged<Expr> {
     type Output = Expr;
-    fn sub(self, rhs: T) -> Expr { self.operate(Operator::subtract(rhs.to_ast())) }
+    fn sub(self, rhs: Tagged<Expr>) -> Expr {
+        self.operate(Operator::subtract(rhs))
+    }
 }
 
-impl<T> ops::Mul<T> for Expr where T: ToAstNode {
+impl ops::Mul<Tagged<Expr>> for Tagged<Expr> {
     type Output = Expr;
-    fn mul(self, rhs: T) -> Expr { self.operate(Operator::multiply(rhs.to_ast())) }
+    fn mul(self, rhs: Tagged<Expr>) -> Expr {
+        self.operate(Operator::multiply(rhs))
+    }
 }
 
-impl<T> ops::Div<T> for Expr where T: ToAstNode {
+impl ops::Div<Tagged<Expr>> for Tagged<Expr> {
     type Output = Expr;
-    fn div(self, rhs: T) -> Expr { self.operate(Operator::divide(rhs.to_ast())) }
+    fn div(self, rhs: Tagged<Expr>) -> Expr {
+        self.operate(Operator::divide(rhs))
+    }
 }
 
-impl ops::Neg for Expr {
+impl ops::Neg for Tagged<Expr> {
     type Output = Expr;
-    fn neg(self) -> Expr { self.operate(Operator::UnOp(UnOp::ArithmeticalNegate)) }
+    fn neg(self) -> Expr {
+        self.operate(Operator::UnOp(UnOp::ArithmeticalNegate))
+    }
 }
 
-impl ops::Not for Expr {
+impl ops::Not for Tagged<Expr> {
     type Output = Expr;
-    fn not(self) -> Expr { self.operate(Operator::UnOp(UnOp::LogicalNegate)) }
+    fn not(self) -> Expr {
+        self.operate(Operator::UnOp(UnOp::LogicalNegate))
+    }
+}
+
+impl Tagged<Expr> {
+    pub fn operate(self, op: Operator) -> Expr {
+        Expr::Operator {
+            operand: self.to_box(),
+            operator: op,
+        }
+    }
+
+    pub fn idiv(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::integer_divide(rhs)) }
+    pub fn lt(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::less(rhs)) }
+    pub fn gt(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::greater(rhs)) }
+    pub fn lte(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::less_equal(rhs)) }
+    pub fn gte(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::greater_equal(rhs)) }
+    pub fn eql(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::equal(rhs)) }
+    pub fn neql(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::not_equal(rhs)) }
+    pub fn and(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::and(rhs)) }
+    pub fn or(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::or(rhs)) }
+    pub fn pow(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::power(rhs)) }
+    pub fn index(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::index(rhs)) }
+    pub fn funcall<T>(self, args: T) -> Expr where T: ToVec<Tagged<ArgElement>> { self.operate(Operator::FunCall(args.to_vec())) }
 }
 
 impl Expr {
@@ -538,28 +567,8 @@ impl Expr {
     pub fn boolean(value: bool) -> Expr { Expr::Literal(Object::Boolean(value)) }
     pub fn null() -> Expr { Expr::Literal(Object::Null) }
 
-    pub fn list<T>(x: T) -> Expr where T: ToVec<ListElement> { Expr::List(x.to_vec()) }
-    pub fn map<T>(x: T) -> Expr where T: ToVec<MapElement> { Expr::Map(x.to_vec()) }
-
-    pub fn operate(self, op: Operator) -> Expr {
-        Expr::Operator {
-            operand: self.to_box(),
-            operator: op,
-        }
-    }
-
-    pub fn idiv<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::integer_divide(rhs.to_ast())) }
-    pub fn lt<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::less(rhs.to_ast())) }
-    pub fn gt<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::greater(rhs.to_ast())) }
-    pub fn lte<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::less_equal(rhs.to_ast())) }
-    pub fn gte<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::greater_equal(rhs.to_ast())) }
-    pub fn eql<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::equal(rhs.to_ast())) }
-    pub fn neql<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::not_equal(rhs.to_ast())) }
-    pub fn and<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::and(rhs.to_ast())) }
-    pub fn or<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::or(rhs.to_ast())) }
-    pub fn pow<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::power(rhs.to_ast())) }
-    pub fn index<T>(self, rhs: T) -> Expr where T: ToAstNode { self.operate(Operator::index(rhs.to_ast())) }
-    pub fn funcall<T>(self, args: T) -> Expr where T: ToVec<ArgElement> { self.operate(Operator::FunCall(args.to_vec())) }
+    pub fn list<T>(x: T) -> Expr where T: ToVec<Tagged<ListElement>> { Expr::List(x.to_vec()) }
+    pub fn map<T>(x: T) -> Expr where T: ToVec<Tagged<MapElement>> { Expr::Map(x.to_vec()) }
 
     pub fn string(value: Vec<StringElement>) -> Expr {
         if value.len() == 0 {
@@ -574,14 +583,10 @@ impl Expr {
             Expr::String(value)
         }
     }
+}
 
-    pub fn free(&self) -> HashSet<Key> {
-        let mut free: HashSet<Key> = HashSet::new();
-        self.free_impl(&mut free);
-        free
-    }
-
-    pub fn free_impl(&self, free: &mut HashSet<Key>) {
+impl FreeImpl for Expr {
+    fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
             Expr::Literal(_) => {},
             Expr::String(elements) => {
@@ -594,7 +599,7 @@ impl Expr {
             Expr::Identifier(name) => { free.insert(*name.as_ref()); },
             Expr::List(elements) => {
                 for element in elements {
-                    element.free_impl(free);
+                    element.as_ref().free_impl(free);
                 }
             },
             Expr::Map(elements) => {
@@ -647,8 +652,10 @@ impl Expr {
             }
         }
     }
+}
 
-    pub fn validate(&self) -> Result<(), String> {
+impl Validatable for Expr {
+    fn validate(&self) -> Result<(), String> {
         match self {
             Expr::String(elements) => {
                 for element in elements {
@@ -657,7 +664,7 @@ impl Expr {
             },
             Expr::List(elements) => {
                 for element in elements {
-                    element.validate()?;
+                    element.as_ref().validate()?;
                 }
             },
             Expr::Map(elements) => {
@@ -710,13 +717,16 @@ impl<T> From<T> for Expr where Object: From<T> {
 }
 
 
+// TopLevel
+// ----------------------------------------------------------------
+
 #[derive(Debug)]
 pub enum TopLevel {
     Import(String, Tagged<Binding>),
 }
 
-impl TopLevel {
-    pub fn validate(&self) -> Result<(), String> {
+impl Validatable for TopLevel {
+    fn validate(&self) -> Result<(), String> {
         match self {
             Self::Import(_, binding) => { binding.as_ref().validate()?; },
         }
@@ -725,14 +735,18 @@ impl TopLevel {
 }
 
 
+// TopLevel
+// ----------------------------------------------------------------
+
+
 #[derive(Debug)]
 pub struct File {
     pub statements: Vec<TopLevel>,
-    pub expression: Expr,
+    pub expression: Tagged<Expr>,
 }
 
-impl File {
-    pub fn validate(&self) -> Result<(), String> {
+impl Validatable for File {
+    fn validate(&self) -> Result<(), String> {
         for statement in &self.statements {
             statement.validate()?;
         }
