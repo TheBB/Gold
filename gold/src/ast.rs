@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use super::error::Tagged;
 use super::object::{Object, Key};
-use super::traits::{Boxable, Free, FreeImpl, FreeAndBound, Splat, Splattable, Validatable, ToVec};
+use super::traits::{Boxable, Free, FreeImpl, FreeAndBound, Validatable, ToVec};
 
 
 fn binding_element_free_and_bound<T: Free, U: FreeAndBound>(
@@ -492,10 +492,6 @@ pub enum Expr {
     }
 }
 
-impl Splattable<Tagged<Expr>> for Tagged<Expr> {
-    fn splat(&self) -> Splat<Tagged<Expr>> { Splat::<Tagged<Expr>> { object: self.clone() } }
-}
-
 impl ops::Add<Tagged<Expr>> for Tagged<Expr> {
     type Output = Expr;
     fn add(self, rhs: Tagged<Expr>) -> Expr {
@@ -696,23 +692,6 @@ impl Validatable for Expr {
             _ => {},
         }
         Ok(())
-    }
-}
-
-
-pub trait ToAstNode {
-    fn to_ast(self) -> Expr;
-}
-
-impl<T> ToAstNode for T where Expr: From<T> {
-    fn to_ast(self) -> Expr {
-        Expr::from(self)
-    }
-}
-
-impl<T> From<T> for Expr where Object: From<T> {
-    fn from(x: T) -> Self {
-        Object::from(x).literal()
     }
 }
 

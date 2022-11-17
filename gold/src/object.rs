@@ -20,7 +20,6 @@ use crate::traits::{ToVec, ToMap};
 use crate::ast::{ListBinding, MapBinding, Expr};
 use crate::error::Tagged;
 use crate::eval::Namespace;
-use crate::traits::{Splattable, Splat};
 use crate::util;
 
 
@@ -156,10 +155,6 @@ pub enum Object {
 
     #[serde(skip)]
     Closure(Closure),
-}
-
-impl Splattable<Object> for Object {
-    fn splat(&self) -> Splat<Object> { Splat::<Object> { object: self.clone() } }
 }
 
 impl PartialEq<Object> for Object {

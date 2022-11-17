@@ -55,9 +55,9 @@ trait ListElementAble {
     fn lel<T>(self, loc: T) -> Tagged<ListElement> where Location: From<T>, T: Copy;
 }
 
-impl<U> ListElementAble for U where Expr: From<U> {
+impl<U> ListElementAble for U where Object: From<U> {
     fn lel<T>(self, loc: T) -> Tagged<ListElement> where Location: From<T>, T: Copy {
-        ListElement::Singleton(Expr::from(self).tag(loc)).tag(loc)
+        ListElement::Singleton(Expr::Literal(Object::from(self)).tag(loc)).tag(loc)
     }
 }
 
@@ -75,19 +75,13 @@ impl MapElementAble for (Tagged<Expr>, Tagged<Expr>) {
     }
 }
 
-// impl<U> ListElementAble for U where ListElement: From<U> {
-//     fn lel<T>(self, loc: T) -> Tagged<ListElement> where Location: From<T> {
-//         ListElement::from(self).tag(loc)
-//     }
-// }
-
 trait ExprAble {
     fn expr<T>(self, loc: T) -> Tagged<Expr> where Location: From<T>;
 }
 
-impl<U> ExprAble for U where Expr: From<U> {
+impl<U> ExprAble for U where Object: From<U> {
     fn expr<T>(self, loc: T) -> Tagged<Expr> where Location: From<T> {
-        Expr::from(self).tag(loc)
+        Expr::Literal(Object::from(self)).tag(loc)
     }
 }
 
