@@ -1,6 +1,7 @@
 use std::num::{ParseFloatError, ParseIntError};
 use std::str::FromStr;
 
+use lazy_static::__Deref;
 use num_bigint::{BigInt, ParseBigIntError};
 use nom_locate::{LocatedSpan, position};
 
@@ -35,26 +36,90 @@ impl<'a> From<Span<'a>> for Location {
 }
 
 
-enum PExpr {
-    Naked(Tagged<Expr>),
-    Parenthesized(Tagged<Tagged<Expr>>),
+fn literal<T>(x: T) -> Expr where Object: From<T> {
+    Object::from(x).literal()
 }
 
-impl PExpr {
-    fn inner(self) -> Tagged<Expr> {
+
+/// Temporary expression wrapper used for accurately tracking parenthesized
+/// locations.
+///
+/// For parenthesized expressions, the Gold parser keeps track of both the outer
+/// and the inner locations, whereas for non-parenthesized expressions, only the
+/// inner location is tracked.
+///
+/// ```ignore
+/// ( some_expression_here )
+///   ^----- inner ------^
+/// ^------- outer --------^
+/// ```
+///
+/// In this way, when a parenthesized expression becomes a constituent part of
+/// a larger expression, the parentheses can be included on both sides, by using
+/// the outer span, e.g.:
+///
+/// ```ignore
+/// ( 2 + 3 ) * 5
+/// ^-----------^
+/// ```
+///
+/// Instead of the confusing result that would result from using the inner span,
+/// incorrectly giving the impression that imbalanced parentheses are allowed:
+///
+/// ```ignore
+/// ( 2 + 3 ) * 5
+///   ^---------^
+/// ```
+///
+/// On the other hand, when a parenthesised expression is used in a context where
+/// an error originates purely from the inner expression, Gold can disregard the
+/// parentheses when reporting the error:
+///
+/// ```ignore
+/// let x = ( some_function(y) ) in x + x
+///           ^--------------^
+/// ```
+enum Paren<T> {
+    /// A naked (non-parenthesized) expression.
+    Naked(Tagged<T>),
+
+    /// A parenthesized expression with two layers of location tags: outer and inner.
+    Parenthesized(Tagged<Tagged<T>>),
+}
+
+
+impl<T> Paren<T> {
+    /// Return the inner expression with location tag, disregarding potential
+    /// parentheses.
+    fn inner(self) -> Tagged<T> {
         match self {
             Self::Naked(x) => x,
             Self::Parenthesized(x) => x.unwrap(),
         }
     }
 
+    /// Return the outermost location span, either parenthesized or not.
+    ///
+    /// Use this when combining two spans.
     fn outer(&self) -> Location {
         match self {
             Self::Naked(x) => x.loc(),
             Self::Parenthesized(x) => x.loc(),
         }
     }
+
+    fn wraptag<F, U>(self, f: F) -> Paren<U> where F: FnOnce(Tagged<T>) -> U {
+        match self {
+            Self::Naked(x) => Paren::<U>::Naked(x.wraptag(f)),
+            Self::Parenthesized(x) => Paren::<U>::Parenthesized(x.map(|y| y.wraptag(f))),
+        }
+    }
 }
+
+
+type PExpr = Paren<Expr>;
+type PList = Paren<ListElement>;
+type PMap = Paren<MapElement>;
 
 
 trait CompleteError<'a>:
@@ -75,6 +140,21 @@ where T:
 
 type OpCons = fn(Tagged<Expr>) -> Operator;
 
+
+/// Wrap the output of a parser in Paren::Naked.
+fn naked<I, E: ParseError<I>, F, U>(
+    parser: F,
+) -> impl FnMut(I) -> IResult<I, Paren<U>, E>
+where
+    F: Parser<I, Tagged<U>, E>,
+{
+    map(parser, Paren::<U>::Naked)
+}
+
+
+/// Consume whitespace after a parser.
+///
+/// Most parsers in this module should consume whitespace after, but not before.
 fn postpad<I, O, E: ParseError<I>, F>(
     parser: F,
 ) -> impl FnMut(I) -> IResult<I, O, E>
@@ -86,6 +166,12 @@ where
     terminated(parser, multispace0)
 }
 
+
+/// Tag the output of a parser with a location.
+///
+/// Note that the inner parser should not consume whitespace after. Otherwise
+/// the whitespace will be part of the tagged location. For that, use
+/// [`positioned_postpad`].
 fn positioned<I, O, E: ParseError<I>, F>(
     parser: F
 ) -> impl FnMut(I) -> IResult<I, Tagged<O>, E>
@@ -101,6 +187,10 @@ where
     )
 }
 
+
+/// Tag the output of a parser with a location, and consume whitespace after.
+///
+/// This is the whitespace-aware version of [`positioned`].
 fn positioned_postpad<I, O, E: ParseError<I>, F>(
     parser: F,
 ) -> impl FnMut(I) -> IResult<I, Tagged<O>, E>
@@ -115,6 +205,19 @@ where
 }
 
 
+/// Match a single named keyword. Unlike [`tag`] this does not match if the
+/// keyword is a prefix of some other name or identifier.
+fn keyword<'a, E: ParseError<Span<'a>>>(
+    value: &'a str,
+) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, Span<'a>, E> {
+    verify(
+        is_not("=,;.:-+/*[](){}\"\' \t\n\r"),
+        move |out: &Span<'a>| { *out.fragment() == value },
+    )
+}
+
+
+/// List of keywords that must be avoided by the [`identifier`] parser.
 static KEYWORDS: [&'static str; 14] = [
     "for",
     "if",
@@ -132,15 +235,10 @@ static KEYWORDS: [&'static str; 14] = [
     "import",
 ];
 
-fn keyword<'a, E: ParseError<Span<'a>>>(
-    value: &'a str,
-) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, Span<'a>, E> {
-    verify(
-        is_not("=,;.:-+/*[](){}\"\' \t\n\r"),
-        move |out: &Span<'a>| { *out.fragment() == value },
-    )
-}
 
+/// Match an identfier.
+///
+/// This parser will refuse to match known keywords (see [`KEYWORDS`]).
 fn identifier<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<Key>, E> {
@@ -156,6 +254,10 @@ fn identifier<'a, E: CompleteError<'a>>(
     ))(input)
 }
 
+
+/// Match an identifier in a map context.
+///
+/// Maps have relaxed conditions on identifier names compared to 'regular' code.
 fn map_identifier<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<Key>, E> {
@@ -165,6 +267,9 @@ fn map_identifier<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Match a decimal: a sequence of digits 0-9, optionally interspersed with
+/// underscores.
 fn decimal<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, &'a str, E> {
@@ -177,6 +282,8 @@ fn decimal<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Match an exponent: an e or E followed by an optional sign and a decimal.
 fn exponent<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, &str, E> {
@@ -190,46 +297,68 @@ fn exponent<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Match a literal integer expression in decimal form.
 fn integer<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
-    map(positioned(map_res(
+    naked(positioned(map_res(
         decimal,
-        |out| {
-            let s = out.replace("_", "");
-            i64::from_str_radix(s.as_str(), 10).map_or_else(
-                |_| { BigInt::from_str(s.as_str()).map(Expr::big_integer) },
-                |val| Ok(Expr::integer(val)),
+
+        |x| {
+            let s = x.replace("_", "");
+            i64::from_str(s.as_ref()).map_or_else(
+                |_| BigInt::from_str(s.as_ref()).map(literal),
+                |x| Ok(literal(x)),
             )
-        }
-    )), PExpr::Naked)(input)
+        },
+    )))(input)
 }
 
+
+/// Match a literal floating-point number expression in decimal form.
 fn float<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
-    map(positioned(map_res(
+    naked(positioned(map_res(
+        // Three forms of floating point numbers. We match only the string here,
+        // relying on built-in Rust float parsing to extract the actual number.
         alt((
+
+            // Decimal integer followed by dot, and potentially fractional part and exponent.
             recognize(tuple((
                 decimal,
                 char('.'),
                 opt(decimal),
                 opt(exponent),
             ))),
+
+            // Dot followed by decimal fractional part.
             recognize(tuple((
                 char('.'),
                 decimal,
                 opt(exponent),
             ))),
+
+            // Pure integer followed by exponent.
             recognize(tuple((
                 decimal,
                 exponent,
             ))),
+
         )),
-        |out: Span<'a>| { (*out.fragment()).replace("_", "").parse::<f64>().map(Expr::float) }
-    )), PExpr::Naked)(input)
+
+        |out: Span<'a>| out.fragment().deref().replace("_", "").parse::<f64>().map(literal)
+    )))(input)
 }
 
+
+/// Matches a raw string part.
+///
+/// This means all characters up to a terminating symbol: either a closing quote
+/// or a dollar sign, signifying the beginning of an interpolated segment. This
+/// parser does *not* parse the initial quote or the terminating symbol,
+/// whatever that may be.
 fn raw_string<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, String, E> {
@@ -246,6 +375,10 @@ fn raw_string<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches a non-interpolated string element.
+///
+/// This is just the output of [`raw_string`] returned as a [`StringElement`].
 fn string_data<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, StringElement, E> {
@@ -255,6 +388,8 @@ fn string_data<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches an interpolated string element.
 fn string_interp<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, StringElement, E> {
@@ -270,36 +405,52 @@ fn string_interp<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches a string.
+///
+/// This parser matches an opening quote, followed by a sequence of string
+/// elements: either raw string data or interpolated expressions, followed by a
+/// closing quote.
 fn string<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
-    map(positioned(map(
-        preceded(
+    naked(positioned(map(
+        delimited(
             char('\"'),
-            terminated(
-                many0(alt((string_interp, string_data))),
-                char('\"'),
-            ),
+            many0(alt((string_interp, string_data))),
+            char('\"'),
         ),
-        Expr::string
-    )), PExpr::Naked)(input)
+
+        Expr::string,
+    )))(input)
 }
 
+
+/// Matches a boolean literal.
 fn boolean<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
-    map(positioned(alt((
-        value(Expr::boolean(true), keyword("true")),
-        value(Expr::boolean(false), keyword("false")),
-    ))), PExpr::Naked)(input)
+    naked(positioned(alt((
+        value(literal(true), keyword("true")),
+        value(literal(false), keyword("false")),
+    ))))(input)
 }
 
+
+/// Matches a null literal.
 fn null<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
-    map(positioned(value(Expr::null(), keyword("null"))), PExpr::Naked)(input)
+    naked(positioned(
+        value(Object::Null.literal(), keyword("null"))
+    ))(input)
 }
 
+
+/// Matches any atomic (non-divisible) expression.
+///
+/// Although strings are technically not atomic due to possibly interpolated
+/// expressions.
 fn atomic<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -312,105 +463,180 @@ fn atomic<'a, E: CompleteError<'a>>(
     ))(input)
 }
 
+
+/// Matches a list element: anything that is legal in a list.
+///
+/// There are four cases:
+/// - singleton elements: `[2]`
+/// - splatted iterables: `[...x]`
+/// - conditional elements: `[if cond: @]`
+/// - iterated elements: `[for x in y: @]`
 fn list_element<'a, E: CompleteError<'a>>(
     input: Span<'a>,
-) -> IResult<Span<'a>, Tagged<ListElement>, E> {
+) -> IResult<Span<'a>, PList, E> {
     alt((
-        positioned(map(
-            preceded(postpad(tag("...")), expression),
-            |x| ListElement::Splat(x.inner()),
-        )),
-        positioned(map(
+
+        // Splat
+        naked(map(
             tuple((
-                preceded(postpad(tag("for")), binding),
+                positioned(postpad(tag("..."))),
+                expression
+            )),
+            |(start, expr)| {
+                let loc = Location::from((&start, expr.outer()));
+                ListElement::Splat(expr.inner()).tag(loc)
+            },
+        )),
+
+        // Iteration
+        naked(map(
+            tuple((
+                positioned_postpad(keyword("for")),
+                binding,
                 preceded(postpad(tag("in")), expression),
                 preceded(postpad(char(':')), list_element),
             )),
-            |(binding, iterable, expr)| ListElement::Loop {
-                binding,
-                iterable: iterable.inner(),
-                element: Box::new(expr),
-            },
+            |(start, binding, iterable, expr)| {
+                let loc = Location::from((&start, expr.outer()));
+                ListElement::Loop {
+                    binding,
+                    iterable: iterable.inner(),
+                    element: Box::new(expr.inner()),
+                }.tag(loc)
+            }
         )),
-        positioned(map(
+
+        // Conditional
+        naked(map(
             tuple((
-                preceded(postpad(tag("if")), expression),
+                positioned_postpad(keyword("if")),
+                expression,
                 preceded(postpad(char(':')), list_element),
             )),
-            |(condition, expr)| ListElement::Cond {
-                condition: condition.inner(),
-                element: Box::new(expr),
+            |(start, condition, expr)| {
+                let loc = Location::from((&start, expr.outer()));
+                ListElement::Cond {
+                    condition: condition.inner(),
+                    element: Box::new(expr.inner()),
+                }.tag(loc)
             },
         )),
-        map(expression, |x| x.inner().wraptag(ListElement::Singleton)),
+
+        // Singleton
+        map(expression, |x| x.wraptag(ListElement::Singleton))
+
     ))(input)
 }
 
+
+/// Matches a list.
+///
+/// A list is composed of an opening bracket, a potentially empty
+/// comma-separated list of list elements, an optional terminal comma and a
+/// closing bracket.
 fn list<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
-    map(positioned(map(
-        preceded(
+    naked(positioned(map(
+        delimited(
             postpad(char('[')),
-            terminated(
-                separated_list0(
-                    postpad(char(',')),
-                    list_element
-                ),
-                tuple((
-                    opt(postpad(char(','))),
-                    char(']')
-                )),
+            separated_list0(
+                postpad(char(',')),
+                list_element,
             ),
+            tuple((
+                opt(postpad(char(','))),
+                char(']')
+            )),
         ),
-        Expr::List,
-    )), PExpr::Naked)(input)
+
+        |x| Expr::List(x.into_iter().map(|y| y.inner()).collect()),
+    )))(input)
 }
 
+
+/// Matches a map element: anything that is legal in a map.
+///
+/// There are five cases:
+/// - literal singleton elements: `{x: 1}`
+/// - evaluated singleton elements: `{$x: 1}`
+/// - splatted iterables: `{...x}`
+/// - conditional elements: `{if cond: @}`
+/// - iterated elements: `{for x in y: @}`
 fn map_element<'a, E: CompleteError<'a>>(
     input: Span<'a>,
-) -> IResult<Span<'a>, Tagged<MapElement>, E> {
+) -> IResult<Span<'a>, PMap, E> {
     alt((
-        positioned(map(
-            preceded(postpad(tag("...")), expression),
-            |x| MapElement::Splat(x.inner()),
-        )),
-        positioned(map(
+
+        // Splat
+        naked(map(
             tuple((
-                preceded(postpad(tag("for")), binding),
+                positioned_postpad(tag("...")),
+                expression
+            )),
+            |(start, expr)| {
+                let loc = Location::from((&start, expr.outer()));
+                MapElement::Splat(expr.inner()).tag(loc)
+            },
+        )),
+
+        // Iteration
+        naked(map(
+            tuple((
+                positioned_postpad(tag("for")),
+                binding,
                 preceded(postpad(tag("in")), expression),
                 preceded(postpad(char(':')), map_element),
             )),
-            |(binding, iterable, expr)| MapElement::Loop {
-                binding,
-                iterable: iterable.inner(),
-                element: Box::new(expr),
+            |(start, binding, iterable, expr)| {
+                let loc = Location::from((&start, expr.outer()));
+                MapElement::Loop {
+                    binding,
+                    iterable: iterable.inner(),
+                    element: Box::new(expr.inner()),
+                }.tag(loc)
             },
         )),
-        positioned(map(
+
+        // Conditional
+        naked(map(
             tuple((
-                preceded(postpad(tag("if")), expression),
+                positioned_postpad(tag("if")),
+                expression,
                 preceded(postpad(char(':')), map_element),
             )),
-            |(condition, expr)| MapElement::Cond {
-                condition: condition.inner(),
-                element: Box::new(expr)
+            |(start, condition, expr)| {
+                let loc = Location::from((&start, expr.outer()));
+                MapElement::Cond {
+                    condition: condition.inner(),
+                    element: Box::new(expr.inner())
+                }.tag(loc)
             },
         )),
-        positioned(map(
+
+        // Evaluated singleton
+        naked(map(
             tuple((
+                positioned_postpad(char('$')),
                 terminated(
-                    preceded(postpad(char('$')), expression),
+                    expression,
                     postpad(char(':')),
                 ),
                 expression,
             )),
-            |(key, value)| MapElement::Singleton {
-                key: key.inner(),
-                value: value.inner(),
-             },
+            |(start, key, value)| {
+                println!("{:?}", Location::from(&start));
+                println!("{:?}", value.outer());
+                let loc = Location::from((&start, value.outer()));
+                MapElement::Singleton {
+                    key: key.inner(),
+                    value: value.inner(),
+                }.tag(loc)
+            },
         )),
-        map(
+
+        // Literal singleton
+        naked(map(
             tuple((
                 terminated(
                     postpad(map_identifier),
@@ -425,10 +651,17 @@ fn map_element<'a, E: CompleteError<'a>>(
                     value: value.inner(),
                 }.tag(loc)
             },
-        ),
+        )),
+
     ))(input)
 }
 
+
+
+/// Matches a map.
+///
+/// A list is composed of an opening brace, a potentially empty comma-separated
+/// list of map elements, an optional terminal comma and a closing brace.
 fn mapping<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -446,29 +679,56 @@ fn mapping<'a, E: CompleteError<'a>>(
                 )),
             ),
         ),
-        Expr::Map,
+
+        |x| Expr::Map(x.into_iter().map(|y| y.inner()).collect()),
     )), PExpr::Naked)(input)
 }
 
+
+/// Matches a parenthesized expression.
+///
+/// This is the only possible source of Paren::Parenthesized in the Gold
+/// language. All other parenthesized variants stem from this origin.
+fn paren<'a, E: CompleteError<'a>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, PExpr, E> {
+    map(
+        tuple((
+            positioned_postpad(char('(')),
+            expression,
+            positioned_postpad(char(')')),
+        )),
+
+        |(start, expr, end)| {
+            let loc = Location::from((&start, &end));
+            PExpr::Parenthesized(expr.inner().tag(loc))
+        }
+    )(input)
+}
+
+
+/// Matches an expression that can be an operand.
+///
+/// The tightest binding operators are the postfix operators, so this class of
+/// expressions are called 'postixable' expressions. Only expressions with a
+/// well defined end are postfixable: in particular, functions, let-blocks and
+/// tertiary expressions are not postfixable, but parenthesized expressions are.
 fn postfixable<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
     postpad(alt((
-        map(
-            positioned(delimited(postpad(char('(')), expression, postpad(char(')')))),
-            |x| {
-                let loc = x.loc();
-                let expr = x.unwrap().inner();
-                PExpr::Parenthesized(expr.tag(loc))
-            }
-        ),
+        paren,
         atomic,
-        map(positioned(identifier), |x| PExpr::Naked(x.map(Expr::Identifier))),
+        naked(positioned(map(identifier, Expr::Identifier))),
         list,
         mapping,
     )))(input)
 }
 
+
+/// Matches a dot-syntax subscripting operator.
+///
+/// This is a dot followed by an identifier.
 fn object_access<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<Operator>, E> {
@@ -484,6 +744,10 @@ fn object_access<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches a bracket-syntax subscripting operator.
+///
+/// This is an open bracket followed by any expression and a closing bracket.
 fn object_index<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<Operator>, E> {
@@ -493,14 +757,23 @@ fn object_index<'a, E: CompleteError<'a>>(
             expression,
             positioned(char(']')),
         )),
-        |(a, expr, b)| Operator::BinOp(BinOp::Index, Box::new(expr.inner())).tag((&a, &b)),
+        |(a, expr, b)| Operator::BinOp(BinOp::Index, expr.inner().to_box()).tag((&a, &b)),
     )(input)
 }
 
+
+/// Matches a function argument element.
+///
+/// There are three cases:
+/// - splatted iterables: `f(...x)`
+/// - keyword arguments: `f(x: y)`
+/// - singleton arguments: `f(x)`
 fn function_arg<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<ArgElement>, E> {
     alt((
+
+        // Splat
         map(
             tuple((
                 positioned_postpad(tag("...")),
@@ -511,6 +784,8 @@ fn function_arg<'a, E: CompleteError<'a>>(
                 ArgElement::Splat(y.inner()).tag((&x, rloc))
             },
         ),
+
+        // Keyword
         map(
             tuple((
                 postpad(identifier),
@@ -524,6 +799,8 @@ fn function_arg<'a, E: CompleteError<'a>>(
                 ArgElement::Keyword(name, expr.inner()).tag(loc)
             },
         ),
+
+        // Singleton
         map(
             expression,
             |x| {
@@ -531,9 +808,16 @@ fn function_arg<'a, E: CompleteError<'a>>(
                 ArgElement::Singleton(x.inner()).tag(loc)
             },
         ),
+
     ))(input)
 }
 
+
+/// Matches a function call operator.
+///
+/// This is an open parenthesis followed by a possibly empty list of
+/// comma-separated argument elements, followed by an optional comma and a
+/// closin parenthesis.
 fn function_call<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<Operator>, E> {
@@ -544,12 +828,20 @@ fn function_call<'a, E: CompleteError<'a>>(
                 postpad(char(',')),
                 function_arg,
             ),
-            positioned_postpad(char(')')),
+            preceded(
+                opt(postpad(char(','))),
+                positioned_postpad(char(')')),
+            ),
         )),
         |(a, expr, b)| Operator::FunCall(expr).tag((&a, &b)),
     )(input)
 }
 
+
+/// Matches any postfix operator expression.
+///
+/// This is a postfixable expression (see [`postfixable`]) followed by an
+/// arbitrary sequence of postfix operators.
 fn postfixed<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -562,6 +854,7 @@ fn postfixed<'a, E: CompleteError<'a>>(
                 function_call,
             )))),
         )),
+
         |(expr, ops)| {
             ops.into_iter().fold(
                 expr,
@@ -571,12 +864,17 @@ fn postfixed<'a, E: CompleteError<'a>>(
                         operand: Box::new(expr.inner()),
                         operator: operator.unwrap()
                     }.tag(loc))
-                }
+                },
             )
         },
     )(input)
 }
 
+
+/// Matches any prefixed operator expression.
+///
+/// This is an arbitrary sequence of prefix operators followed by a postfixed
+/// expression.
 fn prefixed<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -589,6 +887,7 @@ fn prefixed<'a, E: CompleteError<'a>>(
             ))),
             power,
         )),
+
         |(ops, expr)| {
             ops.into_iter().rev().fold(
                 expr,
@@ -604,6 +903,18 @@ fn prefixed<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Utility parser for parsing a single binary operator with operand.
+///
+/// `operators` should return, loosely, a function Expr -> Operator.
+/// `operand` should return an Expr.
+///
+/// The result, essentially, is the result of `operators` applied to the result
+/// of `operand`, thus, an Operator.
+///
+/// Note that in the Gold abstract syntax tree model, an operator is anything
+/// that 'acts' on an expression. In this interpretation, in an expression such
+/// as `1 + 2`, `+ 2` is the operator that acts on `1`.
 fn binop<I, E: ParseError<I>, G, H>(
     operators: G,
     operand: H,
@@ -627,6 +938,11 @@ where
     )
 }
 
+
+/// Utility parser for parsing a left- or right-associative sequence of operators.
+///
+/// `operators` is normally a parser created by [`binop`], that is, something
+/// that returns an `Operator`.
 fn binops<I, E: ParseError<I>, G, H>(
     operators: G,
     operand: H,
@@ -660,6 +976,12 @@ where
     )
 }
 
+
+/// Matches the exponentiation precedence level.
+///
+/// The exponentiation operator, unlike practically every other operator, is
+/// right-associative, and asymmetric in its operands: it binds tighter than
+/// prefix operators on the left, but not on the right.
 fn power<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -675,6 +997,9 @@ fn power<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Utility parser for matching a sequence of left-associative operators with
+/// symmetric operands. In other words, most conventional operators.
 fn lbinop<I, E: ParseError<I>, G, H>(
     operators: G,
     operands: H
@@ -689,6 +1014,8 @@ where
     binops(binop(operators, operands), operands, false)
 }
 
+
+/// Matches the multiplication precedence level.
 fn product<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -698,10 +1025,12 @@ fn product<'a, E: CompleteError<'a>>(
             value(Operator::integer_divide as OpCons, tag("//")),
             value(Operator::divide as OpCons, tag("/")),
         )),
-        prefixed
+        prefixed,
     )(input)
 }
 
+
+/// Matches the addition predecence level.
 fn sum<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -714,6 +1043,8 @@ fn sum<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches the inequality comparison precedence level.
 fn inequality<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -728,6 +1059,8 @@ fn inequality<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches the equality comparison precedence level.
 fn equality<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -740,6 +1073,8 @@ fn equality<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches the conjunction ('and') precedence level.
 fn conjunction<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -751,6 +1086,8 @@ fn conjunction<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches the disjunction ('or') precedence level.
 fn disjunction<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -762,6 +1099,9 @@ fn disjunction<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches an identifier binding. This is essentially the same as a normal
+/// identifier.
 fn ident_binding<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<Binding>, E> {
@@ -773,21 +1113,54 @@ fn ident_binding<'a, E: CompleteError<'a>>(
     )))(input)
 }
 
+
+/// Matches a list binding element: anything that's legal in a list unpacking
+/// environment.
+///
+/// There are four cases:
+/// - anonymous slurp: `let [...] = x`
+/// - named slurp: `let [...y] = x`
+/// - singleton binding: `let [y] = x`
+/// - singleton binding with default: `let [y = z] = x`
 fn list_binding_element<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<ListBindingElement>, E> {
-    positioned(alt((
-        map(
+    alt((
+
+        // Named and anonymous slurps
+        positioned(map(
             preceded(tag("..."), opt(identifier)),
             |ident| ident.map(ListBindingElement::SlurpTo).unwrap_or(ListBindingElement::Slurp),
-        ),
+        )),
+
+        // Singleton bindings with or without defaults
         map(
-            tuple((binding, opt(preceded(postpad(char('=')), expression)))),
-            |(b, e)| ListBindingElement::Binding { binding: b, default: e.map(PExpr::inner) },
+            tuple((
+                binding,
+                opt(preceded(postpad(char('=')), expression))
+            )),
+            |(b, e)| {
+                let loc = if let Some(d) = &e {
+                    Location::from((&b, d.outer()))
+                } else {
+                    b.loc()
+                };
+
+                ListBindingElement::Binding {
+                    binding: b,
+                    default: e.map(PExpr::inner)
+                }.tag(loc)
+            },
         ),
-    )))(input)
+
+    ))(input)
 }
 
+
+/// Matches a list binding, excluding the surrounding brackets.
+///
+/// This is a comma-separated list of list binding elements, optionally
+/// terminated by a comma.
 fn list_binding<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, ListBinding, E> {
@@ -803,17 +1176,32 @@ fn list_binding<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches a map binding element: anything that's legal in a map unpacking environment.
+///
+/// There are five cases:
+/// - named slurp: `let {...y} = x`
+/// - singleton binding: `let {y} = x`
+/// - singleton binding with unpacking: `let {y as z} = x`
+/// - singleton binding with default: `let {y = z} = x`
+/// - singleton binding with unpacking and default: `let {y as z = q} = x`
 fn map_binding_element<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<MapBindingElement>, E> {
-    positioned(alt((
-        map(
+    alt((
+
+        // Slurp
+        positioned(map(
             preceded(tag("..."), identifier),
             |i| MapBindingElement::SlurpTo(i),
-        ),
+        )),
+
+        // All variants of singleton bindings
         map(
             tuple((
                 alt((
+
+                    // With unpacking
                     map(
                         tuple((
                             postpad(map_identifier),
@@ -824,20 +1212,30 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                         )),
                         |(name, binding)| (name, Some(binding)),
                     ),
+
+                    // Without unpacking
                     map(
                         postpad(map_identifier),
                         |name| (name, None),
                     ),
+
                 )),
+
+                // Optional default
                 opt(
                     preceded(
                         postpad(char('=')),
                         expression,
                     ),
                 ),
+
             )),
+
             |((name, binding), default)| {
-                match binding {
+                let mut loc = name.loc();
+                if let Some(b) = &binding { loc = Location::from((loc, b.loc())); };
+                if let Some(d) = &default { loc = Location::from((loc, d.outer())); };
+                let rval = match binding {
                     None => MapBindingElement::Binding {
                         key: name,
                         binding: Binding::Identifier(name).tag(&name),
@@ -848,12 +1246,18 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                         binding,
                         default: default.map(PExpr::inner),
                     },
-                }
+                };
+                rval.tag(loc)
             },
         ),
-    )))(input)
+    ))(input)
 }
 
+
+/// Matches a map binding, excluding the surrounding braces.
+///
+/// This is a comma-separated list of map binding elements, optionally
+/// terminated by a comma.
 fn map_binding<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, MapBinding, E> {
@@ -869,16 +1273,31 @@ fn map_binding<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches a binding.
+///
+/// There are three cases:
+/// - An identifier binding (leaf node)
+/// - A list binding
+/// - A map binding
 fn binding<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<Binding>, E> {
     alt((
         ident_binding,
-        postpad(positioned(map(positioned(delimited(postpad(char('[')), list_binding, char(']'))), Binding::List))),
-        postpad(positioned(map(positioned(delimited(postpad(char('{')), map_binding, char('}'))), Binding::Map))),
+
+        // TODO: Do we need double up location tagging here?
+        positioned_postpad(map(positioned(delimited(postpad(char('[')), list_binding, char(']'))), Binding::List)),
+        positioned_postpad(map(positioned(delimited(postpad(char('{')), map_binding, char('}'))), Binding::Map)),
     ))(input)
 }
 
+
+/// Matches a standard function.
+///
+/// This is an open parenthesis, a list binding (without the brackets), an
+/// optional semicolon followed by a map binding (without the braces), finally
+/// terminated by a close parenthesis, a double arrow (=>) and an expression.
 fn function<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -902,6 +1321,7 @@ fn function<'a, E: CompleteError<'a>>(
                 expression,
             ),
         )),
+
         |((start, posargs, kwargs), expr)| {
             let loc = Location::from((&start, expr.outer()));
             PExpr::Naked(Expr::Function {
@@ -913,6 +1333,11 @@ fn function<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches a keyword-only function.
+///
+/// This is an open brace, a map binding (without the braces) and a close brace
+/// followed by a double arrow (=>) and an expression.
 fn keyword_function<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -928,6 +1353,7 @@ fn keyword_function<'a, E: CompleteError<'a>>(
                 expression,
             ),
         )),
+
         |(start, kwargs, expr)| {
             let loc = Location::from((&start, expr.outer()));
             PExpr::Naked(Expr::Function {
@@ -939,6 +1365,14 @@ fn keyword_function<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches a let-binding block.
+///
+/// This is an arbitrary (non-empty) sequence of let-bindings followed by the
+/// keyword 'in' and then an expression.
+///
+/// A let-binding consists of the keyword 'let' followed by a binding, an equals
+/// symbol and an expression.
 fn let_block<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -972,6 +1406,11 @@ fn let_block<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches a branching expression (tertiary operator).
+///
+/// This consists of the keywords 'if', 'then' and 'else', each followed by an
+/// expression.
 fn branch<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -999,6 +1438,11 @@ fn branch<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches a composite expression.
+///
+/// This is a catch-all terms for special expressions that do not participate in
+/// the operator sequence: let blocks, branches, and functions.
 fn composite<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -1010,6 +1454,8 @@ fn composite<'a, E: CompleteError<'a>>(
     ))(input)
 }
 
+
+/// Matches any expression.
 fn expression<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
@@ -1019,6 +1465,11 @@ fn expression<'a, E: CompleteError<'a>>(
     ))(input)
 }
 
+
+/// Matches an import statement.
+///
+/// An import statement consists of the keyword 'import' followed by a raw
+/// string (no interpolated segments), the keyword 'as' and a binding pattern.
 fn import<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, TopLevel, E> {
@@ -1040,6 +1491,11 @@ fn import<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Matches a file.
+///
+/// A file consists of an arbitrary number of top-level statements followed by a
+/// single expression.
 fn file<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, File, E> {
@@ -1052,6 +1508,8 @@ fn file<'a, E: CompleteError<'a>>(
     )(input)
 }
 
+
+/// Parse the input and return a [`File`] object.
 pub fn parse(input: &str) -> Result<File, String> {
     let span = Span::new(input);
     file::<VerboseError<Span>>(span).map_or_else(
