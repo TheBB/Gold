@@ -229,7 +229,7 @@ fn lists() {
             ListElement::Loop {
                 binding: "x".bid((8, 1, 1)),
                 iterable: "y".id((13, 1, 1)),
-                element: Box::new("x".id((16, 1, 1)).wraptag(ListElement::Singleton)),
+                element: "x".id((16, 1, 1)).wraptag(ListElement::Singleton).to_box(),
             }.tag((4, 1, 13)),
             2.lel((19, 1, 1)),
         )).tag((0, 1, 21))),
@@ -239,12 +239,46 @@ fn lists() {
         parse("[if f(x): x]"),
         Ok(Expr::list((
             ListElement::Cond {
-                condition:"f".id((4, 1, 1)).funcall((
+                condition: "f".id((4, 1, 1)).funcall((
                     "x".id((6, 1, 1)).wraptag(ArgElement::Singleton),
                 )).tag((4, 1, 4)),
                 element: "x".id((10, 1, 1)).wraptag(ListElement::Singleton).to_box(),
             }.tag((1, 1, 10)),
         )).tag((0, 1, 12))),
+    );
+
+    assert_eq!(
+        parse("[ 1 , ... x , if x : y , for x in y : z , ]"),
+        Ok(Expr::list((
+            1.lel((2, 1, 1)),
+            "x".id((10, 1, 1)).wrap(ListElement::Splat, (6, 1, 5)),
+            ListElement::Cond {
+                condition: "x".id((17, 1, 1)),
+                element: "y".id((21, 1, 1)).wraptag(ListElement::Singleton).to_box(),
+            }.tag((14, 1, 8)),
+            ListElement::Loop {
+                binding: "x".bid((29, 1, 1)),
+                iterable: "y".id((34, 1, 1)),
+                element: "z".id((38, 1, 1)).wraptag(ListElement::Singleton).to_box(),
+            }.tag((25, 1, 14)),
+        )).tag((0, 1, 43))),
+    );
+
+    assert_eq!(
+        parse("[ (1) , ... (x), if x: (y) , for x in y: (z) ]"),
+        Ok(Expr::list((
+            1.lel((3, 1, 1)),
+            "x".id((13, 1, 1)).wrap(ListElement::Splat, (8, 1, 7)),
+            ListElement::Cond {
+                condition: "x".id((20, 1, 1)),
+                element: "y".id((24, 1, 1)).wraptag(ListElement::Singleton).to_box(),
+            }.tag((17, 1, 9)),
+            ListElement::Loop {
+                binding: "x".bid((33, 1, 1)),
+                iterable: "y".id((38, 1, 1)),
+                element: "z".id((42, 1, 1)).wraptag(ListElement::Singleton).to_box(),
+            }.tag((29, 1, 15)),
+        )).tag((0, 1, 46))),
     );
 }
 
@@ -384,10 +418,7 @@ fn maps() {
                     }.tag((8, 1, 1)),
                 ]).tag((5, 1, 5))).tag((5, 1, 5)),
                 iterable: "z".id((14, 1, 1)),
-                element: Box::new(MapElement::Singleton {
-                    key: "x".lit((17, 1, 1)),
-                    value: "y".id((20, 1, 1)),
-                }.tag((17, 1, 4))),
+                element: ("x".lit((17, 1, 1)), "y".id((20, 1, 1))).mel().to_box(),
             }.tag((1, 1, 20)),
         )).tag((0, 1, 22))),
     );
@@ -399,12 +430,60 @@ fn maps() {
                 condition: "f".id((4, 1, 1)).funcall((
                     ArgElement::Singleton("x".id((6, 1, 1))).tag((6, 1, 1)),
                 )).tag((4, 1, 4)),
-                element: Box::new(MapElement::Singleton {
-                    key: "z".lit((10, 1, 1)),
-                    value: "y".id((13, 1, 1)),
-                }.tag((10, 1, 4))),
+                element: ("z".lit((10, 1, 1)), "y".id((13, 1, 1))).mel().to_box(),
             }.tag((1, 1, 13)),
         )).tag((0, 1, 15))),
+    );
+
+    assert_eq!(
+        parse("{ a : 1 , ... x , if x : b : y , for x in y : c : z , $ f : 2 , }"),
+        Ok(Expr::map((
+            ("a".lit((2, 1, 1)), 1.expr((6, 1, 1))).mel(),
+            MapElement::Splat("x".id((14, 1, 1))).tag((10, 1, 5)),
+            MapElement::Cond {
+                condition: "x".id((21, 1, 1)),
+                element: ("b".lit((25, 1, 1)), "y".id((29, 1, 1))).mel().to_box(),
+            }.tag((18, 1, 12)),
+            MapElement::Loop {
+                binding: "x".bid((37, 1, 1)),
+                iterable: "y".id((42, 1, 1)),
+                element: ("c".lit((46, 1, 1)), "z".id((50, 1, 1))).mel().to_box(),
+            }.tag((33, 1, 18)),
+            MapElement::Singleton {
+                key: "f".id((56, 1, 1)),
+                value: 2.expr((60, 1, 1))
+            }.tag((54, 1, 7)),
+        )).tag((0, 1, 65))),
+    );
+
+    assert_eq!(
+        parse("{ a : (1), ... (x), if x : b : (y), for x in y : c : (z), $ f : (2) }"),
+        Ok(Expr::map((
+            MapElement::Singleton {
+                key: "a".lit((2, 1, 1)),
+                value: 1.expr((7, 1, 1))
+            }.tag((2, 1, 7)),
+            MapElement::Splat("x".id((16, 1, 1))).tag((11, 1, 7)),
+            MapElement::Cond {
+                condition: "x".id((23, 1, 1)),
+                element: MapElement::Singleton {
+                    key: "b".lit((27, 1, 1)),
+                    value: "y".id((32, 1, 1))
+                }.tag((27, 1, 7)).to_box(),
+            }.tag((20, 1, 14)),
+            MapElement::Loop {
+                binding: "x".bid((40, 1, 1)),
+                iterable: "y".id((45, 1, 1)),
+                element: MapElement::Singleton {
+                    key: "c".lit((49, 1, 1)),
+                    value: "z".id((54, 1, 1))
+                }.tag((49, 1, 7)).to_box(),
+            }.tag((36, 1, 20)),
+            MapElement::Singleton {
+                key: "f".id((60, 1, 1)),
+                value: 2.expr((65, 1, 1))
+            }.tag((58, 1, 9)),
+        )).tag((0, 1, 69))),
     );
 }
 
@@ -581,6 +660,43 @@ fn let_blocks() {
             expression: "a".id((24, 1, 1)).to_box(),
         }.tag((0, 1, 25))),
     );
+
+    assert_eq!(
+        parse("let [ y = (1) ] = x in y"),
+        Ok(Expr::Let {
+            bindings: vec![
+                (
+                    Binding::List(ListBinding(vec![
+                        ListBindingElement::Binding {
+                            binding: "y".bid((6, 1, 1)),
+                            default: Some(1.expr((11, 1, 1))),
+                        }.tag((6, 1, 7)),
+                    ]).tag((4, 1, 11))).tag((4, 1, 11)),
+                    "x".id((18, 1, 1)),
+                ),
+            ],
+            expression: "y".id((23, 1, 1)).to_box(),
+        }.tag((0, 1, 24)))
+    );
+
+    assert_eq!(
+        parse("let { y = (1) } = x in y"),
+        Ok(Expr::Let {
+            bindings: vec![
+                (
+                    Binding::Map(MapBinding(vec![
+                        MapBindingElement::Binding {
+                            key: "y".key((6, 1, 1)),
+                            binding: "y".bid((6, 1, 1)),
+                            default: Some(1.expr((11, 1, 1))),
+                        }.tag((6, 1, 7)),
+                    ]).tag((4, 1, 11))).tag((4, 1, 11)),
+                    "x".id((18, 1, 1)),
+                ),
+            ],
+            expression: "y".id((23, 1, 1)).to_box(),
+        }.tag((0, 1, 24)))
+    );
 }
 
 #[test]
@@ -653,12 +769,12 @@ fn indexing() {
 #[test]
 fn funcall() {
     assert_eq!(
-        parse("func(1, 2, 3)"),
+        parse("func(1, 2, 3,)"),
         Ok("func".id((0, 1, 4)).funcall((
             1.expr((5, 1, 1)).wraptag(ArgElement::Singleton),
             2.expr((8, 1, 1)).wraptag(ArgElement::Singleton),
             3.expr((11, 1, 1)).wraptag(ArgElement::Singleton),
-        )).tag((0, 1, 13))),
+        )).tag((0, 1, 14))),
     );
 
     assert_eq!(

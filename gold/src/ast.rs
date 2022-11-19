@@ -2,8 +2,6 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::ops;
 
-use num_bigint::BigInt;
-
 use serde::{Deserialize, Serialize};
 
 use super::error::Tagged;
@@ -557,12 +555,6 @@ impl Tagged<Expr> {
 }
 
 impl Expr {
-    pub fn integer(value: i64) -> Expr { Expr::Literal(Object::Integer(value)) }
-    pub fn big_integer(value: BigInt) -> Expr { Expr::Literal(Object::from(value)) }
-    pub fn float(value: f64) -> Expr { Expr::Literal(Object::Float(value)) }
-    pub fn boolean(value: bool) -> Expr { Expr::Literal(Object::Boolean(value)) }
-    pub fn null() -> Expr { Expr::Literal(Object::Null) }
-
     pub fn list<T>(x: T) -> Expr where T: ToVec<Tagged<ListElement>> { Expr::List(x.to_vec()) }
     pub fn map<T>(x: T) -> Expr where T: ToVec<Tagged<MapElement>> { Expr::Map(x.to_vec()) }
 

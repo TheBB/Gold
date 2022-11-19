@@ -68,6 +68,24 @@ impl<T> Tagged<T> {
     }
 }
 
+impl<X, Y> Tagged<Result<X,Y>> {
+    pub fn transpose(self) -> Result<Tagged<X>,Y> {
+        match self.contents {
+            Ok(x) => Ok(Tagged { location: self.location, contents: x }),
+            Err(y) => Err(y),
+        }
+    }
+}
+
+impl<X> Tagged<Option<X>> {
+    pub fn transpose(self) -> Option<Tagged<X>> {
+        match self.contents {
+            Some(x) => Some(Tagged { location: self.location, contents: x }),
+            None => None,
+        }
+    }
+}
+
 impl<T: Debug> Debug for Tagged<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.contents.fmt(f)?;
