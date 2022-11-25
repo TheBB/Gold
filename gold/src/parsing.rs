@@ -516,13 +516,16 @@ fn float<'a, E: CompleteError<'a>>(
 fn raw_string<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, String, E> {
-    escaped_transform(
-        recognize(many1(none_of("\"\\$"))),
-        '\\',
-        alt((
-            value("\"", tag("\"")),
-            value("\\", tag("\\")),
-        )),
+    verify(
+        escaped_transform(
+            recognize(many1(none_of("\"\\$"))),
+            '\\',
+            alt((
+                value("\"", tag("\"")),
+                value("\\", tag("\\")),
+            )),
+        ),
+        |x: &str| { x.len() > 0 },
     )(input)
 }
 
