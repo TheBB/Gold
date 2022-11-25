@@ -146,51 +146,51 @@ fn map_bindings() {
 #[test]
 fn function_bindings() {
     assert_seq!(eval(concat!(
-        "let a = (x, [y, z]) => x + y + z\n",
+        "let a = fn (x, [y, z]) => x + y + z\n",
         "in a(1, [2, 3])"
     )), Object::from(6));
 
     assert_seq!(eval(concat!(
-        "let f = ([y = 1]) => y\n",
+        "let f = fn ([y = 1]) => y\n",
         "in f([])"
     )), Object::from(1));
 
     assert_seq!(eval(concat!(
         "let q = 1\n",
-        "let f = ([y = q]) => y\n",
+        "let f = fn ([y = q]) => y\n",
         "in f([])"
     )), Object::from(1));
 
     assert_seq!(eval(concat!(
-        "let f = (q) => ([y = q]) => y\n",
+        "let f = fn (q) => fn ([y = q]) => y\n",
         "let q = 1\n",
         "in f(2)([])"
     )), Object::from(2));
 
     assert_seq!(eval(concat!(
-        "let f = (x; y, z) => x + y + z\n",
+        "let f = fn (x; y, z) => x + y + z\n",
         "in f(1, y: 2, z: 3)"
     )), Object::from(6));
 
     assert_seq!(eval(concat!(
-        "let f = (; y=1) => y\n",
+        "let f = fn (; y=1) => y\n",
         "in f()"
     )), Object::from(1));
 
     assert_seq!(eval(concat!(
         "let q = 1\n",
-        "let f = (; y=q) => y\n",
+        "let f = fn (; y=q) => y\n",
         "in f()"
     )), Object::from(1));
 
     assert_seq!(eval(concat!(
-        "let f = (q) => (; y=q) => y\n",
+        "let f = fn (q) => fn (; y=q) => y\n",
         "let q = 1\n",
         "in f(2)()"
     )), Object::from(2));
 
     assert_seq!(eval(concat!(
-        "let f = (x, y=15; z=200) => [x,y,z]\n",
+        "let f = fn (x, y=15; z=200) => [x,y,z]\n",
         "in [f(1), f(1,2), f(1,z:100), f(1,2,z:100)]"
     )), Object::list((
         Object::list((1, 15, 200)),
@@ -200,7 +200,7 @@ fn function_bindings() {
     )));
 
     assert_seq!(eval(concat!(
-        "let dest = (...args; ...kwargs) => [args, kwargs]\n",
+        "let dest = fn (...args; ...kwargs) => [args, kwargs]\n",
         "in dest()"
     )), Object::list((
         Object::list(()),
@@ -208,7 +208,7 @@ fn function_bindings() {
     )));
 
     assert_seq!(eval(concat!(
-        "let dest = (...args; ...kwargs) => [args, kwargs]\n",
+        "let dest = fn (...args; ...kwargs) => [args, kwargs]\n",
         "in dest(1, 2)"
     )), Object::list((
         Object::list((1, 2)),
@@ -216,7 +216,7 @@ fn function_bindings() {
     )));
 
     assert_seq!(eval(concat!(
-        "let dest = (...args; ...kwargs) => [args, kwargs]\n",
+        "let dest = fn (...args; ...kwargs) => [args, kwargs]\n",
         "in dest(x: 1, y: 2)"
     )), Object::list((
         Object::list(()),
@@ -224,7 +224,7 @@ fn function_bindings() {
     )));
 
     assert_seq!(eval(concat!(
-        "let dest = (...args; ...kwargs) => [args, kwargs]\n",
+        "let dest = fn (...args; ...kwargs) => [args, kwargs]\n",
         "in dest(1, 2, x: 3, y: 4)"
     )), Object::list((
         Object::list((1, 2)),
@@ -232,7 +232,7 @@ fn function_bindings() {
     )));
 
     assert_seq!(eval(concat!(
-        "let dest = (...args; ...kwargs) => [args, kwargs]\n",
+        "let dest = fn (...args; ...kwargs) => [args, kwargs]\n",
         "let args = [1, 2, 3]\n",
         "let kwargs = {x: 4, y: 5, z: 6}\n",
         "in dest(0, ...args, 5, a: 8, ...kwargs, c: 10, z: 12)"
@@ -241,10 +241,10 @@ fn function_bindings() {
         Object::map((("a", 8), ("x", 4), ("y", 5), ("z", 12), ("c", 10))),
     )));
 
-    assert_seq!(eval("({} => 1)()"), Object::from(1));
-    assert_seq!(eval("({a, b} => a + b)(a: 1, b: 2)"), Object::from(3));
-    assert_seq!(eval("({a, b=2} => a + b)(a: 1, b: 3)"), Object::from(4));
-    assert_seq!(eval("({a, b=2} => a + b)(a: 1)"), Object::from(3));
+    assert_seq!(eval("(fn {} => 1)()"), Object::from(1));
+    assert_seq!(eval("(fn {a, b} => a + b)(a: 1, b: 2)"), Object::from(3));
+    assert_seq!(eval("(fn {a, b=2} => a + b)(a: 1, b: 3)"), Object::from(4));
+    assert_seq!(eval("(fn {a, b=2} => a + b)(a: 1)"), Object::from(3));
 }
 
 
@@ -412,69 +412,69 @@ fn map_concat() {
 #[test]
 fn functions() {
     assert_seq!(eval(concat!(
-        "let double = (x) => x + x\n",
-        "let applytwice = (f,x) => f(f(x))\n",
+        "let double = fn (x) => x + x\n",
+        "let applytwice = fn (f,x) => f(f(x))\n",
         "in applytwice(double, [1])"
     )), Object::list((1, 1, 1, 1)));
 
     assert_seq!(eval(concat!(
         "let a = 1\n",
-        "let b = () => a\n",
+        "let b = fn () => a\n",
         "let a = 2\n",
         "in b()"
     )), Object::from(1));
 
     assert_seq!(eval(concat!(
         "let a = 1\n",
-        "let b = (q = a) => q\n",
+        "let b = fn (q = a) => q\n",
         "in b()"
     )), Object::from(1));
 
     assert_seq!(eval(concat!(
         "let a = 1\n",
-        "let b = (q = a) => q\n",
+        "let b = fn (q = a) => q\n",
         "let a = 2\n",
         "in b()"
     )), Object::from(1));
 
     assert_seq!(eval(concat!(
-        "let b = () => let a = 1 in (q = a) => q\n",
+        "let b = fn () => let a = 1 in fn (q = a) => q\n",
         "let c = b()\n",
         "in c()"
     )), Object::from(1));
 
     assert_seq!(eval(concat!(
-        "let a = (q, ...x) => [q, ...x]\n",
+        "let a = fn (q, ...x) => [q, ...x]\n",
         "in a(1, 2, 3)"
     )), Object::list((1, 2, 3)));
 
     assert_seq!(eval(concat!(
-        "let a = (q, p = q) => p\n",
+        "let a = fn (q, p = q) => p\n",
         "in a(1, 2)"
     )), Object::from(2));
 
     assert_seq!(eval(concat!(
-        "let a = (q, p = q) => p\n",
+        "let a = fn (q, p = q) => p\n",
         "in a(1)"
     )), Object::from(1));
 
     assert_seq!(eval(concat!(
-        "let a = (; k = 1) => k\n",
+        "let a = fn (; k = 1) => k\n",
         "in a()"
     )), Object::from(1));
 
     assert_seq!(eval(concat!(
-        "let a = (; k = 1) => k\n",
+        "let a = fn (; k = 1) => k\n",
         "in a(k: 2)"
     )), Object::from(2));
 
     assert_seq!(eval(concat!(
-        "let a = {k = 1} => k\n",
+        "let a = fn {k = 1} => k\n",
         "in a()"
     )), Object::from(1));
 
     assert_seq!(eval(concat!(
-        "let a = {k = 1} => k\n",
+        "let a = fn {k = 1} => k\n",
         "in a(k: 2)"
     )), Object::from(2));
 }
@@ -502,8 +502,8 @@ fn branching_in_collections() {
 
 #[test]
 fn conditional_collection_elements() {
-    assert_seq!(eval("[if true: 1, if false: 2, if true then 3 else 4, 5]"), Object::list((1, 3, 5)));
-    assert_seq!(eval("{a: if true then 1 else 2, if true: b: 3, if false: c: 4}"), Object::map((("a", 1), ("b", 3))));
+    assert_seq!(eval("[when true: 1, when false: 2, if true then 3 else 4, 5]"), Object::list((1, 3, 5)));
+    assert_seq!(eval("{a: if true then 1 else 2, when true: b: 3, when false: c: 4}"), Object::map((("a", 1), ("b", 3))));
 }
 
 
@@ -518,17 +518,17 @@ fn iterable_collection_elements() {
 fn complex_collection_elements() {
     assert_seq!(eval(concat!(
         "let a = [1, 2, 3, 4, 5]\n",
-        "in [for x in a: if x < 3: x]"
+        "in [for x in a: when x < 3: x]"
     )), Object::list((1, 2)));
 
     assert_seq!(eval(concat!(
         "let a = [[1], [2, 3], [4, 5, 6]]\n",
-        "in [for x in a: if len(x) > 1: ...x]"
+        "in [for x in a: when len(x) > 1: ...x]"
     )), Object::list((2, 3, 4, 5, 6)));
 
     assert_seq!(eval(concat!(
         "let a = [[\"x\",1], [\"y\",2], [\"z\",3]]\n",
-        "in {for [x,y] in a: if y != 2: $x: y}"
+        "in {for [x,y] in a: when y != 2: $x: y}"
     )), Object::map((("x", 1), ("z", 3))));
 }
 
