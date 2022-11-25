@@ -20,6 +20,7 @@ impl Location {
     }
 }
 
+
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Tagged<T> {
     pub location: Location,
@@ -64,6 +65,16 @@ impl<T> Tagged<T> {
         Tagged::<U> {
             location: Location::from(loc),
             contents: f(self),
+        }
+    }
+
+    pub fn retag<U>(self, loc: U) -> Tagged<T>
+    where
+        Location: From<U>,
+    {
+        Tagged::<T> {
+            location: Location::from(loc),
+            contents: self.contents,
         }
     }
 }
@@ -118,3 +129,9 @@ impl<T> From<&Tagged<T>> for Location {
         value.location
     }
 }
+
+
+#[derive(Debug)]
+pub struct SyntaxError(
+    pub Option<Vec<(Location, &'static str)>>
+);
