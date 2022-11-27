@@ -7,8 +7,7 @@ use num_bigint::{BigInt, ParseBigIntError};
 use nom_locate::{LocatedSpan, position};
 
 use nom::{
-    IResult, Parser, Err,
-    Err::{Incomplete, Error, Failure},
+    IResult, Parser, Err as NomError,
     branch::alt,
     bytes::complete::{escaped_transform, is_not, tag},
     character::complete::{alpha1, char, none_of, one_of, multispace0},
@@ -19,7 +18,7 @@ use nom::{
 };
 
 use crate::ast::*;
-use crate::error::{Location, Tagged, SyntaxError, SyntaxErrorReason, Expected};
+use crate::error::{Error, Location, Tagged, SyntaxErrorReason, SyntaxElement, ErrorReason};
 use crate::object::{Object, Key};
 use crate::traits::{Boxable, Taggable, Validatable};
 
@@ -37,27 +36,37 @@ impl<'a> From<Span<'a>> for Location {
 }
 
 
+// Custom error type
+struct SyntaxError(Location, Option<SyntaxErrorReason>);
+
+impl SyntaxError {
+    fn to_error(self) -> Error {
+        let SyntaxError(loc, reason) = self;
+        Error {
+            locations: Some(vec![loc]),
+            reason: reason.map(ErrorReason::Syntax),
+        }
+    }
+}
+
+
 trait ExplainError<I> {
     fn error<'a, T>(loc: I, reason: T) -> Self where SyntaxErrorReason: From<T>;
 }
 
-
 impl<I> ExplainError<I> for SyntaxError where Location: From<I> {
     fn error<'a, T>(loc: I, reason: T) -> Self where SyntaxErrorReason: From<T> {
-        Self(Some(vec![
-            (Location::from(loc), SyntaxErrorReason::from(reason)),
-        ]))
+        Self(Location::from(loc), Some(SyntaxErrorReason::from(reason)))
     }
 }
 
-
 impl<'a> ParseError<Span<'a>> for SyntaxError {
-    fn from_error_kind(_: Span<'a>, _: ErrorKind) -> Self {
-        Self(None)
+    fn from_error_kind(loc: Span<'a>, _: ErrorKind) -> Self {
+        Self(Location::from(loc), None)
     }
 
-    fn from_char(_: Span<'a>, _: char) -> Self {
-        Self(None)
+    fn from_char(loc: Span<'a>, _: char) -> Self {
+        Self(Location::from(loc), None)
     }
 
     fn append(_: Span<'a>, _: ErrorKind, other: Self) -> Self {
@@ -65,31 +74,27 @@ impl<'a> ParseError<Span<'a>> for SyntaxError {
     }
 }
 
-
 impl<'a> ContextError<Span<'a>> for SyntaxError {
     fn add_context(_: Span<'a>, _: &'static str, other: Self) -> Self {
         other
     }
 }
 
-
 impl<'a> FromExternalError<Span<'a>, ParseIntError> for SyntaxError {
-    fn from_external_error(_: Span<'a>, _: ErrorKind, _: ParseIntError) -> Self {
-        Self(None)
+    fn from_external_error(loc: Span<'a>, _: ErrorKind, _: ParseIntError) -> Self {
+        Self(Location::from(loc), None)
     }
 }
-
 
 impl<'a> FromExternalError<Span<'a>, ParseBigIntError> for SyntaxError {
-    fn from_external_error(_: Span<'a>, _: ErrorKind, _: ParseBigIntError) -> Self {
-        Self(None)
+    fn from_external_error(loc: Span<'a>, _: ErrorKind, _: ParseBigIntError) -> Self {
+        Self(Location::from(loc), None)
     }
 }
 
-
 impl<'a> FromExternalError<Span<'a>, ParseFloatError> for SyntaxError {
-    fn from_external_error(_: Span<'a>, _: ErrorKind, _: ParseFloatError) -> Self {
-        Self(None)
+    fn from_external_error(loc: Span<'a>, _: ErrorKind, _: ParseFloatError) -> Self {
+        Self(Location::from(loc), None)
     }
 }
 
@@ -222,9 +227,9 @@ where
         let (input, start) = position.parse(input)?;
         parser.parse(input).map_err(
             |err| match err {
-                Err::<E>::Failure(e) => Err::Failure(e),
-                Err::<E>::Error(_) => {
-                    Err::Failure(<E as ExplainError<I>>::error(start, reason))
+                NomError::<E>::Failure(e) => NomError::Failure(e),
+                NomError::<E>::Error(_) => {
+                    NomError::Failure(<E as ExplainError<I>>::error(start, reason))
                 },
                 _ => err
             }
@@ -265,9 +270,9 @@ where
             match item.parse(i.clone()) {
 
                 // Parsing item failed: we expect a terminator
-                Err(Err::Error(_)) => {
+                Err(NomError::Error(_)) => {
                     match terminator.parse(i.clone()) {
-                        Err(Err::Error(_)) => return Err(Err::Failure(
+                        Err(NomError::Error(_)) => return Err(NomError::Failure(
                             <E as ExplainError<I>>::error(i, err_terminator_or_item)
                         )),
                         Err(e) => return Err(e),
@@ -289,9 +294,9 @@ where
             match separator.parse(i.clone()) {
 
                 // Parsing separator failed: we expect a terminator
-                Err(Err::Error(_)) => {
+                Err(NomError::Error(_)) => {
                     match terminator.parse(i.clone()) {
-                        Err(Err::Error(_)) => return Err(Err::Failure(
+                        Err(NomError::Error(_)) => return Err(NomError::Failure(
                             <E as ExplainError<I>>::error(i, err_terminator_or_separator)
                         )),
                         Err(e) => return Err(e),
@@ -570,10 +575,10 @@ fn string_interp<'a, E: CompleteError<'a>>(
         delimited(
             terminated(
                 char('$'),
-                fail(postpad(char('{')), Expected::OpenBrace),
+                fail(postpad(char('{')), SyntaxElement::OpenBrace),
             ),
-            fail(expression, Expected::Expression),
-            fail(char('}'), Expected::CloseBrace),
+            fail(expression, SyntaxElement::Expression),
+            fail(char('}'), SyntaxElement::CloseBrace),
         ),
 
         |x| StringElement::Interpolate(x.inner()),
@@ -592,7 +597,7 @@ fn string_part<'a, E: CompleteError<'a>>(
     delimited(
         char('\"'),
         many0(alt((string_interp, string_data))),
-        fail(char('\"'), Expected::DoubleQuote),
+        fail(char('\"'), SyntaxElement::DoubleQuote),
     )(input)
 }
 
@@ -669,7 +674,7 @@ fn list_element<'a, E: CompleteError<'a>>(
         naked(map(
             tuple((
                 positioned(postpad(tag("..."))),
-                fail(expression, Expected::Expression),
+                fail(expression, SyntaxElement::Expression),
             )),
             |(start, expr)| {
                 let loc = Location::from((&start, expr.outer()));
@@ -681,14 +686,14 @@ fn list_element<'a, E: CompleteError<'a>>(
         naked(map(
             tuple((
                 positioned_postpad(keyword("for")),
-                fail(binding, Expected::Binding),
+                fail(binding, SyntaxElement::Binding),
                 preceded(
-                    fail(postpad(tag("in")), Expected::In),
-                    fail(expression, Expected::Expression),
+                    fail(postpad(tag("in")), SyntaxElement::In),
+                    fail(expression, SyntaxElement::Expression),
                 ),
                 preceded(
-                    fail(postpad(char(':')), Expected::Colon),
-                    fail(list_element, Expected::ListElement)
+                    fail(postpad(char(':')), SyntaxElement::Colon),
+                    fail(list_element, SyntaxElement::ListElement)
                 ),
             )),
             |(start, binding, iterable, expr)| {
@@ -705,10 +710,10 @@ fn list_element<'a, E: CompleteError<'a>>(
         naked(map(
             tuple((
                 positioned_postpad(keyword("when")),
-                fail(expression, Expected::Expression),
+                fail(expression, SyntaxElement::Expression),
                 preceded(
-                    fail(postpad(char(':')), Expected::Colon),
-                    fail(list_element, Expected::ListElement),
+                    fail(postpad(char(':')), SyntaxElement::Colon),
+                    fail(list_element, SyntaxElement::ListElement),
                 ),
             )),
             |(start, condition, expr)| {
@@ -741,8 +746,8 @@ fn list<'a, E: CompleteError<'a>>(
             list_element,
             postpad(char(',')),
             char(']'),
-            (Expected::CloseBracket, Expected::ListElement),
-            (Expected::CloseBracket, Expected::Comma),
+            (SyntaxElement::CloseBracket, SyntaxElement::ListElement),
+            (SyntaxElement::CloseBracket, SyntaxElement::Comma),
         ),
 
         |(_, x, _)| Expr::List(x.into_iter().map(|y| y.inner()).collect()),
@@ -767,7 +772,7 @@ fn map_element<'a, E: CompleteError<'a>>(
         naked(map(
             tuple((
                 positioned_postpad(tag("...")),
-                fail(expression, Expected::Expression),
+                fail(expression, SyntaxElement::Expression),
             )),
             |(start, expr)| {
                 let loc = Location::from((&start, expr.outer()));
@@ -779,14 +784,14 @@ fn map_element<'a, E: CompleteError<'a>>(
         naked(map(
             tuple((
                 positioned_postpad(tag("for")),
-                fail(binding, Expected::Binding),
+                fail(binding, SyntaxElement::Binding),
                 preceded(
-                    fail(postpad(tag("in")), Expected::In),
-                    fail(expression, Expected::Expression),
+                    fail(postpad(tag("in")), SyntaxElement::In),
+                    fail(expression, SyntaxElement::Expression),
                 ),
                 preceded(
-                    fail(postpad(char(':')), Expected::Colon),
-                    fail(map_element, Expected::MapElement),
+                    fail(postpad(char(':')), SyntaxElement::Colon),
+                    fail(map_element, SyntaxElement::MapElement),
                 ),
             )),
             |(start, binding, iterable, expr)| {
@@ -803,10 +808,10 @@ fn map_element<'a, E: CompleteError<'a>>(
         naked(map(
             tuple((
                 positioned_postpad(tag("when")),
-                fail(expression, Expected::Expression),
+                fail(expression, SyntaxElement::Expression),
                 preceded(
-                    fail(postpad(char(':')), Expected::Colon),
-                    fail(map_element, Expected::MapElement),
+                    fail(postpad(char(':')), SyntaxElement::Colon),
+                    fail(map_element, SyntaxElement::MapElement),
                 ),
             )),
             |(start, condition, expr)| {
@@ -823,10 +828,10 @@ fn map_element<'a, E: CompleteError<'a>>(
             tuple((
                 positioned_postpad(char('$')),
                 terminated(
-                    fail(expression, Expected::Expression),
-                    fail(postpad(char(':')), Expected::Colon),
+                    fail(expression, SyntaxElement::Expression),
+                    fail(postpad(char(':')), SyntaxElement::Colon),
                 ),
-                fail(expression, Expected::Expression),
+                fail(expression, SyntaxElement::Expression),
             )),
             |(start, key, value)| {
                 let loc = Location::from((&start, value.outer()));
@@ -842,9 +847,9 @@ fn map_element<'a, E: CompleteError<'a>>(
             tuple((
                 terminated(
                     postpad(map_identifier),
-                    fail(postpad(char(':')), Expected::Colon),
+                    fail(postpad(char(':')), SyntaxElement::Colon),
                 ),
-                fail(expression, Expected::Expression),
+                fail(expression, SyntaxElement::Expression),
             )),
             |(key, value)| {
                 let loc = Location::from((&key, value.outer()));
@@ -873,8 +878,8 @@ fn mapping<'a, E: CompleteError<'a>>(
             map_element,
             postpad(char(',')),
             char('}'),
-            (Expected::CloseBrace, Expected::MapElement),
-            (Expected::CloseBrace, Expected::Comma),
+            (SyntaxElement::CloseBrace, SyntaxElement::MapElement),
+            (SyntaxElement::CloseBrace, SyntaxElement::Comma),
         ),
 
         |(_, x, _)| Expr::Map(x.into_iter().map(|y| y.inner()).collect()),
@@ -892,8 +897,8 @@ fn paren<'a, E: CompleteError<'a>>(
     map(
         tuple((
             positioned_postpad(char('(')),
-            fail(expression, Expected::Expression),
-            fail(positioned_postpad(char(')')), Expected::CloseParen),
+            fail(expression, SyntaxElement::Expression),
+            fail(positioned_postpad(char(')')), SyntaxElement::CloseParen),
         )),
 
         |(start, expr, end)| {
@@ -932,7 +937,7 @@ fn object_access<'a, E: CompleteError<'a>>(
     map(
         tuple((
             positioned_postpad(char('.')),
-            fail(identifier, Expected::Identifier),
+            fail(identifier, SyntaxElement::Identifier),
         )),
         |(dot, out)| Operator::BinOp(
             BinOp::Index,
@@ -951,8 +956,8 @@ fn object_index<'a, E: CompleteError<'a>>(
     map(
         tuple((
             positioned_postpad(char('[')),
-            fail(expression, Expected::Expression),
-            fail(positioned(char(']')), Expected::CloseBracket),
+            fail(expression, SyntaxElement::Expression),
+            fail(positioned(char(']')), SyntaxElement::CloseBracket),
         )),
         |(a, expr, b)| Operator::BinOp(BinOp::Index, expr.inner().to_box()).tag((&a, &b)),
     )(input)
@@ -974,7 +979,7 @@ fn function_arg<'a, E: CompleteError<'a>>(
         map(
             tuple((
                 positioned_postpad(tag("...")),
-                fail(expression, Expected::Expression),
+                fail(expression, SyntaxElement::Expression),
             )),
             |(x, y)| {
                 let rloc = y.outer();
@@ -988,7 +993,7 @@ fn function_arg<'a, E: CompleteError<'a>>(
                 postpad(identifier),
                 preceded(
                     postpad(char(':')),
-                    fail(expression, Expected::Expression),
+                    fail(expression, SyntaxElement::Expression),
                 ),
             )),
             |(name, expr)| {
@@ -1024,8 +1029,8 @@ fn function_call<'a, E: CompleteError<'a>>(
             function_arg,
             postpad(char(',')),
             positioned_postpad(char(')')),
-            (Expected::CloseParen, Expected::ArgElement),
-            (Expected::CloseParen, Expected::Comma),
+            (SyntaxElement::CloseParen, SyntaxElement::ArgElement),
+            (SyntaxElement::CloseParen, SyntaxElement::Comma),
         ),
         |(a, expr, b)| Operator::FunCall(expr).tag((&a, &b)),
     )(input)
@@ -1082,7 +1087,7 @@ fn prefixed<'a, E: CompleteError<'a>>(
                     map(positioned_postpad(tag("-")), |x| x.map(|_| UnOp::ArithmeticalNegate)),
                     map(positioned_postpad(keyword("not")), |x| x.map(|_| UnOp::LogicalNegate)),
                 ))),
-                fail(power, Expected::Operand),
+                fail(power, SyntaxElement::Operand),
             )),
 
             |(ops, expr)| {
@@ -1128,7 +1133,7 @@ where
     map(
         tuple((
             positioned_postpad(operators),
-             fail(operand, Expected::Operand),
+             fail(operand, SyntaxElement::Operand),
         )),
         |(func, expr)| {
             let loc = Location::span(func.loc(), expr.outer());
@@ -1343,7 +1348,7 @@ fn list_binding_element<'a, E: CompleteError<'a>>(
                 binding,
                 opt(preceded(
                     postpad(char('=')),
-                    fail(expression, Expected::Expression),
+                    fail(expression, SyntaxElement::Expression),
                 )),
             )),
 
@@ -1411,7 +1416,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
         positioned(map(
             preceded(
                 tag("..."),
-                fail(identifier, Expected::Identifier),
+                fail(identifier, SyntaxElement::Identifier),
             ),
             |i| MapBindingElement::SlurpTo(i),
         )),
@@ -1427,7 +1432,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                             postpad(map_identifier),
                             preceded(
                                 postpad(tag("as")),
-                                fail(binding, Expected::Binding),
+                                fail(binding, SyntaxElement::Binding),
                             ),
                         )),
                         |(name, binding)| (name, Some(binding)),
@@ -1445,7 +1450,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                 opt(
                     preceded(
                         postpad(char('=')),
-                        fail(expression, Expected::Expression),
+                        fail(expression, SyntaxElement::Expression),
                     ),
                 ),
             )),
@@ -1520,8 +1525,8 @@ fn binding<'a, E: CompleteError<'a>>(
                 list_binding(
                     |i| char('[')(i),
                     |i| char(']')(i),
-                    (Expected::CloseBracket, Expected::ListBindingElement),
-                    (Expected::CloseBracket, Expected::Comma),
+                    (SyntaxElement::CloseBracket, SyntaxElement::ListBindingElement),
+                    (SyntaxElement::CloseBracket, SyntaxElement::Comma),
                 ),
                 |(x,_)| {
                     let loc = x.loc();
@@ -1536,8 +1541,8 @@ fn binding<'a, E: CompleteError<'a>>(
                 map_binding(
                     |i| char('{')(i),
                     |i| char('}')(i),
-                    (Expected::CloseBrace, Expected::MapBindingElement),
-                    (Expected::CloseBrace, Expected::Comma),
+                    (SyntaxElement::CloseBrace, SyntaxElement::MapBindingElement),
+                    (SyntaxElement::CloseBrace, SyntaxElement::Comma),
                 ),
                 |x| {
                     let loc = x.loc();
@@ -1561,24 +1566,24 @@ fn normal_function<'a, E: CompleteError<'a>>(
     let (i, (args, end)) = list_binding(
         |i| char('(')(i),
         |i| alt((char(')'), char(';')))(i),
-        (Expected::CloseParen, Expected::Semicolon, Expected::PosParam),
-        (Expected::CloseParen, Expected::Semicolon, Expected::Comma),
+        (SyntaxElement::CloseParen, SyntaxElement::Semicolon, SyntaxElement::PosParam),
+        (SyntaxElement::CloseParen, SyntaxElement::Semicolon, SyntaxElement::Comma),
     )(input)?;
 
     let (j, kwargs) = if end == ';' {
         let (j, kwargs) = map_binding(
             |i| success(' ')(i),
             |i| char(')')(i),
-            (Expected::CloseParen, Expected::KeywordParam),
-            (Expected::CloseParen, Expected::Comma),
+            (SyntaxElement::CloseParen, SyntaxElement::KeywordParam),
+            (SyntaxElement::CloseParen, SyntaxElement::Comma),
         )(i)?;
         (j, Some(kwargs))
     } else {
         (i, None)
     };
 
-    let (k, _) = fail(postpad(tag("=>")), Expected::DoubleArrow)(j)?;
-    let (l, expr) = fail(expression, Expected::Expression)(k)?;
+    let (k, _) = fail(postpad(tag("=>")), SyntaxElement::DoubleArrow)(j)?;
+    let (l, expr) = fail(expression, SyntaxElement::Expression)(k)?;
     let loc = Location::from((args.loc(), expr.outer()));
 
     let result = PExpr::Naked(Expr::Function {
@@ -1603,12 +1608,12 @@ fn keyword_function<'a, E: CompleteError<'a>>(
             postpad(map_binding(
                 |i| char('{')(i),
                 |i| char('}')(i),
-                (Expected::CloseBrace, Expected::KeywordParam),
-                (Expected::CloseBrace, Expected::Comma),
+                (SyntaxElement::CloseBrace, SyntaxElement::KeywordParam),
+                (SyntaxElement::CloseBrace, SyntaxElement::Comma),
             )),
             preceded(
-                fail(postpad(tag("=>")), Expected::DoubleArrow),
-                fail(expression, Expected::Expression),
+                fail(postpad(tag("=>")), SyntaxElement::DoubleArrow),
+                fail(expression, SyntaxElement::Expression),
             ),
         )),
 
@@ -1638,8 +1643,8 @@ where
     input = i;
 
     match peek(alt((char('('), char('{'))))(input) {
-        Err(Err::Error(_)) => Err(Err::Failure(
-            <E as ExplainError<Span<'a>>>::error(input, (Expected::OpenParen, Expected::OpenBrace))
+        Err(NomError::Error(_)) => Err(NomError::Failure(
+            <E as ExplainError<Span<'a>>>::error(input, (SyntaxElement::OpenParen, SyntaxElement::OpenBrace))
         )),
         Err(e) => Err(e),
         Ok((i, c)) => {
@@ -1668,17 +1673,17 @@ fn let_block<'a, E: CompleteError<'a>>(
                 tuple((
                     preceded(
                         postpad(keyword("let")),
-                        fail(binding, Expected::Binding),
+                        fail(binding, SyntaxElement::Binding),
                     ),
                     preceded(
-                        fail(postpad(tag("=")), Expected::Equals),
-                        fail(expression, Expected::Expression),
+                        fail(postpad(tag("=")), SyntaxElement::Equals),
+                        fail(expression, SyntaxElement::Expression),
                     ),
                 )),
             ),
             preceded(
-                fail(postpad(tag("in")), Expected::In),
-                fail(expression, Expected::Expression),
+                fail(postpad(tag("in")), SyntaxElement::In),
+                fail(expression, SyntaxElement::Expression),
             ),
         )),
         |(start, bindings, expr)| {
@@ -1702,14 +1707,14 @@ fn branch<'a, E: CompleteError<'a>>(
     map(
         tuple((
             positioned_postpad(keyword("if")),
-            fail(expression, Expected::Expression),
+            fail(expression, SyntaxElement::Expression),
             preceded(
-                fail(postpad(keyword("then")), Expected::Then),
-                fail(expression, Expected::Expression),
+                fail(postpad(keyword("then")), SyntaxElement::Then),
+                fail(expression, SyntaxElement::Expression),
             ),
             preceded(
-                fail(postpad(keyword("else")), Expected::Else),
-                fail(expression, Expected::Expression),
+                fail(postpad(keyword("else")), SyntaxElement::Else),
+                fail(expression, SyntaxElement::Expression),
             ),
         )),
 
@@ -1765,11 +1770,11 @@ fn import<'a, E: CompleteError<'a>>(
                 fail(postpad(preceded(
                     char('\"'),
                     terminated(raw_string, char('\"'))
-                )), Expected::ImportPath),
+                )), SyntaxElement::ImportPath),
             ),
             preceded(
-                fail(postpad(keyword("as")), Expected::As),
-                fail(postpad(binding), Expected::Binding),
+                fail(postpad(keyword("as")), SyntaxElement::As),
+                fail(postpad(binding), SyntaxElement::Binding),
             )
         )),
         |(path, binding)| TopLevel::Import(path, binding),
@@ -1790,8 +1795,8 @@ fn file<'a, E: CompleteError<'a>>(
             preceded(
                 multispace0,
                 terminated(
-                    fail(expression, Expected::Expression),
-                    fail(all_consuming(multispace0), Expected::EndOfInput)
+                    fail(expression, SyntaxElement::Expression),
+                    fail(all_consuming(multispace0), SyntaxElement::EndOfInput)
                 ),
             ),
         )),
@@ -1801,15 +1806,15 @@ fn file<'a, E: CompleteError<'a>>(
 
 
 /// Parse the input and return a [`File`] object.
-pub fn parse(input: &str) -> Result<File, SyntaxError> {
+pub fn parse(input: &str) -> Result<File, Error> {
     let span = Span::new(input);
     file::<SyntaxError>(span).map_or_else(
         |err| match err {
-            Incomplete(_) => Err(SyntaxError(None)),
-            Error(e) | Failure(e) => Err(e),
+            NomError::Incomplete(_) => Err(Error::default()),
+            NomError::Error(e) | NomError::Failure(e) => Err(e.to_error()),
         },
         |(_, node)| {
-            node.validate().map_err(|_| SyntaxError(None))?;
+            node.validate().map_err(|_| Error::default())?;
             Ok(node)
         }
     )

@@ -136,7 +136,7 @@ impl<T> From<&Tagged<T>> for Location {
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Expected {
+pub enum SyntaxElement {
     // Characters
     CloseBrace,
     CloseBracket,
@@ -175,37 +175,44 @@ pub enum Expected {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SyntaxErrorReason {
-    One(Expected),
-    Two(Expected, Expected),
-    Three(Expected, Expected, Expected),
+    ExpectedOne(SyntaxElement),
+    ExpectedTwo(SyntaxElement, SyntaxElement),
+    ExpectedThree(SyntaxElement, SyntaxElement, SyntaxElement),
 }
 
-impl From<Expected> for SyntaxErrorReason {
-    fn from(v: Expected) -> Self {
-        Self::One(v)
+impl From<SyntaxElement> for SyntaxErrorReason {
+    fn from(v: SyntaxElement) -> Self {
+        Self::ExpectedOne(v)
     }
 }
 
-impl From<(Expected,)> for SyntaxErrorReason {
-    fn from((v,): (Expected,)) -> Self {
-        Self::One(v)
+impl From<(SyntaxElement,)> for SyntaxErrorReason {
+    fn from((v,): (SyntaxElement,)) -> Self {
+        Self::ExpectedOne(v)
     }
 }
 
-impl From<(Expected,Expected)> for SyntaxErrorReason {
-    fn from((u,v): (Expected,Expected)) -> Self {
-        Self::Two(u,v)
+impl From<(SyntaxElement,SyntaxElement)> for SyntaxErrorReason {
+    fn from((u,v): (SyntaxElement,SyntaxElement)) -> Self {
+        Self::ExpectedTwo(u,v)
     }
 }
 
-impl From<(Expected,Expected,Expected)> for SyntaxErrorReason {
-    fn from((u,v,w): (Expected,Expected,Expected)) -> Self {
-        Self::Three(u,v,w)
+impl From<(SyntaxElement,SyntaxElement,SyntaxElement)> for SyntaxErrorReason {
+    fn from((u,v,w): (SyntaxElement,SyntaxElement,SyntaxElement)) -> Self {
+        Self::ExpectedThree(u,v,w)
     }
 }
 
 
 #[derive(Debug, PartialEq)]
-pub struct SyntaxError(
-    pub Option<Vec<(Location, SyntaxErrorReason)>>
-);
+pub enum ErrorReason {
+    Syntax(SyntaxErrorReason),
+}
+
+
+#[derive(Debug, PartialEq, Default)]
+pub struct Error {
+    pub locations: Option<Vec<Location>>,
+    pub reason: Option<ErrorReason>,
+}

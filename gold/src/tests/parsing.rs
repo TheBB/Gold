@@ -1,13 +1,13 @@
 use std::ops::{Add, Div, Mul, Neg, Not, Sub};
 
 use crate::ast::*;
-use crate::error::{Location, Tagged, SyntaxError, SyntaxErrorReason, Expected};
+use crate::error::{Location, Tagged, Error, ErrorReason, SyntaxErrorReason, SyntaxElement};
 use crate::object::{Object, Key};
 use crate::parsing::{parse as parse_file};
 use crate::traits::{Boxable, Taggable};
 
 
-fn parse(input: &str) -> Result<Tagged<Expr>, SyntaxError> {
+fn parse(input: &str) -> Result<Tagged<Expr>, Error> {
     parse_file(input).map(|x| x.expression)
 }
 
@@ -1089,123 +1089,124 @@ fn functions() {
 fn check_err<T>(code: &str, offset: usize, line: u32, expected: T) where SyntaxErrorReason: From<T> {
     assert_eq!(
         parse(code),
-        Err(SyntaxError(Some(vec![
-            (Location::new(offset, line, 0), SyntaxErrorReason::from(expected)),
-        ])))
+        Err(Error {
+            locations: Some(vec![Location::new(offset, line, 0)]),
+            reason: Some(ErrorReason::Syntax(SyntaxErrorReason::from(expected))),
+        }),
     );
 }
 
 
 #[test]
 fn errors() {
-    check_err("let", 3, 1, Expected::Binding);
-    check_err("let a", 5, 1, Expected::Equals);
-    check_err("let a =", 7, 1, Expected::Expression);
-    check_err("let a = 1", 9, 1, Expected::In);
-    check_err("let a = 1 in", 12, 1, Expected::Expression);
+    check_err("let", 3, 1, SyntaxElement::Binding);
+    check_err("let a", 5, 1, SyntaxElement::Equals);
+    check_err("let a =", 7, 1, SyntaxElement::Expression);
+    check_err("let a = 1", 9, 1, SyntaxElement::In);
+    check_err("let a = 1 in", 12, 1, SyntaxElement::Expression);
 
-    check_err("if", 2, 1, Expected::Expression);
-    check_err("if true", 7, 1, Expected::Then);
-    check_err("if true then", 12, 1, Expected::Expression);
-    check_err("if true then 1", 14, 1, Expected::Else);
-    check_err("if true then 1 else", 19, 1, Expected::Expression);
+    check_err("if", 2, 1, SyntaxElement::Expression);
+    check_err("if true", 7, 1, SyntaxElement::Then);
+    check_err("if true then", 12, 1, SyntaxElement::Expression);
+    check_err("if true then 1", 14, 1, SyntaxElement::Else);
+    check_err("if true then 1 else", 19, 1, SyntaxElement::Expression);
 
-    check_err("[", 1, 1, (Expected::CloseBracket, Expected::ListElement));
-    check_err("[1", 2, 1, (Expected::CloseBracket, Expected::Comma));
-    check_err("[1,", 3, 1, (Expected::CloseBracket, Expected::ListElement));
-    check_err("[...", 4, 1, Expected::Expression);
-    check_err("[when", 5, 1, Expected::Expression);
-    check_err("[when x", 7, 1, Expected::Colon);
-    check_err("[when x:", 8, 1, Expected::ListElement);
-    check_err("[when x: 1", 10, 1, (Expected::CloseBracket, Expected::Comma));
-    check_err("[for", 4, 1, Expected::Binding);
-    check_err("[for x", 6, 1, Expected::In);
-    check_err("[for x in", 9, 1, Expected::Expression);
-    check_err("[for x in y", 11, 1, Expected::Colon);
-    check_err("[for x in y:", 12, 1, Expected::ListElement);
-    check_err("[for x in y: z", 14, 1, (Expected::CloseBracket, Expected::Comma));
+    check_err("[", 1, 1, (SyntaxElement::CloseBracket, SyntaxElement::ListElement));
+    check_err("[1", 2, 1, (SyntaxElement::CloseBracket, SyntaxElement::Comma));
+    check_err("[1,", 3, 1, (SyntaxElement::CloseBracket, SyntaxElement::ListElement));
+    check_err("[...", 4, 1, SyntaxElement::Expression);
+    check_err("[when", 5, 1, SyntaxElement::Expression);
+    check_err("[when x", 7, 1, SyntaxElement::Colon);
+    check_err("[when x:", 8, 1, SyntaxElement::ListElement);
+    check_err("[when x: 1", 10, 1, (SyntaxElement::CloseBracket, SyntaxElement::Comma));
+    check_err("[for", 4, 1, SyntaxElement::Binding);
+    check_err("[for x", 6, 1, SyntaxElement::In);
+    check_err("[for x in", 9, 1, SyntaxElement::Expression);
+    check_err("[for x in y", 11, 1, SyntaxElement::Colon);
+    check_err("[for x in y:", 12, 1, SyntaxElement::ListElement);
+    check_err("[for x in y: z", 14, 1, (SyntaxElement::CloseBracket, SyntaxElement::Comma));
 
-    check_err("{", 1, 1, (Expected::CloseBrace, Expected::MapElement));
-    check_err("{x", 2, 1, Expected::Colon);
-    check_err("{x:", 3, 1, Expected::Expression);
-    check_err("{x: y", 5, 1, (Expected::CloseBrace, Expected::Comma));
-    check_err("{x: y,", 6, 1, (Expected::CloseBrace, Expected::MapElement));
-    check_err("{$", 2, 1, Expected::Expression);
-    check_err("{$x", 3, 1, Expected::Colon);
-    check_err("{$x:", 4, 1, Expected::Expression);
-    check_err("{$x: y", 6, 1, (Expected::CloseBrace, Expected::Comma));
-    check_err("{$x: y,", 7, 1, (Expected::CloseBrace, Expected::MapElement));
-    check_err("{...", 4, 1, Expected::Expression);
-    check_err("{when", 5, 1, Expected::Expression);
-    check_err("{when x", 7, 1, Expected::Colon);
-    check_err("{when x:", 8, 1, Expected::MapElement);
-    check_err("{when x: y", 10, 1, Expected::Colon);
-    check_err("{when x: y:", 11, 1, Expected::Expression);
-    check_err("{when x: y: 1", 13, 1, (Expected::CloseBrace, Expected::Comma));
-    check_err("{for", 4, 1, Expected::Binding);
-    check_err("{for x", 6, 1, Expected::In);
-    check_err("{for x in", 9, 1, Expected::Expression);
-    check_err("{for x in y", 11, 1, Expected::Colon);
-    check_err("{for x in y:", 12, 1, Expected::MapElement);
-    check_err("{for x in y: z", 14, 1, Expected::Colon);
-    check_err("{for x in y: z:", 15, 1, Expected::Expression);
-    check_err("{for x in y: z: v", 17, 1, (Expected::CloseBrace, Expected::Comma));
+    check_err("{", 1, 1, (SyntaxElement::CloseBrace, SyntaxElement::MapElement));
+    check_err("{x", 2, 1, SyntaxElement::Colon);
+    check_err("{x:", 3, 1, SyntaxElement::Expression);
+    check_err("{x: y", 5, 1, (SyntaxElement::CloseBrace, SyntaxElement::Comma));
+    check_err("{x: y,", 6, 1, (SyntaxElement::CloseBrace, SyntaxElement::MapElement));
+    check_err("{$", 2, 1, SyntaxElement::Expression);
+    check_err("{$x", 3, 1, SyntaxElement::Colon);
+    check_err("{$x:", 4, 1, SyntaxElement::Expression);
+    check_err("{$x: y", 6, 1, (SyntaxElement::CloseBrace, SyntaxElement::Comma));
+    check_err("{$x: y,", 7, 1, (SyntaxElement::CloseBrace, SyntaxElement::MapElement));
+    check_err("{...", 4, 1, SyntaxElement::Expression);
+    check_err("{when", 5, 1, SyntaxElement::Expression);
+    check_err("{when x", 7, 1, SyntaxElement::Colon);
+    check_err("{when x:", 8, 1, SyntaxElement::MapElement);
+    check_err("{when x: y", 10, 1, SyntaxElement::Colon);
+    check_err("{when x: y:", 11, 1, SyntaxElement::Expression);
+    check_err("{when x: y: 1", 13, 1, (SyntaxElement::CloseBrace, SyntaxElement::Comma));
+    check_err("{for", 4, 1, SyntaxElement::Binding);
+    check_err("{for x", 6, 1, SyntaxElement::In);
+    check_err("{for x in", 9, 1, SyntaxElement::Expression);
+    check_err("{for x in y", 11, 1, SyntaxElement::Colon);
+    check_err("{for x in y:", 12, 1, SyntaxElement::MapElement);
+    check_err("{for x in y: z", 14, 1, SyntaxElement::Colon);
+    check_err("{for x in y: z:", 15, 1, SyntaxElement::Expression);
+    check_err("{for x in y: z: v", 17, 1, (SyntaxElement::CloseBrace, SyntaxElement::Comma));
 
-    check_err("let", 3, 1, Expected::Binding);
-    check_err("let [", 5, 1, (Expected::CloseBracket, Expected::ListBindingElement));
-    check_err("let [x", 6, 1, (Expected::CloseBracket, Expected::Comma));
-    check_err("let [x,", 7, 1, (Expected::CloseBracket, Expected::ListBindingElement));
-    check_err("let [x =", 8, 1, Expected::Expression);
-    check_err("let [x = 1", 10, 1, (Expected::CloseBracket, Expected::Comma));
-    check_err("let [...", 8, 1, (Expected::CloseBracket, Expected::Comma));
-    check_err("let {", 5, 1, (Expected::CloseBrace, Expected::MapBindingElement));
-    check_err("let {y", 6, 1, (Expected::CloseBrace, Expected::Comma));
-    check_err("let {y,", 7, 1, (Expected::CloseBrace, Expected::MapBindingElement));
-    check_err("let {y =", 8, 1, Expected::Expression);
-    check_err("let {y = 1", 10, 1, (Expected::CloseBrace, Expected::Comma));
-    check_err("let {y as", 9, 1, Expected::Binding);
-    check_err("let {y as x =", 13, 1, Expected::Expression);
-    check_err("let {...", 8, 1, Expected::Identifier);
-    check_err("let {...x", 9, 1, (Expected::CloseBrace, Expected::Comma));
+    check_err("let", 3, 1, SyntaxElement::Binding);
+    check_err("let [", 5, 1, (SyntaxElement::CloseBracket, SyntaxElement::ListBindingElement));
+    check_err("let [x", 6, 1, (SyntaxElement::CloseBracket, SyntaxElement::Comma));
+    check_err("let [x,", 7, 1, (SyntaxElement::CloseBracket, SyntaxElement::ListBindingElement));
+    check_err("let [x =", 8, 1, SyntaxElement::Expression);
+    check_err("let [x = 1", 10, 1, (SyntaxElement::CloseBracket, SyntaxElement::Comma));
+    check_err("let [...", 8, 1, (SyntaxElement::CloseBracket, SyntaxElement::Comma));
+    check_err("let {", 5, 1, (SyntaxElement::CloseBrace, SyntaxElement::MapBindingElement));
+    check_err("let {y", 6, 1, (SyntaxElement::CloseBrace, SyntaxElement::Comma));
+    check_err("let {y,", 7, 1, (SyntaxElement::CloseBrace, SyntaxElement::MapBindingElement));
+    check_err("let {y =", 8, 1, SyntaxElement::Expression);
+    check_err("let {y = 1", 10, 1, (SyntaxElement::CloseBrace, SyntaxElement::Comma));
+    check_err("let {y as", 9, 1, SyntaxElement::Binding);
+    check_err("let {y as x =", 13, 1, SyntaxElement::Expression);
+    check_err("let {...", 8, 1, SyntaxElement::Identifier);
+    check_err("let {...x", 9, 1, (SyntaxElement::CloseBrace, SyntaxElement::Comma));
 
-    check_err("(", 1, 1, Expected::Expression);
-    check_err("(1", 2, 1, Expected::CloseParen);
+    check_err("(", 1, 1, SyntaxElement::Expression);
+    check_err("(1", 2, 1, SyntaxElement::CloseParen);
 
-    check_err("fn", 2, 1, (Expected::OpenParen, Expected::OpenBrace));
-    check_err("fn (", 4, 1, (Expected::CloseParen, Expected::Semicolon, Expected::PosParam));
-    check_err("fn (x", 5, 1, (Expected::CloseParen, Expected::Semicolon, Expected::Comma));
-    check_err("fn (x,", 6, 1, (Expected::CloseParen, Expected::Semicolon, Expected::PosParam));
-    check_err("fn (;", 5, 1, (Expected::CloseParen, Expected::KeywordParam));
-    check_err("fn (;y", 6, 1, (Expected::CloseParen, Expected::Comma));
-    check_err("fn (;y,", 7, 1, (Expected::CloseParen, Expected::KeywordParam));
-    check_err("fn ()", 5, 1, Expected::DoubleArrow);
-    check_err("fn () =>", 8, 1, Expected::Expression);
-    check_err("fn {", 4, 1, (Expected::CloseBrace, Expected::KeywordParam));
-    check_err("fn {x", 5, 1, (Expected::CloseBrace, Expected::Comma));
-    check_err("fn {x,", 6, 1, (Expected::CloseBrace, Expected::KeywordParam));
-    check_err("fn {}", 5, 1, Expected::DoubleArrow);
-    check_err("fn {} =>", 8, 1, Expected::Expression);
+    check_err("fn", 2, 1, (SyntaxElement::OpenParen, SyntaxElement::OpenBrace));
+    check_err("fn (", 4, 1, (SyntaxElement::CloseParen, SyntaxElement::Semicolon, SyntaxElement::PosParam));
+    check_err("fn (x", 5, 1, (SyntaxElement::CloseParen, SyntaxElement::Semicolon, SyntaxElement::Comma));
+    check_err("fn (x,", 6, 1, (SyntaxElement::CloseParen, SyntaxElement::Semicolon, SyntaxElement::PosParam));
+    check_err("fn (;", 5, 1, (SyntaxElement::CloseParen, SyntaxElement::KeywordParam));
+    check_err("fn (;y", 6, 1, (SyntaxElement::CloseParen, SyntaxElement::Comma));
+    check_err("fn (;y,", 7, 1, (SyntaxElement::CloseParen, SyntaxElement::KeywordParam));
+    check_err("fn ()", 5, 1, SyntaxElement::DoubleArrow);
+    check_err("fn () =>", 8, 1, SyntaxElement::Expression);
+    check_err("fn {", 4, 1, (SyntaxElement::CloseBrace, SyntaxElement::KeywordParam));
+    check_err("fn {x", 5, 1, (SyntaxElement::CloseBrace, SyntaxElement::Comma));
+    check_err("fn {x,", 6, 1, (SyntaxElement::CloseBrace, SyntaxElement::KeywordParam));
+    check_err("fn {}", 5, 1, SyntaxElement::DoubleArrow);
+    check_err("fn {} =>", 8, 1, SyntaxElement::Expression);
 
-    check_err("\"alpha", 6, 1, Expected::DoubleQuote);
-    check_err("\"alpha$", 7, 1, Expected::OpenBrace);
-    check_err("\"alpha${", 8, 1, Expected::Expression);
-    check_err("\"alpha${1", 9, 1, Expected::CloseBrace);
-    check_err("\"alpha${1}", 10, 1, Expected::DoubleQuote);
+    check_err("\"alpha", 6, 1, SyntaxElement::DoubleQuote);
+    check_err("\"alpha$", 7, 1, SyntaxElement::OpenBrace);
+    check_err("\"alpha${", 8, 1, SyntaxElement::Expression);
+    check_err("\"alpha${1", 9, 1, SyntaxElement::CloseBrace);
+    check_err("\"alpha${1}", 10, 1, SyntaxElement::DoubleQuote);
 
-    check_err("a.", 2, 1, Expected::Identifier);
-    check_err("a[", 2, 1, Expected::Expression);
-    check_err("a[1", 3, 1, Expected::CloseBracket);
-    check_err("a(", 2, 1, (Expected::CloseParen, Expected::ArgElement));
-    check_err("a(1", 3, 1, (Expected::CloseParen, Expected::Comma));
-    check_err("a(1,", 4, 1, (Expected::CloseParen, Expected::ArgElement));
-    check_err("a(x:", 4, 1, Expected::Expression);
-    check_err("a(...", 5, 1, Expected::Expression);
+    check_err("a.", 2, 1, SyntaxElement::Identifier);
+    check_err("a[", 2, 1, SyntaxElement::Expression);
+    check_err("a[1", 3, 1, SyntaxElement::CloseBracket);
+    check_err("a(", 2, 1, (SyntaxElement::CloseParen, SyntaxElement::ArgElement));
+    check_err("a(1", 3, 1, (SyntaxElement::CloseParen, SyntaxElement::Comma));
+    check_err("a(1,", 4, 1, (SyntaxElement::CloseParen, SyntaxElement::ArgElement));
+    check_err("a(x:", 4, 1, SyntaxElement::Expression);
+    check_err("a(...", 5, 1, SyntaxElement::Expression);
 
-    check_err("-", 1, 1, Expected::Operand);
-    check_err("1+", 2, 1, Expected::Operand);
+    check_err("-", 1, 1, SyntaxElement::Operand);
+    check_err("1+", 2, 1, SyntaxElement::Operand);
 
-    check_err("import", 6, 1, Expected::ImportPath);
-    check_err("import \"path\"", 13, 1, Expected::As);
-    check_err("import \"path\" as", 16, 1, Expected::Binding);
-    check_err("import \"path\" as y", 18, 1, Expected::Expression);
+    check_err("import", 6, 1, SyntaxElement::ImportPath);
+    check_err("import \"path\"", 13, 1, SyntaxElement::As);
+    check_err("import \"path\" as", 16, 1, SyntaxElement::Binding);
+    check_err("import \"path\" as y", 18, 1, SyntaxElement::Expression);
 }
