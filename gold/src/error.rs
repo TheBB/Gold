@@ -11,6 +11,10 @@ pub struct Location {
 }
 
 impl Location {
+    pub fn new(offset: usize, line: u32, length: usize) -> Location {
+        Location { offset, line, length }
+    }
+
     pub fn span(l: Location, r: Location) -> Location {
         Location {
             offset: l.offset,
@@ -131,7 +135,77 @@ impl<T> From<&Tagged<T>> for Location {
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Expected {
+    // Characters
+    CloseBrace,
+    CloseBracket,
+    CloseParen,
+    Colon,
+    Comma,
+    DoubleArrow,
+    DoubleQuote,
+    Equals,
+    OpenBrace,
+    OpenParen,
+    Semicolon,
+
+    // Keywords
+    As,
+    Else,
+    In,
+    Then,
+
+    // Grammatical elements
+    ArgElement,
+    Binding,
+    EndOfInput,
+    Expression,
+    Identifier,
+    ImportPath,
+    KeywordParam,
+    ListBindingElement,
+    ListElement,
+    MapBindingElement,
+    MapElement,
+    Operand,
+    PosParam,
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SyntaxErrorReason {
+    One(Expected),
+    Two(Expected, Expected),
+    Three(Expected, Expected, Expected),
+}
+
+impl From<Expected> for SyntaxErrorReason {
+    fn from(v: Expected) -> Self {
+        Self::One(v)
+    }
+}
+
+impl From<(Expected,)> for SyntaxErrorReason {
+    fn from((v,): (Expected,)) -> Self {
+        Self::One(v)
+    }
+}
+
+impl From<(Expected,Expected)> for SyntaxErrorReason {
+    fn from((u,v): (Expected,Expected)) -> Self {
+        Self::Two(u,v)
+    }
+}
+
+impl From<(Expected,Expected,Expected)> for SyntaxErrorReason {
+    fn from((u,v,w): (Expected,Expected,Expected)) -> Self {
+        Self::Three(u,v,w)
+    }
+}
+
+
+#[derive(Debug, PartialEq)]
 pub struct SyntaxError(
-    pub Option<Vec<(Location, &'static str)>>
+    pub Option<Vec<(Location, SyntaxErrorReason)>>
 );

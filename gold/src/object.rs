@@ -639,6 +639,7 @@ impl TryFrom<Object> for JsonValue {
             Object::BigInteger(_) => Err("too big number".to_string()),
             Object::Float(x) => Ok(JsonValue::from(x)),
             Object::IntString(x) => Ok(JsonValue::from(x.as_str())),
+            Object::NatString(x) => Ok(JsonValue::from(x.as_str())),
             Object::Boolean(x) => Ok(JsonValue::from(x)),
             Object::List(x) => {
                 let mut val = JsonValue::new_array();
