@@ -19,7 +19,7 @@ use nom::{
 };
 
 use crate::ast::*;
-use crate::error::{Location, Tagged, SyntaxError};
+use crate::error::{Location, Tagged, SyntaxError, SyntaxErrorReason, Expected};
 use crate::object::{Object, Key};
 use crate::traits::{Boxable, Taggable, Validatable};
 
@@ -33,6 +33,20 @@ impl<'a> From<Span<'a>> for Location {
             line: x.location_line(),
             length: 0,
         }
+    }
+}
+
+
+trait ExplainError<I> {
+    fn error<'a, T>(loc: I, reason: T) -> Self where SyntaxErrorReason: From<T>;
+}
+
+
+impl<I> ExplainError<I> for SyntaxError where Location: From<I> {
+    fn error<'a, T>(loc: I, reason: T) -> Self where SyntaxErrorReason: From<T> {
+        Self(Some(vec![
+            (Location::from(loc), SyntaxErrorReason::from(reason)),
+        ]))
     }
 }
 
@@ -53,10 +67,8 @@ impl<'a> ParseError<Span<'a>> for SyntaxError {
 
 
 impl<'a> ContextError<Span<'a>> for SyntaxError {
-    fn add_context(input: Span<'a>, ctx: &'static str, other: Self) -> Self {
-        let mut vec = other.0.unwrap_or_else(|| vec![]);
-        vec.push((Location::from(input), ctx));
-        Self(Some(vec))
+    fn add_context(_: Span<'a>, _: &'static str, other: Self) -> Self {
+        other
     }
 }
 
@@ -174,6 +186,7 @@ type PMap = Paren<MapElement>;
 
 
 trait CompleteError<'a>:
+    ExplainError<Span<'a>> +
     ParseError<Span<'a>> +
     ContextError<Span<'a>> +
     FromExternalError<Span<'a>, ParseIntError> +
@@ -182,6 +195,7 @@ trait CompleteError<'a>:
 
 impl<'a, T> CompleteError<'a> for T
 where T:
+    ExplainError<Span<'a>> +
     ParseError<Span<'a>> +
     ContextError<Span<'a>> +
     FromExternalError<Span<'a>, ParseIntError> +
@@ -193,22 +207,24 @@ type OpCons = fn(Tagged<Expr>) -> Operator;
 
 
 /// Convert errors to failures.
-fn fail<I, E: ParseError<I>, O, F>(
+fn fail<I, E: ParseError<I>, O, F, T>(
     mut parser: F,
-    reason: &'static str,
+    reason: T,
 ) -> impl FnMut(I) -> IResult<I, O, E>
 where
     F: Parser<I, O, E>,
     I: nom::InputTake + nom::InputIter + Clone,
-    E: ContextError<I>,
+    E: ExplainError<I>,
+    SyntaxErrorReason: From<T>,
+    T: Copy
 {
     move |input: I| {
         let (input, start) = position.parse(input)?;
         parser.parse(input).map_err(
             |err| match err {
                 Err::<E>::Failure(e) => Err::Failure(e),
-                Err::<E>::Error(e) => {
-                    Err::Failure(<E as ContextError<I>>::add_context(start, reason, e))
+                Err::<E>::Error(_) => {
+                    Err::Failure(<E as ExplainError<I>>::error(start, reason))
                 },
                 _ => err
             }
@@ -218,13 +234,13 @@ where
 
 
 /// Separated list with delimiters and optional trailing separator.
-fn seplist<Init, Item, Sep, Term, InitR, ItemR, SepR, TermR, I, E>(
+fn seplist<Init, Item, Sep, Term, InitR, ItemR, SepR, TermR, I, E, T, U>(
     mut initializer: Init,
     mut item: Item,
     mut separator: Sep,
     mut terminator: Term,
-    err_terminator_or_item: &'static str,
-    err_terminator_or_separator: &'static str,
+    err_terminator_or_item: T,
+    err_terminator_or_separator: U,
 ) -> impl FnMut(I) -> IResult<I, (InitR, Vec<ItemR>, TermR), E>
 where
     Init: Parser<I, InitR, E>,
@@ -232,7 +248,10 @@ where
     Sep: Parser<I, SepR, E>,
     Term: Parser<I, TermR, E>,
     I: Clone,
-    E: ContextError<I>,
+    E: ExplainError<I>,
+    SyntaxErrorReason: From<T> + From<U>,
+    T: Copy,
+    U: Copy,
 {
     move |mut i: I| {
         let (j, initr) = initializer.parse(i)?;
@@ -248,8 +267,8 @@ where
                 // Parsing item failed: we expect a terminator
                 Err(Err::Error(_)) => {
                     match terminator.parse(i.clone()) {
-                        Err(Err::Error(e)) => return Err(Err::Failure(
-                            <E as ContextError<I>>::add_context(i, err_terminator_or_item, e)
+                        Err(Err::Error(_)) => return Err(Err::Failure(
+                            <E as ExplainError<I>>::error(i, err_terminator_or_item)
                         )),
                         Err(e) => return Err(e),
                         Ok((i, termr)) => return Ok((i, (initr, items, termr))),
@@ -272,8 +291,8 @@ where
                 // Parsing separator failed: we expect a terminator
                 Err(Err::Error(_)) => {
                     match terminator.parse(i.clone()) {
-                        Err(Err::Error(e)) => return Err(Err::Failure(
-                            <E as ContextError<I>>::add_context(i, err_terminator_or_separator, e)
+                        Err(Err::Error(_)) => return Err(Err::Failure(
+                            <E as ExplainError<I>>::error(i, err_terminator_or_separator)
                         )),
                         Err(e) => return Err(e),
                         Ok((i, termr)) => return Ok((i, (initr, items, termr))),
@@ -518,7 +537,7 @@ fn raw_string<'a, E: CompleteError<'a>>(
 ) -> IResult<Span<'a>, String, E> {
     verify(
         escaped_transform(
-            recognize(many1(none_of("\"\\$"))),
+            recognize(many1(none_of("\"\\$\n"))),
             '\\',
             alt((
                 value("\"", tag("\"")),
@@ -549,9 +568,12 @@ fn string_interp<'a, E: CompleteError<'a>>(
 ) -> IResult<Span<'a>, StringElement, E> {
     map(
         delimited(
-            postpad(tag("${")),
-            expression,
-            fail(char('}'), "expected '}'"),
+            terminated(
+                char('$'),
+                fail(postpad(char('{')), Expected::OpenBrace),
+            ),
+            fail(expression, Expected::Expression),
+            fail(char('}'), Expected::CloseBrace),
         ),
 
         |x| StringElement::Interpolate(x.inner()),
@@ -559,23 +581,37 @@ fn string_interp<'a, E: CompleteError<'a>>(
 }
 
 
-/// Matches a string.
+/// Matches a string part.
 ///
 /// This parser matches an opening quote, followed by a sequence of string
 /// elements: either raw string data or interpolated expressions, followed by a
 /// closing quote.
+fn string_part<'a, E: CompleteError<'a>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Vec<StringElement>, E> {
+    delimited(
+        char('\"'),
+        many0(alt((string_interp, string_data))),
+        fail(char('\"'), Expected::DoubleQuote),
+    )(input)
+}
+
+
+/// Matches a string.
+///
+/// This consists of a sequence of one or more string parts, separated by
+/// whitespace.
 fn string<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
-    naked(positioned(map(
-        delimited(
-            char('\"'),
-            many0(alt((string_interp, string_data))),
-            fail(char('\"'), "expected '\"'"),
-        ),
-
-        Expr::string,
-    )))(input)
+    naked(map(
+        many1(positioned_postpad(string_part)),
+        |x| {
+            let start = x.first().unwrap().loc();
+            let end = x.last().unwrap().loc();
+            Expr::string(x.into_iter().map(Tagged::unwrap).flatten().collect()).tag((start, end))
+        }
+    ))(input)
 }
 
 
@@ -633,7 +669,7 @@ fn list_element<'a, E: CompleteError<'a>>(
         naked(map(
             tuple((
                 positioned(postpad(tag("..."))),
-                fail(expression, "expected expression"),
+                fail(expression, Expected::Expression),
             )),
             |(start, expr)| {
                 let loc = Location::from((&start, expr.outer()));
@@ -645,14 +681,14 @@ fn list_element<'a, E: CompleteError<'a>>(
         naked(map(
             tuple((
                 positioned_postpad(keyword("for")),
-                fail(binding, "expected binding"),
+                fail(binding, Expected::Binding),
                 preceded(
-                    fail(postpad(tag("in")), "expected 'in'"),
-                    fail(expression, "expected expression"),
+                    fail(postpad(tag("in")), Expected::In),
+                    fail(expression, Expected::Expression),
                 ),
                 preceded(
-                    fail(postpad(char(':')), "expected ':'"),
-                    fail(list_element, "expected list element")
+                    fail(postpad(char(':')), Expected::Colon),
+                    fail(list_element, Expected::ListElement)
                 ),
             )),
             |(start, binding, iterable, expr)| {
@@ -669,10 +705,10 @@ fn list_element<'a, E: CompleteError<'a>>(
         naked(map(
             tuple((
                 positioned_postpad(keyword("when")),
-                fail(expression, "expected expression"),
+                fail(expression, Expected::Expression),
                 preceded(
-                    fail(postpad(char(':')), "expected ':'"),
-                    fail(list_element, "expected list element"),
+                    fail(postpad(char(':')), Expected::Colon),
+                    fail(list_element, Expected::ListElement),
                 ),
             )),
             |(start, condition, expr)| {
@@ -705,8 +741,8 @@ fn list<'a, E: CompleteError<'a>>(
             list_element,
             postpad(char(',')),
             char(']'),
-            "expected ']' or list element",
-            "expected ']' or ','",
+            (Expected::CloseBracket, Expected::ListElement),
+            (Expected::CloseBracket, Expected::Comma),
         ),
 
         |(_, x, _)| Expr::List(x.into_iter().map(|y| y.inner()).collect()),
@@ -731,7 +767,7 @@ fn map_element<'a, E: CompleteError<'a>>(
         naked(map(
             tuple((
                 positioned_postpad(tag("...")),
-                fail(expression, "expected expression"),
+                fail(expression, Expected::Expression),
             )),
             |(start, expr)| {
                 let loc = Location::from((&start, expr.outer()));
@@ -743,14 +779,14 @@ fn map_element<'a, E: CompleteError<'a>>(
         naked(map(
             tuple((
                 positioned_postpad(tag("for")),
-                fail(binding, "expected binding"),
+                fail(binding, Expected::Binding),
                 preceded(
-                    fail(postpad(tag("in")), "expected 'in'"),
-                    fail(expression, "expected expression"),
+                    fail(postpad(tag("in")), Expected::In),
+                    fail(expression, Expected::Expression),
                 ),
                 preceded(
-                    fail(postpad(char(':')), "expected ':'"),
-                    fail(map_element, "expected map element"),
+                    fail(postpad(char(':')), Expected::Colon),
+                    fail(map_element, Expected::MapElement),
                 ),
             )),
             |(start, binding, iterable, expr)| {
@@ -767,10 +803,10 @@ fn map_element<'a, E: CompleteError<'a>>(
         naked(map(
             tuple((
                 positioned_postpad(tag("when")),
-                fail(expression, "expected expression"),
+                fail(expression, Expected::Expression),
                 preceded(
-                    fail(postpad(char(':')), "expected ':'"),
-                    fail(map_element, "expected map element"),
+                    fail(postpad(char(':')), Expected::Colon),
+                    fail(map_element, Expected::MapElement),
                 ),
             )),
             |(start, condition, expr)| {
@@ -787,10 +823,10 @@ fn map_element<'a, E: CompleteError<'a>>(
             tuple((
                 positioned_postpad(char('$')),
                 terminated(
-                    fail(expression, "expected expression"),
-                    fail(postpad(char(':')), "expected ':'"),
+                    fail(expression, Expected::Expression),
+                    fail(postpad(char(':')), Expected::Colon),
                 ),
-                fail(expression, "expected expression"),
+                fail(expression, Expected::Expression),
             )),
             |(start, key, value)| {
                 let loc = Location::from((&start, value.outer()));
@@ -806,9 +842,9 @@ fn map_element<'a, E: CompleteError<'a>>(
             tuple((
                 terminated(
                     postpad(map_identifier),
-                    fail(postpad(char(':')), "expected ':'"),
+                    fail(postpad(char(':')), Expected::Colon),
                 ),
-                fail(expression, "expected expression"),
+                fail(expression, Expected::Expression),
             )),
             |(key, value)| {
                 let loc = Location::from((&key, value.outer()));
@@ -837,8 +873,8 @@ fn mapping<'a, E: CompleteError<'a>>(
             map_element,
             postpad(char(',')),
             char('}'),
-            "expected '}' or map element",
-            "expected '}' or ','",
+            (Expected::CloseBrace, Expected::MapElement),
+            (Expected::CloseBrace, Expected::Comma),
         ),
 
         |(_, x, _)| Expr::Map(x.into_iter().map(|y| y.inner()).collect()),
@@ -856,8 +892,8 @@ fn paren<'a, E: CompleteError<'a>>(
     map(
         tuple((
             positioned_postpad(char('(')),
-            fail(expression, "expected expression"),
-            fail(positioned_postpad(char(')')), "expected ')'"),
+            fail(expression, Expected::Expression),
+            fail(positioned_postpad(char(')')), Expected::CloseParen),
         )),
 
         |(start, expr, end)| {
@@ -896,7 +932,7 @@ fn object_access<'a, E: CompleteError<'a>>(
     map(
         tuple((
             positioned_postpad(char('.')),
-            fail(identifier, "expected identifier"),
+            fail(identifier, Expected::Identifier),
         )),
         |(dot, out)| Operator::BinOp(
             BinOp::Index,
@@ -915,8 +951,8 @@ fn object_index<'a, E: CompleteError<'a>>(
     map(
         tuple((
             positioned_postpad(char('[')),
-            fail(expression, "expected expression"),
-            fail(positioned(char(']')), "expected ']'"),
+            fail(expression, Expected::Expression),
+            fail(positioned(char(']')), Expected::CloseBracket),
         )),
         |(a, expr, b)| Operator::BinOp(BinOp::Index, expr.inner().to_box()).tag((&a, &b)),
     )(input)
@@ -938,7 +974,7 @@ fn function_arg<'a, E: CompleteError<'a>>(
         map(
             tuple((
                 positioned_postpad(tag("...")),
-                fail(expression, "expected expression"),
+                fail(expression, Expected::Expression),
             )),
             |(x, y)| {
                 let rloc = y.outer();
@@ -952,7 +988,7 @@ fn function_arg<'a, E: CompleteError<'a>>(
                 postpad(identifier),
                 preceded(
                     postpad(char(':')),
-                    fail(expression, "expected expression"),
+                    fail(expression, Expected::Expression),
                 ),
             )),
             |(name, expr)| {
@@ -988,8 +1024,8 @@ fn function_call<'a, E: CompleteError<'a>>(
             function_arg,
             postpad(char(',')),
             positioned_postpad(char(')')),
-            "expected ')' or function argument",
-            "expected ')' or ','",
+            (Expected::CloseParen, Expected::ArgElement),
+            (Expected::CloseParen, Expected::Comma),
         ),
         |(a, expr, b)| Operator::FunCall(expr).tag((&a, &b)),
     )(input)
@@ -1046,7 +1082,7 @@ fn prefixed<'a, E: CompleteError<'a>>(
                     map(positioned_postpad(tag("-")), |x| x.map(|_| UnOp::ArithmeticalNegate)),
                     map(positioned_postpad(keyword("not")), |x| x.map(|_| UnOp::LogicalNegate)),
                 ))),
-                fail(power, "expected operand"),
+                fail(power, Expected::Operand),
             )),
 
             |(ops, expr)| {
@@ -1086,13 +1122,13 @@ where
     <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
     G: Parser<I, OpCons, E>,
     H: Parser<I, PExpr, E>,
-    E: ContextError<I>,
+    E: ExplainError<I>,
     Location: From<(I, I)>,
 {
     map(
         tuple((
             positioned_postpad(operators),
-             fail(operand, "expected operand"),
+             fail(operand, Expected::Operand),
         )),
         |(func, expr)| {
             let loc = Location::span(func.loc(), expr.outer());
@@ -1114,7 +1150,7 @@ fn binops<I, E: ParseError<I>, G, H>(
 where
     I: Clone + nom::InputTakeAtPosition + nom::InputLength,
     <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
-    E: ContextError<I>,
+    E: ExplainError<I>,
     G: Parser<I, Tagged<Operator>, E>,
     H: Parser<I, PExpr, E> + Copy,
 {
@@ -1173,7 +1209,7 @@ where
     <I as nom::InputTakeAtPosition>::Item: nom::AsChar + Clone,
     G: Parser<I, OpCons, E>,
     H: Parser<I, PExpr, E> + Copy,
-    E: ContextError<I>,
+    E: ExplainError<I>,
     Location: From<(I, I)>,
 {
     binops(binop(operators, operands), operands, false)
@@ -1307,7 +1343,7 @@ fn list_binding_element<'a, E: CompleteError<'a>>(
                 binding,
                 opt(preceded(
                     postpad(char('=')),
-                    fail(expression, "expected expression"),
+                    fail(expression, Expected::Expression),
                 )),
             )),
 
@@ -1333,19 +1369,27 @@ fn list_binding_element<'a, E: CompleteError<'a>>(
 ///
 /// This is a comma-separated list of list binding elements, optionally
 /// terminated by a comma.
-fn list_binding<'a, E: CompleteError<'a>>(
-    input: Span<'a>,
-) -> IResult<Span<'a>, ListBinding, E> {
-    map(
+fn list_binding<'a, E: CompleteError<'a>, T, U>(
+    initializer: impl Parser<Span<'a>, char, E> + Copy,
+    terminator: impl Parser<Span<'a>, char, E> + Copy,
+    err_terminator_or_item: T,
+    err_terminator_or_separator: U,
+) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, (Tagged<ListBinding>, char), E>
+where
+    SyntaxErrorReason: From<T> + From<U>,
+    T: Copy,
+    U: Copy,
+{
+    move |input: Span<'a>| map(
         seplist(
-            postpad(char('[')),
+            positioned_postpad(initializer),
             list_binding_element,
             postpad(char(',')),
-            char(']'),
-            "expected ']' or list binding element",
-            "expected ']' or ','",
+            positioned_postpad(terminator),
+            err_terminator_or_item,
+            err_terminator_or_separator,
         ),
-        |(_, x, _)| ListBinding(x),
+        |(a, x, b)| (ListBinding(x).tag((&a, &b)), b.unwrap()),
     )(input)
 }
 
@@ -1367,7 +1411,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
         positioned(map(
             preceded(
                 tag("..."),
-                fail(identifier, "expected identifier"),
+                fail(identifier, Expected::Identifier),
             ),
             |i| MapBindingElement::SlurpTo(i),
         )),
@@ -1383,7 +1427,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                             postpad(map_identifier),
                             preceded(
                                 postpad(tag("as")),
-                                fail(binding, "expected binding"),
+                                fail(binding, Expected::Binding),
                             ),
                         )),
                         |(name, binding)| (name, Some(binding)),
@@ -1401,7 +1445,7 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
                 opt(
                     preceded(
                         postpad(char('=')),
-                        fail(expression, "expected expression"),
+                        fail(expression, Expected::Expression),
                     ),
                 ),
             )),
@@ -1433,19 +1477,27 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
 ///
 /// This is a comma-separated list of list binding elements, optionally
 /// terminated by a comma.
-fn map_binding<'a, E: CompleteError<'a>>(
-    input: Span<'a>,
-) -> IResult<Span<'a>, MapBinding, E> {
-    map(
+fn map_binding<'a, E: CompleteError<'a>, T, U>(
+    initializer: impl Parser<Span<'a>, char, E> + Copy,
+    terminator: impl Parser<Span<'a>, char, E> + Copy,
+    err_terminator_or_item: T,
+    err_terminator_or_separator: U,
+) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, Tagged<MapBinding>, E>
+where
+    SyntaxErrorReason: From<T> + From<U>,
+    T: Copy,
+    U: Copy,
+{
+    move |input: Span<'a>| map(
         seplist(
-            postpad(char('{')),
+            positioned_postpad(initializer),
             map_binding_element,
             postpad(char(',')),
-            char('}'),
-            "expected '}' or map binding element",
-            "expected '}' or ','",
+            positioned_postpad(terminator),
+            err_terminator_or_item,
+            err_terminator_or_separator,
         ),
-        |(_, x, _)| MapBinding(x),
+        |(a, x, b)| MapBinding(x).tag((&a, &b)),
     )(input)
 }
 
@@ -1463,64 +1515,37 @@ fn binding<'a, E: CompleteError<'a>>(
         ident_binding,
 
         // TODO: Do we need double up location tagging here?
-        positioned_postpad(
+        postpad(
             map(
-                positioned(list_binding),
-                Binding::List,
+                list_binding(
+                    |i| char('[')(i),
+                    |i| char(']')(i),
+                    (Expected::CloseBracket, Expected::ListBindingElement),
+                    (Expected::CloseBracket, Expected::Comma),
+                ),
+                |(x,_)| {
+                    let loc = x.loc();
+                    x.wrap(Binding::List, loc)
+                },
             )
         ),
 
         // TODO: Do we need double up location tagging here?
-        positioned_postpad(
+        postpad(
             map(
-                positioned(map_binding),
-                Binding::Map,
+                map_binding(
+                    |i| char('{')(i),
+                    |i| char('}')(i),
+                    (Expected::CloseBrace, Expected::MapBindingElement),
+                    (Expected::CloseBrace, Expected::Comma),
+                ),
+                |x| {
+                    let loc = x.loc();
+                    x.wrap(Binding::Map, loc)
+                },
             )
         ),
     ))(input)
-}
-
-
-/// Matches positional parameters in a function definition.
-///
-/// This is essentially the same as a list binding, just with different
-/// delimiters.
-fn posarg_binding<'a, E: CompleteError<'a>>(
-    input: Span<'a>,
-) -> IResult<Span<'a>, (Tagged<ListBinding>, char), E> {
-    map(
-        seplist(
-            positioned_postpad(char('(')),
-            list_binding_element,
-            postpad(char(',')),
-            positioned_postpad(alt((char(')'), char(';')))),
-            "expected ')', ';', or positional function parameter",
-            "expected ')', ';', or ','",
-        ),
-        |(a, x, b)| (ListBinding(x).tag((&a, &b)), b.unwrap()),
-    )(input)
-}
-
-
-/// Matches keyword parameters in a function definition.
-///
-/// This is essentially the same as a map binding, just with different
-/// delimiters.
-fn kwarg_binding<'a, E: CompleteError<'a>>(
-    input: Span<'a>,
-) -> IResult<Span<'a>, MapBinding, E> {
-    map(
-        seplist(
-            // The semicolon should have been consumed by the calling parser
-            success(()),
-            map_binding_element,
-            postpad(char(',')),
-            postpad(char(')')),
-            "expected ')', or keyword function parameter",
-            "expected ')', or ','",
-        ),
-        |(_, x, _)| MapBinding(x),
-    )(input)
 }
 
 
@@ -1533,22 +1558,32 @@ fn kwarg_binding<'a, E: CompleteError<'a>>(
 fn normal_function<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
-    let (i, (args, end)) = fail(posarg_binding, "expected positional parameter list")(input)?;
+    let (i, (args, end)) = list_binding(
+        |i| char('(')(i),
+        |i| alt((char(')'), char(';')))(i),
+        (Expected::CloseParen, Expected::Semicolon, Expected::PosParam),
+        (Expected::CloseParen, Expected::Semicolon, Expected::Comma),
+    )(input)?;
 
     let (j, kwargs) = if end == ';' {
-        let (j, kwargs) = fail(kwarg_binding, "expected keyword parameter list")(i)?;
+        let (j, kwargs) = map_binding(
+            |i| success(' ')(i),
+            |i| char(')')(i),
+            (Expected::CloseParen, Expected::KeywordParam),
+            (Expected::CloseParen, Expected::Comma),
+        )(i)?;
         (j, Some(kwargs))
     } else {
         (i, None)
     };
 
-    let (k, _) = fail(postpad(tag("=>")), "expected '=>'")(j)?;
-    let (l, expr) = fail(expression, "expected expression")(k)?;
+    let (k, _) = fail(postpad(tag("=>")), Expected::DoubleArrow)(j)?;
+    let (l, expr) = fail(expression, Expected::Expression)(k)?;
     let loc = Location::from((args.loc(), expr.outer()));
 
     let result = PExpr::Naked(Expr::Function {
         positional: args.unwrap(),
-        keywords: kwargs,
+        keywords: kwargs.map(Tagged::unwrap),
         expression: expr.inner().to_box(),
     }.tag(loc));
 
@@ -1565,10 +1600,15 @@ fn keyword_function<'a, E: CompleteError<'a>>(
 ) -> IResult<Span<'a>, PExpr, E> {
     map(
         tuple((
-            fail(positioned_postpad(map_binding), "expected parameter list"),
+            postpad(map_binding(
+                |i| char('{')(i),
+                |i| char('}')(i),
+                (Expected::CloseBrace, Expected::KeywordParam),
+                (Expected::CloseBrace, Expected::Comma),
+            )),
             preceded(
-                fail(postpad(tag("=>")), "expected '=>'"),
-                fail(expression, "expected expression"),
+                fail(postpad(tag("=>")), Expected::DoubleArrow),
+                fail(expression, Expected::Expression),
             ),
         )),
 
@@ -1592,14 +1632,14 @@ fn function<'a, E: CompleteError<'a>>(
     mut input: Span<'a>
 ) -> IResult<Span<'a>, PExpr, E>
 where
-    E: ContextError<Span<'a>>
+    E: ExplainError<Span<'a>>
 {
     let (i, start) = positioned_postpad(keyword("fn"))(input)?;
     input = i;
 
     match peek(alt((char('('), char('{'))))(input) {
-        Err(Err::Error(e)) => Err(Err::Failure(
-            <E as ContextError<Span<'a>>>::add_context(start.unwrap(), "expected '(' or '{'", e)
+        Err(Err::Error(_)) => Err(Err::Failure(
+            <E as ExplainError<Span<'a>>>::error(input, (Expected::OpenParen, Expected::OpenBrace))
         )),
         Err(e) => Err(e),
         Ok((i, c)) => {
@@ -1628,17 +1668,17 @@ fn let_block<'a, E: CompleteError<'a>>(
                 tuple((
                     preceded(
                         postpad(keyword("let")),
-                        fail(binding, "expected binding"),
+                        fail(binding, Expected::Binding),
                     ),
                     preceded(
-                        fail(postpad(tag("=")), "expected '='"),
-                        fail(expression, "expected expression"),
+                        fail(postpad(tag("=")), Expected::Equals),
+                        fail(expression, Expected::Expression),
                     ),
                 )),
             ),
             preceded(
-                fail(postpad(tag("in")), "expected 'in'"),
-                fail(expression, "expected expression"),
+                fail(postpad(tag("in")), Expected::In),
+                fail(expression, Expected::Expression),
             ),
         )),
         |(start, bindings, expr)| {
@@ -1662,14 +1702,14 @@ fn branch<'a, E: CompleteError<'a>>(
     map(
         tuple((
             positioned_postpad(keyword("if")),
-            fail(expression, "expected expression"),
+            fail(expression, Expected::Expression),
             preceded(
-                fail(postpad(keyword("then")), "expected 'then'"),
-                fail(expression, "expected expression"),
+                fail(postpad(keyword("then")), Expected::Then),
+                fail(expression, Expected::Expression),
             ),
             preceded(
-                fail(postpad(keyword("else")), "expected 'else'"),
-                fail(expression, "expected expression"),
+                fail(postpad(keyword("else")), Expected::Else),
+                fail(expression, Expected::Expression),
             ),
         )),
 
@@ -1725,11 +1765,11 @@ fn import<'a, E: CompleteError<'a>>(
                 fail(postpad(preceded(
                     char('\"'),
                     terminated(raw_string, char('\"'))
-                )), "expected path"),
+                )), Expected::ImportPath),
             ),
             preceded(
-                fail(postpad(keyword("as")), "expected 'as'"),
-                fail(postpad(binding), "expected binding"),
+                fail(postpad(keyword("as")), Expected::As),
+                fail(postpad(binding), Expected::Binding),
             )
         )),
         |(path, binding)| TopLevel::Import(path, binding),
@@ -1750,8 +1790,8 @@ fn file<'a, E: CompleteError<'a>>(
             preceded(
                 multispace0,
                 terminated(
-                    fail(expression, "expected expression"),
-                    fail(all_consuming(multispace0), "expected end of input")
+                    fail(expression, Expected::Expression),
+                    fail(all_consuming(multispace0), Expected::EndOfInput)
                 ),
             ),
         )),
@@ -1761,17 +1801,15 @@ fn file<'a, E: CompleteError<'a>>(
 
 
 /// Parse the input and return a [`File`] object.
-pub fn parse(input: &str) -> Result<File, String> {
+pub fn parse(input: &str) -> Result<File, SyntaxError> {
     let span = Span::new(input);
     file::<SyntaxError>(span).map_or_else(
         |err| match err {
-            Incomplete(_) => Err("incomplete input".to_string()),
-            Error(e) | Failure(e) => Err(format!("{:#?}", e)),
+            Incomplete(_) => Err(SyntaxError(None)),
+            Error(e) | Failure(e) => Err(e),
         },
-        |(remaining, node)| if remaining.len() > 0 {
-            Err(format!("unconsumed input: {}", remaining))
-        } else {
-            node.validate()?;
+        |(_, node)| {
+            node.validate().map_err(|_| SyntaxError(None))?;
             Ok(node)
         }
     )

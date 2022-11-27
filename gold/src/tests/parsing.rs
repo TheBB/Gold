@@ -1,13 +1,13 @@
 use std::ops::{Add, Div, Mul, Neg, Not, Sub};
 
 use crate::ast::*;
-use crate::error::{Location, Tagged};
+use crate::error::{Location, Tagged, SyntaxError, SyntaxErrorReason, Expected};
 use crate::object::{Object, Key};
 use crate::parsing::{parse as parse_file};
 use crate::traits::{Boxable, Taggable};
 
 
-fn parse(input: &str) -> Result<Tagged<Expr>, String> {
+fn parse(input: &str) -> Result<Tagged<Expr>, SyntaxError> {
     parse_file(input).map(|x| x.expression)
 }
 
@@ -136,6 +136,14 @@ fn strings() {
             StringElement::raw("dingbob"),
             StringElement::Interpolate("a".id((11, 1, 1))),
         ]).tag((0, 1, 14))),
+    );
+
+    assert_eq!(
+        parse("\"alpha\" \"bravo\""),
+        Ok(Expr::String(vec![
+            StringElement::raw("alpha"),
+            StringElement::raw("bravo"),
+        ]).tag((0, 1, 15)))
     );
 }
 
@@ -1075,4 +1083,129 @@ fn functions() {
             expression: "x".id((17, 1, 1)).add("y".id((21, 1, 1))).tag((17, 1, 5)).to_box(),
         }.tag((0, 1, 22))),
     );
+}
+
+
+fn check_err<T>(code: &str, offset: usize, line: u32, expected: T) where SyntaxErrorReason: From<T> {
+    assert_eq!(
+        parse(code),
+        Err(SyntaxError(Some(vec![
+            (Location::new(offset, line, 0), SyntaxErrorReason::from(expected)),
+        ])))
+    );
+}
+
+
+#[test]
+fn errors() {
+    check_err("let", 3, 1, Expected::Binding);
+    check_err("let a", 5, 1, Expected::Equals);
+    check_err("let a =", 7, 1, Expected::Expression);
+    check_err("let a = 1", 9, 1, Expected::In);
+    check_err("let a = 1 in", 12, 1, Expected::Expression);
+
+    check_err("if", 2, 1, Expected::Expression);
+    check_err("if true", 7, 1, Expected::Then);
+    check_err("if true then", 12, 1, Expected::Expression);
+    check_err("if true then 1", 14, 1, Expected::Else);
+    check_err("if true then 1 else", 19, 1, Expected::Expression);
+
+    check_err("[", 1, 1, (Expected::CloseBracket, Expected::ListElement));
+    check_err("[1", 2, 1, (Expected::CloseBracket, Expected::Comma));
+    check_err("[1,", 3, 1, (Expected::CloseBracket, Expected::ListElement));
+    check_err("[...", 4, 1, Expected::Expression);
+    check_err("[when", 5, 1, Expected::Expression);
+    check_err("[when x", 7, 1, Expected::Colon);
+    check_err("[when x:", 8, 1, Expected::ListElement);
+    check_err("[when x: 1", 10, 1, (Expected::CloseBracket, Expected::Comma));
+    check_err("[for", 4, 1, Expected::Binding);
+    check_err("[for x", 6, 1, Expected::In);
+    check_err("[for x in", 9, 1, Expected::Expression);
+    check_err("[for x in y", 11, 1, Expected::Colon);
+    check_err("[for x in y:", 12, 1, Expected::ListElement);
+    check_err("[for x in y: z", 14, 1, (Expected::CloseBracket, Expected::Comma));
+
+    check_err("{", 1, 1, (Expected::CloseBrace, Expected::MapElement));
+    check_err("{x", 2, 1, Expected::Colon);
+    check_err("{x:", 3, 1, Expected::Expression);
+    check_err("{x: y", 5, 1, (Expected::CloseBrace, Expected::Comma));
+    check_err("{x: y,", 6, 1, (Expected::CloseBrace, Expected::MapElement));
+    check_err("{$", 2, 1, Expected::Expression);
+    check_err("{$x", 3, 1, Expected::Colon);
+    check_err("{$x:", 4, 1, Expected::Expression);
+    check_err("{$x: y", 6, 1, (Expected::CloseBrace, Expected::Comma));
+    check_err("{$x: y,", 7, 1, (Expected::CloseBrace, Expected::MapElement));
+    check_err("{...", 4, 1, Expected::Expression);
+    check_err("{when", 5, 1, Expected::Expression);
+    check_err("{when x", 7, 1, Expected::Colon);
+    check_err("{when x:", 8, 1, Expected::MapElement);
+    check_err("{when x: y", 10, 1, Expected::Colon);
+    check_err("{when x: y:", 11, 1, Expected::Expression);
+    check_err("{when x: y: 1", 13, 1, (Expected::CloseBrace, Expected::Comma));
+    check_err("{for", 4, 1, Expected::Binding);
+    check_err("{for x", 6, 1, Expected::In);
+    check_err("{for x in", 9, 1, Expected::Expression);
+    check_err("{for x in y", 11, 1, Expected::Colon);
+    check_err("{for x in y:", 12, 1, Expected::MapElement);
+    check_err("{for x in y: z", 14, 1, Expected::Colon);
+    check_err("{for x in y: z:", 15, 1, Expected::Expression);
+    check_err("{for x in y: z: v", 17, 1, (Expected::CloseBrace, Expected::Comma));
+
+    check_err("let", 3, 1, Expected::Binding);
+    check_err("let [", 5, 1, (Expected::CloseBracket, Expected::ListBindingElement));
+    check_err("let [x", 6, 1, (Expected::CloseBracket, Expected::Comma));
+    check_err("let [x,", 7, 1, (Expected::CloseBracket, Expected::ListBindingElement));
+    check_err("let [x =", 8, 1, Expected::Expression);
+    check_err("let [x = 1", 10, 1, (Expected::CloseBracket, Expected::Comma));
+    check_err("let [...", 8, 1, (Expected::CloseBracket, Expected::Comma));
+    check_err("let {", 5, 1, (Expected::CloseBrace, Expected::MapBindingElement));
+    check_err("let {y", 6, 1, (Expected::CloseBrace, Expected::Comma));
+    check_err("let {y,", 7, 1, (Expected::CloseBrace, Expected::MapBindingElement));
+    check_err("let {y =", 8, 1, Expected::Expression);
+    check_err("let {y = 1", 10, 1, (Expected::CloseBrace, Expected::Comma));
+    check_err("let {y as", 9, 1, Expected::Binding);
+    check_err("let {y as x =", 13, 1, Expected::Expression);
+    check_err("let {...", 8, 1, Expected::Identifier);
+    check_err("let {...x", 9, 1, (Expected::CloseBrace, Expected::Comma));
+
+    check_err("(", 1, 1, Expected::Expression);
+    check_err("(1", 2, 1, Expected::CloseParen);
+
+    check_err("fn", 2, 1, (Expected::OpenParen, Expected::OpenBrace));
+    check_err("fn (", 4, 1, (Expected::CloseParen, Expected::Semicolon, Expected::PosParam));
+    check_err("fn (x", 5, 1, (Expected::CloseParen, Expected::Semicolon, Expected::Comma));
+    check_err("fn (x,", 6, 1, (Expected::CloseParen, Expected::Semicolon, Expected::PosParam));
+    check_err("fn (;", 5, 1, (Expected::CloseParen, Expected::KeywordParam));
+    check_err("fn (;y", 6, 1, (Expected::CloseParen, Expected::Comma));
+    check_err("fn (;y,", 7, 1, (Expected::CloseParen, Expected::KeywordParam));
+    check_err("fn ()", 5, 1, Expected::DoubleArrow);
+    check_err("fn () =>", 8, 1, Expected::Expression);
+    check_err("fn {", 4, 1, (Expected::CloseBrace, Expected::KeywordParam));
+    check_err("fn {x", 5, 1, (Expected::CloseBrace, Expected::Comma));
+    check_err("fn {x,", 6, 1, (Expected::CloseBrace, Expected::KeywordParam));
+    check_err("fn {}", 5, 1, Expected::DoubleArrow);
+    check_err("fn {} =>", 8, 1, Expected::Expression);
+
+    check_err("\"alpha", 6, 1, Expected::DoubleQuote);
+    check_err("\"alpha$", 7, 1, Expected::OpenBrace);
+    check_err("\"alpha${", 8, 1, Expected::Expression);
+    check_err("\"alpha${1", 9, 1, Expected::CloseBrace);
+    check_err("\"alpha${1}", 10, 1, Expected::DoubleQuote);
+
+    check_err("a.", 2, 1, Expected::Identifier);
+    check_err("a[", 2, 1, Expected::Expression);
+    check_err("a[1", 3, 1, Expected::CloseBracket);
+    check_err("a(", 2, 1, (Expected::CloseParen, Expected::ArgElement));
+    check_err("a(1", 3, 1, (Expected::CloseParen, Expected::Comma));
+    check_err("a(1,", 4, 1, (Expected::CloseParen, Expected::ArgElement));
+    check_err("a(x:", 4, 1, Expected::Expression);
+    check_err("a(...", 5, 1, Expected::Expression);
+
+    check_err("-", 1, 1, Expected::Operand);
+    check_err("1+", 2, 1, Expected::Operand);
+
+    check_err("import", 6, 1, Expected::ImportPath);
+    check_err("import \"path\"", 13, 1, Expected::As);
+    check_err("import \"path\" as", 16, 1, Expected::Binding);
+    check_err("import \"path\" as y", 18, 1, Expected::Expression);
 }
