@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use symbol_table::GlobalSymbol;
 
-use crate::error::{Location, Tagged};
+use crate::error::{Error, Location, Tagged};
 use crate::object::Key;
 
 
@@ -81,11 +81,11 @@ impl<T> Taggable for T where T: Sized {
 // ----------------------------------------------------------------
 
 pub trait Validatable {
-    fn validate(&self) -> Result<(), String>;
+    fn validate(&self) -> Result<(), Error>;
 }
 
 impl<T: Validatable> Validatable for Tagged<T> {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         self.as_ref().validate()
     }
 }

@@ -18,7 +18,7 @@ use crate::builtins::BUILTINS;
 use crate::traits::{ToVec, ToMap};
 
 use crate::ast::{ListBinding, MapBinding, Expr};
-use crate::error::Tagged;
+use crate::error::{Error, Tagged};
 use crate::eval::Namespace;
 use crate::util;
 
@@ -48,7 +48,7 @@ where
 }
 
 
-fn arithmetic_operate<F,G,H,X,Y,Z>(ops: Arith<F,G,H,X,Y,Z>, x: &Object, y: &Object) -> Result<Object, String>
+fn arithmetic_operate<F,G,H,X,Y,Z>(ops: Arith<F,G,H,X,Y,Z>, x: &Object, y: &Object) -> Result<Object, Error>
 where
     F: Fn(i64, i64) -> Option<X>,
     G: Fn(&BigInt, &BigInt) -> Y,
@@ -77,7 +77,7 @@ where
         (Object::Float(xx), Object::BigInteger(yy)) => Ok(Object::from(fxf(*xx, util::big_to_f64(yy.as_ref())))),
         (Object::BigInteger(xx), Object::Float(yy)) => Ok(Object::from(fxf(util::big_to_f64(xx.as_ref()), *yy))),
 
-        _ => Err("unsupported types for arithmetic".to_string()),
+        _ => Err(Error::default()),
     }
 }
 
@@ -85,7 +85,7 @@ where
 pub type Key = GlobalSymbol;
 pub type List = Vec<Object>;
 pub type Map = HashMap<Key, Object>;
-pub type RFunc = fn(&List, Option<&Map>) -> Result<Object, String>;
+pub type RFunc = fn(&List, Option<&Map>) -> Result<Object, Error>;
 
 
 const SERIALIZE_VERSION: i32 = 1;
@@ -134,7 +134,7 @@ pub struct Function {
 
 
 #[derive(Clone)]
-pub struct Closure(pub Arc<dyn Fn(&List, Option<&Map>) -> Result<Object, String> + Send + Sync>);
+pub struct Closure(pub Arc<dyn Fn(&List, Option<&Map>) -> Result<Object, Error> + Send + Sync>);
 
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -248,7 +248,7 @@ impl Object {
         Object::Map(Arc::new(x.to_map()))
     }
 
-    pub fn format(&self) -> Result<String, String> {
+    pub fn format(&self) -> Result<String, Error> {
         match self {
             Object::IntString(r) => Ok(r.to_string()),
             Object::Integer(r) => Ok(r.to_string()),
@@ -257,7 +257,7 @@ impl Object {
             Object::Boolean(true) => Ok("true".to_string()),
             Object::Boolean(false) => Ok("false".to_string()),
             Object::Null => Ok("null".to_string()),
-            _ => Err("wrong type".to_string()),
+            _ => Err(Error::default()),
         }
     }
 
@@ -366,7 +366,7 @@ impl Object {
         }
     }
 
-    pub fn neg(&self) -> Result<Object, String> {
+    pub fn neg(&self) -> Result<Object, Error> {
         match self {
             Object::Integer(x) => {
                 if let Some(y) = x.checked_neg() {
@@ -377,11 +377,11 @@ impl Object {
             },
             Object::BigInteger(x) => Ok(Object::from(-x.as_ref()).numeric_normalize()),
             Object::Float(x) => Ok(Object::from(-x)),
-            _ => Err("type mismatch".to_string()),
+            _ => Err(Error::default()),
         }
     }
 
-    pub fn add(&self, other: &Object) -> Result<Object, String> {
+    pub fn add(&self, other: &Object) -> Result<Object, Error> {
         match (&self, &other) {
             (Object::List(x), Object::List(y)) => Ok(Object::from(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())),
             (Object::IntString(x), Object::IntString(y)) => Ok(Object::nat_string(format!("{}{}", x.as_str(), y.as_str()))),
@@ -396,7 +396,7 @@ impl Object {
         }
     }
 
-    pub fn sub(&self, other: &Object) -> Result<Object, String> {
+    pub fn sub(&self, other: &Object) -> Result<Object, Error> {
         arithmetic_operate(Arith {
             ixi: i64::checked_sub,
             bxb: |x,y| x - y,
@@ -404,7 +404,7 @@ impl Object {
         }, self, other)
     }
 
-    pub fn mul(&self, other: &Object) -> Result<Object, String> {
+    pub fn mul(&self, other: &Object) -> Result<Object, Error> {
         arithmetic_operate(Arith {
             ixi: i64::checked_mul,
             bxb: |x,y| x * y,
@@ -412,7 +412,7 @@ impl Object {
         }, self, other)
     }
 
-    pub fn div(&self, other: &Object) -> Result<Object, String> {
+    pub fn div(&self, other: &Object) -> Result<Object, Error> {
         arithmetic_operate(Arith {
             ixi: |x,y| Some((x as f64) / (y as f64)),
             bxb: |x,y| util::big_to_f64(x) / util::big_to_f64(y),
@@ -420,7 +420,7 @@ impl Object {
         }, self, other)
     }
 
-    pub fn idiv(self, other: Object) -> Result<Object, String> {
+    pub fn idiv(self, other: Object) -> Result<Object, Error> {
         arithmetic_operate(Arith {
             ixi: i64::checked_div,
             bxb: |x,y| x / y,
@@ -428,42 +428,42 @@ impl Object {
         }, &self, &other)
     }
 
-    pub fn pow(&self, other: &Object) -> Result<Object, String> {
+    pub fn pow(&self, other: &Object) -> Result<Object, Error> {
         match (self, other) {
             (Object::Integer(x), Object::Integer(y)) if *y >= 0 => {
-                let yy: u32 = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
+                let yy: u32 = (*y).try_into().or_else(|_| Err(Error::default()))?;
                 Ok(checked_pow(*x, yy as usize).map(Object::from).unwrap_or_else(
                     || Object::from(BigInt::from(*x).pow(yy))
                 ))
             },
 
             (Object::BigInteger(x), Object::Integer(y)) if *y >= 0 => {
-                let yy: u32 = (*y).try_into().or_else(|_| Err("unable to convert exponent"))?;
+                let yy: u32 = (*y).try_into().or_else(|_| Err(Error::default()))?;
                 Ok(Object::from(x.as_ref().pow(yy)))
             },
 
             _ => {
-                let xx: f64 = self.to_f64().ok_or_else(|| "wrong type for power".to_string())?;
-                let yy: f64 = other.to_f64().ok_or_else(|| "wrong type for power".to_string())?;
+                let xx: f64 = self.to_f64().ok_or_else(Error::default)?;
+                let yy: f64 = other.to_f64().ok_or_else(Error::default)?;
                 Ok(Object::from(xx.powf(yy)))
             },
         }
     }
 
-    pub fn cmp_bool(&self, other: &Object, ordering: Ordering) -> Result<bool, String> {
-        self.partial_cmp(other).map(|x| x == ordering).ok_or_else(|| "err".to_string())
+    pub fn cmp_bool(&self, other: &Object, ordering: Ordering) -> Result<bool, Error> {
+        self.partial_cmp(other).map(|x| x == ordering).ok_or_else(Error::default)
     }
 
-    pub fn index(&self, other: &Object) -> Result<Object, String> {
+    pub fn index(&self, other: &Object) -> Result<Object, Error> {
         match (self, other) {
             (Object::List(x), Object::Integer(y)) => Ok(x[*y as usize].clone()),
-            (Object::Map(x), Object::IntString(y)) => x.get(y).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
-            (Object::Map(x), Object::NatString(y)) => x.get(&GlobalSymbol::new(y.as_ref())).ok_or_else(|| "unknown key".to_string()).map(Object::clone),
-            _ => Err("unsupported types for indexing".to_string()),
+            (Object::Map(x), Object::IntString(y)) => x.get(y).ok_or_else(Error::default).map(Object::clone),
+            (Object::Map(x), Object::NatString(y)) => x.get(&GlobalSymbol::new(y.as_ref())).ok_or_else(Error::default).map(Object::clone),
+            _ => Err(Error::default()),
         }
     }
 
-    pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, String> {
+    pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
         match self {
             Object::Function(func) => {
                 let Function { args: fargs, kwargs: fkwargs, closure, expr } = func.as_ref();
@@ -486,7 +486,7 @@ impl Object {
             Object::Closure(Closure(func)) => {
                 func(args, kwargs)
             }
-            _ => Err("calling a non-function".to_string()),
+            _ => Err(Error::default()),
         }
     }
 
@@ -631,12 +631,12 @@ impl ToString for Object {
 }
 
 impl TryFrom<Object> for JsonValue {
-    type Error = String;
+    type Error = Error;
 
     fn try_from(value: Object) -> Result<Self, Self::Error> {
         match value {
             Object::Integer(x) => Ok(JsonValue::from(x)),
-            Object::BigInteger(_) => Err("too big number".to_string()),
+            Object::BigInteger(_) => Err(Error::default()),
             Object::Float(x) => Ok(JsonValue::from(x)),
             Object::IntString(x) => Ok(JsonValue::from(x.as_str())),
             Object::NatString(x) => Ok(JsonValue::from(x.as_str())),
@@ -644,7 +644,7 @@ impl TryFrom<Object> for JsonValue {
             Object::List(x) => {
                 let mut val = JsonValue::new_array();
                 for element in x.as_ref() {
-                    val.push(JsonValue::try_from(element.clone())?).map_err(|x| x.to_string())?;
+                    val.push(JsonValue::try_from(element.clone())?).map_err(|_| Error::default())?;
                 }
                 Ok(val)
             },
@@ -656,7 +656,7 @@ impl TryFrom<Object> for JsonValue {
                 Ok(val)
             },
             Object::Null => Ok(JsonValue::Null),
-            _ => Err("uncovertible type".to_string()),
+            _ => Err(Error::default()),
         }
     }
 }
