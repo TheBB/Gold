@@ -2,6 +2,8 @@ use std::fmt::Debug;
 
 use serde::{Serialize, Deserialize};
 
+use crate::object::Key;
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Location {
@@ -205,9 +207,32 @@ impl From<(SyntaxElement,SyntaxElement,SyntaxElement)> for SyntaxErrorReason {
 }
 
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InternalErrorReason {
+    SetInFrozenNamespace,
+}
+
+
 #[derive(Debug, PartialEq)]
 pub enum ErrorReason {
+    None,
+
     Syntax(SyntaxErrorReason),
+    Unbound(Key),
+
+    Internal(InternalErrorReason),
+}
+
+impl From<SyntaxErrorReason> for ErrorReason {
+    fn from(value: SyntaxErrorReason) -> Self {
+        Self::Syntax(value)
+    }
+}
+
+impl From<InternalErrorReason> for ErrorReason {
+    fn from(value: InternalErrorReason) -> Self {
+        Self::Internal(value)
+    }
 }
 
 
@@ -215,4 +240,17 @@ pub enum ErrorReason {
 pub struct Error {
     pub locations: Option<Vec<Location>>,
     pub reason: Option<ErrorReason>,
+}
+
+impl Error {
+    pub fn with_reason<T>(reason: T) -> Self where ErrorReason: From<T> {
+        Self {
+            locations: None,
+            reason: Some(ErrorReason::from(reason)),
+        }
+    }
+
+    pub fn unbound(key: Key) -> Self {
+        Self::with_reason(ErrorReason::Unbound(key))
+    }
 }

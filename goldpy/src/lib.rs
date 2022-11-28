@@ -9,6 +9,7 @@ use pyo3::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 
 use gold::{object, Object};
+use gold::error::Error;
 use gold::eval::{CallableResolver, ResolveFunc};
 
 
@@ -31,7 +32,7 @@ fn call(py: Python<'_>, func: &Object, args: &PyTuple, kwargs: Option<&PyDict>) 
         func.call(gargs, Some(gkwargs))
     } else {
         func.call(gargs, None)
-    }.map_err(|err| PyErr::new::<PyValueError, _>(err))?;
+    }.map_err(|_| PyErr::new::<PyValueError, _>(""))?;
     Ok(ObjectWrapper(result).into_py(py))
 }
 
@@ -83,7 +84,7 @@ impl<'s> FromPyObject<'s> for CallableResolverWrapper {
                         let result = func.call(py, a, None).ok()?.extract::<Option<ObjectWrapper>>(py).ok()?;
                         result.map(|x| x.0)
                     });
-                    result.ok_or_else(|| "dingbob".to_string())
+                    result.ok_or_else(Error::default)
                 }
             ));
             Ok(CallableResolverWrapper(CallableResolver { resolver: closure }))
@@ -135,7 +136,7 @@ impl<'s> FromPyObject<'s> for ObjectWrapper {
                         let result = func.call(py, a, Some(b))?.extract::<ObjectWrapper>(py)?;
                         Ok(result.0)
                     });
-                    result.map_err(|err: PyErr| err.to_string())
+                    result.map_err(|_: PyErr| Error::default())
                 }
             ));
             Ok(ObjectWrapper(Object::Closure(closure)))
@@ -178,7 +179,7 @@ fn eval(x: String, path: Option<String>, resolver: CallableResolverWrapper) -> P
         path.map(PathBuf::from).as_ref().map(PathBuf::as_ref),
         &resolver.0,
     ).map_err(
-        |err| PyErr::new::<PyValueError, _>(err)
+        |_| PyErr::new::<PyValueError, _>("")
     ).map(ObjectWrapper)
 }
 
@@ -188,7 +189,7 @@ fn eval_raw(x: String) -> PyResult<ObjectWrapper> {
     gold::eval_raw(
         x.as_str(),
     ).map_err(
-        |err| PyErr::new::<PyValueError, _>(err)
+        |_| PyErr::new::<PyValueError, _>("")
     ).map(ObjectWrapper)
 }
 
@@ -198,7 +199,7 @@ fn eval_file(x: String) -> PyResult<ObjectWrapper> {
     gold::eval_file(
         &PathBuf::from(x)
     ).map_err(
-        |err| PyErr::new::<PyValueError, _>(err)
+        |_| PyErr::new::<PyValueError, _>("")
     ).map(ObjectWrapper)
 }
 

@@ -4,7 +4,7 @@ use std::ops;
 
 use serde::{Deserialize, Serialize};
 
-use super::error::Tagged;
+use super::error::{Error, Tagged};
 use super::object::{Object, Key};
 use super::traits::{Boxable, Free, FreeImpl, FreeAndBound, Validatable, ToVec};
 
@@ -40,7 +40,7 @@ pub enum ListBindingElement {
 }
 
 impl Validatable for ListBindingElement {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         match self {
             ListBindingElement::Binding { binding, default } => {
                 binding.validate()?;
@@ -92,7 +92,7 @@ impl FreeAndBound for MapBindingElement {
 }
 
 impl Validatable for MapBindingElement {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         match self {
             MapBindingElement::Binding { binding, default, .. } => {
                 binding.validate()?;
@@ -122,14 +122,14 @@ impl FreeAndBound for ListBinding {
 }
 
 impl Validatable for ListBinding {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         let mut found_slurp = false;
         for element in &self.0 {
             element.validate()?;
             if let ListBindingElement::Binding { .. } = element.as_ref() { }
             else {
                 if found_slurp {
-                    return Err("multiple slurps in list binding".to_string())
+                    return Err(Error::default())
                 }
                 found_slurp = true;
             }
@@ -154,13 +154,13 @@ impl FreeAndBound for MapBinding {
 }
 
 impl Validatable for MapBinding {
-    fn validate<'a>(&'a self) -> Result<(), String> {
+    fn validate<'a>(&'a self) -> Result<(), Error> {
         let mut found_slurp = false;
         for element in &self.0 {
             element.validate()?;
             if let MapBindingElement::SlurpTo(_) = element.as_ref() {
                 if found_slurp {
-                    return Err("multiple slurps in map binding".to_string())
+                    return Err(Error::default())
                 }
                 found_slurp = true;
             }
@@ -191,7 +191,7 @@ impl FreeAndBound for Binding {
 }
 
 impl Validatable for Binding {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         match self {
             Binding::List(elements) => elements.validate(),
             Binding::Map(elements) => elements.validate(),
@@ -217,7 +217,7 @@ impl StringElement {
 }
 
 impl Validatable for StringElement {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         match self {
             StringElement::Interpolate(node) => { node.as_ref().validate()?; }
             _ => {},
@@ -269,7 +269,7 @@ impl FreeImpl for ListElement {
 }
 
 impl Validatable for ListElement {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         match self {
             ListElement::Singleton(node) => { node.as_ref().validate()?; },
             ListElement::Splat(node) => { node.as_ref().validate()?; },
@@ -336,7 +336,7 @@ impl FreeImpl for MapElement {
 }
 
 impl Validatable for MapElement {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         match self {
             MapElement::Singleton { key, value } => {
                 key.as_ref().validate()?;
@@ -379,7 +379,7 @@ impl FreeImpl for ArgElement {
 }
 
 impl Validatable for ArgElement {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         match self {
             ArgElement::Singleton(node) => { node.as_ref().validate()?; },
             ArgElement::Splat(node) => { node.as_ref().validate()?; },
@@ -445,7 +445,7 @@ impl Operator {
 }
 
 impl Validatable for Operator {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         match self {
             Operator::BinOp(_, node) => { node.as_ref().as_ref().validate()?; },
             Operator::FunCall(args) => {
@@ -643,7 +643,7 @@ impl FreeImpl for Expr {
 }
 
 impl Validatable for Expr {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         match self {
             Expr::String(elements) => {
                 for element in elements {
@@ -697,7 +697,7 @@ pub enum TopLevel {
 }
 
 impl Validatable for TopLevel {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         match self {
             Self::Import(_, binding) => { binding.as_ref().validate()?; },
         }
@@ -717,7 +717,7 @@ pub struct File {
 }
 
 impl Validatable for File {
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), Error> {
         for statement in &self.statements {
             statement.validate()?;
         }

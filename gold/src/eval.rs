@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::builtins::BUILTINS;
-use crate::error::Tagged;
+use crate::error::{Error, InternalErrorReason, Tagged};
 use crate::object::{Object, Function, Key, Map, List};
 use crate::traits::Free;
 
@@ -15,17 +15,17 @@ const STDLIB: &str = include_str!("std.gold");
 
 
 pub trait ImportResolver {
-    fn resolve(&self, path: &str) -> Result<Object, String>;
+    fn resolve(&self, path: &str) -> Result<Object, Error>;
 }
 
 
 pub struct StdResolver { }
 
 impl ImportResolver for StdResolver {
-    fn resolve(&self, path: &str) -> Result<Object, String> {
+    fn resolve(&self, path: &str) -> Result<Object, Error> {
         match path {
             "std" => eval_str(STDLIB),
-            _ => Err("".to_string()),
+            _ => Err(Error::default()),
         }
     }
 }
@@ -36,7 +36,7 @@ pub struct FileResolver {
 }
 
 impl ImportResolver for FileResolver {
-    fn resolve(&self, path: &str) -> Result<Object, String> {
+    fn resolve(&self, path: &str) -> Result<Object, Error> {
         let target = self.root.join(path);
         eval_file(&target)
     }
@@ -44,7 +44,7 @@ impl ImportResolver for FileResolver {
 
 
 pub struct ResolveFunc(
-    pub Arc<dyn Fn(&str) -> Result<Object, String> + Send + Sync>
+    pub Arc<dyn Fn(&str) -> Result<Object, Error> + Send + Sync>
 );
 
 pub struct CallableResolver {
@@ -52,7 +52,7 @@ pub struct CallableResolver {
 }
 
 impl ImportResolver for CallableResolver {
-    fn resolve(&self, path: &str) -> Result<Object, String> {
+    fn resolve(&self, path: &str) -> Result<Object, Error> {
         self.resolver.0.as_ref()(path)
     }
 }
@@ -63,13 +63,13 @@ pub struct SeqResolver<'a> {
 }
 
 impl<'a> ImportResolver for SeqResolver<'a> {
-    fn resolve(&self, path: &str) -> Result<Object, String> {
+    fn resolve(&self, path: &str) -> Result<Object, Error> {
         for resolver in &self.resolvers {
             if let Ok(obj) = resolver.resolve(path) {
                 return Ok(obj)
             }
         }
-        Err("couldn't import".to_string())
+        Err(Error::default())
     }
 }
 
@@ -77,8 +77,8 @@ impl<'a> ImportResolver for SeqResolver<'a> {
 pub struct NullResolver {}
 
 impl ImportResolver for NullResolver {
-    fn resolve(&self, _: &str) -> Result<Object, String> {
-        Err("no imports".to_string())
+    fn resolve(&self, _: &str) -> Result<Object, Error> {
+        Err(Error::default())
     }
 }
 
@@ -98,24 +98,24 @@ impl<'a> Namespace<'a> {
         Namespace::Mutable { names: Map::new(), prev: self }
     }
 
-    pub fn set(&mut self, key: &Key, value: Object) -> Result<(), String> {
+    pub fn set(&mut self, key: &Key, value: Object) -> Result<(), Error> {
         if let Namespace::Mutable { names, .. } = self {
             names.insert(key.clone(), value);
             Ok(())
         } else {
-            Err("setting in frozen namespace".to_string())
+            Err(Error::with_reason(InternalErrorReason::SetInFrozenNamespace))
         }
     }
 
-    pub fn get(&self, key: &Key) -> Result<Object, String> {
+    pub fn get(&self, key: &Key) -> Result<Object, Error> {
         match self {
-            Namespace::Empty => BUILTINS.get(key.as_str()).cloned().map(Object::from).ok_or_else(|| format!("unknown name {}", key)),
-            Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| format!("unknown name {}", key)),
+            Namespace::Empty => BUILTINS.get(key.as_str()).cloned().map(Object::from).ok_or_else(|| Error::unbound(key.clone())),
+            Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| Error::unbound(key.clone())),
             Namespace::Mutable { names, prev } => names.get(key).map(Object::clone).ok_or(()).or_else(|_| prev.get(key))
         }
     }
 
-    pub fn bind_list<T: AsRef<ListBindingElement>>(&mut self, bindings: &Vec<T>, values: &List) -> Result<(), String> {
+    pub fn bind_list<T: AsRef<ListBindingElement>>(&mut self, bindings: &Vec<T>, values: &List) -> Result<(), Error> {
         let mut value_iter = values.iter();
         let nslurp = values.len() as i64 - bindings.len() as i64 + 1;
 
@@ -127,7 +127,7 @@ impl<'a> Namespace<'a> {
                         .ok_or_else(|| "not enough elements".to_string())
                         .or_else(|_| {
                             default.as_ref()
-                                .ok_or_else(|| "not enough elements, missing default".to_string())
+                                .ok_or_else(|| Error::default())
                                 .and_then(|node| self.eval(node))
                         })?;
 
@@ -137,7 +137,7 @@ impl<'a> Namespace<'a> {
                 ListBindingElement::Slurp => {
                     for _ in 0..nslurp {
                         if let None = value_iter.next() {
-                            return Err("??".to_string())
+                            return Err(Error::default())
                         }
                     }
                 },
@@ -146,7 +146,7 @@ impl<'a> Namespace<'a> {
                     let mut values: List = vec![];
                     for _ in 0..nslurp {
                         match value_iter.next() {
-                            None => return Err("???".to_string()),
+                            None => return Err(Error::default()),
                             Some(val) => values.push(val.clone()),
                         }
                     }
@@ -156,13 +156,13 @@ impl<'a> Namespace<'a> {
         }
 
         if let Some(_) = value_iter.next() {
-            Err("unhandled elements in list".to_string())
+            Err(Error::default())
         } else {
             Ok(())
         }
     }
 
-    pub fn bind_map<T: AsRef<MapBindingElement>>(&mut self, bindings: &Vec<T>, values: &Map) -> Result<(), String> {
+    pub fn bind_map<T: AsRef<MapBindingElement>>(&mut self, bindings: &Vec<T>, values: &Map) -> Result<(), Error> {
         let mut slurp_target: Option<&Key> = None;
 
         for binding_element in bindings {
@@ -173,7 +173,7 @@ impl<'a> Namespace<'a> {
                         .ok_or_else(|| "zomg".to_string())
                         .or_else(|_| {
                             default.as_ref()
-                                .ok_or_else(|| "?????".to_string())
+                                .ok_or_else(|| Error::default())
                                 .and_then(|node| self.eval(node))
                         })?;
 
@@ -200,7 +200,7 @@ impl<'a> Namespace<'a> {
         Ok(())
     }
 
-    pub fn bind(&mut self, binding: &Binding, value: Object) -> Result<(), String> {
+    pub fn bind(&mut self, binding: &Binding, value: Object) -> Result<(), Error> {
         match (binding, value) {
             (Binding::Identifier(key), val) => {
                 self.set(key.as_ref(), val)?;
@@ -208,11 +208,11 @@ impl<'a> Namespace<'a> {
             },
             (Binding::List(bindings), Object::List(values)) => self.bind_list(&bindings.as_ref().0, values.as_ref()),
             (Binding::Map(bindings), Object::Map(values)) => self.bind_map(&bindings.as_ref().0, values.as_ref()),
-            _ => Err("unsupported binding".to_string()),
+            _ => Err(Error::default()),
         }
     }
 
-    fn fill_list(&self, element: &ListElement, values: &mut List) -> Result<(), String> {
+    fn fill_list(&self, element: &ListElement, values: &mut List) -> Result<(), Error> {
         match element {
             ListElement::Singleton(node) => {
                 let val = self.eval(node)?;
@@ -226,7 +226,7 @@ impl<'a> Namespace<'a> {
                     values.extend_from_slice(&*from_values);
                     Ok(())
                 } else {
-                    Err("splatting non-list".to_string())
+                    Err(Error::default())
                 }
             },
 
@@ -247,13 +247,13 @@ impl<'a> Namespace<'a> {
                     }
                     Ok(())
                 } else {
-                    Err("iterating over non-list".to_string())
+                    Err(Error::default())
                 }
             }
         }
     }
 
-    fn fill_map(&self, element: &Tagged<MapElement>, values: &mut Map) -> Result<(), String> {
+    fn fill_map(&self, element: &Tagged<MapElement>, values: &mut Map) -> Result<(), Error> {
         match element.as_ref() {
             MapElement::Singleton { key, value } => {
                 if let Object::IntString(k) = self.eval(key)? {
@@ -261,7 +261,7 @@ impl<'a> Namespace<'a> {
                     values.insert(k, v);
                     Ok(())
                 } else {
-                    Err("key not a string".to_string())
+                    Err(Error::default())
                 }
             },
 
@@ -273,7 +273,7 @@ impl<'a> Namespace<'a> {
                     }
                     Ok(())
                 } else {
-                    Err("splatting a non-map".to_string())
+                    Err(Error::default())
                 }
             },
 
@@ -294,13 +294,13 @@ impl<'a> Namespace<'a> {
                     }
                     Ok(())
                 } else {
-                    Err("iterating over non-list".to_string())
+                    Err(Error::default())
                 }
             }
         }
     }
 
-    fn fill_args(&self, element: &Tagged<ArgElement>, args: &mut List, kwargs: &mut Map) -> Result<(), String> {
+    fn fill_args(&self, element: &Tagged<ArgElement>, args: &mut List, kwargs: &mut Map) -> Result<(), Error> {
         match element.as_ref() {
             ArgElement::Singleton(node) => {
                 let val = self.eval(node)?;
@@ -321,7 +321,7 @@ impl<'a> Namespace<'a> {
                         }
                         Ok(())
                     },
-                    _ => Err("splatting non-list, non-map".to_string()),
+                    _ => Err(Error::default()),
                 }
             },
 
@@ -332,7 +332,7 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    fn operate(&self, operator: &Operator, value: Object) -> Result<Object, String> {
+    fn operate(&self, operator: &Operator, value: Object) -> Result<Object, Error> {
         match operator {
             Operator::UnOp(UnOp::Passthrough) => Ok(value),
             Operator::UnOp(UnOp::LogicalNegate) => Ok(Object::from(!value.truthy())),
@@ -363,7 +363,7 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    pub fn eval_file<T: ImportResolver>(&mut self, file: &File, importer: &T) -> Result<Object, String> {
+    pub fn eval_file<T: ImportResolver>(&mut self, file: &File, importer: &T) -> Result<Object, Error> {
         let mut ns = self.subtend();
         for statement in &file.statements {
             match statement {
@@ -376,7 +376,7 @@ impl<'a> Namespace<'a> {
         ns.eval(&file.expression)
     }
 
-    pub fn eval(&self, node: &Tagged<Expr>) -> Result<Object, String> {
+    pub fn eval(&self, node: &Tagged<Expr>) -> Result<Object, Error> {
         match node.as_ref() {
             Expr::Literal(val) => Ok(val.clone()),
 
@@ -454,7 +454,7 @@ impl<'a> Namespace<'a> {
 }
 
 
-pub fn eval_raw<T: ImportResolver>(file: &File, resolver: &T) -> Result<Object, String> {
+pub fn eval_raw<T: ImportResolver>(file: &File, resolver: &T) -> Result<Object, Error> {
     let resolver = SeqResolver {
         resolvers: vec![
             Box::new(&StdResolver {}),
@@ -465,8 +465,8 @@ pub fn eval_raw<T: ImportResolver>(file: &File, resolver: &T) -> Result<Object, 
 }
 
 
-pub fn eval_path<T: ImportResolver>(file: &File, path: &Path, resolver: &T) -> Result<Object, String> {
-    let parent = path.parent().ok_or_else(|| "what the fsck".to_string())?;
+pub fn eval_path<T: ImportResolver>(file: &File, path: &Path, resolver: &T) -> Result<Object, Error> {
+    let parent = path.parent().ok_or_else(Error::default)?;
     let file_resolver = FileResolver { root: parent.to_owned() };
     let resolver = SeqResolver {
         resolvers: vec![
