@@ -18,7 +18,7 @@ use nom::{
 };
 
 use crate::ast::*;
-use crate::error::{Error, Location, Tagged, SyntaxErrorReason, SyntaxElement, ErrorReason};
+use crate::error::{Error, Location, Tagged, SyntaxErrorReason, SyntaxElement, ErrorReason, Action};
 use crate::object::{Object, Key};
 use crate::traits::{Boxable, Taggable, Validatable};
 
@@ -43,7 +43,7 @@ impl SyntaxError {
     fn to_error(self) -> Error {
         let SyntaxError(loc, reason) = self;
         Error {
-            locations: Some(vec![loc]),
+            locations: Some(vec![(loc, Action::Parse)]),
             reason: reason.map(ErrorReason::Syntax),
         }
     }
@@ -1767,7 +1767,7 @@ fn import<'a, E: CompleteError<'a>>(
         tuple((
             preceded(
                 postpad(keyword("import")),
-                fail(postpad(preceded(
+                fail(positioned_postpad(preceded(
                     char('\"'),
                     terminated(raw_string, char('\"'))
                 )), SyntaxElement::ImportPath),

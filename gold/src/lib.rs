@@ -19,7 +19,7 @@ mod tests;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use error::Error;
+use error::{Error, FileSystemErrorReason};
 use eval::{ImportResolver, NullResolver};
 pub use object::Object;
 pub use parsing::parse;
@@ -40,6 +40,6 @@ pub fn eval_raw(input: &str) -> Result<Object, Error> {
 
 
 pub fn eval_file(input: &Path) -> Result<Object, Error> {
-    let contents = read_to_string(input).map_err(|_| Error::default())?;
+    let contents = read_to_string(input).map_err(|_| Error::with_reason(FileSystemErrorReason::Read(input.to_owned())))?;
     eval(&contents, Some(input), &NullResolver {})
 }

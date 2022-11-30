@@ -4,6 +4,8 @@ use std::ops;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::BindingType;
+
 use super::error::{Error, Tagged};
 use super::object::{Object, Key};
 use super::traits::{Boxable, Free, FreeImpl, FreeAndBound, Validatable, ToVec};
@@ -178,6 +180,16 @@ pub enum Binding {
     Identifier(Tagged<Key>),
     List(Tagged<ListBinding>),
     Map(Tagged<MapBinding>),
+}
+
+impl Binding {
+    pub fn type_of(&self) -> BindingType {
+        match self {
+            Self::Identifier(_) => BindingType::Identifier,
+            Self::List(_) => BindingType::List,
+            Self::Map(_) => BindingType::Map,
+        }
+    }
 }
 
 impl FreeAndBound for Binding {
@@ -693,7 +705,7 @@ impl Validatable for Expr {
 
 #[derive(Debug)]
 pub enum TopLevel {
-    Import(String, Tagged<Binding>),
+    Import(Tagged<String>, Tagged<Binding>),
 }
 
 impl Validatable for TopLevel {

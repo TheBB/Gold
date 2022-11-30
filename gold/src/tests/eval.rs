@@ -1,5 +1,17 @@
+use crate::error::{Error, ErrorReason, UnpackErrorReason, Location, Action, BindingType, TypeMismatchErrorReason};
 use crate::{eval_raw as eval};
-use crate::object::Object;
+use crate::object::{Object, Key, Type};
+
+
+trait KeyAble {
+    fn key(self) -> Key;
+}
+
+impl<U> KeyAble for U where U: AsRef<str> {
+    fn key(self) -> Key {
+        Key::new(self)
+    }
+}
 
 
 macro_rules! assert_seq {
@@ -71,6 +83,9 @@ fn maps() {
         ("d", 3.14),
         ("e", Object::Null),
     )));
+
+    assert_seq!(eval("{$\"a\": 1}"), Object::map((("a", 1),)));
+    assert_seq!(eval("{$\"abcdefghijklmnopqrstuvwxyz\": 1}"), Object::map((("abcdefghijklmnopqrstuvwxyz", 1),)));
 }
 
 
@@ -577,4 +592,93 @@ fn builtins() {
     assert_seq!(eval("float(true)"), Object::from(1.0));
     assert_seq!(eval("float(false)"), Object::from(0.0));
     assert_seq!(eval("float(\"1.2\")"), Object::from(1.2));
+}
+
+
+fn err<U>(reason: U, locs: Vec<(Location, Action)>) -> Error
+where
+    ErrorReason: From<U>,
+{
+    Error {
+        locations: Some(locs),
+        reason: Some(ErrorReason::from(reason)),
+    }
+}
+
+
+#[test]
+fn errors() {
+    assert_eq!(eval("a"),
+        Err(err(ErrorReason::Unbound("a".key()), vec![
+            (Location::from((0, 1, 1)), Action::LookupName),
+        ]))
+    );
+
+    assert_eq!(eval("let [a] = [] in a"),
+        Err(err(UnpackErrorReason::ListTooShort, vec![
+            (Location::from((5, 1, 1)), Action::Bind),
+            (Location::from((4, 1, 3)), Action::Bind),
+        ]))
+    );
+
+    assert_eq!(eval("let [a] = [1, 2] in a"),
+        Err(err(UnpackErrorReason::ListTooLong, vec![
+            (Location::from((4, 1, 3)), Action::Bind),
+        ]))
+    );
+
+    assert_eq!(eval("let {a} = {} in a"),
+        Err(err(UnpackErrorReason::KeyMissing("a".key()), vec![
+            (Location::from((5, 1, 1)), Action::Bind),
+            (Location::from((4, 1, 3)), Action::Bind),
+        ]))
+    );
+
+    assert_eq!(eval("let [a] = 1 in a"),
+        Err(err(UnpackErrorReason::TypeMismatch(BindingType::List, Type::Integer), vec![
+            (Location::from((4, 1, 3)), Action::Bind),
+        ]))
+    );
+
+    assert_eq!(eval("let {a} = true in a"),
+        Err(err(UnpackErrorReason::TypeMismatch(BindingType::Map, Type::Boolean), vec![
+            (Location::from((4, 1, 3)), Action::Bind),
+        ]))
+    );
+
+    assert_eq!(eval("[...1]"),
+        Err(err(TypeMismatchErrorReason::SplatList(Type::Integer), vec![
+            (Location::from((4, 1, 1)), Action::Splat),
+        ]))
+    );
+
+    assert_eq!(eval("[for x in 1: x]"),
+        Err(err(TypeMismatchErrorReason::Iterate(Type::Integer), vec![
+            (Location::from((10, 1, 1)), Action::Iterate),
+        ]))
+    );
+
+    assert_eq!(eval("{$null: 1}"),
+        Err(err(TypeMismatchErrorReason::MapKey(Type::Null), vec![
+            (Location::from((2, 1, 4)), Action::Assign),
+        ]))
+    );
+
+    assert_eq!(eval("{...[]}"),
+        Err(err(TypeMismatchErrorReason::SplatMap(Type::List), vec![
+            (Location::from((4, 1, 2)), Action::Splat),
+        ]))
+    );
+
+    assert_eq!(eval("{for x in 2.2: a: x}"),
+        Err(err(TypeMismatchErrorReason::Iterate(Type::Float), vec![
+            (Location::from((10, 1, 3)), Action::Iterate),
+        ]))
+    );
+
+    assert_eq!(eval("(fn (...x) => 1)(...true)"),
+        Err(err(TypeMismatchErrorReason::SplatArg(Type::Boolean), vec![
+            (Location::from((20, 1, 4)), Action::Splat),
+        ]))
+    );
 }

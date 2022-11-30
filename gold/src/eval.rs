@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::builtins::BUILTINS;
-use crate::error::{Error, InternalErrorReason, Tagged};
+use crate::error::{Error, InternalErrorReason, Tagged, UnpackErrorReason, TypeMismatchErrorReason, FileSystemErrorReason, Action, ErrorReason};
 use crate::object::{Object, Function, Key, Map, List};
 use crate::traits::Free;
 
@@ -25,7 +25,7 @@ impl ImportResolver for StdResolver {
     fn resolve(&self, path: &str) -> Result<Object, Error> {
         match path {
             "std" => eval_str(STDLIB),
-            _ => Err(Error::default()),
+            _ => Err(Error::with_reason(ErrorReason::UnknownImport(path.to_owned()))),
         }
     }
 }
@@ -69,7 +69,7 @@ impl<'a> ImportResolver for SeqResolver<'a> {
                 return Ok(obj)
             }
         }
-        Err(Error::default())
+        Err(Error::with_reason(ErrorReason::UnknownImport(path.to_owned())))
     }
 }
 
@@ -77,8 +77,8 @@ impl<'a> ImportResolver for SeqResolver<'a> {
 pub struct NullResolver {}
 
 impl ImportResolver for NullResolver {
-    fn resolve(&self, _: &str) -> Result<Object, Error> {
-        Err(Error::default())
+    fn resolve(&self, path: &str) -> Result<Object, Error> {
+        Err(Error::with_reason(ErrorReason::UnknownImport(path.to_owned())))
     }
 }
 
@@ -115,7 +115,7 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    pub fn bind_list<T: AsRef<ListBindingElement>>(&mut self, bindings: &Vec<T>, values: &List) -> Result<(), Error> {
+    pub fn bind_list(&mut self, bindings: &Vec<Tagged<ListBindingElement>>, values: &List) -> Result<(), Error> {
         let mut value_iter = values.iter();
         let nslurp = values.len() as i64 - bindings.len() as i64 + 1;
 
@@ -124,20 +124,20 @@ impl<'a> Namespace<'a> {
                 ListBindingElement::Binding { binding, default } => {
                     let val = value_iter.next()
                         .map(Object::clone)
-                        .ok_or_else(|| "not enough elements".to_string())
+                        .ok_or(())
                         .or_else(|_| {
                             default.as_ref()
-                                .ok_or_else(|| Error::default())
+                                .ok_or_else(|| Error::with_reason(UnpackErrorReason::ListTooShort).tag(binding_element, Action::Bind))
                                 .and_then(|node| self.eval(node))
                         })?;
 
-                    self.bind(binding.as_ref(), val)?;
+                    self.bind(binding, val)?;
                 },
 
                 ListBindingElement::Slurp => {
                     for _ in 0..nslurp {
                         if let None = value_iter.next() {
-                            return Err(Error::default())
+                            return Err(Error::with_reason(UnpackErrorReason::ListTooShort).tag(binding_element, Action::Slurp))
                         }
                     }
                 },
@@ -146,7 +146,7 @@ impl<'a> Namespace<'a> {
                     let mut values: List = vec![];
                     for _ in 0..nslurp {
                         match value_iter.next() {
-                            None => return Err(Error::default()),
+                            None => return Err(Error::with_reason(UnpackErrorReason::ListTooShort).tag(binding_element, Action::Slurp)),
                             Some(val) => values.push(val.clone()),
                         }
                     }
@@ -156,13 +156,13 @@ impl<'a> Namespace<'a> {
         }
 
         if let Some(_) = value_iter.next() {
-            Err(Error::default())
+            Err(Error::with_reason(UnpackErrorReason::ListTooLong))
         } else {
             Ok(())
         }
     }
 
-    pub fn bind_map<T: AsRef<MapBindingElement>>(&mut self, bindings: &Vec<T>, values: &Map) -> Result<(), Error> {
+    pub fn bind_map(&mut self, bindings: &Vec<Tagged<MapBindingElement>>, values: &Map) -> Result<(), Error> {
         let mut slurp_target: Option<&Key> = None;
 
         for binding_element in bindings {
@@ -170,14 +170,14 @@ impl<'a> Namespace<'a> {
                 MapBindingElement::Binding { key, binding, default } => {
                     let val = values.get(key.as_ref())
                         .map(Object::clone)
-                        .ok_or_else(|| "zomg".to_string())
+                        .ok_or(())
                         .or_else(|_| {
                             default.as_ref()
-                                .ok_or_else(|| Error::default())
+                                .ok_or_else(|| Error::with_reason(UnpackErrorReason::KeyMissing(key.unwrap())).tag(binding_element, Action::Bind))
                                 .and_then(|node| self.eval(node))
                         })?;
 
-                    self.bind(binding.as_ref(), val)?;
+                    self.bind(binding, val)?;
                 },
                 MapBindingElement::SlurpTo(target) => {
                     slurp_target = Some(target.as_ref());
@@ -200,15 +200,15 @@ impl<'a> Namespace<'a> {
         Ok(())
     }
 
-    pub fn bind(&mut self, binding: &Binding, value: Object) -> Result<(), Error> {
-        match (binding, value) {
+    pub fn bind(&mut self, binding: &Tagged<Binding>, value: Object) -> Result<(), Error> {
+        match (binding.as_ref(), &value) {
             (Binding::Identifier(key), val) => {
-                self.set(key.as_ref(), val)?;
+                self.set(key.as_ref(), val.clone())?;
                 Ok(())
             },
-            (Binding::List(bindings), Object::List(values)) => self.bind_list(&bindings.as_ref().0, values.as_ref()),
-            (Binding::Map(bindings), Object::Map(values)) => self.bind_map(&bindings.as_ref().0, values.as_ref()),
-            _ => Err(Error::default()),
+            (Binding::List(bindings), Object::List(values)) => self.bind_list(&bindings.as_ref().0, values.as_ref()).map_err(binding.tag_error(Action::Bind)),
+            (Binding::Map(bindings), Object::Map(values)) => self.bind_map(&bindings.as_ref().0, values.as_ref()).map_err(binding.tag_error(Action::Bind)),
+            _ => Err(Error::with_reason(UnpackErrorReason::TypeMismatch(binding.as_ref().type_of(), value.type_of())).tag(binding, Action::Bind)),
         }
     }
 
@@ -226,7 +226,7 @@ impl<'a> Namespace<'a> {
                     values.extend_from_slice(&*from_values);
                     Ok(())
                 } else {
-                    Err(Error::default())
+                    Err(Error::with_reason(TypeMismatchErrorReason::SplatList(val.type_of())).tag(node, Action::Splat))
                 }
             },
 
@@ -239,15 +239,16 @@ impl<'a> Namespace<'a> {
             },
 
             ListElement::Loop { binding, iterable, element } => {
-                if let Object::List(from_values) = self.eval(iterable)? {
+                let val = self.eval(iterable)?;
+                if let Object::List(from_values) = val {
                     let mut sub = self.subtend();
                     for entry in &*from_values {
-                        sub.bind(binding.as_ref(), entry.clone())?;
+                        sub.bind(binding, entry.clone())?;
                         sub.fill_list(element.as_ref().as_ref(), values)?;
                     }
                     Ok(())
                 } else {
-                    Err(Error::default())
+                    Err(Error::with_reason(TypeMismatchErrorReason::Iterate(val.type_of())).tag(iterable, Action::Iterate))
                 }
             }
         }
@@ -256,12 +257,20 @@ impl<'a> Namespace<'a> {
     fn fill_map(&self, element: &Tagged<MapElement>, values: &mut Map) -> Result<(), Error> {
         match element.as_ref() {
             MapElement::Singleton { key, value } => {
-                if let Object::IntString(k) = self.eval(key)? {
-                    let v = self.eval(value)?;
-                    values.insert(k, v);
-                    Ok(())
-                } else {
-                    Err(Error::default())
+                match self.eval(key)? {
+                    Object::IntString(k) => {
+                        let v = self.eval(value)?;
+                        values.insert(k, v);
+                        Ok(())
+                    },
+                    Object::NatString(k) => {
+                        let v = self.eval(value)?;
+                        values.insert(Key::new(k.as_ref()), v);
+                        Ok(())
+                    },
+                    k => Err(
+                        Error::with_reason(TypeMismatchErrorReason::MapKey(k.type_of())).tag(key, Action::Assign)
+                    ),
                 }
             },
 
@@ -273,7 +282,7 @@ impl<'a> Namespace<'a> {
                     }
                     Ok(())
                 } else {
-                    Err(Error::default())
+                    Err(Error::with_reason(TypeMismatchErrorReason::SplatMap(val.type_of())).tag(node, Action::Splat))
                 }
             },
 
@@ -286,15 +295,16 @@ impl<'a> Namespace<'a> {
             },
 
             MapElement::Loop { binding, iterable, element } => {
-                if let Object::List(from_values) = self.eval(iterable)? {
+                let val = self.eval(iterable)?;
+                if let Object::List(from_values) = val {
                     let mut sub = self.subtend();
                     for entry in &*from_values {
-                        sub.bind(binding.as_ref(), entry.clone())?;
+                        sub.bind(binding, entry.clone())?;
                         sub.fill_map(element.as_ref(), values)?;
                     }
                     Ok(())
                 } else {
-                    Err(Error::default())
+                    Err(Error::with_reason(TypeMismatchErrorReason::Iterate(val.type_of())).tag(iterable, Action::Iterate))
                 }
             }
         }
@@ -321,7 +331,7 @@ impl<'a> Namespace<'a> {
                         }
                         Ok(())
                     },
-                    _ => Err(Error::default()),
+                    _ => Err(Error::with_reason(TypeMismatchErrorReason::SplatArg(val.type_of())).tag(node, Action::Splat)),
                 }
             },
 
@@ -368,8 +378,8 @@ impl<'a> Namespace<'a> {
         for statement in &file.statements {
             match statement {
                 TopLevel::Import(path, binding) => {
-                    let object = importer.resolve(path.as_str())?;
-                    ns.bind(binding.as_ref(), object)?;
+                    let object = importer.resolve(path.as_ref()).map_err(path.tag_error(Action::Import))?;
+                    ns.bind(binding, object)?;
                 }
             }
         }
@@ -395,7 +405,7 @@ impl<'a> Namespace<'a> {
                 Ok(Object::nat_string(rval))
             },
 
-            Expr::Identifier(name) => self.get(name.as_ref()),
+            Expr::Identifier(name) => self.get(name.as_ref()).map_err(node.tag_error(Action::LookupName)),
 
             Expr::List(elements) => {
                 let mut values: List = vec![];
@@ -417,7 +427,7 @@ impl<'a> Namespace<'a> {
                 let mut sub = self.subtend();
                 for (binding, expr) in bindings {
                     let val = sub.eval(expr)?;
-                    sub.bind(binding.as_ref(), val)?;
+                    sub.bind(binding, val)?;
                 }
                 sub.eval(expression)
             },
@@ -466,7 +476,7 @@ pub fn eval_raw<T: ImportResolver>(file: &File, resolver: &T) -> Result<Object, 
 
 
 pub fn eval_path<T: ImportResolver>(file: &File, path: &Path, resolver: &T) -> Result<Object, Error> {
-    let parent = path.parent().ok_or_else(Error::default)?;
+    let parent = path.parent().ok_or_else(|| Error::with_reason(FileSystemErrorReason::NoParent(path.to_owned())))?;
     let file_resolver = FileResolver { root: parent.to_owned() };
     let resolver = SeqResolver {
         resolvers: vec![

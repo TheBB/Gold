@@ -19,8 +19,8 @@ fn main() {
 
     match obj {
         Ok(val) => println!("{}", stringify_pretty(val, 4)),
-        Err(_) => {
-            eprintln!("Error: {}", "");
+        Err(err) => {
+            eprintln!("Error: {:?}", err);
             exit(1);
         },
     }
