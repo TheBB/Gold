@@ -344,24 +344,32 @@ impl<'a> Namespace<'a> {
 
     fn operate(&self, operator: &Operator, value: Object) -> Result<Object, Error> {
         match operator {
-            Operator::UnOp(UnOp::Passthrough) => Ok(value),
-            Operator::UnOp(UnOp::LogicalNegate) => Ok(Object::from(!value.truthy())),
-            Operator::UnOp(UnOp::ArithmeticalNegate) => value.neg(),
-            Operator::BinOp(BinOp::And, node) => if value.truthy() { self.eval(node) } else { Ok(value) },
-            Operator::BinOp(BinOp::Or, node) => if value.truthy() { Ok(value) } else { self.eval(node) },
-            Operator::BinOp(BinOp::Add, node) => value.add(&self.eval(node)?),
-            Operator::BinOp(BinOp::Subtract, node) => value.sub(&self.eval(node)?),
-            Operator::BinOp(BinOp::Multiply, node) => value.mul(&self.eval(node)?),
-            Operator::BinOp(BinOp::Divide, node) => value.div(&self.eval(node)?),
-            Operator::BinOp(BinOp::IntegerDivide, node) => value.idiv(self.eval(node)?),
-            Operator::BinOp(BinOp::Power, node) => value.pow(&self.eval(node)?),
-            Operator::BinOp(BinOp::Less, node) => value.cmp_bool(&self.eval(node)?, Ordering::Less).map(Object::from),
-            Operator::BinOp(BinOp::LessEqual, node) => value.cmp_bool(&self.eval(node)?, Ordering::Greater).map(bool::not).map(Object::from),
-            Operator::BinOp(BinOp::Greater, node) => value.cmp_bool(&self.eval(node)?, Ordering::Greater).map(Object::from),
-            Operator::BinOp(BinOp::GreaterEqual, node) => value.cmp_bool(&self.eval(node)?, Ordering::Less).map(bool::not).map(Object::from),
-            Operator::BinOp(BinOp::Equal, node) => Ok(Object::from(value.user_eq(&self.eval(node)?))),
-            Operator::BinOp(BinOp::NotEqual, node) => Ok(Object::from(!value.user_eq(&self.eval(node)?))),
-            Operator::BinOp(BinOp::Index, node) => value.index(&self.eval(node)?),
+            Operator::UnOp(op) => {
+                match op.as_ref() {
+                    UnOp::Passthrough => Ok(value),
+                    UnOp::LogicalNegate => Ok(Object::from(!value.truthy())),
+                    UnOp::ArithmeticalNegate => value.neg(),
+                }
+            },
+            Operator::BinOp(op, node) => {
+                match op.as_ref() {
+                    BinOp::And => if value.truthy() { self.eval(node) } else { Ok(value) },
+                    BinOp::Or => if value.truthy() { Ok(value) } else { self.eval(node) },
+                    BinOp::Add => value.add(&self.eval(node)?),
+                    BinOp::Subtract => value.sub(&self.eval(node)?),
+                    BinOp::Multiply => value.mul(&self.eval(node)?),
+                    BinOp::Divide => value.div(&self.eval(node)?),
+                    BinOp::IntegerDivide => value.idiv(self.eval(node)?),
+                    BinOp::Power => value.pow(&self.eval(node)?),
+                    BinOp::Less => value.cmp_bool(&self.eval(node)?, Ordering::Less).map(Object::from),
+                    BinOp::LessEqual => value.cmp_bool(&self.eval(node)?, Ordering::Greater).map(bool::not).map(Object::from),
+                    BinOp::Greater => value.cmp_bool(&self.eval(node)?, Ordering::Greater).map(Object::from),
+                    BinOp::GreaterEqual => value.cmp_bool(&self.eval(node)?, Ordering::Less).map(bool::not).map(Object::from),
+                    BinOp::Equal => Ok(Object::from(value.user_eq(&self.eval(node)?))),
+                    BinOp::NotEqual => Ok(Object::from(!value.user_eq(&self.eval(node)?))),
+                    BinOp::Index => value.index(&self.eval(node)?),
+                }
+            },
             Operator::FunCall(elements) => {
                 let mut call_args: List = vec![];
                 let mut call_kwargs: Map = Map::new();

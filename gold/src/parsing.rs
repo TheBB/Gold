@@ -208,7 +208,7 @@ where T:
     FromExternalError<Span<'a>, ParseFloatError> {}
 
 
-type OpCons = fn(Tagged<Expr>) -> Operator;
+type OpCons = fn(Tagged<Expr>, loc: Location) -> Operator;
 
 
 /// Convert errors to failures.
@@ -940,7 +940,7 @@ fn object_access<'a, E: CompleteError<'a>>(
             fail(identifier, SyntaxElement::Identifier),
         )),
         |(dot, out)| Operator::BinOp(
-            BinOp::Index,
+            BinOp::Index.tag(&dot),
             out.map(Object::IntString).map(Expr::Literal).to_box(),
         ).tag((&dot, &out)),
     )(input)
@@ -959,7 +959,7 @@ fn object_index<'a, E: CompleteError<'a>>(
             fail(expression, SyntaxElement::Expression),
             fail(positioned(char(']')), SyntaxElement::CloseBracket),
         )),
-        |(a, expr, b)| Operator::BinOp(BinOp::Index, expr.inner().to_box()).tag((&a, &b)),
+        |(a, expr, b)| Operator::BinOp(BinOp::Index.tag((&a, &b)), expr.inner().to_box()).tag((&a, &b)),
     )(input)
 }
 
@@ -1097,7 +1097,7 @@ fn prefixed<'a, E: CompleteError<'a>>(
                         let loc = Location::from((&operator, expr.outer()));
                         PExpr::Naked(Expr::Operator {
                             operand: Box::new(expr.inner()),
-                            operator: Operator::UnOp(operator.unwrap())
+                            operator: Operator::UnOp(operator)
                         }.tag(loc))
                     },
                 )
@@ -1133,11 +1133,11 @@ where
     map(
         tuple((
             positioned_postpad(operators),
-             fail(operand, SyntaxElement::Operand),
+            fail(operand, SyntaxElement::Operand),
         )),
         |(func, expr)| {
             let loc = Location::span(func.loc(), expr.outer());
-            func.as_ref()(expr.inner()).direct_tag(loc)
+            func.as_ref()(expr.inner(), func.loc()).direct_tag(loc)
         },
     )
 }

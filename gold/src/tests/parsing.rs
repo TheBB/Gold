@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, Neg, Not, Sub};
+use std::ops::Range;
 
 use crate::ast::*;
 use crate::error::{Location, Tagged, Error, ErrorReason, SyntaxErrorReason, SyntaxElement, Action};
@@ -82,6 +82,33 @@ trait ExprAble {
 impl<U> ExprAble for U where Object: From<U> {
     fn expr<T>(self, loc: T) -> Tagged<Expr> where Location: From<T> {
         Expr::Literal(Object::from(self)).tag(loc)
+    }
+}
+
+
+impl From<(usize, u32, usize)> for Location {
+    fn from((offset, line, length): (usize, u32, usize)) -> Self {
+        Location { offset, line, length }
+    }
+}
+
+impl From<usize> for Location {
+    fn from(value: usize) -> Self {
+        Location {
+            offset: value,
+            line: 1,
+            length: 1,
+        }
+    }
+}
+
+impl From<Range<u32>> for Location {
+    fn from(value: Range<u32>) -> Self {
+        Location {
+            offset: value.start as usize,
+            line: 1,
+            length: (value.end - value.start) as usize,
+        }
     }
 }
 
@@ -725,7 +752,7 @@ fn indexing() {
         parse("a.b"),
         Ok(
             "a".id((0, 1, 1))
-            .index("b".lit((2, 1, 1))).tag((0, 1, 3))
+            .index("b".lit((2, 1, 1)), (1, 1, 1)).tag((0, 1, 3))
         ),
     };
 
@@ -733,7 +760,7 @@ fn indexing() {
         parse("a[b]"),
         Ok(
             "a".id((0, 1, 1))
-            .index("b".id((2, 1, 1))).tag((0, 1, 4))
+            .index("b".id((2, 1, 1)), (1, 1, 3)).tag((0, 1, 4))
         ),
     );
 
@@ -741,8 +768,8 @@ fn indexing() {
         parse("a.b.c"),
         Ok(
             "a".id((0, 1, 1))
-            .index("b".lit((2, 1, 1))).tag((0, 1, 3))
-            .index("c".lit((4, 1, 1))).tag((0, 1, 5))
+            .index("b".lit((2, 1, 1)), (1, 1, 1)).tag((0, 1, 3))
+            .index("c".lit((4, 1, 1)), (3, 1, 1)).tag((0, 1, 5))
         ),
     );
 
@@ -750,8 +777,8 @@ fn indexing() {
         parse("a[b].c"),
         Ok(
             "a".id((0, 1, 1))
-            .index("b".id((2, 1, 1))).tag((0, 1, 4))
-            .index("c".lit((5, 1, 1))).tag((0, 1, 6))
+            .index("b".id((2, 1, 1)), (1, 1, 3)).tag((0, 1, 4))
+            .index("c".lit((5, 1, 1)), (4, 1, 1)).tag((0, 1, 6))
         ),
     );
 
@@ -759,8 +786,8 @@ fn indexing() {
         parse("a.b[c]"),
         Ok(
             "a".id((0, 1, 1))
-            .index("b".lit((2, 1, 1))).tag((0, 1, 3))
-            .index("c".id((4, 1, 1))).tag((0, 1, 6))
+            .index("b".lit((2, 1, 1)), (1, 1, 1)).tag((0, 1, 3))
+            .index("c".id((4, 1, 1)), (3, 1, 3)).tag((0, 1, 6))
         ),
     );
 
@@ -768,8 +795,8 @@ fn indexing() {
         parse("a[b][c]"),
         Ok(
             "a".id((0, 1, 1))
-            .index("b".id((2, 1, 1))).tag((0, 1, 4))
-            .index("c".id((5, 1, 1))).tag((0, 1, 7))
+            .index("b".id((2, 1, 1)), (1, 1, 3)).tag((0, 1, 4))
+            .index("c".id((5, 1, 1)), (4, 1, 3)).tag((0, 1, 7))
         ),
     );
 }
@@ -826,7 +853,7 @@ fn funcall() {
                     }.tag((7, 1, 1)),
                 ]),
                 keywords: None,
-                expression: "x".id((13, 1, 1)).add("y".id((15, 1, 1))).tag((13, 1, 3)).to_box(),
+                expression: "x".id((13, 1, 1)).add("y".id((15, 1, 1)), (14, 1, 1)).tag((13, 1, 3)).to_box(),
             }.tag((1, 1, 15)).funcall((
                 1.expr((18, 1, 1)).wraptag(ArgElement::Singleton),
                 2.expr((20, 1, 1)).wraptag(ArgElement::Singleton),
@@ -852,17 +879,17 @@ fn funcall() {
 fn unary_operators() {
     assert_eq!(
         parse("-1"),
-        Ok(1.expr((1, 1, 1)).neg().tag((0, 1, 2))),
+        Ok(1.expr((1, 1, 1)).neg(0).tag((0, 1, 2))),
     );
 
     assert_eq!(
         parse("- not 1"),
-        Ok(1.expr((6, 1, 1)).not().tag((2, 1, 5)).neg().tag((0, 1, 7))),
+        Ok(1.expr((6, 1, 1)).not(2..5).tag((2, 1, 5)).neg(0).tag((0, 1, 7))),
     );
 
     assert_eq!(
         parse("not -1"),
-        Ok(1.expr((5, 1, 1)).neg().tag((4, 1, 2)).not().tag((0, 1, 6))),
+        Ok(1.expr((5, 1, 1)).neg(4).tag((4, 1, 2)).not(0..3).tag((0, 1, 6))),
     );
 }
 
@@ -872,7 +899,7 @@ fn power_operators() {
         parse("2^3"),
         Ok(
             2.expr((0, 1, 1))
-            .pow(3.expr((2, 1, 1))).tag((0, 1, 3))
+            .pow(3.expr((2, 1, 1)), (1, 1, 1)).tag((0, 1, 3))
         ),
     );
 
@@ -882,7 +909,8 @@ fn power_operators() {
             2.expr((0, 1, 1))
             .pow(
                 3.expr((3, 1, 1))
-                .neg().tag((2, 1, 2))
+                .neg(2).tag((2, 1, 2)),
+                (1, 1, 1),
             ).tag((0, 1, 4))
         ),
     );
@@ -891,8 +919,8 @@ fn power_operators() {
         parse("-2^3"),
         Ok(
             2.expr((1, 1, 1))
-            .pow(3.expr((3, 1, 1))).tag((1, 1, 3))
-            .neg().tag((0, 1, 4))
+            .pow(3.expr((3, 1, 1)), (2, 1, 1)).tag((1, 1, 3))
+            .neg(0).tag((0, 1, 4))
         ),
     );
 
@@ -902,9 +930,10 @@ fn power_operators() {
             2.expr((1, 1, 1))
             .pow(
                 3.expr((4, 1, 1))
-                .neg().tag((3, 1, 2))
+                .neg(3).tag((3, 1, 2)),
+                2..3,
             ).tag((1, 1, 4))
-            .neg().tag((0, 1, 5))
+            .neg(0).tag((0, 1, 5))
         ),
     );
 }
@@ -915,7 +944,7 @@ fn operators() {
         parse("1 + 2"),
         Ok(
             1.expr((0, 1, 1))
-            .add(2.expr((4, 1, 1))).tag((0, 1, 5))
+            .add(2.expr((4, 1, 1)), 2).tag((0, 1, 5))
         ),
     );
 
@@ -923,8 +952,8 @@ fn operators() {
         parse("1 / 2 + 3"),
         Ok(
             1.expr((0, 1, 1))
-            .div(2.expr((4, 1, 1))).tag((0, 1, 5))
-            .add(3.expr((8, 1, 1))).tag((0, 1, 9))
+            .div(2.expr((4, 1, 1)), 2).tag((0, 1, 5))
+            .add(3.expr((8, 1, 1)), 6).tag((0, 1, 9))
         ),
     );
 
@@ -932,12 +961,13 @@ fn operators() {
         parse("1 + 2 - 3 * 4 // 5 / 6"),
         Ok(
             1.expr((0, 1, 1))
-            .add(2.expr((4, 1, 1))).tag((0, 1, 5))
+            .add(2.expr((4, 1, 1)), 2).tag((0, 1, 5))
             .sub(
                 3.expr((8, 1, 1))
-                .mul(4.expr((12, 1, 1))).tag((8, 1, 5))
-                .idiv(5.expr((17, 1, 1))).tag((8, 1, 10))
-                .div(6.expr((21, 1, 1))).tag((8, 1, 14))
+                .mul(4.expr((12, 1, 1)), 10).tag((8, 1, 5))
+                .idiv(5.expr((17, 1, 1)), 14..16).tag((8, 1, 10))
+                .div(6.expr((21, 1, 1)), 19).tag((8, 1, 14)),
+                6,
             ).tag((0, 1, 22))
         ),
     );
@@ -946,7 +976,7 @@ fn operators() {
         parse("1 < 2"),
         Ok(
             1.expr((0, 1, 1))
-            .lt(2.expr((4, 1, 1))).tag((0, 1, 5))
+            .lt(2.expr((4, 1, 1)), 2).tag((0, 1, 5))
         ),
     );
 
@@ -954,11 +984,11 @@ fn operators() {
         parse("1 > 2 <= 3 >= 4 == 5 != 6"),
         Ok(
             1.expr((0, 1, 1))
-            .gt(2.expr((4, 1, 1))).tag((0, 1, 5))
-            .lte(3.expr((9, 1, 1))).tag((0, 1, 10))
-            .gte(4.expr((14, 1, 1))).tag((0, 1, 15))
-            .eql(5.expr((19, 1, 1))).tag((0, 1, 20))
-            .neql(6.expr((24, 1, 1))).tag((0, 1, 25))
+            .gt(2.expr((4, 1, 1)), 2).tag((0, 1, 5))
+            .lte(3.expr((9, 1, 1)), 6..8).tag((0, 1, 10))
+            .gte(4.expr((14, 1, 1)), 11..13).tag((0, 1, 15))
+            .eql(5.expr((19, 1, 1)), 16..18).tag((0, 1, 20))
+            .neql(6.expr((24, 1, 1)), 21..23).tag((0, 1, 25))
         ),
     );
 
@@ -966,8 +996,8 @@ fn operators() {
         parse("1 and 2 or 3"),
         Ok(
             1.expr((0, 1, 1))
-            .and(2.expr((6, 1, 1))).tag((0, 1, 7))
-            .or(3.expr((11, 1, 1))).tag((0, 1, 12))
+            .and(2.expr((6, 1, 1)), 2..5).tag((0, 1, 7))
+            .or(3.expr((11, 1, 1)), 8..10).tag((0, 1, 12))
         ),
     );
 
@@ -975,8 +1005,8 @@ fn operators() {
         parse("2 // 2 * 2"),
         Ok(
             2.expr((0, 1, 1))
-            .idiv(2.expr((5, 1, 1))).tag((0, 1, 6))
-            .mul(2.expr((9, 1, 1))).tag((0, 1, 10))
+            .idiv(2.expr((5, 1, 1)), 2..4).tag((0, 1, 6))
+            .mul(2.expr((9, 1, 1)), 7..8).tag((0, 1, 10))
         ),
     );
 
@@ -986,7 +1016,8 @@ fn operators() {
             2.expr((0, 1, 1))
             .pow(
                 2.expr((4, 1, 1))
-                .pow(2.expr((8, 1, 1))).tag((4, 1, 5))
+                .pow(2.expr((8, 1, 1)), 6).tag((4, 1, 5)),
+                2,
             ).tag((0, 1, 9))
         ),
     );
@@ -997,9 +1028,10 @@ fn operators() {
             2.expr((1, 1, 1))
             .pow(
                 2.expr((5, 1, 1))
-                .pow(2.expr((9, 1, 1))).tag((5, 1, 5))
+                .pow(2.expr((9, 1, 1)), 7).tag((5, 1, 5)),
+                3,
             ).tag((1, 1, 9))
-            .neg().tag((0, 1, 10))
+            .neg(0).tag((0, 1, 10))
         ),
     );
 
@@ -1007,8 +1039,8 @@ fn operators() {
         parse("(1 + 2) * 5"),
         Ok(
             1.expr((1, 1, 1))
-            .add(2.expr((5, 1, 1))).tag((1, 1, 5))
-            .mul(5.expr((10, 1, 1))).tag((0, 1, 11))
+            .add(2.expr((5, 1, 1)), 3).tag((1, 1, 5))
+            .mul(5.expr((10, 1, 1)), 8).tag((0, 1, 11))
         ),
     );
 }
@@ -1080,7 +1112,7 @@ fn functions() {
                     default: Some(2.expr((11, 1, 1))),
                 }.tag((9, 1, 3)),
             ])),
-            expression: "x".id((17, 1, 1)).add("y".id((21, 1, 1))).tag((17, 1, 5)).to_box(),
+            expression: "x".id((17, 1, 1)).add("y".id((21, 1, 1)), 19).tag((17, 1, 5)).to_box(),
         }.tag((0, 1, 22))),
     );
 }

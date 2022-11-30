@@ -130,12 +130,6 @@ impl<U,V> From<(U,V)> for Location where Location: From<U> + From<V> {
     }
 }
 
-impl From<(usize, u32, usize)> for Location {
-    fn from((offset, line, length): (usize, u32, usize)) -> Self {
-        Location { offset, line, length }
-    }
-}
-
 impl<T> From<&Tagged<T>> for Location {
     fn from(value: &Tagged<T>) -> Self {
         value.location

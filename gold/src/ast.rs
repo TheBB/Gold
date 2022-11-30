@@ -1,14 +1,13 @@
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::ops;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::BindingType;
+use crate::error::{BindingType, Location};
 
 use super::error::{Error, Tagged};
 use super::object::{Object, Key};
-use super::traits::{Boxable, Free, FreeImpl, FreeAndBound, Validatable, ToVec};
+use super::traits::{Boxable, Free, FreeImpl, FreeAndBound, Validatable, Taggable, ToVec};
 
 
 fn binding_element_free_and_bound<T: Free, U: FreeAndBound>(
@@ -433,27 +432,27 @@ pub enum BinOp {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Operator {
-    UnOp(UnOp),
-    BinOp(BinOp, Box<Tagged<Expr>>),
+    UnOp(Tagged<UnOp>),
+    BinOp(Tagged<BinOp>, Box<Tagged<Expr>>),
     FunCall(Vec<Tagged<ArgElement>>),
 }
 
 impl Operator {
-    pub fn index<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Index, x.to_box()) }
-    pub fn power<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Power, x.to_box()) }
-    pub fn multiply<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Multiply, x.to_box()) }
-    pub fn integer_divide<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::IntegerDivide, x.to_box()) }
-    pub fn divide<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Divide, x.to_box()) }
-    pub fn add<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Add, x.to_box()) }
-    pub fn subtract<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Subtract, x.to_box()) }
-    pub fn less<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Less, x.to_box()) }
-    pub fn greater<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Greater, x.to_box()) }
-    pub fn less_equal<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::LessEqual, x.to_box()) }
-    pub fn greater_equal<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::GreaterEqual, x.to_box()) }
-    pub fn equal<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Equal, x.to_box()) }
-    pub fn not_equal<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::NotEqual, x.to_box()) }
-    pub fn and<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::And, x.to_box()) }
-    pub fn or<T>(x: T) -> Operator where T: Boxable<Tagged<Expr>> { Operator::BinOp(BinOp::Or, x.to_box()) }
+    pub fn index<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Index.tag(l), x.to_box()) }
+    pub fn power<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Power.tag(l), x.to_box()) }
+    pub fn multiply<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Multiply.tag(l), x.to_box()) }
+    pub fn integer_divide<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::IntegerDivide.tag(l), x.to_box()) }
+    pub fn divide<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Divide.tag(l), x.to_box()) }
+    pub fn add<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Add.tag(l), x.to_box()) }
+    pub fn subtract<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Subtract.tag(l), x.to_box()) }
+    pub fn less<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Less.tag(l), x.to_box()) }
+    pub fn greater<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Greater.tag(l), x.to_box()) }
+    pub fn less_equal<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::LessEqual.tag(l), x.to_box()) }
+    pub fn greater_equal<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::GreaterEqual.tag(l), x.to_box()) }
+    pub fn equal<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Equal.tag(l), x.to_box()) }
+    pub fn not_equal<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::NotEqual.tag(l), x.to_box()) }
+    pub fn and<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::And.tag(l), x.to_box()) }
+    pub fn or<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Or.tag(l), x.to_box()) }
 }
 
 impl Validatable for Operator {
@@ -502,49 +501,31 @@ pub enum Expr {
     }
 }
 
-impl ops::Add<Tagged<Expr>> for Tagged<Expr> {
-    type Output = Expr;
-    fn add(self, rhs: Tagged<Expr>) -> Expr {
-        self.operate(Operator::add(rhs))
-    }
-}
-
-impl ops::Sub<Tagged<Expr>> for Tagged<Expr> {
-    type Output = Expr;
-    fn sub(self, rhs: Tagged<Expr>) -> Expr {
-        self.operate(Operator::subtract(rhs))
-    }
-}
-
-impl ops::Mul<Tagged<Expr>> for Tagged<Expr> {
-    type Output = Expr;
-    fn mul(self, rhs: Tagged<Expr>) -> Expr {
-        self.operate(Operator::multiply(rhs))
-    }
-}
-
-impl ops::Div<Tagged<Expr>> for Tagged<Expr> {
-    type Output = Expr;
-    fn div(self, rhs: Tagged<Expr>) -> Expr {
-        self.operate(Operator::divide(rhs))
-    }
-}
-
-impl ops::Neg for Tagged<Expr> {
-    type Output = Expr;
-    fn neg(self) -> Expr {
-        self.operate(Operator::UnOp(UnOp::ArithmeticalNegate))
-    }
-}
-
-impl ops::Not for Tagged<Expr> {
-    type Output = Expr;
-    fn not(self) -> Expr {
-        self.operate(Operator::UnOp(UnOp::LogicalNegate))
-    }
-}
-
 impl Tagged<Expr> {
+    pub fn add<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> {
+        self.operate(Operator::add(rhs, l))
+    }
+
+    pub fn sub<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> {
+        self.operate(Operator::subtract(rhs, l))
+    }
+
+    pub fn mul<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> {
+        self.operate(Operator::multiply(rhs, l))
+    }
+
+    pub fn div<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> {
+        self.operate(Operator::divide(rhs, l))
+    }
+
+    pub fn neg<U>(self, l: U) -> Expr where Location: From<U> {
+        self.operate(Operator::UnOp(UnOp::ArithmeticalNegate.tag(l)))
+    }
+
+    pub fn not<U>(self, l: U) -> Expr where Location: From<U> {
+        self.operate(Operator::UnOp(UnOp::LogicalNegate.tag(l)))
+    }
+
     pub fn operate(self, op: Operator) -> Expr {
         Expr::Operator {
             operand: self.to_box(),
@@ -552,17 +533,17 @@ impl Tagged<Expr> {
         }
     }
 
-    pub fn idiv(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::integer_divide(rhs)) }
-    pub fn lt(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::less(rhs)) }
-    pub fn gt(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::greater(rhs)) }
-    pub fn lte(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::less_equal(rhs)) }
-    pub fn gte(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::greater_equal(rhs)) }
-    pub fn eql(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::equal(rhs)) }
-    pub fn neql(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::not_equal(rhs)) }
-    pub fn and(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::and(rhs)) }
-    pub fn or(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::or(rhs)) }
-    pub fn pow(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::power(rhs)) }
-    pub fn index(self, rhs: Tagged<Expr>) -> Expr { self.operate(Operator::index(rhs)) }
+    pub fn idiv<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::integer_divide(rhs, l)) }
+    pub fn lt<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::less(rhs, l)) }
+    pub fn gt<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::greater(rhs, l)) }
+    pub fn lte<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::less_equal(rhs, l)) }
+    pub fn gte<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::greater_equal(rhs, l)) }
+    pub fn eql<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::equal(rhs, l)) }
+    pub fn neql<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::not_equal(rhs, l)) }
+    pub fn and<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::and(rhs, l)) }
+    pub fn or<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::or(rhs, l)) }
+    pub fn pow<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::power(rhs, l)) }
+    pub fn index<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::index(rhs, l)) }
     pub fn funcall<T>(self, args: T) -> Expr where T: ToVec<Tagged<ArgElement>> { self.operate(Operator::FunCall(args.to_vec())) }
 }
 
