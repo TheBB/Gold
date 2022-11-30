@@ -1,8 +1,9 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, path::PathBuf};
 
 use serde::{Serialize, Deserialize};
 
-use crate::object::Key;
+use crate::ast::{BinOp};
+use crate::object::{Key, Type};
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -82,6 +83,11 @@ impl<T> Tagged<T> {
             location: Location::from(loc),
             contents: self.contents,
         }
+    }
+
+    pub fn tag_error(&self, action: Action) -> impl Fn(Error) -> Error {
+        let loc = self.loc();
+        move |err: Error| err.tag(loc, action)
     }
 }
 
@@ -207,20 +213,57 @@ impl From<(SyntaxElement,SyntaxElement,SyntaxElement)> for SyntaxErrorReason {
 }
 
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum InternalErrorReason {
     SetInFrozenNamespace,
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BindingType {
+    Identifier,
+    List,
+    Map,
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum UnpackErrorReason {
+    ListTooShort,
+    ListTooLong,
+    KeyMissing(Key),
+    TypeMismatch(BindingType, Type)
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TypeMismatchErrorReason {
+    Iterate(Type),
+    SplatList(Type),
+    SplatMap(Type),
+    SplatArg(Type),
+    MapKey(Type),
+    BinOp(Type, Type, BinOp)
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FileSystemErrorReason {
+    NoParent(PathBuf),
+    Read(PathBuf),
 }
 
 
 #[derive(Debug, PartialEq)]
 pub enum ErrorReason {
     None,
-
     Syntax(SyntaxErrorReason),
     Unbound(Key),
-
+    Unpack(UnpackErrorReason),
     Internal(InternalErrorReason),
+    TypeMismatch(TypeMismatchErrorReason),
+    FileSystem(FileSystemErrorReason),
+    UnknownImport(String),
 }
 
 impl From<SyntaxErrorReason> for ErrorReason {
@@ -235,14 +278,54 @@ impl From<InternalErrorReason> for ErrorReason {
     }
 }
 
+impl From<UnpackErrorReason> for ErrorReason {
+    fn from(value: UnpackErrorReason) -> Self {
+        Self::Unpack(value)
+    }
+}
+
+impl From<TypeMismatchErrorReason> for ErrorReason {
+    fn from(value: TypeMismatchErrorReason) -> Self {
+        Self::TypeMismatch(value)
+    }
+}
+
+impl From<FileSystemErrorReason> for ErrorReason {
+    fn from(value: FileSystemErrorReason) -> Self {
+        Self::FileSystem(value)
+    }
+}
+
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Action {
+    Parse,
+    LookupName,
+    Bind,
+    Slurp,
+    Splat,
+    Iterate,
+    Assign,
+    Import,
+    Evaluate,
+}
+
 
 #[derive(Debug, PartialEq, Default)]
 pub struct Error {
-    pub locations: Option<Vec<Location>>,
+    pub locations: Option<Vec<(Location, Action)>>,
     pub reason: Option<ErrorReason>,
 }
 
 impl Error {
+    pub fn tag<T>(mut self, loc: T, action: Action) -> Self where Location: From<T> {
+        match &mut self.locations {
+            None => { self.locations = Some(vec![(Location::from(loc), action)]); },
+            Some(vec) => { vec.push((Location::from(loc), action)); },
+        }
+        self
+    }
+
     pub fn with_reason<T>(reason: T) -> Self where ErrorReason: From<T> {
         Self {
             locations: None,

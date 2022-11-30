@@ -17,8 +17,8 @@ use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use crate::builtins::BUILTINS;
 use crate::traits::{ToVec, ToMap};
 
-use crate::ast::{ListBinding, MapBinding, Expr};
-use crate::error::{Error, Tagged};
+use crate::ast::{ListBinding, MapBinding, Expr, BinOp};
+use crate::error::{Error, Tagged, TypeMismatchErrorReason};
 use crate::eval::Namespace;
 use crate::util;
 
@@ -48,7 +48,7 @@ where
 }
 
 
-fn arithmetic_operate<F,G,H,X,Y,Z>(ops: Arith<F,G,H,X,Y,Z>, x: &Object, y: &Object) -> Result<Object, Error>
+fn arithmetic_operate<F,G,H,X,Y,Z>(ops: Arith<F,G,H,X,Y,Z>, x: &Object, y: &Object, op: BinOp) -> Result<Object, Error>
 where
     F: Fn(i64, i64) -> Option<X>,
     G: Fn(&BigInt, &BigInt) -> Y,
@@ -77,7 +77,7 @@ where
         (Object::Float(xx), Object::BigInteger(yy)) => Ok(Object::from(fxf(*xx, util::big_to_f64(yy.as_ref())))),
         (Object::BigInteger(xx), Object::Float(yy)) => Ok(Object::from(fxf(util::big_to_f64(xx.as_ref()), *yy))),
 
-        _ => Err(Error::default()),
+        _ => Err(Error::with_reason(TypeMismatchErrorReason::BinOp(x.type_of(), y.type_of(), op))),
     }
 }
 
@@ -135,6 +135,19 @@ pub struct Function {
 
 #[derive(Clone)]
 pub struct Closure(pub Arc<dyn Fn(&List, Option<&Map>) -> Result<Object, Error> + Send + Sync>);
+
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Type {
+    Integer,
+    Float,
+    String,
+    Boolean,
+    List,
+    Map,
+    Function,
+    Null,
+}
 
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -224,6 +237,19 @@ impl Debug for Object {
 }
 
 impl Object {
+    pub fn type_of(&self) -> Type {
+        match self {
+            Self::BigInteger(_) | Self::Integer(_) => Type::Integer,
+            Self::Float(_) => Type::Float,
+            Self::IntString(_) | Self::NatString(_) => Type::String,
+            Self::Boolean(_) => Type::Boolean,
+            Self::List(_) => Type::List,
+            Self::Map(_) => Type::Map,
+            Self::Function(_) | Self::Builtin(_) | Self::Closure(_) => Type::Function,
+            Self::Null => Type::Null,
+        }
+    }
+
     pub fn int_string<T: AsRef<str>>(x: T) -> Object {
         Object::IntString(GlobalSymbol::new(x))
     }
@@ -392,7 +418,7 @@ impl Object {
                 ixi: i64::checked_add,
                 bxb: |x,y| x + y,
                 fxf: |x,y| x + y,
-            }, self, other),
+            }, self, other, BinOp::Add),
         }
     }
 
@@ -401,7 +427,7 @@ impl Object {
             ixi: i64::checked_sub,
             bxb: |x,y| x - y,
             fxf: |x,y| x - y,
-        }, self, other)
+        }, self, other, BinOp::Subtract)
     }
 
     pub fn mul(&self, other: &Object) -> Result<Object, Error> {
@@ -409,7 +435,7 @@ impl Object {
             ixi: i64::checked_mul,
             bxb: |x,y| x * y,
             fxf: |x,y| x * y,
-        }, self, other)
+        }, self, other, BinOp::Multiply)
     }
 
     pub fn div(&self, other: &Object) -> Result<Object, Error> {
@@ -417,7 +443,7 @@ impl Object {
             ixi: |x,y| Some((x as f64) / (y as f64)),
             bxb: |x,y| util::big_to_f64(x) / util::big_to_f64(y),
             fxf: |x,y| x / y,
-        }, self, other)
+        }, self, other, BinOp::Divide)
     }
 
     pub fn idiv(self, other: Object) -> Result<Object, Error> {
@@ -425,7 +451,7 @@ impl Object {
             ixi: i64::checked_div,
             bxb: |x,y| x / y,
             fxf: |x,y| (x / y).floor() as f64,
-        }, &self, &other)
+        }, &self, &other, BinOp::IntegerDivide)
     }
 
     pub fn pow(&self, other: &Object) -> Result<Object, Error> {

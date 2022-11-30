@@ -1,7 +1,7 @@
 use std::ops::{Add, Div, Mul, Neg, Not, Sub};
 
 use crate::ast::*;
-use crate::error::{Location, Tagged, Error, ErrorReason, SyntaxErrorReason, SyntaxElement};
+use crate::error::{Location, Tagged, Error, ErrorReason, SyntaxErrorReason, SyntaxElement, Action};
 use crate::object::{Object, Key};
 use crate::parsing::{parse as parse_file};
 use crate::traits::{Boxable, Taggable};
@@ -1090,7 +1090,7 @@ fn check_err<T>(code: &str, offset: usize, line: u32, expected: T) where SyntaxE
     assert_eq!(
         parse(code),
         Err(Error {
-            locations: Some(vec![Location::new(offset, line, 0)]),
+            locations: Some(vec![(Location::new(offset, line, 0), Action::Parse)]),
             reason: Some(ErrorReason::Syntax(SyntaxErrorReason::from(expected))),
         }),
     );
