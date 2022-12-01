@@ -1,12 +1,11 @@
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
-use std::ops::Not;
 use std::sync::Arc;
 
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::builtins::BUILTINS;
-use crate::error::{Error, InternalErrorReason, Tagged, UnpackErrorReason, TypeMismatchErrorReason, FileSystemErrorReason, Action, ErrorReason};
+use crate::error::{Error, Internal, Tagged, Unpack, TypeMismatch, FileSystem, Action, Reason};
 use crate::object::{Object, Function, Key, Map, List};
 use crate::traits::Free;
 
@@ -25,7 +24,7 @@ impl ImportResolver for StdResolver {
     fn resolve(&self, path: &str) -> Result<Object, Error> {
         match path {
             "std" => eval_str(STDLIB),
-            _ => Err(Error::with_reason(ErrorReason::UnknownImport(path.to_owned()))),
+            _ => Err(Error::new(Reason::UnknownImport(path.to_owned()))),
         }
     }
 }
@@ -69,7 +68,7 @@ impl<'a> ImportResolver for SeqResolver<'a> {
                 return Ok(obj)
             }
         }
-        Err(Error::with_reason(ErrorReason::UnknownImport(path.to_owned())))
+        Err(Error::new(Reason::UnknownImport(path.to_owned())))
     }
 }
 
@@ -78,7 +77,7 @@ pub struct NullResolver {}
 
 impl ImportResolver for NullResolver {
     fn resolve(&self, path: &str) -> Result<Object, Error> {
-        Err(Error::with_reason(ErrorReason::UnknownImport(path.to_owned())))
+        Err(Error::new(Reason::UnknownImport(path.to_owned())))
     }
 }
 
@@ -103,7 +102,7 @@ impl<'a> Namespace<'a> {
             names.insert(key.clone(), value);
             Ok(())
         } else {
-            Err(Error::with_reason(InternalErrorReason::SetInFrozenNamespace))
+            Err(Error::new(Internal::SetInFrozenNamespace))
         }
     }
 
@@ -127,7 +126,7 @@ impl<'a> Namespace<'a> {
                         .ok_or(())
                         .or_else(|_| {
                             default.as_ref()
-                                .ok_or_else(|| Error::with_reason(UnpackErrorReason::ListTooShort).tag(binding_element, Action::Bind))
+                                .ok_or_else(|| Error::new(Unpack::ListTooShort).tag(binding_element, Action::Bind))
                                 .and_then(|node| self.eval(node))
                         })?;
 
@@ -137,7 +136,7 @@ impl<'a> Namespace<'a> {
                 ListBindingElement::Slurp => {
                     for _ in 0..nslurp {
                         if let None = value_iter.next() {
-                            return Err(Error::with_reason(UnpackErrorReason::ListTooShort).tag(binding_element, Action::Slurp))
+                            return Err(Error::new(Unpack::ListTooShort).tag(binding_element, Action::Slurp))
                         }
                     }
                 },
@@ -146,7 +145,7 @@ impl<'a> Namespace<'a> {
                     let mut values: List = vec![];
                     for _ in 0..nslurp {
                         match value_iter.next() {
-                            None => return Err(Error::with_reason(UnpackErrorReason::ListTooShort).tag(binding_element, Action::Slurp)),
+                            None => return Err(Error::new(Unpack::ListTooShort).tag(binding_element, Action::Slurp)),
                             Some(val) => values.push(val.clone()),
                         }
                     }
@@ -156,7 +155,7 @@ impl<'a> Namespace<'a> {
         }
 
         if let Some(_) = value_iter.next() {
-            Err(Error::with_reason(UnpackErrorReason::ListTooLong))
+            Err(Error::new(Unpack::ListTooLong))
         } else {
             Ok(())
         }
@@ -173,7 +172,7 @@ impl<'a> Namespace<'a> {
                         .ok_or(())
                         .or_else(|_| {
                             default.as_ref()
-                                .ok_or_else(|| Error::with_reason(UnpackErrorReason::KeyMissing(key.unwrap())).tag(binding_element, Action::Bind))
+                                .ok_or_else(|| Error::new(Unpack::KeyMissing(key.unwrap())).tag(binding_element, Action::Bind))
                                 .and_then(|node| self.eval(node))
                         })?;
 
@@ -208,7 +207,7 @@ impl<'a> Namespace<'a> {
             },
             (Binding::List(bindings), Object::List(values)) => self.bind_list(&bindings.as_ref().0, values.as_ref()).map_err(binding.tag_error(Action::Bind)),
             (Binding::Map(bindings), Object::Map(values)) => self.bind_map(&bindings.as_ref().0, values.as_ref()).map_err(binding.tag_error(Action::Bind)),
-            _ => Err(Error::with_reason(UnpackErrorReason::TypeMismatch(binding.as_ref().type_of(), value.type_of())).tag(binding, Action::Bind)),
+            _ => Err(Error::new(Unpack::TypeMismatch(binding.as_ref().type_of(), value.type_of())).tag(binding, Action::Bind)),
         }
     }
 
@@ -226,7 +225,7 @@ impl<'a> Namespace<'a> {
                     values.extend_from_slice(&*from_values);
                     Ok(())
                 } else {
-                    Err(Error::with_reason(TypeMismatchErrorReason::SplatList(val.type_of())).tag(node, Action::Splat))
+                    Err(Error::new(TypeMismatch::SplatList(val.type_of())).tag(node, Action::Splat))
                 }
             },
 
@@ -248,7 +247,7 @@ impl<'a> Namespace<'a> {
                     }
                     Ok(())
                 } else {
-                    Err(Error::with_reason(TypeMismatchErrorReason::Iterate(val.type_of())).tag(iterable, Action::Iterate))
+                    Err(Error::new(TypeMismatch::Iterate(val.type_of())).tag(iterable, Action::Iterate))
                 }
             }
         }
@@ -269,7 +268,7 @@ impl<'a> Namespace<'a> {
                         Ok(())
                     },
                     k => Err(
-                        Error::with_reason(TypeMismatchErrorReason::MapKey(k.type_of())).tag(key, Action::Assign)
+                        Error::new(TypeMismatch::MapKey(k.type_of())).tag(key, Action::Assign)
                     ),
                 }
             },
@@ -282,7 +281,7 @@ impl<'a> Namespace<'a> {
                     }
                     Ok(())
                 } else {
-                    Err(Error::with_reason(TypeMismatchErrorReason::SplatMap(val.type_of())).tag(node, Action::Splat))
+                    Err(Error::new(TypeMismatch::SplatMap(val.type_of())).tag(node, Action::Splat))
                 }
             },
 
@@ -304,7 +303,7 @@ impl<'a> Namespace<'a> {
                     }
                     Ok(())
                 } else {
-                    Err(Error::with_reason(TypeMismatchErrorReason::Iterate(val.type_of())).tag(iterable, Action::Iterate))
+                    Err(Error::new(TypeMismatch::Iterate(val.type_of())).tag(iterable, Action::Iterate))
                 }
             }
         }
@@ -331,7 +330,7 @@ impl<'a> Namespace<'a> {
                         }
                         Ok(())
                     },
-                    _ => Err(Error::with_reason(TypeMismatchErrorReason::SplatArg(val.type_of())).tag(node, Action::Splat)),
+                    _ => Err(Error::new(TypeMismatch::SplatArg(val.type_of())).tag(node, Action::Splat)),
                 }
             },
 
@@ -349,27 +348,43 @@ impl<'a> Namespace<'a> {
                     UnOp::Passthrough => Ok(value),
                     UnOp::LogicalNegate => Ok(Object::from(!value.truthy())),
                     UnOp::ArithmeticalNegate => value.neg(),
-                }
+                }.map_err(op.tag_error(Action::Evaluate))
             },
+
             Operator::BinOp(op, node) => {
                 match op.as_ref() {
-                    BinOp::And => if value.truthy() { self.eval(node) } else { Ok(value) },
-                    BinOp::Or => if value.truthy() { Ok(value) } else { self.eval(node) },
-                    BinOp::Add => value.add(&self.eval(node)?),
-                    BinOp::Subtract => value.sub(&self.eval(node)?),
-                    BinOp::Multiply => value.mul(&self.eval(node)?),
-                    BinOp::Divide => value.div(&self.eval(node)?),
-                    BinOp::IntegerDivide => value.idiv(self.eval(node)?),
-                    BinOp::Power => value.pow(&self.eval(node)?),
-                    BinOp::Less => value.cmp_bool(&self.eval(node)?, Ordering::Less).map(Object::from),
-                    BinOp::LessEqual => value.cmp_bool(&self.eval(node)?, Ordering::Greater).map(bool::not).map(Object::from),
-                    BinOp::Greater => value.cmp_bool(&self.eval(node)?, Ordering::Greater).map(Object::from),
-                    BinOp::GreaterEqual => value.cmp_bool(&self.eval(node)?, Ordering::Less).map(bool::not).map(Object::from),
-                    BinOp::Equal => Ok(Object::from(value.user_eq(&self.eval(node)?))),
-                    BinOp::NotEqual => Ok(Object::from(!value.user_eq(&self.eval(node)?))),
-                    BinOp::Index => value.index(&self.eval(node)?),
+                    BinOp::And => return if value.truthy() { self.eval(node) } else { Ok(value) },
+                    BinOp::Or => return if value.truthy() { Ok(value) } else { self.eval(node) },
+                    _ => {},
                 }
-            },
+
+                let rhs = self.eval(node)?;
+                match op.as_ref() {
+                    BinOp::Add => value.add(&rhs),
+                    BinOp::Subtract => value.sub(&rhs),
+                    BinOp::Multiply => value.mul(&rhs),
+                    BinOp::Divide => value.div(&rhs),
+                    BinOp::IntegerDivide => value.idiv(&rhs),
+                    BinOp::Power => value.pow(&rhs),
+                    BinOp::Less | BinOp::GreaterEqual => {
+                        value.cmp_bool(&rhs, Ordering::Less)
+                        .ok_or_else(|| Error::new(TypeMismatch::BinOp(value.type_of(), rhs.type_of(), *op.as_ref())))
+                        .map(|x| Object::from(if op.as_ref() == &BinOp::Less { x } else { !x }))
+                    }
+                    BinOp::Greater | BinOp::LessEqual => {
+                        value.cmp_bool(&rhs, Ordering::Greater)
+                        .ok_or_else(|| Error::new(TypeMismatch::BinOp(value.type_of(), rhs.type_of(), *op.as_ref())))
+                        .map(|x| Object::from(if op.as_ref() == &BinOp::Greater { x } else { !x }))
+                    }
+                    BinOp::Equal => Ok(Object::from(value.user_eq(&rhs))),
+                    BinOp::NotEqual => Ok(Object::from(!value.user_eq(&rhs))),
+                    BinOp::Index => value.index(&self.eval(node)?),
+
+                    // Unreachable
+                    BinOp::And | BinOp::Or => { Err(Error::new(Reason::None)) },
+                }
+            }.map_err(op.tag_error(Action::Evaluate)),
+
             Operator::FunCall(elements) => {
                 let mut call_args: List = vec![];
                 let mut call_kwargs: Map = Map::new();
@@ -405,7 +420,7 @@ impl<'a> Namespace<'a> {
                         StringElement::Raw(val) => rval += val.as_ref(),
                         StringElement::Interpolate(expr) => {
                             let val = self.eval(expr)?;
-                            let text = val.format()?;
+                            let text = val.format().map_err(expr.tag_error(Action::Format))?;
                             rval += &text;
                         }
                     }
@@ -484,7 +499,7 @@ pub fn eval_raw<T: ImportResolver>(file: &File, resolver: &T) -> Result<Object, 
 
 
 pub fn eval_path<T: ImportResolver>(file: &File, path: &Path, resolver: &T) -> Result<Object, Error> {
-    let parent = path.parent().ok_or_else(|| Error::with_reason(FileSystemErrorReason::NoParent(path.to_owned())))?;
+    let parent = path.parent().ok_or_else(|| Error::new(FileSystem::NoParent(path.to_owned())))?;
     let file_resolver = FileResolver { root: parent.to_owned() };
     let resolver = SeqResolver {
         resolvers: vec![

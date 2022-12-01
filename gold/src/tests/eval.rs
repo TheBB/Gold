@@ -1,5 +1,6 @@
-use crate::error::{Error, ErrorReason, UnpackErrorReason, Location, Action, BindingType, TypeMismatchErrorReason};
-use crate::{eval_raw as eval};
+use crate::ast::{BinOp, UnOp};
+use crate::error::{Error, Reason, Unpack, Location, Action, BindingType, TypeMismatch, Value};
+use crate::eval_raw as eval;
 use crate::object::{Object, Key, Type};
 
 
@@ -296,6 +297,7 @@ fn arithmetic() {
     assert_seq!(eval("-2 ^ 3 ^ 3"), Object::from(-134217728));
     assert_seq!(eval("(-2 ^ 3) ^ 3"), Object::from(-512));
     assert_seq!(eval("-(2 ^ 3) ^ 3"), Object::from(-512));
+    assert_seq!(eval("2 ^ -1"), Object::from(0.5));
 
     assert_seq!(eval("(9999999999999999999999999 + 1) - 9999999999999999999999999"), Object::from(1));
     assert_seq!(eval("9223372036854775800 + 9223372036854775800 - 9223372036854775800"), Object::from(9223372036854775800_i64));
@@ -606,7 +608,7 @@ macro_rules! err {
     ($reason:expr, $($locs:expr),*) => {
         Err(Error {
             locations: Some(vec![$($locs),*]),
-            reason: Some(ErrorReason::from($reason)),
+            reason: Some(Reason::from($reason)),
         })
     }
 }
@@ -614,16 +616,38 @@ macro_rules! err {
 
 #[test]
 fn errors() {
-    assert_eq!(eval("a"), err!(ErrorReason::Unbound("a".key()), loc!(0, LookupName)));
-    assert_eq!(eval("let [a] = [] in a"), err!(UnpackErrorReason::ListTooShort, loc!(5, Bind), loc!(4..7, Bind)));
-    assert_eq!(eval("let [a] = [1, 2] in a"), err!(UnpackErrorReason::ListTooLong, loc!(4..7, Bind)));
-    assert_eq!(eval("let {a} = {} in a"), err!(UnpackErrorReason::KeyMissing("a".key()), loc!(5, Bind), loc!(4..7, Bind)));
-    assert_eq!(eval("let [a] = 1 in a"), err!(UnpackErrorReason::TypeMismatch(BindingType::List, Type::Integer), loc!(4..7, Bind)));
-    assert_eq!(eval("let {a} = true in a"), err!(UnpackErrorReason::TypeMismatch(BindingType::Map, Type::Boolean), loc!(4..7, Bind)));
-    assert_eq!(eval("[...1]"), err!(TypeMismatchErrorReason::SplatList(Type::Integer), loc!(4, Splat)));
-    assert_eq!(eval("[for x in 1: x]"), err!(TypeMismatchErrorReason::Iterate(Type::Integer), loc!(10, Iterate)));
-    assert_eq!(eval("{$null: 1}"), err!(TypeMismatchErrorReason::MapKey(Type::Null), loc!(2..6, Assign)));
-    assert_eq!(eval("{...[]}"), err!(TypeMismatchErrorReason::SplatMap(Type::List), loc!(4..6, Splat)));
-    assert_eq!(eval("{for x in 2.2: a: x}"), err!(TypeMismatchErrorReason::Iterate(Type::Float), loc!(10..13, Iterate)));
-    assert_eq!(eval("(fn (...x) => 1)(...true)"), err!(TypeMismatchErrorReason::SplatArg(Type::Boolean), loc!(20..24, Splat)));
+    assert_eq!(eval("a"), err!(Reason::Unbound("a".key()), loc!(0, LookupName)));
+    assert_eq!(eval("let [a] = [] in a"), err!(Unpack::ListTooShort, loc!(5, Bind), loc!(4..7, Bind)));
+    assert_eq!(eval("let [a] = [1, 2] in a"), err!(Unpack::ListTooLong, loc!(4..7, Bind)));
+    assert_eq!(eval("let {a} = {} in a"), err!(Unpack::KeyMissing("a".key()), loc!(5, Bind), loc!(4..7, Bind)));
+    assert_eq!(eval("let [a] = 1 in a"), err!(Unpack::TypeMismatch(BindingType::List, Type::Integer), loc!(4..7, Bind)));
+    assert_eq!(eval("let {a} = true in a"), err!(Unpack::TypeMismatch(BindingType::Map, Type::Boolean), loc!(4..7, Bind)));
+    assert_eq!(eval("[...1]"), err!(TypeMismatch::SplatList(Type::Integer), loc!(4, Splat)));
+    assert_eq!(eval("[for x in 1: x]"), err!(TypeMismatch::Iterate(Type::Integer), loc!(10, Iterate)));
+    assert_eq!(eval("{$null: 1}"), err!(TypeMismatch::MapKey(Type::Null), loc!(2..6, Assign)));
+    assert_eq!(eval("{...[]}"), err!(TypeMismatch::SplatMap(Type::List), loc!(4..6, Splat)));
+    assert_eq!(eval("{for x in 2.2: a: x}"), err!(TypeMismatch::Iterate(Type::Float), loc!(10..13, Iterate)));
+    assert_eq!(eval("(fn (...x) => 1)(...true)"), err!(TypeMismatch::SplatArg(Type::Boolean), loc!(20..24, Splat)));
+    assert_eq!(eval("1 + true"), err!(TypeMismatch::BinOp(Type::Integer, Type::Boolean, BinOp::Add), loc!(2, Evaluate)));
+    assert_eq!(eval("\"t\" - 9"), err!(TypeMismatch::BinOp(Type::String, Type::Integer, BinOp::Subtract), loc!(4, Evaluate)));
+    assert_eq!(eval("[] * 9"), err!(TypeMismatch::BinOp(Type::List, Type::Integer, BinOp::Multiply), loc!(3, Evaluate)));
+    assert_eq!(eval("9 / {}"), err!(TypeMismatch::BinOp(Type::Integer, Type::Map, BinOp::Divide), loc!(2, Evaluate)));
+    assert_eq!(eval("null // {}"), err!(TypeMismatch::BinOp(Type::Null, Type::Map, BinOp::IntegerDivide), loc!(5..7, Evaluate)));
+    assert_eq!(eval("2 ^ 999999999999999999"), err!(Value::TooLarge, loc!(2, Evaluate)));
+    assert_eq!(eval("99999999999999999999999999999999999 ^ 999999999999999999"), err!(Value::TooLarge, loc!(36, Evaluate)));
+    assert_eq!(eval("null < true"), err!(TypeMismatch::BinOp(Type::Null, Type::Boolean, BinOp::Less), loc!(5, Evaluate)));
+    assert_eq!(eval("1 > \"\""), err!(TypeMismatch::BinOp(Type::Integer, Type::String, BinOp::Greater), loc!(2, Evaluate)));
+    assert_eq!(eval("[] <= 2.1"), err!(TypeMismatch::BinOp(Type::List, Type::Float, BinOp::LessEqual), loc!(3..5, Evaluate)));
+    assert_eq!(eval("{} >= false"), err!(TypeMismatch::BinOp(Type::Map, Type::Boolean, BinOp::GreaterEqual), loc!(3..5, Evaluate)));
+    assert_eq!(eval("\"${[]}\""), err!(TypeMismatch::Interpolate(Type::List), loc!(3..5, Format)));
+    assert_eq!(eval("\"${{}}\""), err!(TypeMismatch::Interpolate(Type::Map), loc!(3..5, Format)));
+    assert_eq!(eval("-null"), err!(TypeMismatch::UnOp(Type::Null, UnOp::ArithmeticalNegate), loc!(0, Evaluate)));
+    assert_eq!(eval("null[2]"), err!(TypeMismatch::BinOp(Type::Null, Type::Integer, BinOp::Index), loc!(4..7, Evaluate)));
+    assert_eq!(eval("2[null]"), err!(TypeMismatch::BinOp(Type::Integer, Type::Null, BinOp::Index), loc!(1..7, Evaluate)));
+    assert_eq!(eval("(2).x"), err!(TypeMismatch::BinOp(Type::Integer, Type::String, BinOp::Index), loc!(3, Evaluate)));
+    assert_eq!(eval("{a: 1}.b"), err!(Reason::Unassigned("b".key()), loc!(6, Evaluate)));
+    assert_eq!(
+        eval("{a: 1}[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]"),
+        err!(Reason::Unassigned("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".key()), loc!(6..66, Evaluate))
+    );
 }

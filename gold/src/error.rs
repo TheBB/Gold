@@ -2,7 +2,7 @@ use std::{fmt::Debug, path::PathBuf};
 
 use serde::{Serialize, Deserialize};
 
-use crate::ast::{BinOp};
+use crate::ast::{BinOp, UnOp};
 use crate::object::{Key, Type};
 
 
@@ -176,31 +176,31 @@ pub enum SyntaxElement {
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum SyntaxErrorReason {
+pub enum Syntax {
     ExpectedOne(SyntaxElement),
     ExpectedTwo(SyntaxElement, SyntaxElement),
     ExpectedThree(SyntaxElement, SyntaxElement, SyntaxElement),
 }
 
-impl From<SyntaxElement> for SyntaxErrorReason {
+impl From<SyntaxElement> for Syntax {
     fn from(v: SyntaxElement) -> Self {
         Self::ExpectedOne(v)
     }
 }
 
-impl From<(SyntaxElement,)> for SyntaxErrorReason {
+impl From<(SyntaxElement,)> for Syntax {
     fn from((v,): (SyntaxElement,)) -> Self {
         Self::ExpectedOne(v)
     }
 }
 
-impl From<(SyntaxElement,SyntaxElement)> for SyntaxErrorReason {
+impl From<(SyntaxElement,SyntaxElement)> for Syntax {
     fn from((u,v): (SyntaxElement,SyntaxElement)) -> Self {
         Self::ExpectedTwo(u,v)
     }
 }
 
-impl From<(SyntaxElement,SyntaxElement,SyntaxElement)> for SyntaxErrorReason {
+impl From<(SyntaxElement,SyntaxElement,SyntaxElement)> for Syntax {
     fn from((u,v,w): (SyntaxElement,SyntaxElement,SyntaxElement)) -> Self {
         Self::ExpectedThree(u,v,w)
     }
@@ -208,7 +208,7 @@ impl From<(SyntaxElement,SyntaxElement,SyntaxElement)> for SyntaxErrorReason {
 
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum InternalErrorReason {
+pub enum Internal {
     SetInFrozenNamespace,
 }
 
@@ -222,7 +222,7 @@ pub enum BindingType {
 
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum UnpackErrorReason {
+pub enum Unpack {
     ListTooShort,
     ListTooLong,
     KeyMissing(Key),
@@ -231,62 +231,79 @@ pub enum UnpackErrorReason {
 
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum TypeMismatchErrorReason {
+pub enum TypeMismatch {
     Iterate(Type),
     SplatList(Type),
     SplatMap(Type),
     SplatArg(Type),
     MapKey(Type),
-    BinOp(Type, Type, BinOp)
+    Interpolate(Type),
+    BinOp(Type, Type, BinOp),
+    UnOp(Type, UnOp),
+    Call(Type),
 }
 
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum FileSystemErrorReason {
+pub enum Value {
+    TooLarge,
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FileSystem {
     NoParent(PathBuf),
     Read(PathBuf),
 }
 
 
 #[derive(Debug, PartialEq)]
-pub enum ErrorReason {
+pub enum Reason {
     None,
-    Syntax(SyntaxErrorReason),
+    Syntax(Syntax),
     Unbound(Key),
-    Unpack(UnpackErrorReason),
-    Internal(InternalErrorReason),
-    TypeMismatch(TypeMismatchErrorReason),
-    FileSystem(FileSystemErrorReason),
+    Unassigned(Key),
+    Unpack(Unpack),
+    Internal(Internal),
+    TypeMismatch(TypeMismatch),
+    Value(Value),
+    FileSystem(FileSystem),
     UnknownImport(String),
 }
 
-impl From<SyntaxErrorReason> for ErrorReason {
-    fn from(value: SyntaxErrorReason) -> Self {
+impl From<Syntax> for Reason {
+    fn from(value: Syntax) -> Self {
         Self::Syntax(value)
     }
 }
 
-impl From<InternalErrorReason> for ErrorReason {
-    fn from(value: InternalErrorReason) -> Self {
+impl From<Internal> for Reason {
+    fn from(value: Internal) -> Self {
         Self::Internal(value)
     }
 }
 
-impl From<UnpackErrorReason> for ErrorReason {
-    fn from(value: UnpackErrorReason) -> Self {
+impl From<Unpack> for Reason {
+    fn from(value: Unpack) -> Self {
         Self::Unpack(value)
     }
 }
 
-impl From<TypeMismatchErrorReason> for ErrorReason {
-    fn from(value: TypeMismatchErrorReason) -> Self {
+impl From<TypeMismatch> for Reason {
+    fn from(value: TypeMismatch) -> Self {
         Self::TypeMismatch(value)
     }
 }
 
-impl From<FileSystemErrorReason> for ErrorReason {
-    fn from(value: FileSystemErrorReason) -> Self {
+impl From<FileSystem> for Reason {
+    fn from(value: FileSystem) -> Self {
         Self::FileSystem(value)
+    }
+}
+
+impl From<Value> for Reason {
+    fn from(value: Value) -> Self {
+        Self::Value(value)
     }
 }
 
@@ -302,13 +319,14 @@ pub enum Action {
     Assign,
     Import,
     Evaluate,
+    Format,
 }
 
 
 #[derive(Debug, PartialEq, Default)]
 pub struct Error {
     pub locations: Option<Vec<(Location, Action)>>,
-    pub reason: Option<ErrorReason>,
+    pub reason: Option<Reason>,
 }
 
 impl Error {
@@ -320,14 +338,14 @@ impl Error {
         self
     }
 
-    pub fn with_reason<T>(reason: T) -> Self where ErrorReason: From<T> {
+    pub fn new<T>(reason: T) -> Self where Reason: From<T> {
         Self {
             locations: None,
-            reason: Some(ErrorReason::from(reason)),
+            reason: Some(Reason::from(reason)),
         }
     }
 
     pub fn unbound(key: Key) -> Self {
-        Self::with_reason(ErrorReason::Unbound(key))
+        Self::new(Reason::Unbound(key))
     }
 }

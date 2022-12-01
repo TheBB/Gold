@@ -17,8 +17,8 @@ use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use crate::builtins::BUILTINS;
 use crate::traits::{ToVec, ToMap};
 
-use crate::ast::{ListBinding, MapBinding, Expr, BinOp};
-use crate::error::{Error, Tagged, TypeMismatchErrorReason};
+use crate::ast::{ListBinding, MapBinding, Expr, BinOp, UnOp};
+use crate::error::{Error, Tagged, TypeMismatch, Value, Reason};
 use crate::eval::Namespace;
 use crate::util;
 
@@ -77,7 +77,7 @@ where
         (Object::Float(xx), Object::BigInteger(yy)) => Ok(Object::from(fxf(*xx, util::big_to_f64(yy.as_ref())))),
         (Object::BigInteger(xx), Object::Float(yy)) => Ok(Object::from(fxf(util::big_to_f64(xx.as_ref()), *yy))),
 
-        _ => Err(Error::with_reason(TypeMismatchErrorReason::BinOp(x.type_of(), y.type_of(), op))),
+        _ => Err(Error::new(TypeMismatch::BinOp(x.type_of(), y.type_of(), op))),
     }
 }
 
@@ -283,7 +283,7 @@ impl Object {
             Object::Boolean(true) => Ok("true".to_string()),
             Object::Boolean(false) => Ok("false".to_string()),
             Object::Null => Ok("null".to_string()),
-            _ => Err(Error::default()),
+            _ => Err(Error::new(TypeMismatch::Interpolate(self.type_of()))),
         }
     }
 
@@ -403,7 +403,7 @@ impl Object {
             },
             Object::BigInteger(x) => Ok(Object::from(-x.as_ref()).numeric_normalize()),
             Object::Float(x) => Ok(Object::from(-x)),
-            _ => Err(Error::default()),
+            _ => Err(Error::new(TypeMismatch::UnOp(self.type_of(), UnOp::ArithmeticalNegate))),
         }
     }
 
@@ -446,7 +446,7 @@ impl Object {
         }, self, other, BinOp::Divide)
     }
 
-    pub fn idiv(self, other: Object) -> Result<Object, Error> {
+    pub fn idiv(self, other: &Object) -> Result<Object, Error> {
         arithmetic_operate(Arith {
             ixi: i64::checked_div,
             bxb: |x,y| x / y,
@@ -457,35 +457,43 @@ impl Object {
     pub fn pow(&self, other: &Object) -> Result<Object, Error> {
         match (self, other) {
             (Object::Integer(x), Object::Integer(y)) if *y >= 0 => {
-                let yy: u32 = (*y).try_into().or_else(|_| Err(Error::default()))?;
+                let yy: u32 = (*y).try_into().map_err(
+                    |_| Error::new(Value::TooLarge)
+                )?;
                 Ok(checked_pow(*x, yy as usize).map(Object::from).unwrap_or_else(
                     || Object::from(BigInt::from(*x).pow(yy))
                 ))
             },
 
             (Object::BigInteger(x), Object::Integer(y)) if *y >= 0 => {
-                let yy: u32 = (*y).try_into().or_else(|_| Err(Error::default()))?;
+                let yy: u32 = (*y).try_into().map_err(
+                    |_| Error::new(Value::TooLarge)
+                )?;
                 Ok(Object::from(x.as_ref().pow(yy)))
             },
 
             _ => {
-                let xx: f64 = self.to_f64().ok_or_else(Error::default)?;
-                let yy: f64 = other.to_f64().ok_or_else(Error::default)?;
+                let (xx, yy) = self.to_f64()
+                    .and_then(|x| other.to_f64().map(|y| (x, y)))
+                    .ok_or_else(|| Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Power)))?;
                 Ok(Object::from(xx.powf(yy)))
             },
         }
     }
 
-    pub fn cmp_bool(&self, other: &Object, ordering: Ordering) -> Result<bool, Error> {
-        self.partial_cmp(other).map(|x| x == ordering).ok_or_else(Error::default)
+    pub fn cmp_bool(&self, other: &Object, ordering: Ordering) -> Option<bool> {
+        self.partial_cmp(other).map(|x| x == ordering)
     }
 
     pub fn index(&self, other: &Object) -> Result<Object, Error> {
         match (self, other) {
             (Object::List(x), Object::Integer(y)) => Ok(x[*y as usize].clone()),
-            (Object::Map(x), Object::IntString(y)) => x.get(y).ok_or_else(Error::default).map(Object::clone),
-            (Object::Map(x), Object::NatString(y)) => x.get(&GlobalSymbol::new(y.as_ref())).ok_or_else(Error::default).map(Object::clone),
-            _ => Err(Error::default()),
+            (Object::Map(x), Object::IntString(y)) => x.get(y).ok_or_else(|| Error::new(Reason::Unassigned(*y))).map(Object::clone),
+            (Object::Map(x), Object::NatString(y)) => {
+                let yy = GlobalSymbol::new(y.as_ref());
+                x.get(&yy).ok_or_else(|| Error::new(Reason::Unassigned(yy))).map(Object::clone)
+            }
+            _ => Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Index))),
         }
     }
 
@@ -512,7 +520,7 @@ impl Object {
             Object::Closure(Closure(func)) => {
                 func(args, kwargs)
             }
-            _ => Err(Error::default()),
+            _ => Err(Error::new(TypeMismatch::Call(self.type_of()))),
         }
     }
 
