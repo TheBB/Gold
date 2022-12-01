@@ -595,90 +595,35 @@ fn builtins() {
 }
 
 
-fn err<U>(reason: U, locs: Vec<(Location, Action)>) -> Error
-where
-    ErrorReason: From<U>,
-{
-    Error {
-        locations: Some(locs),
-        reason: Some(ErrorReason::from(reason)),
+macro_rules! loc {
+    ($loc:expr, $act:ident) => {
+        (Location::from($loc), Action::$act)
+    };
+}
+
+
+macro_rules! err {
+    ($reason:expr, $($locs:expr),*) => {
+        Err(Error {
+            locations: Some(vec![$($locs),*]),
+            reason: Some(ErrorReason::from($reason)),
+        })
     }
 }
 
 
 #[test]
 fn errors() {
-    assert_eq!(eval("a"),
-        Err(err(ErrorReason::Unbound("a".key()), vec![
-            (Location::from((0, 1, 1)), Action::LookupName),
-        ]))
-    );
-
-    assert_eq!(eval("let [a] = [] in a"),
-        Err(err(UnpackErrorReason::ListTooShort, vec![
-            (Location::from((5, 1, 1)), Action::Bind),
-            (Location::from((4, 1, 3)), Action::Bind),
-        ]))
-    );
-
-    assert_eq!(eval("let [a] = [1, 2] in a"),
-        Err(err(UnpackErrorReason::ListTooLong, vec![
-            (Location::from((4, 1, 3)), Action::Bind),
-        ]))
-    );
-
-    assert_eq!(eval("let {a} = {} in a"),
-        Err(err(UnpackErrorReason::KeyMissing("a".key()), vec![
-            (Location::from((5, 1, 1)), Action::Bind),
-            (Location::from((4, 1, 3)), Action::Bind),
-        ]))
-    );
-
-    assert_eq!(eval("let [a] = 1 in a"),
-        Err(err(UnpackErrorReason::TypeMismatch(BindingType::List, Type::Integer), vec![
-            (Location::from((4, 1, 3)), Action::Bind),
-        ]))
-    );
-
-    assert_eq!(eval("let {a} = true in a"),
-        Err(err(UnpackErrorReason::TypeMismatch(BindingType::Map, Type::Boolean), vec![
-            (Location::from((4, 1, 3)), Action::Bind),
-        ]))
-    );
-
-    assert_eq!(eval("[...1]"),
-        Err(err(TypeMismatchErrorReason::SplatList(Type::Integer), vec![
-            (Location::from((4, 1, 1)), Action::Splat),
-        ]))
-    );
-
-    assert_eq!(eval("[for x in 1: x]"),
-        Err(err(TypeMismatchErrorReason::Iterate(Type::Integer), vec![
-            (Location::from((10, 1, 1)), Action::Iterate),
-        ]))
-    );
-
-    assert_eq!(eval("{$null: 1}"),
-        Err(err(TypeMismatchErrorReason::MapKey(Type::Null), vec![
-            (Location::from((2, 1, 4)), Action::Assign),
-        ]))
-    );
-
-    assert_eq!(eval("{...[]}"),
-        Err(err(TypeMismatchErrorReason::SplatMap(Type::List), vec![
-            (Location::from((4, 1, 2)), Action::Splat),
-        ]))
-    );
-
-    assert_eq!(eval("{for x in 2.2: a: x}"),
-        Err(err(TypeMismatchErrorReason::Iterate(Type::Float), vec![
-            (Location::from((10, 1, 3)), Action::Iterate),
-        ]))
-    );
-
-    assert_eq!(eval("(fn (...x) => 1)(...true)"),
-        Err(err(TypeMismatchErrorReason::SplatArg(Type::Boolean), vec![
-            (Location::from((20, 1, 4)), Action::Splat),
-        ]))
-    );
+    assert_eq!(eval("a"), err!(ErrorReason::Unbound("a".key()), loc!(0, LookupName)));
+    assert_eq!(eval("let [a] = [] in a"), err!(UnpackErrorReason::ListTooShort, loc!(5, Bind), loc!(4..7, Bind)));
+    assert_eq!(eval("let [a] = [1, 2] in a"), err!(UnpackErrorReason::ListTooLong, loc!(4..7, Bind)));
+    assert_eq!(eval("let {a} = {} in a"), err!(UnpackErrorReason::KeyMissing("a".key()), loc!(5, Bind), loc!(4..7, Bind)));
+    assert_eq!(eval("let [a] = 1 in a"), err!(UnpackErrorReason::TypeMismatch(BindingType::List, Type::Integer), loc!(4..7, Bind)));
+    assert_eq!(eval("let {a} = true in a"), err!(UnpackErrorReason::TypeMismatch(BindingType::Map, Type::Boolean), loc!(4..7, Bind)));
+    assert_eq!(eval("[...1]"), err!(TypeMismatchErrorReason::SplatList(Type::Integer), loc!(4, Splat)));
+    assert_eq!(eval("[for x in 1: x]"), err!(TypeMismatchErrorReason::Iterate(Type::Integer), loc!(10, Iterate)));
+    assert_eq!(eval("{$null: 1}"), err!(TypeMismatchErrorReason::MapKey(Type::Null), loc!(2..6, Assign)));
+    assert_eq!(eval("{...[]}"), err!(TypeMismatchErrorReason::SplatMap(Type::List), loc!(4..6, Splat)));
+    assert_eq!(eval("{for x in 2.2: a: x}"), err!(TypeMismatchErrorReason::Iterate(Type::Float), loc!(10..13, Iterate)));
+    assert_eq!(eval("(fn (...x) => 1)(...true)"), err!(TypeMismatchErrorReason::SplatArg(Type::Boolean), loc!(20..24, Splat)));
 }
