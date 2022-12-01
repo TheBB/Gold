@@ -18,7 +18,7 @@ use nom::{
 };
 
 use crate::ast::*;
-use crate::error::{Error, Location, Tagged, SyntaxErrorReason, SyntaxElement, ErrorReason, Action};
+use crate::error::{Error, Location, Tagged, Syntax, SyntaxElement, Reason, Action};
 use crate::object::{Object, Key};
 use crate::traits::{Boxable, Taggable, Validatable};
 
@@ -37,26 +37,26 @@ impl<'a> From<Span<'a>> for Location {
 
 
 // Custom error type
-struct SyntaxError(Location, Option<SyntaxErrorReason>);
+struct SyntaxError(Location, Option<Syntax>);
 
 impl SyntaxError {
     fn to_error(self) -> Error {
         let SyntaxError(loc, reason) = self;
         Error {
             locations: Some(vec![(loc, Action::Parse)]),
-            reason: reason.map(ErrorReason::Syntax),
+            reason: reason.map(Reason::Syntax),
         }
     }
 }
 
 
 trait ExplainError<I> {
-    fn error<'a, T>(loc: I, reason: T) -> Self where SyntaxErrorReason: From<T>;
+    fn error<'a, T>(loc: I, reason: T) -> Self where Syntax: From<T>;
 }
 
 impl<I> ExplainError<I> for SyntaxError where Location: From<I> {
-    fn error<'a, T>(loc: I, reason: T) -> Self where SyntaxErrorReason: From<T> {
-        Self(Location::from(loc), Some(SyntaxErrorReason::from(reason)))
+    fn error<'a, T>(loc: I, reason: T) -> Self where Syntax: From<T> {
+        Self(Location::from(loc), Some(Syntax::from(reason)))
     }
 }
 
@@ -220,7 +220,7 @@ where
     F: Parser<I, O, E>,
     I: nom::InputTake + nom::InputIter + Clone,
     E: ExplainError<I>,
-    SyntaxErrorReason: From<T>,
+    Syntax: From<T>,
     T: Copy
 {
     move |input: I| {
@@ -254,7 +254,7 @@ where
     Term: Parser<I, TermR, E>,
     I: Clone,
     E: ExplainError<I>,
-    SyntaxErrorReason: From<T> + From<U>,
+    Syntax: From<T> + From<U>,
     T: Copy,
     U: Copy,
 {
@@ -1381,7 +1381,7 @@ fn list_binding<'a, E: CompleteError<'a>, T, U>(
     err_terminator_or_separator: U,
 ) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, (Tagged<ListBinding>, char), E>
 where
-    SyntaxErrorReason: From<T> + From<U>,
+    Syntax: From<T> + From<U>,
     T: Copy,
     U: Copy,
 {
@@ -1489,7 +1489,7 @@ fn map_binding<'a, E: CompleteError<'a>, T, U>(
     err_terminator_or_separator: U,
 ) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, Tagged<MapBinding>, E>
 where
-    SyntaxErrorReason: From<T> + From<U>,
+    Syntax: From<T> + From<U>,
     T: Copy,
     U: Copy,
 {

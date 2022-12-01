@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use crate::ast::*;
-use crate::error::{Location, Tagged, Error, ErrorReason, SyntaxErrorReason, SyntaxElement, Action};
+use crate::error::{Location, Tagged, Error, Reason, Syntax, SyntaxElement, Action};
 use crate::object::{Object, Key};
 use crate::parsing::{parse as parse_file};
 use crate::traits::{Boxable, Taggable};
@@ -1131,7 +1131,7 @@ macro_rules! err {
             parse($code),
             Err(Error {
                 locations: Some(vec![(Location::new($offset, 1, 0), Action::Parse)]),
-                reason: Some(ErrorReason::Syntax(SyntaxErrorReason::from(syntax_element!($elt $(,$elts)*)))),
+                reason: Some(Reason::Syntax(Syntax::from(syntax_element!($elt $(,$elts)*)))),
             })
         )
     };

@@ -404,14 +404,14 @@ impl Validatable for ArgElement {
 // Operator
 // ----------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum UnOp {
     Passthrough,
     ArithmeticalNegate,
     LogicalNegate,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum BinOp {
     Index,
     Power,
