@@ -1032,7 +1032,7 @@ fn function_call<'a, E: CompleteError<'a>>(
             (SyntaxElement::CloseParen, SyntaxElement::ArgElement),
             (SyntaxElement::CloseParen, SyntaxElement::Comma),
         ),
-        |(a, expr, b)| Operator::FunCall(expr).tag((&a, &b)),
+        |(a, expr, b)| Operator::FunCall(expr.tag((&a, &b))).tag((&a, &b)),
     )(input)
 }
 
@@ -1814,7 +1814,7 @@ pub fn parse(input: &str) -> Result<File, Error> {
             NomError::Error(e) | NomError::Failure(e) => Err(e.to_error()),
         },
         |(_, node)| {
-            node.validate().map_err(|_| Error::default())?;
+            node.validate()?;
             Ok(node)
         }
     )

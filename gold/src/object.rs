@@ -487,7 +487,14 @@ impl Object {
 
     pub fn index(&self, other: &Object) -> Result<Object, Error> {
         match (self, other) {
-            (Object::List(x), Object::Integer(y)) => Ok(x[*y as usize].clone()),
+            (Object::List(x), Object::Integer(y)) => {
+                let i: usize = (*y).try_into().map_err(|_| Error::new(Value::OutOfRange))?;
+                if i >= x.len() {
+                    Err(Error::new(Value::OutOfRange))
+                } else {
+                    Ok(x[i].clone())
+                }
+            },
             (Object::Map(x), Object::IntString(y)) => x.get(y).ok_or_else(|| Error::new(Reason::Unassigned(*y))).map(Object::clone),
             (Object::Map(x), Object::NatString(y)) => {
                 let yy = GlobalSymbol::new(y.as_ref());
@@ -670,7 +677,7 @@ impl TryFrom<Object> for JsonValue {
     fn try_from(value: Object) -> Result<Self, Self::Error> {
         match value {
             Object::Integer(x) => Ok(JsonValue::from(x)),
-            Object::BigInteger(_) => Err(Error::default()),
+            Object::BigInteger(_) => Err(Error::new(Value::TooLarge)),
             Object::Float(x) => Ok(JsonValue::from(x)),
             Object::IntString(x) => Ok(JsonValue::from(x.as_str())),
             Object::NatString(x) => Ok(JsonValue::from(x.as_str())),
@@ -678,7 +685,7 @@ impl TryFrom<Object> for JsonValue {
             Object::List(x) => {
                 let mut val = JsonValue::new_array();
                 for element in x.as_ref() {
-                    val.push(JsonValue::try_from(element.clone())?).map_err(|_| Error::default())?;
+                    val.push(JsonValue::try_from(element.clone())?).unwrap();
                 }
                 Ok(val)
             },
@@ -690,7 +697,7 @@ impl TryFrom<Object> for JsonValue {
                 Ok(val)
             },
             Object::Null => Ok(JsonValue::Null),
-            _ => Err(Error::default()),
+            _ => Err(Error::new(TypeMismatch::Json(value.type_of()))),
         }
     }
 }
