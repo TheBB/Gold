@@ -650,4 +650,11 @@ fn errors() {
         eval("{a: 1}[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]"),
         err!(Reason::Unassigned("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".key()), loc!(6..66, Evaluate))
     );
+    assert_eq!(eval("[]()"), err!(TypeMismatch::Call(Type::List), loc!(2..4, Evaluate)));
+    assert_eq!(eval("true(1)"), err!(TypeMismatch::Call(Type::Boolean), loc!(4..7, Evaluate)));
+
+    assert_eq!(eval("range()"), err!(TypeMismatch::ArgCount(1, 2, 0), loc!(5..7, Evaluate)));
+    assert_eq!(eval("range(1, 2, 3)"), err!(TypeMismatch::ArgCount(1, 2, 3), loc!(5..14, Evaluate)));
+    assert_eq!(eval("len(1)"), err!(TypeMismatch::ExpectedArg(0, vec![Type::String, Type::List, Type::Map], Type::Integer), loc!(3..6, Evaluate)));
+    assert_eq!(eval("len(true)"), err!(TypeMismatch::ExpectedArg(0, vec![Type::String, Type::List, Type::Map], Type::Boolean), loc!(3..9, Evaluate)));
 }

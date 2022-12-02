@@ -382,16 +382,16 @@ impl<'a> Namespace<'a> {
 
                     // Unreachable
                     BinOp::And | BinOp::Or => { Err(Error::new(Reason::None)) },
-                }
-            }.map_err(op.tag_error(Action::Evaluate)),
+                }.map_err(op.tag_error(Action::Evaluate))
+            },
 
             Operator::FunCall(elements) => {
                 let mut call_args: List = vec![];
                 let mut call_kwargs: Map = Map::new();
-                for element in elements {
+                for element in elements.as_ref() {
                     self.fill_args(element, &mut call_args, &mut call_kwargs)?;
                 }
-                value.call(&call_args, Some(&call_kwargs))
+                value.call(&call_args, Some(&call_kwargs)).map_err(elements.tag_error(Action::Evaluate))
             },
         }
     }

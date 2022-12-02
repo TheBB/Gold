@@ -3,7 +3,10 @@ use std::collections::HashMap;
 
 use num_bigint::BigInt;
 
-use crate::{object::*, util, error::Error};
+use crate::error::Value;
+use crate::object::*;
+use crate::util;
+use crate::error::{Error, TypeMismatch};
 
 
 macro_rules! builtin {
@@ -39,18 +42,24 @@ pub fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         [Object::NatString(x)] => Ok(Object::from(x.as_str().chars().count() as usize)),
         [Object::List(x)] => Ok(Object::from(x.len() as usize)),
         [Object::Map(x)] => Ok(Object::from(x.len() as usize)),
-        _ => Err(Error::default()),
+        [obj] => Err(Error::new(TypeMismatch::ExpectedArg(
+            0,
+            vec![Type::String, Type::List, Type::Map],
+            obj.type_of(),
+        ))),
+        args => Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len()))),
     }
 }
 
 
 pub fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     match &args[..] {
-        [Object::Integer(start), Object::Integer(stop)] =>
-            Ok(Object::from((*start..*stop).map(Object::from).collect::<List>())),
-        [Object::Integer(stop)] =>
-            Ok(Object::from((0..*stop).map(Object::from).collect::<List>())),
-        _ => Err(Error::default()),
+        [Object::Integer(start), Object::Integer(stop)] => Ok(Object::from((*start..*stop).map(Object::from).collect::<List>())),
+        [Object::Integer(_), y] => Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::Integer], y.type_of()))),
+        [x, Object::Integer(_)] => Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Integer], x.type_of()))),
+        [Object::Integer(stop)] => Ok(Object::from((0..*stop).map(Object::from).collect::<List>())),
+        [x] => Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Integer], x.type_of()))),
+        args => Err(Error::new(TypeMismatch::ArgCount(1, 2, args.len()))),
     }
 }
 
@@ -62,10 +71,15 @@ pub fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         [Object::Float(x)] => Ok(Object::Integer(x.round() as i64)),
         [Object::Boolean(x)] => Ok(Object::from(if *x { 1 } else { 0 })),
         [Object::IntString(x)] =>
-            BigInt::from_str(x.as_str()).map_err(|_| Error::default()).map(Object::from).map(Object::numeric_normalize),
+            BigInt::from_str(x.as_str()).map_err(|_| Error::new(Value::Convert(Type::Integer))).map(Object::from).map(Object::numeric_normalize),
         [Object::NatString(x)] =>
-            BigInt::from_str(x.as_str()).map_err(|_| Error::default()).map(Object::from).map(Object::numeric_normalize),
-        _ => Err(Error::default()),
+            BigInt::from_str(x.as_str()).map_err(|_| Error::new(Value::Convert(Type::Integer))).map(Object::from).map(Object::numeric_normalize),
+        [x] => Err(Error::new(TypeMismatch::ExpectedArg(
+            0,
+            vec![Type::Integer, Type::Float, Type::Boolean, Type::String],
+            x.type_of(),
+        ))),
+        args => Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len()))),
     }
 }
 
@@ -76,9 +90,14 @@ pub fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         [Object::BigInteger(x)] => Ok(Object::from(util::big_to_f64(x))),
         [Object::Float(_)] => Ok(args[0].clone()),
         [Object::Boolean(x)] => Ok(Object::from(if *x { 1.0 } else { 0.0 })),
-        [Object::IntString(x)] => f64::from_str(x.as_str()).map_err(|_| Error::default()).map(Object::from),
-        [Object::NatString(x)] => f64::from_str(x.as_str()).map_err(|_| Error::default()).map(Object::from),
-        _ => Err(Error::default()),
+        [Object::IntString(x)] => f64::from_str(x.as_str()).map_err(|_| Error::new(Value::Convert(Type::Float))).map(Object::from),
+        [Object::NatString(x)] => f64::from_str(x.as_str()).map_err(|_| Error::new(Value::Convert(Type::Float))).map(Object::from),
+        [x] => Err(Error::new(TypeMismatch::ExpectedArg(
+            0,
+            vec![Type::Integer, Type::Float, Type::Boolean, Type::String],
+            x.type_of(),
+        ))),
+        args => Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len()))),
     }
 }
 
@@ -86,7 +105,7 @@ pub fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 pub fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     match &args[..] {
         [x] => Ok(Object::from(x.truthy())),
-        _ => Err(Error::default()),
+        args => Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len()))),
     }
 }
 

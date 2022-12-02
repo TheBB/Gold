@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{BindingType, Location};
+use crate::error::{BindingType, Location, Syntax};
 
-use super::error::{Error, Tagged};
+use super::error::{Error, Tagged, Action};
 use super::object::{Object, Key};
 use super::traits::{Boxable, Free, FreeImpl, FreeAndBound, Validatable, Taggable, ToVec};
 
@@ -130,7 +130,7 @@ impl Validatable for ListBinding {
             if let ListBindingElement::Binding { .. } = element.as_ref() { }
             else {
                 if found_slurp {
-                    return Err(Error::default())
+                    return Err(Error::new(Syntax::MultiSlurp).tag(element, Action::Parse))
                 }
                 found_slurp = true;
             }
@@ -161,7 +161,7 @@ impl Validatable for MapBinding {
             element.validate()?;
             if let MapBindingElement::SlurpTo(_) = element.as_ref() {
                 if found_slurp {
-                    return Err(Error::default())
+                    return Err(Error::new(Syntax::MultiSlurp).tag(element, Action::Parse))
                 }
                 found_slurp = true;
             }
@@ -434,7 +434,7 @@ pub enum BinOp {
 pub enum Operator {
     UnOp(Tagged<UnOp>),
     BinOp(Tagged<BinOp>, Box<Tagged<Expr>>),
-    FunCall(Vec<Tagged<ArgElement>>),
+    FunCall(Tagged<Vec<Tagged<ArgElement>>>),
 }
 
 impl Operator {
@@ -460,7 +460,7 @@ impl Validatable for Operator {
         match self {
             Operator::BinOp(_, node) => { node.as_ref().as_ref().validate()?; },
             Operator::FunCall(args) => {
-                for arg in args {
+                for arg in args.as_ref() {
                     arg.as_ref().validate()?;
                 }
             },
@@ -544,7 +544,14 @@ impl Tagged<Expr> {
     pub fn or<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::or(rhs, l)) }
     pub fn pow<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::power(rhs, l)) }
     pub fn index<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::index(rhs, l)) }
-    pub fn funcall<T>(self, args: T) -> Expr where T: ToVec<Tagged<ArgElement>> { self.operate(Operator::FunCall(args.to_vec())) }
+
+    pub fn funcall<T, U>(self, args: T, l: U) -> Expr
+    where
+        T: ToVec<Tagged<ArgElement>>,
+        Location: From<U>
+    {
+        self.operate(Operator::FunCall(args.to_vec().tag(l)))
+    }
 }
 
 impl Expr {
@@ -609,7 +616,7 @@ impl FreeImpl for Expr {
                 match operator {
                     Operator::BinOp(_, expr) => expr.free_impl(free),
                     Operator::FunCall(elements) => {
-                        for element in elements {
+                        for element in elements.as_ref() {
                             element.free_impl(free);
                         }
                     }

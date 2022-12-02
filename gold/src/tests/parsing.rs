@@ -276,7 +276,7 @@ fn lists() {
             ListElement::Cond {
                 condition: "f".id(6).funcall((
                     "x".id(8).wraptag(ArgElement::Singleton),
-                )).tag(6..10),
+                ), 7..10).tag(6..10),
                 element: "x".id(12).wraptag(ListElement::Singleton).to_box(),
             }.tag(1..13),
         )).tag(0..14)),
@@ -464,7 +464,7 @@ fn maps() {
             MapElement::Cond {
                 condition: "f".id(6).funcall((
                     ArgElement::Singleton("x".id(8)).tag(8),
-                )).tag(6..10),
+                ), 7..10).tag(6..10),
                 element: ("z".lit(12), "y".id(15)).mel().to_box(),
             }.tag(1..16),
         )).tag(0..17)),
@@ -809,7 +809,7 @@ fn funcall() {
             1.expr(5).wraptag(ArgElement::Singleton),
             2.expr(8).wraptag(ArgElement::Singleton),
             3.expr(11).wraptag(ArgElement::Singleton),
-        )).tag(0..14)),
+        ), 4..14).tag(0..14)),
     );
 
     assert_eq!(
@@ -821,7 +821,7 @@ fn funcall() {
                 "a".key(11),
                 3.expr(14),
             ).tag(11..15),
-        )).tag(0..16)),
+        ), 4..16).tag(0..16)),
     );
 
     assert_eq!(
@@ -835,7 +835,7 @@ fn funcall() {
                 "b".key(11),
                 3.expr(14),
             ).tag(11..15),
-        )).tag(0..16)),
+        ), 4..16).tag(0..16)),
     );
 
     assert_eq!(
@@ -857,7 +857,7 @@ fn funcall() {
             }.tag(1..16).funcall((
                 1.expr(18).wraptag(ArgElement::Singleton),
                 2.expr(20).wraptag(ArgElement::Singleton),
-            )).tag(0..22)
+            ), 17..22).tag(0..22)
         ),
     );
 
@@ -871,7 +871,7 @@ fn funcall() {
                 2.expr(17),
             ).tag(14..18),
             ArgElement::Splat("q".id(23)).tag(20..24),
-        )).tag(0..25)),
+        ), 4..25).tag(0..25)),
     );
 }
 
@@ -1130,12 +1130,32 @@ macro_rules! err {
         assert_eq!(
             parse($code),
             Err(Error {
-                locations: Some(vec![(Location::new($offset, 1, 0), Action::Parse)]),
+                locations: Some(vec![(Location::from($offset..$offset), Action::Parse)]),
                 reason: Some(Reason::Syntax(Syntax::from(syntax_element!($elt $(,$elts)*)))),
             })
         )
     };
 }
+
+
+macro_rules! errl {
+    ($code:expr, $offset:expr, $elt:expr) => {
+        assert_eq!(
+            parse($code),
+            Err(Error {
+                locations: Some(vec![(Location::from($offset), Action::Parse)]),
+                reason: Some(Reason::Syntax($elt)),
+            })
+        )
+    };
+}
+
+
+// macro_rules! errl {
+//     ($code:expr, $offset:expr, $elt:ident $(,$elts:ident)*) => {
+//         err!($code, $offset..$offset, $elt $(,$elts)*)
+//     };
+// }
 
 
 #[test]
@@ -1250,4 +1270,7 @@ fn errors() {
     err!("import \"path\"", 13, As);
     err!("import \"path\" as", 16, Binding);
     err!("import \"path\" as y", 18, Expression);
+
+    errl!("let [x, ..., y, ...] = z in 2", 16..19, Syntax::MultiSlurp);
+    errl!("let {x, ...a, y, ...b} = z in 2", 17..21, Syntax::MultiSlurp);
 }

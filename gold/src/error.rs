@@ -180,6 +180,7 @@ pub enum Syntax {
     ExpectedOne(SyntaxElement),
     ExpectedTwo(SyntaxElement, SyntaxElement),
     ExpectedThree(SyntaxElement, SyntaxElement, SyntaxElement),
+    MultiSlurp,
 }
 
 impl From<SyntaxElement> for Syntax {
@@ -241,12 +242,18 @@ pub enum TypeMismatch {
     BinOp(Type, Type, BinOp),
     UnOp(Type, UnOp),
     Call(Type),
+    Json(Type),
+
+    ExpectedArg(usize, Vec<Type>, Type),
+    ArgCount(usize, usize, usize),
 }
 
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    OutOfRange,
     TooLarge,
+    Convert(Type),
 }
 
 
