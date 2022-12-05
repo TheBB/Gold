@@ -1,7 +1,16 @@
 use crate::ast::{BinOp, UnOp};
 use crate::error::{Error, Reason, Unpack, Location, Action, BindingType, TypeMismatch, Value};
-use crate::eval_raw as eval;
+use crate::eval_raw;
 use crate::object::{Object, Key, Type};
+
+
+fn eval(input: &str) -> Result<Object, Error> {
+    eval_raw(input).map_err(Error::unrender)
+}
+
+fn eval_errstr(input: &str) -> Option<String> {
+    eval_raw(input).err().map(|x| x.rendered).flatten()
+}
 
 
 trait KeyAble {
@@ -609,6 +618,7 @@ macro_rules! err {
         Err(Error {
             locations: Some(vec![$($locs),*]),
             reason: Some(Reason::from($reason)),
+            rendered: None,
         })
     }
 }
@@ -657,4 +667,31 @@ fn errors() {
     assert_eq!(eval("range(1, 2, 3)"), err!(TypeMismatch::ArgCount(1, 2, 3), loc!(5..14, Evaluate)));
     assert_eq!(eval("len(1)"), err!(TypeMismatch::ExpectedArg(0, vec![Type::String, Type::List, Type::Map], Type::Integer), loc!(3..6, Evaluate)));
     assert_eq!(eval("len(true)"), err!(TypeMismatch::ExpectedArg(0, vec![Type::String, Type::List, Type::Map], Type::Boolean), loc!(3..9, Evaluate)));
+
+    assert!(eval_errstr("a").is_some_and(|x| x.contains("\na\n^\n")));
+    assert!(eval_errstr("\n\na\n").is_some_and(|x| x.contains("\na\n^\n")));
+    assert!(eval_errstr("  a  \n").is_some_and(|x| x.contains("\n  a  \n  ^\n")));
+    assert!(eval_errstr("\n  a  \n").is_some_and(|x| x.contains("\n  a  \n  ^\n")));
+    assert!(eval_errstr("\n  bingbong  \n").is_some_and(|x| x.contains("\n  bingbong  \n  ^^^^^^^^\n")));
+
+    assert!(eval_errstr(concat!(
+        "let f = fn (x) => x + 1\n",
+        "let g = fn (x) => f(x)\n",
+        "let h = fn (x) => g(x)\n",
+        "in h(null)",
+    )).is_some_and(|x|
+        x.contains(concat!(
+            "let f = fn (x) => x + 1\n",
+            "                    ^",
+        )) && x.contains(concat!(
+            "let g = fn (x) => f(x)\n",
+            "                   ^^^",
+        )) && x.contains(concat!(
+            "let h = fn (x) => g(x)\n",
+            "                   ^^^",
+        )) && x.contains(concat!(
+            "in h(null)\n",
+            "    ^^^^^",
+        ))
+    ));
 }

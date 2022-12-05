@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fmt::Display;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -467,6 +468,38 @@ impl Validatable for Operator {
             _ => {},
         }
         Ok(())
+    }
+}
+
+impl Display for UnOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Passthrough => f.write_str(""),
+            Self::ArithmeticalNegate => f.write_str("-"),
+            Self::LogicalNegate => f.write_str("not"),
+        }
+    }
+}
+
+impl Display for BinOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Index => f.write_str("subscript"),
+            Self::Power => f.write_str("^"),
+            Self::Multiply => f.write_str("*"),
+            Self::IntegerDivide => f.write_str("//"),
+            Self::Divide => f.write_str("/"),
+            Self::Add => f.write_str("+"),
+            Self::Subtract => f.write_str("-"),
+            Self::Less => f.write_str("<"),
+            Self::Greater => f.write_str(">"),
+            Self::LessEqual => f.write_str("<="),
+            Self::GreaterEqual => f.write_str(">="),
+            Self::Equal => f.write_str("=="),
+            Self::NotEqual => f.write_str("!="),
+            Self::And => f.write_str("and"),
+            Self::Or => f.write_str("or"),
+        }
     }
 }
 

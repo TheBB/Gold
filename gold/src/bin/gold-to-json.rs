@@ -4,6 +4,7 @@ use std::process::exit;
 use clap::Parser;
 use json::{JsonValue, stringify_pretty};
 
+use gold::error::Error;
 use gold::eval_file;
 
 
@@ -19,9 +20,13 @@ fn main() {
 
     match obj {
         Ok(val) => println!("{}", stringify_pretty(val, 4)),
-        Err(err) => {
-            eprintln!("Error: {:?}", err);
+        Err(Error { rendered: Some(e), .. }) => {
+            eprintln!("{}", e);
             exit(1);
         },
+        Err(_) => {
+            eprintln!("Error: unknown");
+            exit(1);
+        }
     }
 }

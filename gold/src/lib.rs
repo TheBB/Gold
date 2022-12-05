@@ -26,11 +26,13 @@ pub use parsing::parse;
 
 
 pub fn eval<T: ImportResolver>(input: &str, root: Option<&Path>, resolver: &T) -> Result<Object, Error> {
-    if let Some(path) = root {
+    let ret = if let Some(path) = root {
         parsing::parse(input).and_then(|file| eval::eval_path(&file, &path, resolver))
     } else {
         parsing::parse(input).and_then(|file| eval::eval_raw(&file, resolver))
-    }
+    };
+
+    ret.map_err(|err| err.render(input))
 }
 
 
