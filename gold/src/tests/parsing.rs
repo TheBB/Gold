@@ -8,7 +8,7 @@ use crate::traits::{Boxable, Taggable};
 
 
 fn parse(input: &str) -> Result<Tagged<Expr>, Error> {
-    parse_file(input).map(|x| x.expression)
+    parse_file(input).map(|x| x.expression).map_err(Error::unrender)
 }
 
 trait IdAble {
@@ -1132,6 +1132,7 @@ macro_rules! err {
             Err(Error {
                 locations: Some(vec![(Location::from($offset..$offset), Action::Parse)]),
                 reason: Some(Reason::Syntax(Syntax::from(syntax_element!($elt $(,$elts)*)))),
+                rendered: None,
             })
         )
     };
@@ -1145,17 +1146,11 @@ macro_rules! errl {
             Err(Error {
                 locations: Some(vec![(Location::from($offset), Action::Parse)]),
                 reason: Some(Reason::Syntax($elt)),
+                rendered: None,
             })
         )
     };
 }
-
-
-// macro_rules! errl {
-//     ($code:expr, $offset:expr, $elt:ident $(,$elts:ident)*) => {
-//         err!($code, $offset..$offset, $elt $(,$elts)*)
-//     };
-// }
 
 
 #[test]

@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::io::{Read, Write};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -147,6 +147,21 @@ pub enum Type {
     Map,
     Function,
     Null,
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Integer => f.write_str("int"),
+            Self::Float => f.write_str("float"),
+            Self::String => f.write_str("str"),
+            Self::Boolean => f.write_str("bool"),
+            Self::List => f.write_str("list"),
+            Self::Map => f.write_str("map"),
+            Self::Function => f.write_str("function"),
+            Self::Null => f.write_str("null"),
+        }
+    }
 }
 
 

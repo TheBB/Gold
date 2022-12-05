@@ -1,4 +1,6 @@
-use std::{fmt::Debug, path::PathBuf};
+use std::cmp::min;
+use std::fmt::{Debug, Display, Write};
+use std::path::PathBuf;
 
 use serde::{Serialize, Deserialize};
 
@@ -334,6 +336,7 @@ pub enum Action {
 pub struct Error {
     pub locations: Option<Vec<(Location, Action)>>,
     pub reason: Option<Reason>,
+    pub rendered: Option<String>,
 }
 
 impl Error {
@@ -349,10 +352,189 @@ impl Error {
         Self {
             locations: None,
             reason: Some(Reason::from(reason)),
+            rendered: None,
         }
     }
 
     pub fn unbound(key: Key) -> Self {
         Self::new(Reason::Unbound(key))
+    }
+
+    pub fn unrender(self) -> Self {
+        Self {
+            locations: self.locations,
+            reason: self.reason,
+            rendered: None,
+        }
+    }
+
+    pub fn render(self, code: &str) -> Self {
+        let rendered = format!("{}", ErrorRenderer(&self, code));
+        Self {
+            locations: self.locations,
+            reason: self.reason,
+            rendered: Some(rendered),
+        }
+    }
+}
+
+
+struct ErrorRenderer<'a>(&'a Error, &'a str);
+
+impl Display for SyntaxElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::ArgElement => "function argument",
+            Self::As => "'as'",
+            Self::Binding => "binding pattern",
+            Self::CloseBrace => "'}'",
+            Self::CloseBracket => "']'",
+            Self::CloseParen => "')'",
+            Self::Colon => "':'",
+            Self::Comma => "','",
+            Self::DoubleArrow => "'=>'",
+            Self::DoubleQuote => "'\"'",
+            Self::Else => "'else'",
+            Self::EndOfInput => "end of input",
+            Self::Equals => "'='",
+            Self::Expression => "expression",
+            Self::Identifier => "identifier",
+            Self::ImportPath => "import path",
+            Self::In => "'in'",
+            Self::KeywordParam => "keyword parameter",
+            Self::ListBindingElement => "list binding pattern",
+            Self::ListElement => "list element",
+            Self::MapBindingElement => "map binding pattern",
+            Self::MapElement => "map element",
+            Self::OpenBrace => "'{'",
+            Self::OpenParen => "'('",
+            Self::Operand => "operand",
+            Self::PosParam => "positional parameter",
+            Self::Semicolon => "';'",
+            Self::Then => "'then'",
+        };
+
+        f.write_str(s)
+    }
+}
+
+impl Display for BindingType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Identifier => f.write_str("identifier"),
+            Self::List => f.write_str("list"),
+            Self::Map => f.write_str("map"),
+        }
+    }
+}
+
+impl Display for Reason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => f.write_str("unknown reason - this should not happen, please file a bug report"),
+
+            Self::Syntax(Syntax::ExpectedOne(x)) => f.write_fmt(format_args!("expected {}", x)),
+            Self::Syntax(Syntax::ExpectedTwo(x, y)) => f.write_fmt(format_args!("expected {} or {}", x, y)),
+            Self::Syntax(Syntax::ExpectedThree(x, y, z)) => f.write_fmt(format_args!("expected {}, {} or {}", x, y, z)),
+            Self::Syntax(Syntax::MultiSlurp) => f.write_str("only one slurp allowed in this context"),
+
+            Self::Unbound(key) => f.write_fmt(format_args!("unbound name '{}'", key)),
+
+            Self::Unassigned(key) => f.write_fmt(format_args!("unbound key '{}'", key)),
+
+            Self::Unpack(Unpack::KeyMissing(key)) => f.write_fmt(format_args!("unbound key '{}'", key)),
+            Self::Unpack(Unpack::ListTooLong) => f.write_str("list too long"),
+            Self::Unpack(Unpack::ListTooShort) => f.write_str("list too short"),
+            Self::Unpack(Unpack::TypeMismatch(x, y)) => f.write_fmt(format_args!("expected {}, found {}", x, y)),
+
+            Self::Internal(Internal::SetInFrozenNamespace) => f.write_str("internal error 001 - this should not happen, please file a bug report"),
+
+            Self::TypeMismatch(TypeMismatch::ArgCount(min, max, actual)) => {
+                if min == max && *max == 1 {
+                    f.write_fmt(format_args!("expected 1 argument, got {}", actual))
+                } else if min == max {
+                    f.write_fmt(format_args!("expected {} arguments, got {}", min, actual))
+                } else {
+                    f.write_fmt(format_args!("expected {} to {} arguments, got {}", min, max, actual))
+                }
+            },
+            Self::TypeMismatch(TypeMismatch::BinOp(l, r, op)) => f.write_fmt(format_args!("unsuitable types for '{}': {} and {}", op, l, r)),
+            Self::TypeMismatch(TypeMismatch::Call(x)) => f.write_fmt(format_args!("unsuitable type for function call: {}", x)),
+            Self::TypeMismatch(TypeMismatch::ExpectedArg(i, types, actual)) => {
+                f.write_fmt(format_args!("unsuitable type for parameter {} - expected ", i + 1))?;
+                match types[..] {
+                    [] => {},
+                    [t] => f.write_fmt(format_args!("{}", t))?,
+                    _ => {
+                        let s = types[0..types.len() - 1].iter().map(|t| format!("{}", t)).collect::<Vec<String>>().join(", ");
+                        f.write_fmt(format_args!("{} or {}", s, types.last().unwrap()))?
+                    }
+                }
+                f.write_fmt(format_args!(", got {}", actual))
+            },
+            Self::TypeMismatch(TypeMismatch::Interpolate(x)) => f.write_fmt(format_args!("unsuitable type for string interpolation: {}", x)),
+            Self::TypeMismatch(TypeMismatch::Iterate(x)) => f.write_fmt(format_args!("non-iterable type: {}", x)),
+            Self::TypeMismatch(TypeMismatch::Json(x)) => f.write_fmt(format_args!("unsuitable type for JSON-like conversion: {}", x)),
+            Self::TypeMismatch(TypeMismatch::MapKey(x)) => f.write_fmt(format_args!("unsuitable type for map key: {}", x)),
+            Self::TypeMismatch(TypeMismatch::SplatArg(x)) => f.write_fmt(format_args!("unsuitable type for splatting: {}", x)),
+            Self::TypeMismatch(TypeMismatch::SplatList(x)) => f.write_fmt(format_args!("unsuitable type for splatting: {}", x)),
+            Self::TypeMismatch(TypeMismatch::SplatMap(x)) => f.write_fmt(format_args!("unsuitable type for splatting: {}", x)),
+            Self::TypeMismatch(TypeMismatch::UnOp(x, op)) => f.write_fmt(format_args!("unsuitable type for '{}': {}", op, x)),
+
+            Self::Value(Value::TooLarge) => f.write_str("value too large"),
+            Self::Value(Value::OutOfRange) => f.write_str("value out of range"),
+            Self::Value(Value::Convert(t)) => f.write_fmt(format_args!("couldn't convert to {}", t)),
+
+            Self::FileSystem(FileSystem::NoParent(p)) => f.write_fmt(format_args!("path has no parent: {}", p.display())),
+            Self::FileSystem(FileSystem::Read(p)) => f.write_fmt(format_args!("couldn't read file: {}", p.display())),
+
+            Self::UnknownImport(p) => f.write_fmt(format_args!("unknown import: '{}'", p)),
+        }
+    }
+}
+
+impl Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Assign => f.write_str("assigning"),
+            Self::Bind => f.write_str("pattern matching"),
+            Self::Evaluate => f.write_str("evaluating"),
+            Self::Format => f.write_str("interpolating"),
+            Self::Import => f.write_str("importing"),
+            Self::Iterate => f.write_str("iterating"),
+            Self::LookupName => f.write_str("evaluating"),
+            Self::Parse => f.write_str("parsing"),
+            Self::Slurp => f.write_str("slurping"),
+            Self::Splat => f.write_str("splatting"),
+        }
+    }
+}
+
+impl<'a> Display for ErrorRenderer<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ErrorRenderer(err, code) = self;
+
+        f.write_fmt(format_args!("Error: {}", err.reason.as_ref().unwrap_or(&Reason::None)))?;
+        if let Some(locs) = err.locations.as_ref() {
+            for (loc, act) in locs.iter() {
+                let Location { offset, line, length } = loc;
+                let col = code[0..*offset].rfind('\n').map(|x| offset - x - 1).unwrap_or(*offset);
+                let bol = offset - col;
+                let eol = code[bol+1..].find('\n').map(|x| x + bol + 1).unwrap_or(code.len());
+                let span_end = min(offset + length, eol) - offset;
+                f.write_char('\n')?;
+                f.write_str(&code[bol..eol])?;
+                f.write_char('\n')?;
+                for _ in 0..col {
+                    f.write_char(' ')?;
+                }
+                for _ in 0..span_end {
+                    f.write_char('^')?;
+                }
+                f.write_fmt(format_args!("\nwhile {} at {}:{}", act, line, col))?;
+            }
+        }
+
+        Ok(())
     }
 }

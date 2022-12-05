@@ -45,6 +45,7 @@ impl SyntaxError {
         Error {
             locations: Some(vec![(loc, Action::Parse)]),
             reason: reason.map(Reason::Syntax),
+            rendered: None,
         }
     }
 }
