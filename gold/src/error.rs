@@ -274,6 +274,7 @@ pub enum Reason {
     Unassigned(Key),
     Unpack(Unpack),
     Internal(Internal),
+    External(String),
     TypeMismatch(TypeMismatch),
     Value(Value),
     FileSystem(FileSystem),
@@ -448,6 +449,8 @@ impl Display for Reason {
             Self::Unpack(Unpack::TypeMismatch(x, y)) => f.write_fmt(format_args!("expected {}, found {}", x, y)),
 
             Self::Internal(Internal::SetInFrozenNamespace) => f.write_str("internal error 001 - this should not happen, please file a bug report"),
+
+            Self::External(reason) => f.write_fmt(format_args!("external error: {}", reason)),
 
             Self::TypeMismatch(TypeMismatch::ArgCount(min, max, actual)) => {
                 if min == max && *max == 1 {
