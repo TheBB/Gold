@@ -144,6 +144,7 @@ pub enum SyntaxElement {
     // Characters
     CloseBrace,
     CloseBracket,
+    CloseCurlyPipe,
     CloseParen,
     Colon,
     Comma,
@@ -152,6 +153,7 @@ pub enum SyntaxElement {
     Equals,
     OpenBrace,
     OpenParen,
+    Pipe,
     Semicolon,
 
     // Keywords
@@ -390,6 +392,7 @@ impl Display for SyntaxElement {
             Self::Binding => "binding pattern",
             Self::CloseBrace => "'}'",
             Self::CloseBracket => "']'",
+            Self::CloseCurlyPipe => "|}",
             Self::CloseParen => "')'",
             Self::Colon => "':'",
             Self::Comma => "','",
@@ -410,6 +413,7 @@ impl Display for SyntaxElement {
             Self::OpenBrace => "'{'",
             Self::OpenParen => "'('",
             Self::Operand => "operand",
+            Self::Pipe => "|",
             Self::PosParam => "positional parameter",
             Self::Semicolon => "';'",
             Self::Then => "'then'",

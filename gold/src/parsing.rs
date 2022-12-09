@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::num::{ParseFloatError, ParseIntError};
 use std::ops::Deref;
 use std::str::FromStr;
@@ -11,7 +12,7 @@ use nom::{
     branch::alt,
     bytes::complete::{escaped_transform, is_not, tag},
     character::complete::{alpha1, char, none_of, one_of, multispace0},
-    combinator::{map, map_res, opt, recognize, value, verify, peek, success},
+    combinator::{map, map_res, opt, recognize, value, verify, success},
     error::{ErrorKind, ParseError, FromExternalError, ContextError},
     multi::{many0, many1},
     sequence::{delimited, preceded, terminated, tuple, pair},
@@ -37,6 +38,7 @@ impl<'a> From<Span<'a>> for Location {
 
 
 // Custom error type
+#[derive(Debug)]
 struct SyntaxError(Location, Option<Syntax>);
 
 impl SyntaxError {
@@ -179,10 +181,6 @@ impl<T> Paren<T> {
             Self::Parenthesized(x) => Paren::<U>::Parenthesized(x.map(|y| y.wraptag(f))),
         }
     }
-
-    fn retag<U>(self, loc: U) -> Paren<T> where Location: From<U> {
-        Self::Naked(self.inner().retag(loc))
-    }
 }
 
 
@@ -192,6 +190,7 @@ type PMap = Paren<MapElement>;
 
 
 trait CompleteError<'a>:
+    Debug +
     ExplainError<Span<'a>> +
     ParseError<Span<'a>> +
     ContextError<Span<'a>> +
@@ -201,6 +200,7 @@ trait CompleteError<'a>:
 
 impl<'a, T> CompleteError<'a> for T
 where T:
+    Debug +
     ExplainError<Span<'a>> +
     ParseError<Span<'a>> +
     ContextError<Span<'a>> +
@@ -388,14 +388,14 @@ fn keyword<'a, E: ParseError<Span<'a>>>(
     value: &'a str,
 ) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, Span<'a>, E> {
     verify(
-        is_not("=,;.:-+/*[](){}\"\' \t\n\r"),
+        is_not("=,;.:-+/*[](){}|\"\' \t\n\r"),
         move |out: &Span<'a>| { *out.fragment() == value },
     )
 }
 
 
 /// List of keywords that must be avoided by the [`identifier`] parser.
-static KEYWORDS: [&'static str; 16] = [
+static KEYWORDS: [&'static str; 15] = [
     "for",
     "when",
     "if",
@@ -411,7 +411,6 @@ static KEYWORDS: [&'static str; 16] = [
     "not",
     "as",
     "import",
-    "fn",
 ];
 
 
@@ -425,7 +424,7 @@ fn identifier<'a, E: CompleteError<'a>>(
         verify(
             recognize(pair(
                 alt((alpha1::<Span<'a>, E>, tag("_"))),
-                opt(is_not("=.,:;-+/*[](){}\"\' \t\n\r")),
+                opt(is_not("=.,:;-+/*[](){}|\"\' \t\n\r")),
             )),
             |out: &Span<'a>| !KEYWORDS.contains(out.fragment()),
         ),
@@ -441,7 +440,7 @@ fn map_identifier<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, Tagged<Key>, E> {
     map(
-        positioned(is_not(",=:$}()\"\' \t\n\r")),
+        positioned(is_not(",=:$}()|\"\' \t\n\r")),
         |x| x.map(|x: Span<'a>| Key::new(x.fragment()))
     )(input)
 }
@@ -1375,12 +1374,12 @@ fn list_binding_element<'a, E: CompleteError<'a>>(
 ///
 /// This is a comma-separated list of list binding elements, optionally
 /// terminated by a comma.
-fn list_binding<'a, E: CompleteError<'a>, T, U>(
-    initializer: impl Parser<Span<'a>, char, E> + Copy,
-    terminator: impl Parser<Span<'a>, char, E> + Copy,
+fn list_binding<'a, E: CompleteError<'a>, T, U, V>(
+    initializer: impl Parser<Span<'a>, V, E> + Copy,
+    terminator: impl Parser<Span<'a>, V, E> + Copy,
     err_terminator_or_item: T,
     err_terminator_or_separator: U,
-) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, (Tagged<ListBinding>, char), E>
+) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, (Tagged<ListBinding>, V), E>
 where
     Syntax: From<T> + From<U>,
     T: Copy,
@@ -1483,9 +1482,9 @@ fn map_binding_element<'a, E: CompleteError<'a>>(
 ///
 /// This is a comma-separated list of list binding elements, optionally
 /// terminated by a comma.
-fn map_binding<'a, E: CompleteError<'a>, T, U>(
-    initializer: impl Parser<Span<'a>, char, E> + Copy,
-    terminator: impl Parser<Span<'a>, char, E> + Copy,
+fn map_binding<'a, E: CompleteError<'a>, T, U, V>(
+    initializer: impl Parser<Span<'a>, V, E> + Copy,
+    terminator: impl Parser<Span<'a>, V, E> + Copy,
     err_terminator_or_item: T,
     err_terminator_or_separator: U,
 ) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, Tagged<MapBinding>, E>
@@ -1565,26 +1564,25 @@ fn normal_function<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
     let (i, (args, end)) = list_binding(
-        |i| char('(')(i),
-        |i| alt((char(')'), char(';')))(i),
-        (SyntaxElement::CloseParen, SyntaxElement::Semicolon, SyntaxElement::PosParam),
-        (SyntaxElement::CloseParen, SyntaxElement::Semicolon, SyntaxElement::Comma),
+        |i| char('|')(i),
+        |i| alt((char('|'), char(';')))(i),
+        (SyntaxElement::Pipe, SyntaxElement::Semicolon, SyntaxElement::PosParam),
+        (SyntaxElement::Pipe, SyntaxElement::Semicolon, SyntaxElement::Comma),
     )(input)?;
 
     let (j, kwargs) = if end == ';' {
         let (j, kwargs) = map_binding(
             |i| success(' ')(i),
-            |i| char(')')(i),
-            (SyntaxElement::CloseParen, SyntaxElement::KeywordParam),
-            (SyntaxElement::CloseParen, SyntaxElement::Comma),
+            |i| char('|')(i),
+            (SyntaxElement::Pipe, SyntaxElement::KeywordParam),
+            (SyntaxElement::Pipe, SyntaxElement::Comma),
         )(i)?;
         (j, Some(kwargs))
     } else {
         (i, None)
     };
 
-    let (k, _) = fail(postpad(tag("=>")), SyntaxElement::DoubleArrow)(j)?;
-    let (l, expr) = fail(expression, SyntaxElement::Expression)(k)?;
+    let (l, expr) = fail(expression, SyntaxElement::Expression)(j)?;
     let loc = Location::from((args.loc(), expr.outer()));
 
     let result = PExpr::Naked(Expr::Function {
@@ -1607,15 +1605,12 @@ fn keyword_function<'a, E: CompleteError<'a>>(
     map(
         tuple((
             postpad(map_binding(
-                |i| char('{')(i),
-                |i| char('}')(i),
-                (SyntaxElement::CloseBrace, SyntaxElement::KeywordParam),
-                (SyntaxElement::CloseBrace, SyntaxElement::Comma),
+                |i| tag("{|")(i),
+                |i| tag("|}")(i),
+                (SyntaxElement::CloseCurlyPipe, SyntaxElement::KeywordParam),
+                (SyntaxElement::CloseCurlyPipe, SyntaxElement::Comma),
             )),
-            preceded(
-                fail(postpad(tag("=>")), SyntaxElement::DoubleArrow),
-                fail(expression, SyntaxElement::Expression),
-            ),
+            fail(expression, SyntaxElement::Expression),
         )),
 
         |(kwargs, expr)| {
@@ -1635,25 +1630,15 @@ fn keyword_function<'a, E: CompleteError<'a>>(
 /// The heavy lifting of this function is done by [`normal_function`] or
 /// [`keyword_function`].
 fn function<'a, E: CompleteError<'a>>(
-    mut input: Span<'a>
+    input: Span<'a>
 ) -> IResult<Span<'a>, PExpr, E>
 where
     E: ExplainError<Span<'a>>
 {
-    let (i, start) = positioned_postpad(keyword("fn"))(input)?;
-    input = i;
-
-    match peek(alt((char('('), char('{'))))(input) {
-        Err(NomError::Error(_)) => Err(NomError::Failure(
-            <E as ExplainError<Span<'a>>>::error(input, (SyntaxElement::OpenParen, SyntaxElement::OpenBrace))
-        )),
-        Err(e) => Err(e),
-        Ok((i, c)) => {
-            let (j, func) = if c == '(' { normal_function(i)? } else { keyword_function(i)? };
-            let loc = func.outer();
-            Ok((j, func.retag((&start, loc))))
-        }
-    }
+    alt((
+        keyword_function,
+        normal_function,
+    ))(input)
 }
 
 

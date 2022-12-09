@@ -839,25 +839,25 @@ fn funcall() {
     );
 
     assert_eq!(
-        parse("(fn (x,y) => x+y)(1,2)"),
+        parse("(|x,y| x+y)(1,2)"),
         Ok(
             Expr::Function {
                 positional: ListBinding(vec![
                     ListBindingElement::Binding {
-                        binding: "x".bid(5),
+                        binding: "x".bid(2),
                         default: None
-                    }.tag(5),
+                    }.tag(2),
                     ListBindingElement::Binding {
-                        binding: "y".bid(7),
+                        binding: "y".bid(4),
                         default: None
-                    }.tag(7),
+                    }.tag(4),
                 ]),
                 keywords: None,
-                expression: "x".id(13).add("y".id(15), 14).tag(13..16).to_box(),
-            }.tag(1..16).funcall((
-                1.expr(18).wraptag(ArgElement::Singleton),
-                2.expr(20).wraptag(ArgElement::Singleton),
-            ), 17..22).tag(0..22)
+                expression: "x".id(7).add("y".id(9), 8).tag(7..10).to_box(),
+            }.tag(1..10).funcall((
+                1.expr(12).wraptag(ArgElement::Singleton),
+                2.expr(14).wraptag(ArgElement::Singleton),
+            ), 11..16).tag(0..16)
         ),
     );
 
@@ -1048,72 +1048,72 @@ fn operators() {
 #[test]
 fn functions() {
     assert_eq!(
-        parse("fn () => 1"),
+        parse("|| 1"),
         Ok(Expr::Function {
             positional: ListBinding(vec![]),
             keywords: None,
-            expression: 1.expr(9).to_box(),
-        }.tag(0..10)),
+            expression: 1.expr(3).to_box(),
+        }.tag(0..4)),
     );
 
     assert_eq!(
-        parse("fn (;) => 1"),
+        parse("|;| 1"),
         Ok(Expr::Function {
             positional: ListBinding(vec![]),
             keywords: Some(MapBinding(vec![])),
-            expression: 1.expr(10).to_box(),
-        }.tag(0..11)),
+            expression: 1.expr(4).to_box(),
+        }.tag(0..5)),
     );
 
     assert_eq!(
-        parse("fn {} => 1"),
+        parse("{||} 1"),
         Ok(Expr::Function {
             positional: ListBinding(vec![]),
             keywords: Some(MapBinding(vec![])),
-            expression: 1.expr(9).to_box(),
-        }.tag(0..10)),
+            expression: 1.expr(5).to_box(),
+        }.tag(0..6)),
     );
 
     assert_eq!(
-        parse("fn (a) => let b = a in b"),
+        parse("|a| let b = a in b"),
         Ok(Expr::Function {
             positional: ListBinding(vec![
                 ListBindingElement::Binding {
-                    binding: "a".bid(4),
+                    binding: "a".bid(1),
                     default: None
-                }.tag(4),
+                }.tag(1),
             ]),
             keywords: None,
             expression: Box::new(Expr::Let {
                 bindings: vec![
                     (
-                        "b".bid(14),
-                        "a".id(18),
+                        "b".bid(8),
+                        "a".id(12),
                     ),
                 ],
-                expression: "b".id(23).to_box(),
-            }.tag(10..24)),
-        }.tag(0..24)),
+                expression: "b".id(17).to_box(),
+            }.tag(4..18)),
+        }.tag(0..18)),
     );
 
     assert_eq!(
-        parse("fn {x=1, y=2} => x + y"),
+        parse("{|x=1, y=2|} x + y"),
         Ok(Expr::Function {
             positional: ListBinding(vec![]),
             keywords: Some(MapBinding(vec![
                 MapBindingElement::Binding {
-                    key: "x".key(4),
-                    binding: "x".bid(4),
-                    default: Some(1.expr(6)),
-                }.tag(4..7),
+                    key: "x".key(2),
+                    binding: "x".bid(2),
+                    default: Some(1.expr(4)),
+                }.tag(2..5),
                 MapBindingElement::Binding {
-                    key: "y".key(9),
-                    binding: "y".bid(9),
-                    default: Some(2.expr(11)),
-                }.tag(9..12),
+                    key: "y".key(7),
+                    binding: "y".bid(7),
+                    default: Some(2.expr(9)),
+                }.tag(7..10),
             ])),
-            expression: "x".id(17).add("y".id(21), 19).tag(17..22).to_box(),
-        }.tag(0..22)),
+            expression: "x".id(13).add("y".id(17), 15).tag(13..18).to_box(),
+        }.tag(0..18)),
     );
 }
 
@@ -1216,6 +1216,7 @@ fn errors() {
     err!("let [x = 1", 10, CloseBracket, Comma);
     err!("let [...", 8, CloseBracket, Comma);
     err!("let {", 5, CloseBrace, MapBindingElement);
+
     err!("let {y", 6, CloseBrace, Comma);
     err!("let {y,", 7, CloseBrace, MapBindingElement);
     err!("let {y =", 8, Expression);
@@ -1228,20 +1229,17 @@ fn errors() {
     err!("(", 1, Expression);
     err!("(1", 2, CloseParen);
 
-    err!("fn", 2, OpenParen, OpenBrace);
-    err!("fn (", 4, CloseParen, Semicolon, PosParam);
-    err!("fn (x", 5, CloseParen, Semicolon, Comma);
-    err!("fn (x,", 6, CloseParen, Semicolon, PosParam);
-    err!("fn (;", 5, CloseParen, KeywordParam);
-    err!("fn (;y", 6, CloseParen, Comma);
-    err!("fn (;y,", 7, CloseParen, KeywordParam);
-    err!("fn ()", 5, DoubleArrow);
-    err!("fn () =>", 8, Expression);
-    err!("fn {", 4, CloseBrace, KeywordParam);
-    err!("fn {x", 5, CloseBrace, Comma);
-    err!("fn {x,", 6, CloseBrace, KeywordParam);
-    err!("fn {}", 5, DoubleArrow);
-    err!("fn {} =>", 8, Expression);
+    err!("|", 1, Pipe, Semicolon, PosParam);
+    err!("|x", 2, Pipe, Semicolon, Comma);
+    err!("|x,", 3, Pipe, Semicolon, PosParam);
+    err!("|;", 2, Pipe, KeywordParam);
+    err!("|;y", 3, Pipe, Comma);
+    err!("|;y,", 4, Pipe, KeywordParam);
+    err!("||", 2, Expression);
+    err!("{|", 2, CloseCurlyPipe, KeywordParam);
+    err!("{|x", 3, CloseCurlyPipe, Comma);
+    err!("{|x,", 4, CloseCurlyPipe, KeywordParam);
+    err!("{||}", 4, Expression);
 
     err!("\"alpha", 6, DoubleQuote);
     err!("\"alpha$", 7, OpenBrace);
