@@ -842,6 +842,24 @@ fn map_element<'a, E: CompleteError<'a>>(
             },
         )),
 
+        // Quoted singleton
+        naked(map(
+            tuple((
+                postpad(string),
+                preceded(
+                    fail(postpad(char(':')), SyntaxElement::Colon),
+                    fail(expression, SyntaxElement::Expression),
+                ),
+            )),
+            |(key, value)| {
+                let loc = Location::from((key.outer(), value.outer()));
+                MapElement::Singleton {
+                    key: key.inner(),
+                    value: value.inner(),
+                }.tag(loc)
+            },
+        )),
+
         // Literal singleton
         naked(map(
             tuple((
