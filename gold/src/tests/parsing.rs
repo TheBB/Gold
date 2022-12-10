@@ -431,6 +431,13 @@ fn maps() {
     );
 
     assert_eq!(
+        parse("{\"z\": y}"),
+        Ok(Expr::map((
+            ("z".lit(1..4), "y".id(6)).mel(),
+        )).tag(0..8)),
+    );
+
+    assert_eq!(
         parse("{...y, x: 1}"),
         Ok(Expr::map((
             MapElement::Splat("y".id(4)).tag(1..5),
