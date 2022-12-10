@@ -174,6 +174,7 @@ pub enum SyntaxElement {
     ListElement,
     MapBindingElement,
     MapElement,
+    MapValue,
     Operand,
     PosParam,
 }
@@ -410,6 +411,7 @@ impl Display for SyntaxElement {
             Self::ListElement => "list element",
             Self::MapBindingElement => "map binding pattern",
             Self::MapElement => "map element",
+            Self::MapValue => "map value",
             Self::OpenBrace => "'{'",
             Self::OpenParen => "'('",
             Self::Operand => "operand",

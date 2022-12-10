@@ -3,6 +3,7 @@ use std::num::{ParseFloatError, ParseIntError};
 use std::ops::Deref;
 use std::str::FromStr;
 
+use nom::bytes::complete::take_until;
 use nom::combinator::all_consuming;
 use num_bigint::{BigInt, ParseBigIntError};
 use nom_locate::{LocatedSpan, position};
@@ -104,6 +105,31 @@ impl<'a> FromExternalError<Span<'a>, ParseFloatError> for SyntaxError {
 
 fn literal<T>(x: T) -> Expr where Object: From<T> {
     Object::from(x).literal()
+}
+
+
+/// Convert multiline string by handling indentation.
+fn multiline(s: &str) -> String {
+    let mut lines = s.lines();
+
+    let first = lines.next().unwrap().trim_start();
+
+    let rest: Vec<&str> = lines.filter(|s: &&str| !s.deref().trim().is_empty()).collect();
+    let indent =
+        rest.iter()
+            .filter(|s: &&&str| !s.trim().is_empty())
+            .map(|s: &&str| s.deref().chars().take_while(|c| c.is_whitespace()).map(|_| 1).sum())
+            .min().unwrap_or(0);
+
+    let mut ret = first.to_string();
+    for r in rest {
+        if !ret.is_empty() {
+            ret += "\n";
+        }
+        ret += &r.chars().skip(indent).collect::<String>();
+    }
+
+    ret
 }
 
 
@@ -755,6 +781,77 @@ fn list<'a, E: CompleteError<'a>>(
 }
 
 
+/// Matches a singleton key in a map context.
+fn map_key_singleton<'a, E: CompleteError<'a>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, (Location, PExpr), E> {
+    alt((
+
+        map(
+            tuple((
+                positioned_postpad(char('$')),
+                fail(expression, SyntaxElement::Expression),
+            )),
+            |(start, key)| (start.loc(), PExpr::Naked(key.inner())),
+        ),
+
+        map(
+            postpad(string),
+            |x| (x.outer(), x)
+        ),
+
+        map(
+            postpad(map_identifier),
+            |key| (key.loc(), PExpr::Naked(key.map(Object::from).map(Expr::Literal))),
+        ),
+
+    ))(input)
+}
+
+
+/// Matches a singleton value in a map context.
+fn map_value_singleton<'a, E: CompleteError<'a>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, PExpr, E> {
+    alt((
+        naked(map(
+            preceded(
+                tag("::"),
+                positioned_postpad(
+                    map(
+                        take_until(",\n"),
+                        |s: Span<'a>| multiline(s.as_ref()),
+                    ),
+                ),
+            ),
+            |s| s.map(|s| Expr::string(vec![StringElement::raw(s)])),
+        )),
+
+        preceded(
+            fail(postpad(char(':')), SyntaxElement::Colon),
+            fail(expression, SyntaxElement::Expression),
+        ),
+    ))(input)
+}
+
+
+/// Matches a singleton map element.
+fn map_element_singleton<'a, E: CompleteError<'a>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, PMap, E> {
+    naked(map(
+        tuple((
+            map_key_singleton,
+            map_value_singleton,
+        )),
+        |((start, key), value)| {
+            let loc = Location::from((start, value.outer()));
+            MapElement::Singleton { key: key.inner(), value: value.inner() }.tag(loc)
+        }
+    ))(input)
+}
+
+
 /// Matches a map element: anything that is legal in a map.
 ///
 /// There are five cases:
@@ -823,60 +920,8 @@ fn map_element<'a, E: CompleteError<'a>>(
             },
         )),
 
-        // Evaluated singleton
-        naked(map(
-            tuple((
-                positioned_postpad(char('$')),
-                terminated(
-                    fail(expression, SyntaxElement::Expression),
-                    fail(postpad(char(':')), SyntaxElement::Colon),
-                ),
-                fail(expression, SyntaxElement::Expression),
-            )),
-            |(start, key, value)| {
-                let loc = Location::from((&start, value.outer()));
-                MapElement::Singleton {
-                    key: key.inner(),
-                    value: value.inner(),
-                }.tag(loc)
-            },
-        )),
-
-        // Quoted singleton
-        naked(map(
-            tuple((
-                postpad(string),
-                preceded(
-                    fail(postpad(char(':')), SyntaxElement::Colon),
-                    fail(expression, SyntaxElement::Expression),
-                ),
-            )),
-            |(key, value)| {
-                let loc = Location::from((key.outer(), value.outer()));
-                MapElement::Singleton {
-                    key: key.inner(),
-                    value: value.inner(),
-                }.tag(loc)
-            },
-        )),
-
-        // Literal singleton
-        naked(map(
-            tuple((
-                terminated(
-                    postpad(map_identifier),
-                    fail(postpad(char(':')), SyntaxElement::Colon),
-                ),
-                fail(expression, SyntaxElement::Expression),
-            )),
-            |(key, value)| {
-                let loc = Location::from((&key, value.outer()));
-                MapElement::Singleton {
-                    key: key.map(Object::from).map(Expr::Literal),
-                    value: value.inner(),
-                }.tag(loc)
-            },
-        )),
+        // Various types of singletons
+        map_element_singleton,
 
     ))(input)
 }
