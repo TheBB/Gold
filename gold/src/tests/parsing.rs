@@ -438,6 +438,93 @@ fn maps() {
     );
 
     assert_eq!(
+        parse(concat!(
+            "{\n",
+            "   z:: here's some text,\n",
+            "}\n",
+        )),
+        Ok(Expr::map((
+            ("z".lit((5, 2, 1)), "here's some text".expr((8, 2, 17))).mel(),
+        )).tag(0..28)),
+    );
+
+    assert_eq!(
+        parse(concat!(
+            "{\n",
+            "   z:: here's some\n",
+            "       text,\n",
+            "}\n",
+        )),
+        Ok(Expr::map((
+            ("z".lit((5, 2, 1)), "here's some\ntext".expr((8, 2, 24))).mel(),
+        )).tag(0..35)),
+    );
+
+    assert_eq!(
+        parse(concat!(
+            "{\n",
+            "   z:: here's some\n",
+            "     text,\n",
+            "}\n",
+        )),
+        Ok(Expr::map((
+            ("z".lit((5, 2, 1)), "here's some\ntext".expr((8, 2, 22))).mel(),
+        )).tag(0..33)),
+    );
+
+    assert_eq!(
+        parse(concat!(
+            "{\n",
+            "   z::\n",
+            "     here's some\n",
+            "     text,\n",
+            "}\n",
+        )),
+        Ok(Expr::map((
+            ("z".lit((5, 2, 1)), "here's some\ntext".expr((8, 2, 27))).mel(),
+        )).tag(0..38)),
+    );
+
+    assert_eq!(
+        parse(concat!(
+            "{\n",
+            "   z::\n",
+            "     here's some\n",
+            "       text,\n",
+            "}\n",
+        )),
+        Ok(Expr::map((
+            ("z".lit((5, 2, 1)), "here's some\n  text".expr((8, 2, 29))).mel(),
+        )).tag(0..40)),
+    );
+
+    assert_eq!(
+        parse(concat!(
+            "{\n",
+            "   z::\n",
+            "       here's some\n",
+            "     text,\n",
+            "}\n",
+        )),
+        Ok(Expr::map((
+            ("z".lit((5, 2, 1)), "  here's some\ntext".expr((8, 2, 29))).mel(),
+        )).tag(0..40)),
+    );
+
+    assert_eq!(
+        parse(concat!(
+            "{\n",
+            "    a:: x,\n",
+            "    b: y,\n",
+            "}\n",
+        )),
+        Ok(Expr::map((
+            ("a".lit((6, 2, 1)), "x".expr((9, 2, 2))).mel(),
+            ("b".lit((17, 3, 1)), "y".id((20, 3, 1))).mel(),
+        )).tag(0..24)),
+    );
+
+    assert_eq!(
         parse("{...y, x: 1}"),
         Ok(Expr::map((
             MapElement::Splat("y".id(4)).tag(1..5),
