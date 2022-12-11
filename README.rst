@@ -447,9 +447,9 @@ Importing libraries
 -------------------
 
 You can write Gold code and data that can be imported in other files. The
-function *import* takes a single argument: a path to a file (relative to the
+*import* statement takes a path to a file (relative to the
 file currently being loaded) which will be evaluated.  Its result will then be
-returned as the return value from the *import* function.
+bound to a name (or destructured).
 
 This can be used to write libraries of functions, e.g. assume this is the
 contents of the file ``mylib.gold``::
@@ -463,7 +463,7 @@ The function *add* can be used from another file like this::
     import "mylib.gold" as mylib
     in mylib.add(1, 2)
 
-or, more idiomatically, like this::
+or, more idiomatically, like this, using destructuring::
 
     import("mylib.gold") as { add }
     in add(1, 2)
