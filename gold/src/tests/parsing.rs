@@ -440,36 +440,36 @@ fn maps() {
     assert_eq!(
         parse(concat!(
             "{\n",
-            "   z:: here's some text,\n",
+            "   z:: here's some text\n",
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit((5, 2, 1)), "here's some text".expr((8, 2, 17))).mel(),
-        )).tag(0..28)),
+            ("z".lit((5, 2, 1)), "here's some text".expr((8, 2, 18))).mel(),
+        )).tag(0..27)),
     );
 
     assert_eq!(
         parse(concat!(
             "{\n",
             "   z:: here's some\n",
-            "       text,\n",
+            "       text\n",
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit((5, 2, 1)), "here's some\ntext".expr((8, 2, 24))).mel(),
-        )).tag(0..35)),
+            ("z".lit((5, 2, 1)), "here's some\ntext".expr((8, 2, 25))).mel(),
+        )).tag(0..34)),
     );
 
     assert_eq!(
         parse(concat!(
             "{\n",
             "   z:: here's some\n",
-            "     text,\n",
+            "     text\n",
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit((5, 2, 1)), "here's some\ntext".expr((8, 2, 22))).mel(),
-        )).tag(0..33)),
+            ("z".lit((5, 2, 1)), "here's some\ntext".expr((8, 2, 23))).mel(),
+        )).tag(0..32)),
     );
 
     assert_eq!(
@@ -477,12 +477,12 @@ fn maps() {
             "{\n",
             "   z::\n",
             "     here's some\n",
-            "     text,\n",
+            "     text\n",
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit((5, 2, 1)), "here's some\ntext".expr((8, 2, 27))).mel(),
-        )).tag(0..38)),
+            ("z".lit((5, 2, 1)), "here's some\ntext".expr((8, 2, 28))).mel(),
+        )).tag(0..37)),
     );
 
     assert_eq!(
@@ -490,12 +490,12 @@ fn maps() {
             "{\n",
             "   z::\n",
             "     here's some\n",
-            "       text,\n",
+            "       text\n",
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit((5, 2, 1)), "here's some\n  text".expr((8, 2, 29))).mel(),
-        )).tag(0..40)),
+            ("z".lit((5, 2, 1)), "here's some\n  text".expr((8, 2, 30))).mel(),
+        )).tag(0..39)),
     );
 
     assert_eq!(
@@ -503,25 +503,25 @@ fn maps() {
             "{\n",
             "   z::\n",
             "       here's some\n",
-            "     text,\n",
+            "     text\n",
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit((5, 2, 1)), "  here's some\ntext".expr((8, 2, 29))).mel(),
-        )).tag(0..40)),
+            ("z".lit((5, 2, 1)), "  here's some\ntext".expr((8, 2, 30))).mel(),
+        )).tag(0..39)),
     );
 
     assert_eq!(
         parse(concat!(
             "{\n",
-            "    a:: x,\n",
+            "    a:: x\n",
             "    b: y,\n",
             "}\n",
         )),
         Ok(Expr::map((
-            ("a".lit((6, 2, 1)), "x".expr((9, 2, 2))).mel(),
-            ("b".lit((17, 3, 1)), "y".id((20, 3, 1))).mel(),
-        )).tag(0..24)),
+            ("a".lit((6, 2, 1)), "x".expr((9, 2, 3))).mel(),
+            ("b".lit((16, 3, 1)), "y".id((19, 3, 1))).mel(),
+        )).tag(0..23)),
     );
 
     assert_eq!(

@@ -12,8 +12,8 @@ use nom::{
     IResult, Parser, Err as NomError,
     branch::alt,
     bytes::complete::{escaped_transform, is_not, tag},
-    character::complete::{alpha1, char, none_of, one_of, multispace0},
-    combinator::{map, map_res, opt, recognize, value, verify, success},
+    character::complete::{alpha1, char, none_of, one_of, multispace0, space0},
+    combinator::{map, map_res, opt, recognize, value, verify, success, peek},
     error::{ErrorKind, ParseError, FromExternalError, ContextError},
     multi::{many0, many1},
     sequence::{delimited, preceded, terminated, tuple, pair},
@@ -108,7 +108,8 @@ fn literal<T>(x: T) -> Expr where Object: From<T> {
 }
 
 
-/// Convert multiline string by handling indentation.
+/// Convert a multiline string from source code to string by removing leading
+/// whitespace from each line according to the rules for such strings.
 fn multiline(s: &str) -> String {
     let mut lines = s.lines();
 
@@ -265,8 +266,49 @@ where
 }
 
 
+/// Apply a separator skip rule to an item parser. See [`seplist_opt_delim`] for
+/// details.
+fn apply_skip<I, E: ParseError<I>, O, F>(
+    parser: F,
+    skip_delimiter: bool,
+) -> impl FnMut(I) -> IResult<I, (O, bool), E>
+where
+    F: Parser<I, O, E>,
+{
+    map(parser, move |x| (x, skip_delimiter))
+}
+
+
+/// Create an item parser that always skips the following separator. See
+/// [`seplist_opt_delim`] for details.
+fn do_skip<I, E: ParseError<I>, O, F>(
+    parser: F,
+) -> impl FnMut(I) -> IResult<I, (O, bool), E>
+where
+    F: Parser<I, O, E>,
+{
+    apply_skip(parser, true)
+}
+
+
+/// Create an item parser that never skips the following separator. See
+/// [`seplist_opt_delim`] for details.
+fn dont_skip<I, E: ParseError<I>, O, F>(
+    parser: F,
+) -> impl FnMut(I) -> IResult<I, (O, bool), E>
+where
+    F: Parser<I, O, E>,
+{
+    apply_skip(parser, false)
+}
+
+
 /// Separated list with delimiters and optional trailing separator.
-fn seplist<Init, Item, Sep, Term, InitR, ItemR, SepR, TermR, I, E, T, U>(
+///
+/// The item parser should return a tuple with two items: the item itself, and a
+/// boolean indicating whether the following separator should be skipped or not.
+/// This is used in certain contexts, like map parsing.
+fn seplist_opt_delim<Init, Item, Sep, Term, InitR, ItemR, SepR, TermR, I, E, T, U>(
     mut initializer: Init,
     mut item: Item,
     mut separator: Sep,
@@ -276,7 +318,7 @@ fn seplist<Init, Item, Sep, Term, InitR, ItemR, SepR, TermR, I, E, T, U>(
 ) -> impl FnMut(I) -> IResult<I, (InitR, Vec<ItemR>, TermR), E>
 where
     Init: Parser<I, InitR, E>,
-    Item: Parser<I, ItemR, E>,
+    Item: Parser<I, (ItemR, bool), E>,
     Sep: Parser<I, SepR, E>,
     Term: Parser<I, TermR, E>,
     I: Clone,
@@ -290,6 +332,7 @@ where
         i = j;
 
         let mut items = Vec::new();
+        let mut expect_separator: bool;
 
         loop {
 
@@ -311,10 +354,22 @@ where
                 Err(e) => return Err(e),
 
                 // Parsing item succeeded
-                Ok((j, it)) => {
+                Ok((j, (it, skip_separator))) => {
                     i = j;
+                    expect_separator = !skip_separator;
                     items.push(it);
                 }
+            }
+
+            // If at this moment we don't expect a separator, try to parse a terminator
+            if !expect_separator {
+                match terminator.parse(i.clone()) {
+                    Err(NomError::Error(_)) => { },
+                    Err(e) => { return Err(e); },
+                    Ok((i, termr)) => return Ok((i, (initr, items, termr))),
+                }
+
+                continue;
             }
 
             // Try to parse a separator
@@ -341,6 +396,31 @@ where
         }
 
     }
+}
+
+
+/// Separated list with delimiters and optional trailing separator.
+fn seplist<Init, Item, Sep, Term, InitR, ItemR, SepR, TermR, I, E, T, U>(
+    initializer: Init,
+    item: Item,
+    separator: Sep,
+    terminator: Term,
+    err_terminator_or_item: T,
+    err_terminator_or_separator: U,
+) -> impl FnMut(I) -> IResult<I, (InitR, Vec<ItemR>, TermR), E>
+where
+    Init: Parser<I, InitR, E>,
+    Item: Parser<I, ItemR, E>,
+    Sep: Parser<I, SepR, E>,
+    Term: Parser<I, TermR, E>,
+    I: Clone,
+    E: ExplainError<I>,
+    Syntax: From<T> + From<U>,
+    T: Copy,
+    U: Copy,
+{
+    let item_parser = map(item, |it| (it, false));
+    seplist_opt_delim(initializer, item_parser, separator, terminator, err_terminator_or_item, err_terminator_or_separator)
 }
 
 
@@ -782,91 +862,124 @@ fn list<'a, E: CompleteError<'a>>(
 
 
 /// Matches a singleton key in a map context.
+///
+/// This is either a dollar sign followed by an expression, a string literal or
+/// a pure map identifier.
 fn map_key_singleton<'a, E: CompleteError<'a>>(
     input: Span<'a>,
-) -> IResult<Span<'a>, (Location, PExpr), E> {
-    alt((
-
-        map(
-            tuple((
-                positioned_postpad(char('$')),
-                fail(expression, SyntaxElement::Expression),
+) -> IResult<Span<'a>, (Span<'a>, PExpr), E> {
+    tuple((
+        position,
+        alt((
+            naked(map(
+                preceded(
+                    postpad(char('$')),
+                    fail(expression, SyntaxElement::Expression),
+                ),
+                PExpr::inner,
             )),
-            |(start, key)| (start.loc(), PExpr::Naked(key.inner())),
-        ),
 
-        map(
             postpad(string),
-            |x| (x.outer(), x)
-        ),
 
-        map(
-            postpad(map_identifier),
-            |key| (key.loc(), PExpr::Naked(key.map(Object::from).map(Expr::Literal))),
-        ),
-
+            naked(map(
+                postpad(map_identifier),
+                |key| key.map(Object::from).map(Expr::Literal),
+            )),
+        ))
     ))(input)
+}
+
+
+/// Matches a line with indentation of at least `col` spaces.
+///
+/// This does not return the line itself as a result, but the input at the
+/// beginning of the next line.
+fn line_indent_at_least<'a>(
+    col: usize,
+    input: Span<'a>,
+) -> IResult<Span<'a>, Span<'a>, ()> {
+    let (input, _) = space0(input)?;
+    let (input, pos) = position(input)?;
+    let this_col = pos.get_column();
+    if this_col > col {
+        let (input, _) = take_until("\n")(input)?;
+        let (input, _) = tag("\n")(input)?;
+        Ok((input, input))
+    } else {
+        Err(NomError::Error(()))
+    }
 }
 
 
 /// Matches a singleton value in a map context.
+///
+/// This is either a double comma followed by a multiline string, or a single
+/// comma followed by an expression.
 fn map_value_singleton<'a, E: CompleteError<'a>>(
+    col: usize,
     input: Span<'a>,
-) -> IResult<Span<'a>, PExpr, E> {
+) -> IResult<Span<'a>, (PExpr, bool), E> {
     alt((
-        naked(map(
+        do_skip(naked(map(
             preceded(
                 tag("::"),
-                positioned_postpad(
-                    map(
-                        take_until(",\n"),
-                        |s: Span<'a>| multiline(s.as_ref()),
-                    ),
-                ),
+                positioned_postpad(recognize(|i: Span<'a>| {
+                    let (mut i, _) = take_until("\n")(i)?;
+                    loop {
+                        match peek(|j| line_indent_at_least(col, j))(i) {
+                            Ok((_, input)) => {
+                                i = input;
+                            },
+                            Err(_) => {
+                                break;
+                            },
+                        }
+                    }
+                    Ok((i, ()))
+                })),
             ),
-            |s| s.map(|s| Expr::string(vec![StringElement::raw(s)])),
-        )),
+            |s| s.map(|s| Expr::string(vec![StringElement::raw(multiline(s.as_ref()))])),
+        ))),
 
-        preceded(
+        dont_skip(preceded(
             fail(postpad(char(':')), SyntaxElement::Colon),
             fail(expression, SyntaxElement::Expression),
-        ),
+        )),
     ))(input)
 }
 
 
-/// Matches a singleton map element.
+/// Matches a singleton map element: a singleton key followed by a singleton
+/// value.
 fn map_element_singleton<'a, E: CompleteError<'a>>(
     input: Span<'a>,
-) -> IResult<Span<'a>, PMap, E> {
-    naked(map(
-        tuple((
-            map_key_singleton,
-            map_value_singleton,
-        )),
-        |((start, key), value)| {
-            let loc = Location::from((start, value.outer()));
-            MapElement::Singleton { key: key.inner(), value: value.inner() }.tag(loc)
-        }
-    ))(input)
+) -> IResult<Span<'a>, (PMap, bool), E> {
+    let (input, (span, key)) = map_key_singleton(input)?;
+    let col = span.get_column();
+
+    let (input, (value, skip_sep)) = map_value_singleton(col, input)?;
+
+    let loc = Location::from((span, value.outer()));
+    let ret = MapElement::Singleton { key: key.inner(), value: value.inner() }.tag(loc);
+
+    Ok((input, (PMap::Naked(ret), skip_sep)))
 }
 
 
 /// Matches a map element: anything that is legal in a map.
 ///
 /// There are five cases:
-/// - literal singleton elements: `{x: 1}`
-/// - evaluated singleton elements: `{$x: 1}`
+/// - singleton elements
 /// - splatted iterables: `{...x}`
 /// - conditional elements: `{if cond: @}`
 /// - iterated elements: `{for x in y: @}`
 fn map_element<'a, E: CompleteError<'a>>(
     input: Span<'a>,
-) -> IResult<Span<'a>, PMap, E> {
+) -> IResult<Span<'a>, (PMap, bool), E> {
     alt((
 
         // Splat
-        naked(map(
+        dont_skip(naked(map(
             tuple((
                 positioned_postpad(tag("...")),
                 fail(expression, SyntaxElement::Expression),
@@ -875,10 +988,10 @@ fn map_element<'a, E: CompleteError<'a>>(
                 let loc = Location::from((&start, expr.outer()));
                 MapElement::Splat(expr.inner()).tag(loc)
             },
-        )),
+        ))),
 
         // Iteration
-        naked(map(
+        map(
             tuple((
                 positioned_postpad(tag("for")),
                 fail(binding, SyntaxElement::Binding),
@@ -891,18 +1004,19 @@ fn map_element<'a, E: CompleteError<'a>>(
                     fail(map_element, SyntaxElement::MapElement),
                 ),
             )),
-            |(start, binding, iterable, expr)| {
+            |(start, binding, iterable, (expr, skip))| {
                 let loc = Location::from((&start, expr.outer()));
-                MapElement::Loop {
+                let ret = MapElement::Loop {
                     binding,
                     iterable: iterable.inner(),
                     element: Box::new(expr.inner()),
-                }.tag(loc)
+                }.tag(loc);
+                (PMap::Naked(ret), skip)
             },
-        )),
+        ),
 
         // Conditional
-        naked(map(
+        map(
             tuple((
                 positioned_postpad(tag("when")),
                 fail(expression, SyntaxElement::Expression),
@@ -911,14 +1025,15 @@ fn map_element<'a, E: CompleteError<'a>>(
                     fail(map_element, SyntaxElement::MapElement),
                 ),
             )),
-            |(start, condition, expr)| {
+            |(start, condition, (expr, skip))| {
                 let loc = Location::from((&start, expr.outer()));
-                MapElement::Cond {
+                let ret = MapElement::Cond {
                     condition: condition.inner(),
                     element: Box::new(expr.inner())
-                }.tag(loc)
+                }.tag(loc);
+                (PMap::Naked(ret), skip)
             },
-        )),
+        ),
 
         // Various types of singletons
         map_element_singleton,
@@ -936,7 +1051,7 @@ fn mapping<'a, E: CompleteError<'a>>(
     input: Span<'a>,
 ) -> IResult<Span<'a>, PExpr, E> {
     naked(positioned(map(
-        seplist(
+        seplist_opt_delim(
             postpad(char('{')),
             map_element,
             postpad(char(',')),
