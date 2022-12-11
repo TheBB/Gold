@@ -1,5 +1,6 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
+use indexmap::IndexMap;
 use symbol_table::GlobalSymbol;
 
 use crate::error::{Error, Location, Tagged};
@@ -190,12 +191,12 @@ where
 // ----------------------------------------------------------------
 
 pub trait ToMap<K,V> {
-    fn to_map(self) -> HashMap<K,V>;
+    fn to_map(self) -> IndexMap<K,V>;
 }
 
 impl<K,V> ToMap<K,V> for () {
-    fn to_map(self) -> HashMap<K,V> {
-        HashMap::new()
+    fn to_map(self) -> IndexMap<K,V> {
+        IndexMap::new()
     }
 }
 
@@ -204,8 +205,8 @@ where
     Ak: AsRef<str>,
     V: From<Av>,
 {
-    fn to_map(self) -> HashMap<GlobalSymbol,V> {
-        let mut ret = HashMap::new();
+    fn to_map(self) -> IndexMap<GlobalSymbol,V> {
+        let mut ret = IndexMap::new();
         ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
         ret
     }
@@ -218,8 +219,8 @@ where
     V: From<Av>,
     V: From<Bv>,
 {
-    fn to_map(self) -> HashMap<GlobalSymbol,V> {
-        let mut ret = HashMap::new();
+    fn to_map(self) -> IndexMap<GlobalSymbol,V> {
+        let mut ret = IndexMap::new();
         ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
         ret.insert(GlobalSymbol::new(self.1.0), V::from(self.1.1));
         ret
@@ -235,8 +236,8 @@ where
     V: From<Bv>,
     V: From<Cv>,
 {
-    fn to_map(self) -> HashMap<GlobalSymbol,V> {
-        let mut ret = HashMap::new();
+    fn to_map(self) -> IndexMap<GlobalSymbol,V> {
+        let mut ret = IndexMap::new();
         ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
         ret.insert(GlobalSymbol::new(self.1.0), V::from(self.1.1));
         ret.insert(GlobalSymbol::new(self.2.0), V::from(self.2.1));
@@ -255,8 +256,8 @@ where
     V: From<Cv>,
     V: From<Dv>,
 {
-    fn to_map(self) -> HashMap<GlobalSymbol,V> {
-        let mut ret = HashMap::new();
+    fn to_map(self) -> IndexMap<GlobalSymbol,V> {
+        let mut ret = IndexMap::new();
         ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
         ret.insert(GlobalSymbol::new(self.1.0), V::from(self.1.1));
         ret.insert(GlobalSymbol::new(self.2.0), V::from(self.2.1));
@@ -278,8 +279,8 @@ where
     V: From<Dv>,
     V: From<Ev>,
 {
-    fn to_map(self) -> HashMap<GlobalSymbol,V> {
-        let mut ret = HashMap::new();
+    fn to_map(self) -> IndexMap<GlobalSymbol,V> {
+        let mut ret = IndexMap::new();
         ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
         ret.insert(GlobalSymbol::new(self.1.0), V::from(self.1.1));
         ret.insert(GlobalSymbol::new(self.2.0), V::from(self.2.1));

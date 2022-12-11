@@ -1,18 +1,19 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+// use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::io::{Read, Write};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use symbol_table::GlobalSymbol;
+use indexmap::IndexMap;
+use json::JsonValue;
 use num_bigint::BigInt;
 use num_traits::{ToPrimitive, checked_pow};
-use json::JsonValue;
 use rmp_serde::{decode, encode};
 use serde::de::Visitor;
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
+use symbol_table::GlobalSymbol;
 
 use crate::builtins::BUILTINS;
 use crate::traits::{ToVec, ToMap};
@@ -84,7 +85,7 @@ where
 
 pub type Key = GlobalSymbol;
 pub type List = Vec<Object>;
-pub type Map = HashMap<Key, Object>;
+pub type Map = IndexMap<Key, Object>;
 pub type RFunc = fn(&List, Option<&Map>) -> Result<Object, Error>;
 
 
