@@ -258,6 +258,7 @@ pub enum TypeMismatch {
 pub enum Value {
     OutOfRange,
     TooLarge,
+    TooLong,
     Convert(Type),
 }
 
@@ -491,6 +492,7 @@ impl Display for Reason {
             Self::TypeMismatch(TypeMismatch::UnOp(x, op)) => f.write_fmt(format_args!("unsuitable type for '{}': {}", op, x)),
 
             Self::Value(Value::TooLarge) => f.write_str("value too large"),
+            Self::Value(Value::TooLong) => f.write_str("value too long"),
             Self::Value(Value::OutOfRange) => f.write_str("value out of range"),
             Self::Value(Value::Convert(t)) => f.write_fmt(format_args!("couldn't convert to {}", t)),
 

@@ -530,7 +530,7 @@ fn identifier<'a, E: CompleteError<'a>>(
         verify(
             recognize(pair(
                 alt((alpha1::<Span<'a>, E>, tag("_"))),
-                opt(is_not("=.,:;-+/*[](){}|\"\' \t\n\r")),
+                opt(is_not("=.,:;-+/*[](){}^|\"\' \t\n\r")),
             )),
             |out: &Span<'a>| !KEYWORDS.contains(out.fragment()),
         ),
@@ -653,6 +653,7 @@ fn raw_string<'a, E: CompleteError<'a>>(
             alt((
                 value("\"", tag("\"")),
                 value("\\", tag("\\")),
+                value("$", tag("$")),
             )),
         ),
         |x: &str| { x.len() > 0 },
