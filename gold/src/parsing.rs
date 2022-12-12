@@ -794,7 +794,7 @@ fn list_element<'a, E: CompleteError<'a>>(
                 positioned_postpad(keyword("for")),
                 fail(binding, SyntaxElement::Binding),
                 preceded(
-                    fail(postpad(tag("in")), SyntaxElement::In),
+                    fail(postpad(keyword("in")), SyntaxElement::In),
                     fail(expression, SyntaxElement::Expression),
                 ),
                 preceded(
@@ -993,10 +993,10 @@ fn map_element<'a, E: CompleteError<'a>>(
         // Iteration
         map(
             tuple((
-                positioned_postpad(tag("for")),
+                positioned_postpad(keyword("for")),
                 fail(binding, SyntaxElement::Binding),
                 preceded(
-                    fail(postpad(tag("in")), SyntaxElement::In),
+                    fail(postpad(keyword("in")), SyntaxElement::In),
                     fail(expression, SyntaxElement::Expression),
                 ),
                 preceded(
@@ -1018,7 +1018,7 @@ fn map_element<'a, E: CompleteError<'a>>(
         // Conditional
         map(
             tuple((
-                positioned_postpad(tag("when")),
+                positioned_postpad(keyword("when")),
                 fail(expression, SyntaxElement::Expression),
                 preceded(
                     fail(postpad(char(':')), SyntaxElement::Colon),

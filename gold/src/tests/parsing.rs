@@ -393,6 +393,13 @@ fn maps() {
     );
 
     assert_eq!(
+        parse("{format: 1}"),
+        Ok(Expr::map((
+            ("format".lit(1..7), 1.expr(9)).mel(),
+        )).tag(0..11)),
+    );
+
+    assert_eq!(
         parse("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}"),
         Ok(Expr::map((
             ("a".lit(1), 1.expr(4)).mel(),
