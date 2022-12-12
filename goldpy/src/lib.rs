@@ -231,9 +231,7 @@ fn eval(x: String, path: Option<String>, resolver: CallableResolverWrapper) -> P
         x.as_ref(),
         path.map(PathBuf::from).as_ref().map(PathBuf::as_ref),
         &resolver.0,
-    ).map_err(
-        |_| PyErr::new::<PyValueError, _>("")
-    ).map(ObjectWrapper)
+    ).map_err(err_to_py).map(ObjectWrapper)
 }
 
 
@@ -241,9 +239,7 @@ fn eval(x: String, path: Option<String>, resolver: CallableResolverWrapper) -> P
 fn eval_raw(x: String) -> PyResult<ObjectWrapper> {
     gold::eval_raw(
         x.as_str(),
-    ).map_err(
-        |_| PyErr::new::<PyValueError, _>("")
-    ).map(ObjectWrapper)
+    ).map_err(err_to_py).map(ObjectWrapper)
 }
 
 
@@ -251,9 +247,7 @@ fn eval_raw(x: String) -> PyResult<ObjectWrapper> {
 fn eval_file(x: String) -> PyResult<ObjectWrapper> {
     gold::eval_file(
         &PathBuf::from(x)
-    ).map_err(
-        |_| PyErr::new::<PyValueError, _>("")
-    ).map(ObjectWrapper)
+    ).map_err(err_to_py).map(ObjectWrapper)
 }
 
 
