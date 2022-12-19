@@ -1,4 +1,6 @@
 use std::cmp::min;
+use std::ops::Range;
+
 use std::fmt::{Debug, Display, Write};
 use std::path::PathBuf;
 
@@ -27,6 +29,34 @@ impl Location {
             length: r.offset + r.length - l.offset,
         }
     }
+
+    pub fn line(&self, l: u32) -> Location {
+        Location {
+            offset: self.offset,
+            line: l,
+            length: self.length,
+        }
+    }
+}
+
+impl From<Range<u32>> for Location {
+    fn from(value: Range<u32>) -> Self {
+        Location {
+            offset: value.start as usize,
+            line: 1,
+            length: (value.end - value.start) as usize,
+        }
+    }
+}
+
+impl From<usize> for Location {
+    fn from(value: usize) -> Self {
+        Location {
+            offset: value,
+            line: 1,
+            length: 1,
+        }
+    }
 }
 
 
@@ -50,6 +80,11 @@ impl<T> Tagged<T> {
 
     pub fn unwrap(self) -> T {
         self.contents
+    }
+
+    pub fn line(self, l: u32) -> Tagged<T> {
+        let loc = self.location.line(l);
+        self.retag(loc)
     }
 
     pub fn map<F, U>(self, f: F) -> Tagged<U> where F: FnOnce(T) -> U {

@@ -1,5 +1,3 @@
-use std::ops::Range;
-
 use crate::ast::*;
 use crate::error::{Location, Tagged, Error, Reason, Syntax, SyntaxElement, Action};
 use crate::object::{Object, Key};
@@ -82,33 +80,6 @@ trait ExprAble {
 impl<U> ExprAble for U where Object: From<U> {
     fn expr<T>(self, loc: T) -> Tagged<Expr> where Location: From<T> {
         Expr::Literal(Object::from(self)).tag(loc)
-    }
-}
-
-
-impl From<(usize, u32, usize)> for Location {
-    fn from((offset, line, length): (usize, u32, usize)) -> Self {
-        Location { offset, line, length }
-    }
-}
-
-impl From<usize> for Location {
-    fn from(value: usize) -> Self {
-        Location {
-            offset: value,
-            line: 1,
-            length: 1,
-        }
-    }
-}
-
-impl From<Range<u32>> for Location {
-    fn from(value: Range<u32>) -> Self {
-        Location {
-            offset: value.start as usize,
-            line: 1,
-            length: (value.end - value.start) as usize,
-        }
     }
 }
 
@@ -286,7 +257,7 @@ fn lists() {
         parse("[ 1 , ... x , when x : y , for x in y : z , ]"),
         Ok(Expr::list((
             1.lel(2),
-            "x".id(10).wrap(ListElement::Splat, (6, 1, 5)),
+            "x".id(10).wrap(ListElement::Splat, 6..11),
             ListElement::Cond {
                 condition: "x".id(19),
                 element: "y".id(23).wraptag(ListElement::Singleton).to_box(),
@@ -307,7 +278,7 @@ fn lists() {
             ListElement::Cond {
                 condition: "x".id(22),
                 element: "y".id(26).wraptag(ListElement::Singleton).to_box(),
-            }.tag((17, 1, 11)),
+            }.tag(17..28),
             ListElement::Loop {
                 binding: "x".bid(35),
                 iterable: "y".id(40),
@@ -451,7 +422,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit((5, 2, 1)), "here's some text".expr((8, 2, 18))).mel(),
+            ("z".lit(5).line(2), "here's some text".expr(8..26).line(2)).mel(),
         )).tag(0..27)),
     );
 
@@ -463,7 +434,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit((5, 2, 1)), "here's some\ntext".expr((8, 2, 25))).mel(),
+            ("z".lit(5).line(2), "here's some\ntext".expr(8..33).line(2)).mel(),
         )).tag(0..34)),
     );
 
@@ -475,7 +446,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit((5, 2, 1)), "here's some\ntext".expr((8, 2, 23))).mel(),
+            ("z".lit(5).line(2), "here's some\ntext".expr(8..31).line(2)).mel(),
         )).tag(0..32)),
     );
 
@@ -488,7 +459,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit((5, 2, 1)), "here's some\ntext".expr((8, 2, 28))).mel(),
+            ("z".lit(5).line(2), "here's some\ntext".expr(8..36).line(2)).mel(),
         )).tag(0..37)),
     );
 
@@ -501,7 +472,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit((5, 2, 1)), "here's some\n  text".expr((8, 2, 30))).mel(),
+            ("z".lit(5).line(2), "here's some\n  text".expr(8..38).line(2)).mel(),
         )).tag(0..39)),
     );
 
@@ -514,7 +485,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit((5, 2, 1)), "  here's some\ntext".expr((8, 2, 30))).mel(),
+            ("z".lit(5).line(2), "  here's some\ntext".expr(8..38).line(2)).mel(),
         )).tag(0..39)),
     );
 
@@ -526,8 +497,8 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("a".lit((6, 2, 1)), "x".expr((9, 2, 3))).mel(),
-            ("b".lit((16, 3, 1)), "y".id((19, 3, 1))).mel(),
+            ("a".lit(6).line(2), "x".expr(9..12).line(2)).mel(),
+            ("b".lit(16).line(3), "y".key(19).line(3).wraptag(Expr::Identifier)).mel(),
         )).tag(0..23)),
     );
 
@@ -579,7 +550,7 @@ fn maps() {
             MapElement::Cond {
                 condition: "x".id(23),
                 element: ("b".lit(27), "y".id(31)).mel().to_box(),
-            }.tag((18, 1, 14)),
+            }.tag(18..32),
             MapElement::Loop {
                 binding: "x".bid(39),
                 iterable: "y".id(44),
@@ -1131,7 +1102,7 @@ fn operators() {
                 2.expr(5)
                 .pow(2.expr(9), 7).tag(5..10),
                 3,
-            ).tag((1, 1, 9))
+            ).tag(1..10)
             .neg(0).tag(0..10)
         ),
     );

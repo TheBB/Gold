@@ -7,6 +7,7 @@ mod ast;
 mod builtins;
 pub mod error;
 pub mod eval;
+mod lexing;
 mod parsing;
 mod traits;
 mod util;
