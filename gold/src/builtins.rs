@@ -334,9 +334,7 @@ pub fn islist(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 pub fn isfunc(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     match &args[..] {
-        [Object::Function(_)] => Ok(Object::from(true)),
-        [Object::Closure(_)] => Ok(Object::from(true)),
-        [Object::Builtin(_)] => Ok(Object::from(true)),
+        [Object::Func(_)] => Ok(Object::from(true)),
         [_] => Ok(Object::from(false)),
         _ => Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len()))),
     }

@@ -6,7 +6,7 @@ use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::builtins::BUILTINS;
 use crate::error::{Error, Internal, Tagged, Unpack, TypeMismatch, FileSystem, Action, Reason};
-use crate::object::{Object, Function, Key, Map, List};
+use crate::object::{Object, Func, Key, Map, List};
 use crate::traits::Free;
 
 
@@ -108,7 +108,7 @@ impl<'a> Namespace<'a> {
 
     pub fn get(&self, key: &Key) -> Result<Object, Error> {
         match self {
-            Namespace::Empty => BUILTINS.get(key.as_str()).cloned().map(Object::from).ok_or_else(|| Error::unbound(key.clone())),
+            Namespace::Empty => BUILTINS.get(key.as_str()).cloned().map(Object::function).ok_or_else(|| Error::unbound(key.clone())),
             Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| Error::unbound(key.clone())),
             Namespace::Mutable { names, prev } => names.get(key).map(Object::clone).ok_or(()).or_else(|_| prev.get(key))
         }
@@ -470,7 +470,7 @@ impl<'a> Namespace<'a> {
                     let val = self.get(&ident)?;
                     closure.insert(ident, val);
                 }
-                Ok(Object::from(Function {
+                Ok(Object::function(Func {
                     args: positional.clone(),
                     kwargs: keywords.clone(),
                     closure,

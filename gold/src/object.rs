@@ -390,43 +390,9 @@ impl IntVariant {
 }
 
 
-struct Arith<F,G,S,T>
-where
-    F: Fn(&IntVariant, &IntVariant) -> S,
-    G: Fn(f64, f64) -> T,
-    Object: From<S> + From<T>,
-{
-    ixi: F,
-    fxf: G,
-}
 
-
-fn arithmetic_operate<F,G,S,T>(ops: Arith<F,G,S,T>, x: &Object, y: &Object, op: BinOp) -> Result<Object, Error>
-where
-    F: Fn(&IntVariant, &IntVariant) -> S,
-    G: Fn(f64, f64) -> T,
-    Object: From<S> + From<T>,
-{
-    let Arith { ixi, fxf } = ops;
-
-    match (x, y) {
-        (Object::Int(xx), Object::Int(yy)) => Ok(Object::from(ixi(xx, yy))),
-        (Object::Int(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx.to_f64(), *yy))),
-        (Object::Float(xx), Object::Int(yy)) => Ok(Object::from(fxf(*xx, yy.to_f64()))),
-        (Object::Float(xx), Object::Float(yy)) => Ok(Object::from(fxf(*xx, *yy))),
-
-        _ => Err(Error::new(TypeMismatch::BinOp(x.type_of(), y.type_of(), op))),
-    }
-}
-
-
-pub type Key = GlobalSymbol;
-pub type List = Vec<Object>;
-pub type Map = IndexMap<Key, Object>;
-pub type RFunc = fn(&List, Option<&Map>) -> Result<Object, Error>;
-
-
-const SERIALIZE_VERSION: i32 = 1;
+// Function variant
+// ------------------------------------------------------------------------------------------------
 
 
 #[derive(Clone)]
@@ -463,7 +429,7 @@ impl<'a> Deserialize<'a> for Builtin {
 
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct Function {
+pub struct Func {
     pub args: ListBinding,
     pub kwargs: Option<MapBinding>,
     pub closure: Map,
@@ -473,6 +439,84 @@ pub struct Function {
 
 #[derive(Clone)]
 pub struct Closure(pub Arc<dyn Fn(&List, Option<&Map>) -> Result<Object, Error> + Send + Sync>);
+
+
+#[derive(Clone, Serialize, Deserialize)]
+pub enum FuncVariant {
+    Func(Arc<Func>),
+    Builtin(Builtin),
+
+    #[serde(skip)]
+    Closure(Closure),
+}
+
+impl Debug for FuncVariant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Func(x) => f.debug_tuple("FuncVariant::Function").field(x).finish(),
+            Self::Builtin(_) => f.debug_tuple("FuncVariant::Builtin").finish(),
+            Self::Closure(_) => f.debug_tuple("FuncVariant::Closure").finish(),
+        }
+    }
+}
+
+impl From<Func> for FuncVariant {
+    fn from(value: Func) -> Self {
+        FuncVariant::Func(Arc::new(value))
+    }
+}
+
+impl From<Builtin> for FuncVariant {
+    fn from(value: Builtin) -> Self {
+        FuncVariant::Builtin(value)
+    }
+}
+
+impl From<Closure> for FuncVariant {
+    fn from(value: Closure) -> Self {
+        FuncVariant::Closure(value)
+    }
+}
+
+impl FuncVariant {
+    fn user_eq(&self, other: &FuncVariant) -> bool {
+        match (self, other) {
+            (FuncVariant::Builtin(x), FuncVariant::Builtin(y)) => x.name == y.name,
+            _ => false,
+        }
+    }
+
+    fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+        match self {
+            Self::Builtin(Builtin { func, .. }) => func(args, kwargs),
+            Self::Closure(Closure(func)) => func(args, kwargs),
+            Self::Func(func) => {
+                let Func { args: fargs, kwargs: fkwargs, closure, expr } = func.as_ref();
+
+                let ns = Namespace::Frozen(closure);
+                let mut sub = ns.subtend();
+                sub.bind_list(&fargs.0, args)?;
+
+                match (fkwargs, kwargs) {
+                    (Some(b), Some(k)) => { sub.bind_map(&b.0, k)?; },
+                    (Some(b), None) => { sub.bind_map(&b.0, &Map::new())?; },
+                    _ => {},
+                }
+
+                sub.eval(expr)
+            }
+        }
+    }
+}
+
+
+pub type Key = GlobalSymbol;
+pub type List = Vec<Object>;
+pub type Map = IndexMap<Key, Object>;
+pub type RFunc = fn(&List, Option<&Map>) -> Result<Object, Error>;
+
+
+const SERIALIZE_VERSION: i32 = 1;
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -507,18 +551,12 @@ impl Display for Type {
 pub enum Object {
     Int(IntVariant),
     Float(f64),
-
     Str(StrVariant),
-
     Boolean(bool),
     List(Arc<List>),
     Map(Arc<Map>),
-    Function(Arc<Function>),
-    Builtin(Builtin),
+    Func(FuncVariant),
     Null,
-
-    #[serde(skip)]
-    Closure(Closure),
 }
 
 impl PartialEq<Object> for Object {
@@ -558,10 +596,8 @@ impl Debug for Object {
             Self::Boolean(x) => f.debug_tuple("Object::Boolean").field(x).finish(),
             Self::List(x) => f.debug_tuple("Object::List").field(x.as_ref()).finish(),
             Self::Map(x) => f.debug_tuple("Object::Map").field(x.as_ref()).finish(),
-            Self::Function(x) => f.debug_tuple("Object::Function").field(x.as_ref()).finish(),
-            Self::Builtin(_) => f.debug_tuple("Object::Builtin").finish(),
+            Self::Func(x) => f.debug_tuple("Object::Function").field(x).finish(),
             Self::Null => f.debug_tuple("Object::Null").finish(),
-            Self::Closure(_) => f.debug_tuple("Object::Closure").finish(),
         }
     }
 }
@@ -575,7 +611,7 @@ impl Object {
             Self::Boolean(_) => Type::Boolean,
             Self::List(_) => Type::List,
             Self::Map(_) => Type::Map,
-            Self::Function(_) | Self::Builtin(_) | Self::Closure(_) => Type::Function,
+            Self::Func(_) => Type::Function,
             Self::Null => Type::Null,
         }
     }
@@ -602,6 +638,10 @@ impl Object {
 
     pub fn map<T>(x: T) -> Object where T: ToMap<Key, Object> {
         Object::Map(Arc::new(x.to_map()))
+    }
+
+    pub fn function<T>(x: T) -> Object where FuncVariant: From<T> {
+        Object::Func(FuncVariant::from(x))
     }
 
     pub fn numeric_normalize(self) -> Self {
@@ -647,7 +687,7 @@ impl Object {
             (Object::Str(x), Object::Str(y)) => x.user_eq(y),
             (Object::Boolean(x), Object::Boolean(y)) => x.eq(y),
             (Object::Null, Object::Null) => true,
-            (Object::Builtin(x), Object::Builtin(y)) => x.name == y.name,
+            (Object::Func(x), Object::Func(y)) => x.user_eq(y),
 
             // Composite objects => use user equality
             (Object::List(x), Object::List(y)) => {
@@ -723,39 +763,40 @@ impl Object {
         match (&self, &other) {
             (Object::List(x), Object::List(y)) => Ok(Object::from(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())),
             (Object::Str(x), Object::Str(y)) => Ok(Object::Str(x.add(y))),
-            _ => arithmetic_operate(Arith {
-                ixi: IntVariant::add,
-                fxf: |x,y| x + y,
-            }, self, other, BinOp::Add),
+            _ => self.operate(other, IntVariant::add, |x,y| x + y, BinOp::Add),
         }
     }
 
     pub fn sub(&self, other: &Object) -> Result<Object, Error> {
-        arithmetic_operate(Arith {
-            ixi: IntVariant::sub,
-            fxf: |x,y| x - y,
-        }, self, other, BinOp::Subtract)
+        self.operate(other, IntVariant::sub, |x,y| x - y, BinOp::Subtract)
     }
 
     pub fn mul(&self, other: &Object) -> Result<Object, Error> {
-        arithmetic_operate(Arith {
-            ixi: IntVariant::mul,
-            fxf: |x,y| x * y,
-        }, self, other, BinOp::Multiply)
+        self.operate(other, IntVariant::mul, |x,y| x * y, BinOp::Multiply)
     }
 
     pub fn div(&self, other: &Object) -> Result<Object, Error> {
-        arithmetic_operate(Arith {
-            ixi: IntVariant::div,
-            fxf: |x,y| x / y,
-        }, self, other, BinOp::Divide)
+        self.operate(other, IntVariant::div, |x,y| x / y, BinOp::Divide)
     }
 
     pub fn idiv(self, other: &Object) -> Result<Object, Error> {
-        arithmetic_operate(Arith {
-            ixi: IntVariant::idiv,
-            fxf: |x,y| (x / y).floor() as f64,
-        }, &self, &other, BinOp::IntegerDivide)
+        self.operate(other, IntVariant::idiv, |x,y| (x / y).floor() as f64, BinOp::IntegerDivide)
+    }
+
+    fn operate<F,G,S,T>(&self, other: &Object, ixi: F, fxf: G, op: BinOp) -> Result<Object, Error>
+    where
+        F: Fn(&IntVariant, &IntVariant) -> S,
+        G: Fn(f64, f64) -> T,
+        Object: From<S> + From<T>,
+    {
+        match (self, other) {
+            (Object::Int(xx), Object::Int(yy)) => Ok(Object::from(ixi(xx, yy))),
+            (Object::Int(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx.to_f64(), *yy))),
+            (Object::Float(xx), Object::Int(yy)) => Ok(Object::from(fxf(*xx, yy.to_f64()))),
+            (Object::Float(xx), Object::Float(yy)) => Ok(Object::from(fxf(*xx, *yy))),
+
+            _ => Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), op))),
+        }
     }
 
     pub fn pow(&self, other: &Object) -> Result<Object, Error> {
@@ -795,27 +836,7 @@ impl Object {
 
     pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
         match self {
-            Object::Function(func) => {
-                let Function { args: fargs, kwargs: fkwargs, closure, expr } = func.as_ref();
-
-                let ns = Namespace::Frozen(closure);
-                let mut sub = ns.subtend();
-                sub.bind_list(&fargs.0, args)?;
-
-                match (fkwargs, kwargs) {
-                    (Some(b), Some(k)) => { sub.bind_map(&b.0, k)?; },
-                    (Some(b), None) => { sub.bind_map(&b.0, &Map::new())?; },
-                    _ => {},
-                }
-
-                sub.eval(expr)
-            },
-            Object::Builtin(Builtin { func, .. }) => {
-                func(args, kwargs)
-            },
-            Object::Closure(Closure(func)) => {
-                func(args, kwargs)
-            }
+            Object::Func(func) => func.call(args, kwargs),
             _ => Err(Error::new(TypeMismatch::Call(self.type_of()))),
         }
     }
@@ -882,18 +903,6 @@ impl From<List> for Object {
 impl From<Map> for Object {
     fn from(value: Map) -> Self {
         Object::Map(Arc::new(value))
-    }
-}
-
-impl From<Function> for Object {
-    fn from(value: Function) -> Self {
-        Object::Function(Arc::new(value))
-    }
-}
-
-impl From<Builtin> for Object {
-    fn from(value: Builtin) -> Self {
-        Object::Builtin(value)
     }
 }
 

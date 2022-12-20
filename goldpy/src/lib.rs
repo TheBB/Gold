@@ -17,51 +17,16 @@ use gold::eval::{CallableResolver, ResolveFunc};
 /// Thin wrapper around [`object::Function`] so that it can be converted to an
 /// opaque Python type.
 ///
-/// This type represents callable objects implemented in pure Gold.
+/// This type represents all kinds of callable objects.
 #[pyclass]
 #[derive(Clone)]
-struct Function(Arc<object::Function>);
+struct Function(object::FuncVariant);
 
 #[pymethods]
 impl Function {
     #[args(args = "*", kwargs = "**")]
     fn __call__(&self, py: Python<'_>, args: &PyTuple, kwargs: Option<&PyDict>) -> PyResult<Py<PyAny>> {
-        call(py, &Object::Function(self.0.clone()), args, kwargs)
-    }
-}
-
-
-/// Thin wrapper around [`object::Builtin`] so that it can be converted to an
-/// opaque Python type.
-///
-/// This type represents callable objects implemented in Rust.
-#[pyclass]
-#[derive(Clone)]
-struct Builtin(object::Builtin);
-
-#[pymethods]
-impl Builtin {
-    #[args(args = "*", kwargs = "**")]
-    fn __call__(&self, py: Python<'_>, args: &PyTuple, kwargs: Option<&PyDict>) -> PyResult<Py<PyAny>> {
-        call(py, &Object::Builtin(self.0.clone()), args, kwargs)
-    }
-}
-
-
-/// Thin wrapper around [`object::Closure`] so that it can be converted to an
-/// opaque Python type.
-///
-/// This type represents general closures, i.e. dyn Fn(...) -> ..., typically
-/// created by converting Python callables to Gold.
-#[pyclass]
-#[derive(Clone)]
-struct Closure(object::Closure);
-
-#[pymethods]
-impl Closure {
-    #[args(args = "*", kwargs = "**")]
-    fn __call__(&self, py: Python<'_>, args: &PyTuple, kwargs: Option<&PyDict>) -> PyResult<Py<PyAny>> {
-        call(py, &Object::Closure(self.0.clone()), args, kwargs)
+        call(py, &Object::function(self.0.clone()), args, kwargs)
     }
 }
 
@@ -118,9 +83,7 @@ impl<'s> FromPyObject<'s> for ObjectWrapper {
     fn extract(obj: &'s PyAny) -> PyResult<Self> {
         // Nothing magical here, just a prioritized list of possible Python types and their Gold equivalents
         if let Ok(Function(x)) = obj.extract::<Function>() {
-            Ok(ObjectWrapper(Object::Function(x)))
-        } else if let Ok(Builtin(x)) = obj.extract::<Builtin>() {
-            Ok(ObjectWrapper(Object::Builtin(x)))
+            Ok(ObjectWrapper(Object::Func(x)))
         } else if let Ok(x) = obj.extract::<i64>() {
             Ok(ObjectWrapper(Object::from(x)))
         } else if let Ok(x) = obj.extract::<BigInt>() {
@@ -159,7 +122,7 @@ impl<'s> FromPyObject<'s> for ObjectWrapper {
                     result.map_err(|e: PyErr| Error::new(Reason::External(format!("{}", e))))
                 }
             ));
-            Ok(ObjectWrapper(Object::Closure(closure)))
+            Ok(ObjectWrapper(Object::function(closure)))
         } else {
             Err(PyTypeError::new_err(
                 format!("uncovertible type: {}", obj.get_type().name().unwrap_or("unknown"))
@@ -187,9 +150,7 @@ impl pyo3::IntoPy<PyObject> for ObjectWrapper {
                 r.into()
             },
             Object::Null => (None as Option<bool>).into_py(py),
-            Object::Function(x) => Function(x).into_py(py),
-            Object::Builtin(x) => Builtin(x).into_py(py),
-            Object::Closure(x) => Closure(x).into_py(py),
+            Object::Func(x) => Function(x).into_py(py),
         }
     }
 }
@@ -254,7 +215,6 @@ fn eval_file(x: String) -> PyResult<ObjectWrapper> {
 #[pymodule]
 fn goldpy(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Function>()?;
-    m.add_class::<Builtin>()?;
     m.add_function(wrap_pyfunction!(eval, m)?)?;
     m.add_function(wrap_pyfunction!(eval_raw, m)?)?;
     m.add_function(wrap_pyfunction!(eval_file, m)?)?;
