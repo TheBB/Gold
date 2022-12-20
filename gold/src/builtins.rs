@@ -54,8 +54,7 @@ lazy_static! {
 
 pub fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     match &args[..] {
-        [Object::IntString(x)] => Ok(Object::from(x.as_str().chars().count() as usize)),
-        [Object::NatString(x)] => Ok(Object::from(x.as_str().chars().count() as usize)),
+        [Object::Str(x)] => Ok(Object::from(x.as_str().chars().count() as usize)),
         [Object::List(x)] => Ok(Object::from(x.len() as usize)),
         [Object::Map(x)] => Ok(Object::from(x.len() as usize)),
         [obj] => Err(Error::new(TypeMismatch::ExpectedArg(
@@ -86,10 +85,9 @@ pub fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         [Object::BigInteger(_)] => Ok(args[0].clone()),
         [Object::Float(x)] => Ok(Object::Integer(x.round() as i64)),
         [Object::Boolean(x)] => Ok(Object::from(if *x { 1 } else { 0 })),
-        [Object::IntString(x)] =>
-            BigInt::from_str(x.as_str()).map_err(|_| Error::new(Value::Convert(Type::Integer))).map(Object::from).map(Object::numeric_normalize),
-        [Object::NatString(x)] =>
-            BigInt::from_str(x.as_str()).map_err(|_| Error::new(Value::Convert(Type::Integer))).map(Object::from).map(Object::numeric_normalize),
+        [Object::Str(x)] => BigInt::from_str(x.as_str()).map_err(|_|
+            Error::new(Value::Convert(Type::Integer))
+        ).map(Object::from).map(Object::numeric_normalize),
         [x] => Err(Error::new(TypeMismatch::ExpectedArg(
             0,
             vec![Type::Integer, Type::Float, Type::Boolean, Type::String],
@@ -106,8 +104,7 @@ pub fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         [Object::BigInteger(x)] => Ok(Object::from(util::big_to_f64(x))),
         [Object::Float(_)] => Ok(args[0].clone()),
         [Object::Boolean(x)] => Ok(Object::from(if *x { 1.0 } else { 0.0 })),
-        [Object::IntString(x)] => f64::from_str(x.as_str()).map_err(|_| Error::new(Value::Convert(Type::Float))).map(Object::from),
-        [Object::NatString(x)] => f64::from_str(x.as_str()).map_err(|_| Error::new(Value::Convert(Type::Float))).map(Object::from),
+        [Object::Str(x)] => f64::from_str(x.as_str()).map_err(|_| Error::new(Value::Convert(Type::Float))).map(Object::from),
         [x] => Err(Error::new(TypeMismatch::ExpectedArg(
             0,
             vec![Type::Integer, Type::Float, Type::Boolean, Type::String],
@@ -128,8 +125,7 @@ pub fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 pub fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     match &args[..] {
-        [Object::IntString(_)] => Ok(args[0].clone()),
-        [Object::NatString(_)] => Ok(args[0].clone()),
+        [Object::Str(_)] => Ok(args[0].clone()),
         [x] => Ok(Object::from(x.to_string().as_str())),
         args => Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len()))),
     }
@@ -237,8 +233,7 @@ pub fn log(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 pub fn ord(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     let s = match &args[..] {
-        [Object::IntString(x)] => x.as_str(),
-        [Object::NatString(x)] => x.as_str(),
+        [Object::Str(x)] => x.as_str(),
         [x] => { return Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::String], x.type_of()))); },
         _ => { return Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len()))); },
     };
@@ -280,8 +275,7 @@ pub fn isint(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 pub fn isstr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     match &args[..] {
-        [Object::NatString(_)] => Ok(Object::from(true)),
-        [Object::IntString(_)] => Ok(Object::from(true)),
+        [Object::Str(_)] => Ok(Object::from(true)),
         [_] => Ok(Object::from(false)),
         _ => Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len()))),
     }

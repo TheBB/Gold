@@ -973,7 +973,7 @@ fn object_access<'a>(input: In<'a>) -> Out<'a, Tagged<Operator>> {
         tuple((dot, fail(identifier, SyntaxElement::Identifier))),
         |(dot, out)| Operator::BinOp(
             BinOp::Index.tag(&dot),
-            out.map(Object::IntString).map(Expr::Literal).to_box(),
+            out.map(Object::from).map(Expr::Literal).to_box(),
         ).tag(dot.span()..out.span()),
     )(input)
 }

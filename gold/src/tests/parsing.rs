@@ -26,7 +26,7 @@ trait LitAble {
 
 impl<U> LitAble for U where U: KeyAble {
     fn lit<T>(self, loc: T) -> Tagged<Expr> where Span: From<T> {
-        self.key(loc).map(Object::IntString).map(Expr::Literal)
+        self.key(loc).map(Object::from).map(Expr::Literal)
     }
 }
 

@@ -593,11 +593,11 @@ impl Expr {
 
     pub fn string(value: Vec<StringElement>) -> Expr {
         if value.len() == 0 {
-            Expr::Literal(Object::int_string(""))
+            Expr::Literal(Object::interned(""))
         } else if value.len() == 1 {
             match &value[0] {
-                StringElement::Raw(val) if val.len() < 20 => Object::int_string(val.as_ref()).literal(),
-                StringElement::Raw(val) => Object::nat_string(val).literal(),
+                StringElement::Raw(val) if val.len() < 20 => Object::interned(val.as_ref()).literal(),
+                StringElement::Raw(val) => Object::natural_string(val).literal(),
                 _ => Expr::String(value)
             }
         } else {

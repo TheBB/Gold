@@ -175,8 +175,7 @@ impl pyo3::IntoPy<PyObject> for ObjectWrapper {
             Object::Integer(x) => x.into_py(py),
             Object::BigInteger(x) => x.as_ref().clone().into_py(py),
             Object::Float(x) => x.into_py(py),
-            Object::IntString(x) => x.as_str().into_py(py),
-            Object::NatString(x) => x.as_str().into_py(py),
+            Object::Str(x) => x.as_str().into_py(py),
             Object::Boolean(x) => x.into_py(py),
             Object::List(x) => PyList::new(py, x.iter().map(|x| ObjectWrapper(x.clone()).into_py(py))).into(),
             Object::Map(x) => {

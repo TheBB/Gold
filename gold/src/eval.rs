@@ -256,15 +256,10 @@ impl<'a> Namespace<'a> {
     fn fill_map(&self, element: &Tagged<MapElement>, values: &mut Map) -> Result<(), Error> {
         match element.as_ref() {
             MapElement::Singleton { key, value } => {
-                match self.eval(key)? {
-                    Object::IntString(k) => {
-                        let v = self.eval(&value)?;
-                        values.insert(k, v);
-                        Ok(())
-                    },
-                    Object::NatString(k) => {
-                        let v = self.eval(&value)?;
-                        values.insert(Key::new(k.as_ref()), v);
+                match &self.eval(key)? {
+                    Object::Str(k) => {
+                        let v = self.eval(value)?;
+                        values.insert(Key::from(k), v);
                         Ok(())
                     },
                     k => Err(
@@ -425,7 +420,7 @@ impl<'a> Namespace<'a> {
                         }
                     }
                 }
-                Ok(Object::nat_string(rval))
+                Ok(Object::natural_string(rval))
             },
 
             Expr::Identifier(name) => self.get(name).map_err(node.tag_error(Action::LookupName)),

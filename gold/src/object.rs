@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-// use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::io::{Read, Write};
 use std::str::FromStr;
@@ -24,17 +23,83 @@ use crate::eval::Namespace;
 use crate::util;
 
 
+
+/// Convert a string to a displayable representation by adding escape sequences.
 fn escape(s: &str) -> String {
     let mut r = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
             '"' => { r.push_str("\\\""); }
             '\\' => { r.push_str("\\\\"); }
+            '$' => { r.push_str("\\$"); }
             _ => { r.push(c); }
         }
     }
     r
 }
+
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+pub enum StringVariant {
+    Interned(Key),
+    Natural(Arc<String>),
+}
+
+impl PartialOrd<StringVariant> for StringVariant {
+    fn partial_cmp(&self, other: &StringVariant) -> Option<Ordering> {
+        self.as_str().partial_cmp(other.as_str())
+    }
+}
+
+impl From<&StringVariant> for GlobalSymbol {
+    fn from(value: &StringVariant) -> Self {
+        match value {
+            StringVariant::Interned(x) => *x,
+            StringVariant::Natural(x) => Key::new(x.as_ref()),
+        }
+    }
+}
+
+impl ToString for StringVariant {
+    fn to_string(&self) -> String {
+        format!("\"{}\"", escape(self.as_str()))
+    }
+}
+
+impl StringVariant {
+    pub fn interned<T: AsRef<str>>(x: T) -> Self {
+        Self::Interned(Key::new(x))
+    }
+
+    pub fn natural<T: AsRef<str>>(x: T) -> Self {
+        Self::Natural(Arc::new(x.as_ref().to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Interned(x) => x.as_str(),
+            Self::Natural(x) => x.as_str(),
+        }
+    }
+
+    fn format(&self) -> String {
+        self.as_str().to_string()
+    }
+
+    fn user_eq(&self, other: &StringVariant) -> bool {
+        match (self, other) {
+            (Self::Interned(x), Self::Interned(y)) => x == y,
+            (Self::Natural(x), Self::Interned(y)) => x.as_str() == y.as_str(),
+            (Self::Interned(x), Self::Natural(y)) => x.as_str() == y.as_str(),
+            (Self::Natural(x), Self::Natural(y)) => x.as_str() == y.as_str(),
+        }
+    }
+
+    fn add(&self, other: &StringVariant) -> StringVariant {
+        Self::natural(format!("{}{}", self.as_str(), other.as_str()))
+    }
+}
+
 
 
 struct Arith<F,G,H,X,Y,Z>
@@ -172,8 +237,7 @@ pub enum Object {
     BigInteger(Arc<BigInt>),
     Float(f64),
 
-    IntString(GlobalSymbol),
-    NatString(Arc<String>),
+    Str(StringVariant),
 
     Boolean(bool),
     List(Arc<List>),
@@ -192,8 +256,7 @@ impl PartialEq<Object> for Object {
             (Self::Integer(x), Self::Integer(y)) => x.eq(y),
             (Self::BigInteger(x), Self::BigInteger(y)) => x.eq(y),
             (Self::Float(x), Self::Float(y)) => x.eq(y),
-            (Self::IntString(x), Self::IntString(y)) => x.eq(y),
-            (Self::NatString(x), Self::NatString(y)) => x.eq(y),
+            (Self::Str(x), Self::Str(y)) => x.eq(y),
             (Self::Boolean(x), Self::Boolean(y)) => x.eq(y),
             (Self::List(x), Self::List(y)) => x.eq(y),
             (Self::Map(x), Self::Map(y)) => x.eq(y),
@@ -224,10 +287,7 @@ impl PartialOrd<Object> for Object {
             (Object::Float(x), Object::Integer(y)) => x.partial_cmp(&(*y as f64)),
             (Object::Float(_), Object::BigInteger(_)) => other.partial_cmp(self).map(Ordering::reverse),
             (Object::Float(x), Object::Float(y)) => x.partial_cmp(y),
-            (Object::IntString(x), Object::IntString(y)) => x.as_str().partial_cmp(y.as_str()),
-            (Object::NatString(x), Object::IntString(y)) => x.as_str().partial_cmp(y.as_str()),
-            (Object::IntString(x), Object::NatString(y)) => x.as_str().partial_cmp(y.as_str()),
-            (Object::NatString(x), Object::NatString(y)) => x.as_str().partial_cmp(y.as_str()),
+            (Object::Str(x), Object::Str(y)) => x.partial_cmp(y),
             _ => None,
         }
     }
@@ -239,8 +299,7 @@ impl Debug for Object {
             Self::Integer(x) => f.debug_tuple("Object::Integer").field(x).finish(),
             Self::BigInteger(x) => f.debug_tuple("Object::BigInteger").field(x).finish(),
             Self::Float(x) => f.debug_tuple("Object::Float").field(x).finish(),
-            Self::IntString(x) => f.debug_tuple("Object::IntString").field(x).finish(),
-            Self::NatString(x) => f.debug_tuple("Object::NatString").field(x).finish(),
+            Self::Str(x) => f.debug_tuple("Object::Str").field(x).finish(),
             Self::Boolean(x) => f.debug_tuple("Object::Boolean").field(x).finish(),
             Self::List(x) => f.debug_tuple("Object::List").field(x.as_ref()).finish(),
             Self::Map(x) => f.debug_tuple("Object::Map").field(x.as_ref()).finish(),
@@ -257,7 +316,7 @@ impl Object {
         match self {
             Self::BigInteger(_) | Self::Integer(_) => Type::Integer,
             Self::Float(_) => Type::Float,
-            Self::IntString(_) | Self::NatString(_) => Type::String,
+            Self::Str(_) => Type::String,
             Self::Boolean(_) => Type::Boolean,
             Self::List(_) => Type::List,
             Self::Map(_) => Type::Map,
@@ -266,12 +325,12 @@ impl Object {
         }
     }
 
-    pub fn int_string<T: AsRef<str>>(x: T) -> Object {
-        Object::IntString(GlobalSymbol::new(x))
+    pub fn interned<T: AsRef<str>>(x: T) -> Self {
+        Self::Str(StringVariant::interned(x))
     }
 
-    pub fn nat_string<T: AsRef<str>>(x: T) -> Object {
-        Object::NatString(Arc::new(x.as_ref().to_string()))
+    pub fn natural_string<T: AsRef<str>>(x: T) -> Object {
+        Self::Str(StringVariant::natural(x))
     }
 
     pub fn bigint(x: &str) -> Option<Object> {
@@ -292,7 +351,7 @@ impl Object {
 
     pub fn format(&self) -> Result<String, Error> {
         match self {
-            Object::IntString(r) => Ok(r.to_string()),
+            Object::Str(r) => Ok(r.format()),
             Object::Integer(r) => Ok(r.to_string()),
             Object::BigInteger(r) => Ok(r.to_string()),
             Object::Float(r) => Ok(r.to_string()),
@@ -341,7 +400,7 @@ impl Object {
             // Structural equality
             (Object::Integer(x), Object::Integer(y)) => x.eq(y),
             (Object::Float(x), Object::Float(y)) => x.eq(y),
-            (Object::IntString(x), Object::IntString(y)) => x.eq(y),
+            (Object::Str(x), Object::Str(y)) => x.user_eq(y),
             (Object::Boolean(x), Object::Boolean(y)) => x.eq(y),
             (Object::Null, Object::Null) => true,
             (Object::Builtin(x), Object::Builtin(y)) => x.name == y.name,
@@ -426,10 +485,7 @@ impl Object {
     pub fn add(&self, other: &Object) -> Result<Object, Error> {
         match (&self, &other) {
             (Object::List(x), Object::List(y)) => Ok(Object::from(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())),
-            (Object::IntString(x), Object::IntString(y)) => Ok(Object::nat_string(format!("{}{}", x.as_str(), y.as_str()))),
-            (Object::NatString(x), Object::IntString(y)) => Ok(Object::nat_string(format!("{}{}", x.as_str(), y.as_str()))),
-            (Object::IntString(x), Object::NatString(y)) => Ok(Object::nat_string(format!("{}{}", x.as_str(), y.as_str()))),
-            (Object::NatString(x), Object::NatString(y)) => Ok(Object::nat_string(format!("{}{}", x.as_str(), y.as_str()))),
+            (Object::Str(x), Object::Str(y)) => Ok(Object::Str(x.add(y))),
             _ => arithmetic_operate(Arith {
                 ixi: i64::checked_add,
                 bxb: |x,y| x + y,
@@ -510,10 +566,9 @@ impl Object {
                 } else {
                     Ok(x[i].clone())
                 }
-            },
-            (Object::Map(x), Object::IntString(y)) => x.get(y).ok_or_else(|| Error::new(Reason::Unassigned(*y))).map(Object::clone),
-            (Object::Map(x), Object::NatString(y)) => {
-                let yy = GlobalSymbol::new(y.as_ref());
+            }
+            (Object::Map(x), Object::Str(y)) => {
+                let yy = GlobalSymbol::from(y);
                 x.get(&yy).ok_or_else(|| Error::new(Reason::Unassigned(yy))).map(Object::clone)
             }
             _ => Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Index))),
@@ -602,16 +657,16 @@ impl From<BigInt> for Object {
 impl From<&str> for Object {
     fn from(x: &str) -> Object {
         if x.len() < 20 {
-            Object::int_string(x)
+            Object::interned(x)
         } else {
-            Object::nat_string(x)
+            Object::natural_string(x)
         }
     }
 }
 
 impl From<Key> for Object where {
     fn from(value: Key) -> Self {
-        Object::IntString(value)
+        Self::Str(StringVariant::Interned(value))
     }
 }
 
@@ -646,7 +701,7 @@ impl From<Builtin> for Object {
 impl ToString for Object {
     fn to_string(&self) -> String {
         match self {
-            Object::IntString(r) => format!("\"{}\"", escape(r.as_str())),
+            Object::Str(r) => r.to_string(),
             Object::Integer(r) => r.to_string(),
             Object::BigInteger(r) => r.to_string(),
             Object::Float(r) => r.to_string(),
@@ -695,8 +750,7 @@ impl TryFrom<Object> for JsonValue {
             Object::Integer(x) => Ok(JsonValue::from(x)),
             Object::BigInteger(_) => Err(Error::new(Value::TooLarge)),
             Object::Float(x) => Ok(JsonValue::from(x)),
-            Object::IntString(x) => Ok(JsonValue::from(x.as_str())),
-            Object::NatString(x) => Ok(JsonValue::from(x.as_str())),
+            Object::Str(x) => Ok(JsonValue::from(x.as_str())),
             Object::Boolean(x) => Ok(JsonValue::from(x)),
             Object::List(x) => {
                 let mut val = JsonValue::new_array();

@@ -59,13 +59,13 @@ fn floats() {
 
 #[test]
 fn strings() {
-    assert_seq!(eval("\"\""), Object::int_string(""));
-    assert_seq!(eval("\"simsalabim\""), Object::int_string("simsalabim"));
-    assert_seq!(eval("\"simsalabim ${-1} abracadabra\""), Object::nat_string("simsalabim -1 abracadabra"));
-    assert_seq!(eval("\"simsalabim ${0} abracadabra\""), Object::nat_string("simsalabim 0 abracadabra"));
-    assert_seq!(eval("\"simsalabim ${1} abracadabra\""), Object::nat_string("simsalabim 1 abracadabra"));
-    assert_seq!(eval("\"simsalabim ${9223372036854775807} abracadabra\""), Object::nat_string("simsalabim 9223372036854775807 abracadabra"));
-    assert_seq!(eval("\"simsalabim ${9223372036854776000} abracadabra\""), Object::nat_string("simsalabim 9223372036854776000 abracadabra"));
+    assert_seq!(eval("\"\""), Object::interned(""));
+    assert_seq!(eval("\"simsalabim\""), Object::interned("simsalabim"));
+    assert_seq!(eval("\"simsalabim ${-1} abracadabra\""), Object::natural_string("simsalabim -1 abracadabra"));
+    assert_seq!(eval("\"simsalabim ${0} abracadabra\""), Object::natural_string("simsalabim 0 abracadabra"));
+    assert_seq!(eval("\"simsalabim ${1} abracadabra\""), Object::natural_string("simsalabim 1 abracadabra"));
+    assert_seq!(eval("\"simsalabim ${9223372036854775807} abracadabra\""), Object::natural_string("simsalabim 9223372036854775807 abracadabra"));
+    assert_seq!(eval("\"simsalabim ${9223372036854776000} abracadabra\""), Object::natural_string("simsalabim 9223372036854776000 abracadabra"));
 }
 
 
