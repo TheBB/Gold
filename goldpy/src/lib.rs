@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use gold::object::IntVariant;
 use num_bigint::BigInt;
 
 use pyo3::types::{PyList, PyDict, PyTuple, PyString};
@@ -172,8 +173,8 @@ impl<'s> FromPyObject<'s> for ObjectWrapper {
 impl pyo3::IntoPy<PyObject> for ObjectWrapper {
     fn into_py(self, py: Python<'_>) -> PyObject {
         match self.0 {
-            Object::Integer(x) => x.into_py(py),
-            Object::BigInteger(x) => x.as_ref().clone().into_py(py),
+            Object::Int(IntVariant::Small(x)) => x.into_py(py),
+            Object::Int(IntVariant::Big(x)) => x.as_ref().clone().into_py(py),
             Object::Float(x) => x.into_py(py),
             Object::Str(x) => x.as_str().into_py(py),
             Object::Boolean(x) => x.into_py(py),

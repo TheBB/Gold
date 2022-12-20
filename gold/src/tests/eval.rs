@@ -1,5 +1,5 @@
 use crate::ast::{BinOp, UnOp};
-use crate::error::{Error, Reason, Unpack, Span, Action, BindingType, TypeMismatch, Value};
+use crate::error::{Error, Reason, Unpack, Span, Action, BindingType, TypeMismatch};
 use crate::eval_raw;
 use crate::object::{Object, Key, Type};
 
@@ -643,8 +643,6 @@ fn errors() {
     assert_eq!(eval("[] * 9"), err!(TypeMismatch::BinOp(Type::List, Type::Integer, BinOp::Multiply), loc!(3, Evaluate)));
     assert_eq!(eval("9 / {}"), err!(TypeMismatch::BinOp(Type::Integer, Type::Map, BinOp::Divide), loc!(2, Evaluate)));
     assert_eq!(eval("null // {}"), err!(TypeMismatch::BinOp(Type::Null, Type::Map, BinOp::IntegerDivide), loc!(5..7, Evaluate)));
-    assert_eq!(eval("2 ^ 999999999999999999"), err!(Value::TooLarge, loc!(2, Evaluate)));
-    assert_eq!(eval("99999999999999999999999999999999999 ^ 999999999999999999"), err!(Value::TooLarge, loc!(36, Evaluate)));
     assert_eq!(eval("null < true"), err!(TypeMismatch::BinOp(Type::Null, Type::Boolean, BinOp::Less), loc!(5, Evaluate)));
     assert_eq!(eval("1 > \"\""), err!(TypeMismatch::BinOp(Type::Integer, Type::String, BinOp::Greater), loc!(2, Evaluate)));
     assert_eq!(eval("[] <= 2.1"), err!(TypeMismatch::BinOp(Type::List, Type::Float, BinOp::LessEqual), loc!(3..5, Evaluate)));

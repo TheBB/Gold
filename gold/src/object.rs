@@ -1,13 +1,14 @@
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::io::{Read, Write};
+use std::iter::Step;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
 
 use indexmap::IndexMap;
 use json::JsonValue;
-use num_bigint::BigInt;
+use num_bigint::{BigInt, BigUint};
 use num_traits::{ToPrimitive, checked_pow};
 use rmp_serde::{decode, encode};
 use serde::de::Visitor;
@@ -22,6 +23,10 @@ use crate::error::{Error, Tagged, TypeMismatch, Value, Reason};
 use crate::eval::Namespace;
 use crate::util;
 
+
+
+// String variant
+// ------------------------------------------------------------------------------------------------
 
 
 /// Convert a string to a displayable representation by adding escape sequences.
@@ -40,33 +45,33 @@ fn escape(s: &str) -> String {
 
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
-pub enum StringVariant {
+pub enum StrVariant {
     Interned(Key),
     Natural(Arc<String>),
 }
 
-impl PartialOrd<StringVariant> for StringVariant {
-    fn partial_cmp(&self, other: &StringVariant) -> Option<Ordering> {
+impl PartialOrd<StrVariant> for StrVariant {
+    fn partial_cmp(&self, other: &StrVariant) -> Option<Ordering> {
         self.as_str().partial_cmp(other.as_str())
     }
 }
 
-impl From<&StringVariant> for GlobalSymbol {
-    fn from(value: &StringVariant) -> Self {
+impl From<&StrVariant> for GlobalSymbol {
+    fn from(value: &StrVariant) -> Self {
         match value {
-            StringVariant::Interned(x) => *x,
-            StringVariant::Natural(x) => Key::new(x.as_ref()),
+            StrVariant::Interned(x) => *x,
+            StrVariant::Natural(x) => Key::new(x.as_ref()),
         }
     }
 }
 
-impl ToString for StringVariant {
+impl ToString for StrVariant {
     fn to_string(&self) -> String {
         format!("\"{}\"", escape(self.as_str()))
     }
 }
 
-impl StringVariant {
+impl StrVariant {
     pub fn interned<T: AsRef<str>>(x: T) -> Self {
         Self::Interned(Key::new(x))
     }
@@ -86,7 +91,7 @@ impl StringVariant {
         self.as_str().to_string()
     }
 
-    fn user_eq(&self, other: &StringVariant) -> bool {
+    fn user_eq(&self, other: &StrVariant) -> bool {
         match (self, other) {
             (Self::Interned(x), Self::Interned(y)) => x == y,
             (Self::Natural(x), Self::Interned(y)) => x.as_str() == y.as_str(),
@@ -95,53 +100,320 @@ impl StringVariant {
         }
     }
 
-    fn add(&self, other: &StringVariant) -> StringVariant {
+    fn add(&self, other: &StrVariant) -> StrVariant {
         Self::natural(format!("{}{}", self.as_str(), other.as_str()))
     }
 }
 
 
 
-struct Arith<F,G,H,X,Y,Z>
-where
-    F: Fn(i64, i64) -> Option<X>,
-    G: Fn(&BigInt, &BigInt) -> Y,
-    H: Fn(f64, f64) -> Z,
-{
-    ixi: F,
-    bxb: G,
-    fxf: H,
+// Integer variant
+// ------------------------------------------------------------------------------------------------
+
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+pub enum IntVariant {
+    Small(i64),
+    Big(Arc<BigInt>),
+}
+
+impl PartialOrd<IntVariant> for IntVariant {
+    fn partial_cmp(&self, other: &IntVariant) -> Option<Ordering> {
+        match (self, other) {
+            (Self::Small(x), Self::Small(y)) => x.partial_cmp(y),
+            (Self::Small(x), Self::Big(y)) => BigInt::from(*x).partial_cmp(y),
+            (Self::Big(x), Self::Small(y)) => x.as_ref().partial_cmp(&BigInt::from(*y)),
+            (Self::Big(x), Self::Big(y)) => x.as_ref().partial_cmp(y.as_ref()),
+        }
+    }
+}
+
+impl PartialEq<f64> for IntVariant {
+    fn eq(&self, other: &f64) -> bool {
+        return self.partial_cmp(other) == Some(Ordering::Equal);
+    }
+}
+
+impl PartialOrd<f64> for IntVariant {
+    fn partial_cmp(&self, other: &f64) -> Option<Ordering> {
+        match self {
+            Self::Small(x) => (*x as f64).partial_cmp(other),
+            Self::Big(x) => {
+                let (lo, hi) = util::f64_to_bigs(*other);
+                if x.as_ref() < &lo || x.as_ref() == &lo && lo != hi {
+                    Some(Ordering::Less)
+                } else if x.as_ref() > &hi || x.as_ref() == &hi && lo != hi {
+                    Some(Ordering::Greater)
+                } else {
+                    Some(Ordering::Equal)
+                }
+            },
+        }
+    }
+}
+
+impl From<BigInt> for IntVariant {
+    fn from(value: BigInt) -> Self {
+        Self::Big(Arc::new(value))
+    }
+}
+
+impl From<&i64> for IntVariant {
+    fn from(x: &i64) -> Self {
+        Self::Small(*x)
+    }
+}
+
+impl From<i64> for IntVariant {
+    fn from(x: i64) -> Self {
+        Self::Small(x)
+    }
+}
+
+impl From<i32> for IntVariant {
+    fn from(x: i32) -> Self {
+        Self::Small(x as i64)
+    }
+}
+
+impl From<usize> for IntVariant {
+    fn from(x: usize) -> Self {
+        i64::try_from(x).map(IntVariant::from).unwrap_or_else(
+            |_| IntVariant::from(BigInt::from(x))
+        )
+    }
+}
+
+impl TryFrom<IntVariant> for u32 {
+    type Error = ();
+
+    fn try_from(value: IntVariant) -> Result<Self, Self::Error> {
+        match value {
+            IntVariant::Small(x) => Self::try_from(x).map_err(|_| ()),
+            IntVariant::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
+        }
+    }
+}
+
+impl TryFrom<IntVariant> for i64 {
+    type Error = ();
+
+    fn try_from(value: IntVariant) -> Result<Self, Self::Error> {
+        match value {
+            IntVariant::Small(x) => Ok(x),
+            IntVariant::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
+        }
+    }
+}
+
+impl TryFrom<IntVariant> for usize {
+    type Error = ();
+
+    fn try_from(value: IntVariant) -> Result<Self, Self::Error> {
+        match value {
+            IntVariant::Small(x) => Self::try_from(x).map_err(|_| ()),
+            IntVariant::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
+        }
+    }
+}
+
+impl ToString for IntVariant {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Small(r) => r.to_string(),
+            Self::Big(r) => r.to_string(),
+        }
+    }
+}
+
+impl Step for IntVariant {
+    fn steps_between(start: &Self, end: &Self) -> Option<usize> {
+        usize::try_from(end.sub(start)).ok()
+    }
+
+    fn forward_checked(start: Self, count: usize) -> Option<Self> {
+        Some(start.add(&Self::from(count)))
+    }
+
+    fn backward_checked(start: Self, count: usize) -> Option<Self> {
+        Some(start.sub(&Self::from(count)))
+    }
+}
+
+impl IntVariant {
+    fn add(&self, other: &IntVariant) -> IntVariant {
+        IntVariant::normalize(self.operate(other, i64::checked_add, |x,y| x + y))
+    }
+
+    fn sub(&self, other: &IntVariant) -> IntVariant {
+        IntVariant::normalize(self.operate(other, i64::checked_sub, |x,y| x - y))
+    }
+
+    fn mul(&self, other: &IntVariant) -> IntVariant {
+        IntVariant::normalize(self.operate(other, i64::checked_mul, |x,y| x * y))
+    }
+
+    fn div(&self, other: &IntVariant) -> f64 {
+        self.operate(
+            other,
+            |x,y| Some((x as f64) / (y as f64)),
+            |x,y| util::big_to_f64(x) / util::big_to_f64(y),
+        )
+    }
+
+    fn idiv(&self, other: &IntVariant) -> IntVariant {
+        IntVariant::normalize(self.operate(other, i64::checked_div, |x,y| x / y))
+    }
+
+    fn operate<F,G,S,T,U>(&self, other: &IntVariant, ixi: F, bxb: G) -> U
+    where
+        F: Fn(i64, i64) -> Option<S>,
+        G: Fn(&BigInt, &BigInt) -> T,
+        U: From<S> + From<T>,
+    {
+        match (self, other) {
+            (Self::Small(xx), Self::Small(yy)) => ixi(*xx, *yy).map(U::from).unwrap_or_else(
+                || U::from(bxb(&BigInt::from(*xx), &BigInt::from(*yy)))
+            ),
+            (Self::Small(xx), Self::Big(yy)) => U::from(bxb(&BigInt::from(*xx), yy.as_ref())),
+            (Self::Big(xx), Self::Small(yy)) => U::from(bxb(xx.as_ref(), &BigInt::from(*yy))),
+            (Self::Big(xx), Self::Big(yy)) => U::from(bxb(xx.as_ref(), yy.as_ref())),
+        }
+    }
+
+    fn neg(&self) -> IntVariant {
+        match self {
+            Self::Small(x) => {
+                if let Some(y) = x.checked_neg() {
+                    Self::Small(y)
+                } else {
+                    Self::from(-BigInt::from(*x)).normalize()
+                }
+            },
+            Self::Big(x) => Self::from(-x.as_ref()).normalize(),
+        }
+    }
+
+    fn small_pow(&self, other: &IntVariant) -> Option<IntVariant> {
+        if let (Self::Small(x), Self::Small(y)) = (self, other) {
+            let yy: usize = (*y).try_into().ok()?;
+            checked_pow(*x, yy).map(Self::from)
+        } else {
+            None
+        }
+    }
+
+    fn medium_pow(&self, other: &IntVariant) -> Option<IntVariant> {
+        let yy: u32 = other.clone().try_into().ok()?;
+
+        match self {
+            Self::Big(x) => Some(Self::from(x.pow(yy))),
+            Self::Small(x) => Some(Self::from(BigInt::from(*x).pow(yy))),
+        }
+    }
+
+    fn big_pow(&self, other: &IntVariant) -> Option<IntVariant> {
+        if other.eq(&IntVariant::from(0)) {
+            return Some(IntVariant::from(1));
+        }
+
+        let mut exp = match other {
+            Self::Small(x) => BigUint::try_from(*x).ok()?,
+            Self::Big(x) => BigUint::try_from(x.as_ref().clone()).ok()?,
+        };
+
+        let mut base = match self {
+            Self::Small(x) => BigInt::from(*x),
+            Self::Big(x) => x.as_ref().clone(),
+        };
+
+        let one = BigUint::from(1u8);
+        let zero = BigUint::from(0u8);
+
+        while &exp & &one == zero {
+            base = &base * &base;
+            exp >>= 1;
+        }
+
+        if exp == one {
+            return Some(IntVariant::from(base))
+        }
+
+        let mut acc = base.clone();
+        while exp > one {
+            exp >>= 1;
+            base = &base * &base;
+            if &exp & &one == one {
+                acc *= &base;
+            }
+        }
+
+        Some(IntVariant::from(acc))
+    }
+
+    fn pow(&self, other: &IntVariant) -> Option<IntVariant> {
+        self.small_pow(other)
+            .or_else(|| self.medium_pow(other))
+            .or_else(|| self.big_pow(other))
+    }
+
+    fn normalize(self) -> IntVariant {
+        if let Self::Big(x) = &self {
+            x.to_i64().map(IntVariant::Small).unwrap_or(self)
+        } else {
+            self
+        }
+    }
+
+    pub fn to_f64(&self) -> f64 {
+        match self {
+            Self::Small(x) => *x as f64,
+            Self::Big(x) => util::big_to_f64(x.as_ref()),
+        }
+    }
+
+    fn nonzero(&self) -> bool {
+        match self {
+            Self::Small(x) => *x != 0,
+            Self::Big(x) => x.as_ref() != &BigInt::from(0),
+        }
+    }
+
+    fn user_eq(&self, other: &IntVariant) -> bool {
+        match (self, other) {
+            (Self::Small(x), Self::Small(y)) => x.eq(y),
+            (Self::Small(x), Self::Big(y)) => y.as_ref().eq(&BigInt::from(*x)),
+            (Self::Big(x), Self::Small(y)) => x.as_ref().eq(&BigInt::from(*y)),
+            (Self::Big(x), Self::Big(y)) => x.eq(y),
+        }
+    }
 }
 
 
-fn arithmetic_operate<F,G,H,X,Y,Z>(ops: Arith<F,G,H,X,Y,Z>, x: &Object, y: &Object, op: BinOp) -> Result<Object, Error>
+struct Arith<F,G,S,T>
 where
-    F: Fn(i64, i64) -> Option<X>,
-    G: Fn(&BigInt, &BigInt) -> Y,
-    H: Fn(f64, f64) -> Z,
-    Object: From<X>,
-    Object: From<Y>,
-    Object: From<Z>,
+    F: Fn(&IntVariant, &IntVariant) -> S,
+    G: Fn(f64, f64) -> T,
+    Object: From<S> + From<T>,
 {
-    let Arith { ixi, bxb, fxf } = ops;
+    ixi: F,
+    fxf: G,
+}
+
+
+fn arithmetic_operate<F,G,S,T>(ops: Arith<F,G,S,T>, x: &Object, y: &Object, op: BinOp) -> Result<Object, Error>
+where
+    F: Fn(&IntVariant, &IntVariant) -> S,
+    G: Fn(f64, f64) -> T,
+    Object: From<S> + From<T>,
+{
+    let Arith { ixi, fxf } = ops;
 
     match (x, y) {
-        (Object::Integer(xx), Object::Integer(yy)) => Ok(
-            ixi(*xx, *yy).map(Object::from).unwrap_or_else(
-                || Object::from(bxb(&BigInt::from(*xx), &BigInt::from(*yy))).numeric_normalize()
-            )
-        ),
-
-        (Object::Integer(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(&BigInt::from(*xx), yy.as_ref())).numeric_normalize()),
-        (Object::BigInteger(xx), Object::Integer(yy)) => Ok(Object::from(bxb(xx.as_ref(), &BigInt::from(*yy))).numeric_normalize()),
-        (Object::BigInteger(xx), Object::BigInteger(yy)) => Ok(Object::from(bxb(xx.as_ref(), yy.as_ref())).numeric_normalize()),
-
+        (Object::Int(xx), Object::Int(yy)) => Ok(Object::from(ixi(xx, yy))),
+        (Object::Int(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx.to_f64(), *yy))),
+        (Object::Float(xx), Object::Int(yy)) => Ok(Object::from(fxf(*xx, yy.to_f64()))),
         (Object::Float(xx), Object::Float(yy)) => Ok(Object::from(fxf(*xx, *yy))),
-        (Object::Integer(xx), Object::Float(yy)) => Ok(Object::from(fxf(*xx as f64, *yy))),
-        (Object::Float(xx), Object::Integer(yy)) => Ok(Object::from(fxf(*xx, *yy as f64))),
-
-        (Object::Float(xx), Object::BigInteger(yy)) => Ok(Object::from(fxf(*xx, util::big_to_f64(yy.as_ref())))),
-        (Object::BigInteger(xx), Object::Float(yy)) => Ok(Object::from(fxf(util::big_to_f64(xx.as_ref()), *yy))),
 
         _ => Err(Error::new(TypeMismatch::BinOp(x.type_of(), y.type_of(), op))),
     }
@@ -233,11 +505,10 @@ impl Display for Type {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Object {
-    Integer(i64),
-    BigInteger(Arc<BigInt>),
+    Int(IntVariant),
     Float(f64),
 
-    Str(StringVariant),
+    Str(StrVariant),
 
     Boolean(bool),
     List(Arc<List>),
@@ -253,8 +524,7 @@ pub enum Object {
 impl PartialEq<Object> for Object {
     fn eq(&self, other: &Object) -> bool {
         match (self, other) {
-            (Self::Integer(x), Self::Integer(y)) => x.eq(y),
-            (Self::BigInteger(x), Self::BigInteger(y)) => x.eq(y),
+            (Self::Int(x), Self::Int(y)) => x.eq(y),
             (Self::Float(x), Self::Float(y)) => x.eq(y),
             (Self::Str(x), Self::Str(y)) => x.eq(y),
             (Self::Boolean(x), Self::Boolean(y)) => x.eq(y),
@@ -269,23 +539,9 @@ impl PartialEq<Object> for Object {
 impl PartialOrd<Object> for Object {
     fn partial_cmp(&self, other: &Object) -> Option<Ordering> {
         match (self, other) {
-            (Object::Integer(x), Object::Integer(y)) => x.partial_cmp(y),
-            (Object::Integer(x), Object::BigInteger(y)) => BigInt::from(*x).partial_cmp(y),
-            (Object::Integer(x), Object::Float(y)) => (*x as f64).partial_cmp(y),
-            (Object::BigInteger(x), Object::Integer(y)) => x.as_ref().partial_cmp(&BigInt::from(*y)),
-            (Object::BigInteger(x), Object::BigInteger(y)) => x.as_ref().partial_cmp(y.as_ref()),
-            (Object::BigInteger(x), Object::Float(y)) => {
-                let (lo, hi) = util::f64_to_bigs(*y);
-                if x.as_ref() < &lo || x.as_ref() == &lo && lo != hi {
-                    Some(Ordering::Less)
-                } else if x.as_ref() > &hi || x.as_ref() == &hi && lo != hi {
-                    Some(Ordering::Greater)
-                } else {
-                    Some(Ordering::Equal)
-                }
-            },
-            (Object::Float(x), Object::Integer(y)) => x.partial_cmp(&(*y as f64)),
-            (Object::Float(_), Object::BigInteger(_)) => other.partial_cmp(self).map(Ordering::reverse),
+            (Object::Int(x), Object::Int(y)) => x.partial_cmp(y),
+            (Object::Int(x), Object::Float(y)) => x.partial_cmp(y),
+            (Object::Float(_), Object::Int(_)) => other.partial_cmp(self).map(Ordering::reverse),
             (Object::Float(x), Object::Float(y)) => x.partial_cmp(y),
             (Object::Str(x), Object::Str(y)) => x.partial_cmp(y),
             _ => None,
@@ -296,8 +552,7 @@ impl PartialOrd<Object> for Object {
 impl Debug for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Integer(x) => f.debug_tuple("Object::Integer").field(x).finish(),
-            Self::BigInteger(x) => f.debug_tuple("Object::BigInteger").field(x).finish(),
+            Self::Int(x) => f.debug_tuple("Object::Int").field(x).finish(),
             Self::Float(x) => f.debug_tuple("Object::Float").field(x).finish(),
             Self::Str(x) => f.debug_tuple("Object::Str").field(x).finish(),
             Self::Boolean(x) => f.debug_tuple("Object::Boolean").field(x).finish(),
@@ -314,7 +569,7 @@ impl Debug for Object {
 impl Object {
     pub fn type_of(&self) -> Type {
         match self {
-            Self::BigInteger(_) | Self::Integer(_) => Type::Integer,
+            Self::Int(_) => Type::Integer,
             Self::Float(_) => Type::Float,
             Self::Str(_) => Type::String,
             Self::Boolean(_) => Type::Boolean,
@@ -326,11 +581,11 @@ impl Object {
     }
 
     pub fn interned<T: AsRef<str>>(x: T) -> Self {
-        Self::Str(StringVariant::interned(x))
+        Self::Str(StrVariant::interned(x))
     }
 
     pub fn natural_string<T: AsRef<str>>(x: T) -> Object {
-        Self::Str(StringVariant::natural(x))
+        Self::Str(StrVariant::natural(x))
     }
 
     pub fn bigint(x: &str) -> Option<Object> {
@@ -349,11 +604,18 @@ impl Object {
         Object::Map(Arc::new(x.to_map()))
     }
 
+    pub fn numeric_normalize(self) -> Self {
+        if let Self::Int(x) = self {
+            Self::Int(x.normalize())
+        } else {
+            self
+        }
+    }
+
     pub fn format(&self) -> Result<String, Error> {
         match self {
             Object::Str(r) => Ok(r.format()),
-            Object::Integer(r) => Ok(r.to_string()),
-            Object::BigInteger(r) => Ok(r.to_string()),
+            Object::Int(r) => Ok(r.to_string()),
             Object::Float(r) => Ok(r.to_string()),
             Object::Boolean(true) => Ok("true".to_string()),
             Object::Boolean(false) => Ok("false".to_string()),
@@ -366,17 +628,9 @@ impl Object {
         match self {
             Object::Null => false,
             Object::Boolean(val) => *val,
-            Object::Integer(r) => *r != 0,
+            Object::Int(r) => r.nonzero(),
             Object::Float(r) => *r != 0.0,
             _ => true,
-        }
-    }
-
-    pub fn numeric_normalize(self) -> Object {
-        if let Object::BigInteger(x) = &self {
-            x.to_i64().map(Object::from).unwrap_or(self)
-        } else {
-            self
         }
     }
 
@@ -384,21 +638,11 @@ impl Object {
         match (self, other) {
 
             // Equality between disparate types
-            (Object::Integer(x), Object::BigInteger(y)) => y.as_ref().eq(&BigInt::from(*x)),
-            (Object::BigInteger(x), Object::Integer(y)) => x.as_ref().eq(&BigInt::from(*y)),
-            (Object::Float(x), Object::Integer(y)) => x.eq(&(*y as f64)),
-            (Object::Integer(x), Object::Float(y)) => y.eq(&(*x as f64)),
-            (Object::Float(x), Object::BigInteger(y)) => {
-                let (lo, hi) = util::f64_to_bigs(*x);
-                lo == hi && &hi == y.as_ref()
-            },
-            (Object::BigInteger(x), Object::Float(y)) => {
-                let (lo, hi) = util::f64_to_bigs(*y);
-                lo == hi && &hi == x.as_ref()
-            },
+            (Object::Float(x), Object::Int(y)) => y.eq(x),
+            (Object::Int(x), Object::Float(y)) => x.eq(y),
 
             // Structural equality
-            (Object::Integer(x), Object::Integer(y)) => x.eq(y),
+            (Object::Int(x), Object::Int(y)) => x.user_eq(y),
             (Object::Float(x), Object::Float(y)) => x.eq(y),
             (Object::Str(x), Object::Str(y)) => x.user_eq(y),
             (Object::Boolean(x), Object::Boolean(y)) => x.eq(y),
@@ -469,14 +713,7 @@ impl Object {
 
     pub fn neg(&self) -> Result<Object, Error> {
         match self {
-            Object::Integer(x) => {
-                if let Some(y) = x.checked_neg() {
-                    Ok(Object::from(y))
-                } else {
-                    Object::from(BigInt::from(*x)).neg()
-                }
-            },
-            Object::BigInteger(x) => Ok(Object::from(-x.as_ref()).numeric_normalize()),
+            Object::Int(x) => Ok(Object::Int(x.neg())),
             Object::Float(x) => Ok(Object::from(-x)),
             _ => Err(Error::new(TypeMismatch::UnOp(self.type_of(), UnOp::ArithmeticalNegate))),
         }
@@ -487,8 +724,7 @@ impl Object {
             (Object::List(x), Object::List(y)) => Ok(Object::from(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())),
             (Object::Str(x), Object::Str(y)) => Ok(Object::Str(x.add(y))),
             _ => arithmetic_operate(Arith {
-                ixi: i64::checked_add,
-                bxb: |x,y| x + y,
+                ixi: IntVariant::add,
                 fxf: |x,y| x + y,
             }, self, other, BinOp::Add),
         }
@@ -496,61 +732,43 @@ impl Object {
 
     pub fn sub(&self, other: &Object) -> Result<Object, Error> {
         arithmetic_operate(Arith {
-            ixi: i64::checked_sub,
-            bxb: |x,y| x - y,
+            ixi: IntVariant::sub,
             fxf: |x,y| x - y,
         }, self, other, BinOp::Subtract)
     }
 
     pub fn mul(&self, other: &Object) -> Result<Object, Error> {
         arithmetic_operate(Arith {
-            ixi: i64::checked_mul,
-            bxb: |x,y| x * y,
+            ixi: IntVariant::mul,
             fxf: |x,y| x * y,
         }, self, other, BinOp::Multiply)
     }
 
     pub fn div(&self, other: &Object) -> Result<Object, Error> {
         arithmetic_operate(Arith {
-            ixi: |x,y| Some((x as f64) / (y as f64)),
-            bxb: |x,y| util::big_to_f64(x) / util::big_to_f64(y),
+            ixi: IntVariant::div,
             fxf: |x,y| x / y,
         }, self, other, BinOp::Divide)
     }
 
     pub fn idiv(self, other: &Object) -> Result<Object, Error> {
         arithmetic_operate(Arith {
-            ixi: i64::checked_div,
-            bxb: |x,y| x / y,
+            ixi: IntVariant::idiv,
             fxf: |x,y| (x / y).floor() as f64,
         }, &self, &other, BinOp::IntegerDivide)
     }
 
     pub fn pow(&self, other: &Object) -> Result<Object, Error> {
-        match (self, other) {
-            (Object::Integer(x), Object::Integer(y)) if *y >= 0 => {
-                let yy: u32 = (*y).try_into().map_err(
-                    |_| Error::new(Value::TooLarge)
-                )?;
-                Ok(checked_pow(*x, yy as usize).map(Object::from).unwrap_or_else(
-                    || Object::from(BigInt::from(*x).pow(yy))
-                ))
-            },
-
-            (Object::BigInteger(x), Object::Integer(y)) if *y >= 0 => {
-                let yy: u32 = (*y).try_into().map_err(
-                    |_| Error::new(Value::TooLarge)
-                )?;
-                Ok(Object::from(x.as_ref().pow(yy)))
-            },
-
-            _ => {
-                let (xx, yy) = self.to_f64()
-                    .and_then(|x| other.to_f64().map(|y| (x, y)))
-                    .ok_or_else(|| Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Power)))?;
-                Ok(Object::from(xx.powf(yy)))
-            },
+        if let (Object::Int(x), Object::Int(y)) = (self, other) {
+            if let Some(r) = x.pow(y) {
+                return Ok(Object::from(r));
+            }
         }
+
+        let (xx, yy) = self.to_f64()
+            .and_then(|x| other.to_f64().map(|y| (x, y)))
+            .ok_or_else(|| Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Power)))?;
+        Ok(Object::from(xx.powf(yy)))
     }
 
     pub fn cmp_bool(&self, other: &Object, ordering: Ordering) -> Option<bool> {
@@ -559,8 +777,8 @@ impl Object {
 
     pub fn index(&self, other: &Object) -> Result<Object, Error> {
         match (self, other) {
-            (Object::List(x), Object::Integer(y)) => {
-                let i: usize = (*y).try_into().map_err(|_| Error::new(Value::OutOfRange))?;
+            (Object::List(x), Object::Int(y)) => {
+                let i: usize = y.clone().try_into().map_err(|_| Error::new(Value::OutOfRange))?;
                 if i >= x.len() {
                     Err(Error::new(Value::OutOfRange))
                 } else {
@@ -618,40 +836,21 @@ impl Object {
 
     pub fn to_f64(&self) -> Option<f64> {
         match self {
-            Object::Integer(x) => Some(*x as f64),
-            Object::BigInteger(x) => Some(util::big_to_f64(x.as_ref())),
+            Object::Int(x) => Some(x.to_f64()),
             Object::Float(x) => Some(*x),
             _ => None,
         }
     }
 }
 
-impl From<&i64> for Object {
-    fn from(x: &i64) -> Object { Object::Integer(*x) }
-}
-
-impl From<i64> for Object {
-    fn from(x: i64) -> Object { Object::Integer(x) }
-}
-
-impl From<i32> for Object {
-    fn from(x: i32) -> Object { Object::Integer(x as i64) }
+impl<T> From<T> for Object where IntVariant: From<T> {
+    fn from(value: T) -> Self {
+        Object::Int(IntVariant::from(value))
+    }
 }
 
 impl From<f64> for Object {
     fn from(x: f64) -> Object { Object::Float(x) }
-}
-
-impl From<usize> for Object {
-    fn from(value: usize) -> Object {
-        i64::try_from(value).map(Object::from).unwrap_or_else(
-            |_| Object::from(BigInt::from(value))
-        )
-    }
-}
-
-impl From<BigInt> for Object {
-    fn from(x: BigInt) -> Object { Object::BigInteger(Arc::new(x)) }
 }
 
 impl From<&str> for Object {
@@ -666,7 +865,7 @@ impl From<&str> for Object {
 
 impl From<Key> for Object where {
     fn from(value: Key) -> Self {
-        Self::Str(StringVariant::Interned(value))
+        Self::Str(StrVariant::Interned(value))
     }
 }
 
@@ -702,8 +901,7 @@ impl ToString for Object {
     fn to_string(&self) -> String {
         match self {
             Object::Str(r) => r.to_string(),
-            Object::Integer(r) => r.to_string(),
-            Object::BigInteger(r) => r.to_string(),
+            Object::Int(r) => r.to_string(),
             Object::Float(r) => r.to_string(),
             Object::Boolean(true) => "true".to_string(),
             Object::Boolean(false) => "false".to_string(),
@@ -747,8 +945,7 @@ impl TryFrom<Object> for JsonValue {
 
     fn try_from(value: Object) -> Result<Self, Self::Error> {
         match value {
-            Object::Integer(x) => Ok(JsonValue::from(x)),
-            Object::BigInteger(_) => Err(Error::new(Value::TooLarge)),
+            Object::Int(x) => i64::try_from(x).map_err(|_| Error::new(Value::TooLarge)).map(JsonValue::from),
             Object::Float(x) => Ok(JsonValue::from(x)),
             Object::Str(x) => Ok(JsonValue::from(x.as_str())),
             Object::Boolean(x) => Ok(JsonValue::from(x)),

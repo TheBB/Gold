@@ -5,7 +5,6 @@ use num_bigint::BigInt;
 
 use crate::error::Value;
 use crate::object::*;
-use crate::util;
 use crate::error::{Error, TypeMismatch};
 
 
@@ -69,10 +68,12 @@ pub fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 pub fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     match &args[..] {
-        [Object::Integer(start), Object::Integer(stop)] => Ok(Object::from((*start..*stop).map(Object::from).collect::<List>())),
-        [Object::Integer(_), y] => Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::Integer], y.type_of()))),
-        [x, Object::Integer(_)] => Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Integer], x.type_of()))),
-        [Object::Integer(stop)] => Ok(Object::from((0..*stop).map(Object::from).collect::<List>())),
+        [Object::Int(start), Object::Int(stop)] => {
+            Ok(Object::from((start.clone()..stop.clone()).map(Object::from).collect::<List>()))
+        }
+        [Object::Int(_), y] => Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::Integer], y.type_of()))),
+        [x, Object::Int(_)] => Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Integer], x.type_of()))),
+        [Object::Int(stop)] => Ok(Object::from((IntVariant::from(0)..stop.clone()).map(Object::from).collect::<List>())),
         [x] => Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Integer], x.type_of()))),
         args => Err(Error::new(TypeMismatch::ArgCount(1, 2, args.len()))),
     }
@@ -81,9 +82,8 @@ pub fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 pub fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     match &args[..] {
-        [Object::Integer(_)] => Ok(args[0].clone()),
-        [Object::BigInteger(_)] => Ok(args[0].clone()),
-        [Object::Float(x)] => Ok(Object::Integer(x.round() as i64)),
+        [Object::Int(_)] => Ok(args[0].clone()),
+        [Object::Float(x)] => Ok(Object::from(x.round() as i64)),
         [Object::Boolean(x)] => Ok(Object::from(if *x { 1 } else { 0 })),
         [Object::Str(x)] => BigInt::from_str(x.as_str()).map_err(|_|
             Error::new(Value::Convert(Type::Integer))
@@ -100,8 +100,7 @@ pub fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 pub fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     match &args[..] {
-        [Object::Integer(x)] => Ok(Object::from(*x as f64)),
-        [Object::BigInteger(x)] => Ok(Object::from(util::big_to_f64(x))),
+        [Object::Int(x)] => Ok(Object::from(x.to_f64())),
         [Object::Float(_)] => Ok(args[0].clone()),
         [Object::Boolean(x)] => Ok(Object::from(if *x { 1.0 } else { 0.0 })),
         [Object::Str(x)] => f64::from_str(x.as_str()).map_err(|_| Error::new(Value::Convert(Type::Float))).map(Object::from),
@@ -194,8 +193,7 @@ pub fn exp(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
     let result = match &args[1..] {
         [Object::Float(x)] => x.powf(power),
-        [Object::Integer(x)] => (*x as f64).powf(power),
-        [Object::BigInteger(x)] => util::big_to_f64(x).powf(power),
+        [Object::Int(x)] => x.to_f64().powf(power),
         [x] => { return Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::Integer, Type::Float], x.type_of())))},
         [] => { power.exp() },
 
@@ -218,8 +216,7 @@ pub fn log(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
     let result = match &args[1..] {
         [Object::Float(x)] => power.log(*x),
-        [Object::Integer(x)] => power.log(*x as f64),
-        [Object::BigInteger(x)] => power.log(util::big_to_f64(x)),
+        [Object::Int(x)] => power.log(x.to_f64()),
         [x] => { return Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::Integer, Type::Float], x.type_of())))},
         [] => { power.ln() },
 
@@ -251,12 +248,11 @@ pub fn ord(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 pub fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     match &args[..] {
-        [Object::Integer(x)] => {
-            let codepoint = u32::try_from(*x).map_err(|_| Error::new(Value::OutOfRange))?;
+        [Object::Int(x)] => {
+            let codepoint = u32::try_from(x.clone()).map_err(|_| Error::new(Value::OutOfRange))?;
             let c = char::try_from(codepoint).map_err(|_| Error::new(Value::OutOfRange))?;
             Ok(Object::from(c.to_string().as_str()))
         },
-        [Object::BigInteger(_)] => Err(Error::new(Value::OutOfRange)),
         [x] => Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::Integer], x.type_of()))),
         _ => Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len()))),
     }
@@ -265,8 +261,7 @@ pub fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 pub fn isint(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     match &args[..] {
-        [Object::Integer(_)] => Ok(Object::from(true)),
-        [Object::BigInteger(_)] => Ok(Object::from(true)),
+        [Object::Int(_)] => Ok(Object::from(true)),
         [_] => Ok(Object::from(false)),
         _ => Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len()))),
     }
@@ -311,8 +306,7 @@ pub fn isfloat(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 pub fn isnumber(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     match &args[..] {
-        [Object::Integer(_)] => Ok(Object::from(true)),
-        [Object::BigInteger(_)] => Ok(Object::from(true)),
+        [Object::Int(_)] => Ok(Object::from(true)),
         [Object::Float(_)] => Ok(Object::from(true)),
         [_] => Ok(Object::from(false)),
         _ => Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len()))),

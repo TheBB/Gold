@@ -1,4 +1,5 @@
 #![feature(is_some_and)]
+#![feature(step_trait)]
 
 #[macro_use]
 extern crate lazy_static;
