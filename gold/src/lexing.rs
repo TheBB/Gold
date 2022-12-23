@@ -1,13 +1,17 @@
 use std::iter::Iterator;
 use regex::Regex;
 
-use crate::error::{Location, Tagged};
+use crate::error::{Location, Tagged, SyntaxError, Syntax, SyntaxElement};
 use crate::traits::Taggable;
+
+
+type LexResult<'a, T> = Result<(Lexer<'a>, T), SyntaxError>;
 
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Token<'a> {
     Dollar,
+    DoubleComma,
     DoubleQuote,
     OpenBrace,
     OpenBracket,
@@ -23,45 +27,25 @@ pub(crate) enum Token<'a> {
     Float(&'a str),
     Integer(&'a str),
     StringLit(&'a str),
+    MultiString(&'a str),
 
     Unexpected(char),
 }
 
 
-#[derive(Clone, Copy, PartialEq)]
-enum Delim {
-    Brace,
-    Bracket,
-    DoubleQuote,
-    Dollar,
-    File,
-    Paren,
-
-    Error,
-}
-
-
-#[derive(Clone, Copy, PartialEq)]
-enum Ctx {
-    Default,
-    String,
-    IntName,
-
-    Error,
-}
-
-
+#[derive(Clone, Copy)]
 pub(crate) struct Lexer<'a> {
     code: &'a str,
     offset: usize,
     line: u32,
-    context_stack: Vec<(Ctx, Delim)>,
+    col: usize,
 }
 
 
 lazy_static! {
-    static ref WHITESPACE: Regex = Regex::new(r"^[^\S\n]+").unwrap();
-    static ref NAME: Regex = Regex::new("^[[:alpha:]_][^\\s'\"{}()\\[\\]/+*\\-;:,.=]*").unwrap();
+    static ref WHITESPACE: Regex = Regex::new(r"^[^\S\n]*").unwrap();
+    static ref NAME: Regex = Regex::new("^[[:alpha:]_][^\\s'\"{}()\\[\\]/+*\\-;:,.=#]*").unwrap();
+    static ref KEY: Regex = Regex::new("^[^\\s'\"{}()\\[\\]:]+").unwrap();
     static ref FLOAT_A: Regex = Regex::new(r"^[[:digit:]][[:digit:]_]*\.[[:digit:]_]*(?:(?:e|E)(?:\+|-)?[[:digit:]][[:digit:]_]*)?").unwrap();
     static ref FLOAT_B: Regex = Regex::new(r"^\.[[:digit:]][[:digit:]_]*(?:(?:e|E)[[:digit:]][[:digit:]_]*)?").unwrap();
     static ref FLOAT_C: Regex = Regex::new(r"^[[:digit:]][[:digit:]_]*(?:e|E)(?:\+|-)?[[:digit:]][[:digit:]_]*").unwrap();
@@ -75,42 +59,36 @@ impl<'a> Lexer<'a> {
             code,
             offset: 0,
             line: 1,
-            context_stack: vec![(Ctx::Default, Delim::File)],
+            col: 0,
         }
     }
 
-    fn context(&self) -> (Ctx, Delim) {
-        self.context_stack.last().copied().unwrap()
+    fn loc(&self) -> Location {
+        Location {
+            offset: self.offset,
+            line: self.line,
+            length: 0,
+        }
     }
 
-    fn push(&mut self, context: (Ctx, Delim)) {
-        self.context_stack.push(context);
-    }
-
-    fn pop(&mut self) -> Option<(Ctx, Delim)> {
-        self.context_stack.pop()
-    }
-
-    fn peek(&mut self) -> Option<char> {
+    fn peek(&self) -> Option<char> {
         self.code.chars().next()
     }
 
-    fn double_peek(&mut self) -> (Option<char>, Option<char>) {
-        let mut chars = self.code.chars();
-        let a = chars.next();
-        let b = chars.next();
-        (a, b)
+    fn satisfies_at(&self, i: usize, f: impl FnOnce(char) -> bool) -> bool {
+        self.code.chars().nth(i).is_some_and(f)
     }
 
-    fn skip(&mut self, offset: usize, delta_line: u32) {
-        self.code = &self.code[offset..];
-        self.offset += offset;
-        self.line += delta_line;
+    fn skip(self, offset: usize, delta_line: u32) -> Self {
+        Lexer {
+            code: &self.code[offset..],
+            offset: self.offset + offset,
+            line: self.line + delta_line,
+            col: if delta_line > 0 { 0 } else { self.col + offset }
+        }
     }
 
-    fn skip_tag<F, T>(&mut self, offset: usize, mapper: F) -> Option<Tagged<T>>
-    where
-        F: FnOnce(&'a str) -> T
+    fn skip_tag<T>(self, offset: usize, mapper: impl FnOnce(&'a str) -> T) -> LexResult<'a, Tagged<T>>
     {
         let ret = self.code[..offset].tag(Location {
             offset: self.offset,
@@ -118,11 +96,17 @@ impl<'a> Lexer<'a> {
             length: offset,
         }).map(mapper);
 
-        self.skip(offset, 0);
-        Some(ret)
+        Ok((self.skip(offset, 0), ret))
     }
 
-    fn traverse(&mut self, regex: &Regex) -> Option<Tagged<&'a str>> {
+    fn skip_tag_col<T>(self, offset: usize, mapper: impl FnOnce(&'a str) -> T) -> LexResult<'a, (usize, Tagged<T>)>
+    {
+        let col = self.col;
+        let (lex, tok) = self.skip_tag(offset, mapper).unwrap();
+        Ok((lex, (col, tok)))
+    }
+
+    fn traverse(self, regex: &'a Regex, element: SyntaxElement) -> LexResult<Tagged<&'a str>> {
         regex.find(self.code).map(|m| {
             let ret = m.as_str().tag(Location {
                 offset: self.offset + m.start(),
@@ -130,83 +114,144 @@ impl<'a> Lexer<'a> {
                 length: m.end() - m.start(),
             });
 
-            self.skip(m.end(), 0);
-
-            ret
-        })
+            (self.skip(m.end(), 0), ret)
+        }).ok_or_else(
+            || SyntaxError(self.loc(), Some(Syntax::from(element)))
+        )
     }
 
-    fn skip_whitespace(&mut self) {
+    fn skip_whitespace(mut self) -> Self {
         loop {
-            self.traverse(&WHITESPACE).and_then(|s| { println!("{:?}", s.as_ref()); Some(1) });
+            self = self.skip_indent();
 
             match self.peek() {
                 Some('\n') => {
-                    self.skip(1, 1);
+                    self = self.skip(1, 1);
                     continue;
                 },
                 Some('#') => {
                     let end = self.code.find('\n').unwrap_or(self.code.len() - 1);
-                    self.skip(end + 1, 1);
+                    self = self.skip(end + 1, 1);
                 },
                 _ => {
                     break;
                 },
             }
         }
+
+        self
     }
 
-    fn next_number(&mut self) -> Option<Tagged<Token<'a>>> {
-        if let Some(t) = self.traverse(&FLOAT_A) {
-            return Some(t.map(Token::Float));
-        }
-
-        if let Some(t) = self.traverse(&FLOAT_B) {
-            return Some(t.map(Token::Float));
-        }
-
-        if let Some(t) = self.traverse(&FLOAT_C) {
-            return Some(t.map(Token::Float));
-        }
-
-        if let Some(t) = self.traverse(&DIGITS) {
-            return Some(t.map(Token::Integer));
-        }
-
-        None
+    fn skip_indent(self) -> Self {
+        // The WHITESPACE regex cannot fail to match, so unwrapping is safe
+        self.traverse(&WHITESPACE, SyntaxElement::Whitespace).unwrap().0
     }
 
-    fn next_name(&mut self) -> Option<Tagged<Token<'a>>> {
-        self.traverse(&NAME).map(|t| Token::Name(t.as_ref()).tag(t.loc()))
+    fn next_number(self) -> LexResult<'a, Tagged<Token<'a>>> {
+        self.traverse(&FLOAT_A, SyntaxElement::Number)
+        .or_else(|_| self.traverse(&FLOAT_B, SyntaxElement::Number))
+        .or_else(|_| self.traverse(&FLOAT_C, SyntaxElement::Number))
+        .map(|(lex, tok)| (lex, tok.map(Token::Float)))
+        .or_else(|_| self.traverse(&DIGITS, SyntaxElement::Number).map(|(lex, tok)| (lex, tok.map(Token::Integer))))
     }
 
-    fn next_string(&mut self) -> Option<Tagged<Token<'a>>> {
+    fn next_name(self, regex: &'a Regex) -> LexResult<'a, (usize, Tagged<Token<'a>>)> {
+        let col = self.col;
+        self.traverse(regex, SyntaxElement::Identifier).map(
+            |(lex, tok)| (lex, (col, tok.map(Token::Name)))
+        )
+    }
+
+    pub fn next_token(mut self) -> LexResult<'a, Tagged<Token<'a>>> {
+        self = self.skip_whitespace();
+
         match self.peek() {
-            None => { return None; },
+            Some('a'..='z') | Some('A'..='Z') | Some('_') => self.next_name(&NAME).map(|(lex, (_, tok))| (lex, tok)),
+
+            Some(x) if x.is_ascii_digit() => self.next_number(),
+            Some('.') if self.satisfies_at(1, |x| x.is_ascii_digit()) => self.next_number(),
+
+            Some('.') if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') => self.skip_tag(3, |_| Token::Ellipsis),
+
+            Some(':') if self.satisfies_at(1, |x| x == ':') => self.skip_tag(2, |_| Token::DoubleComma),
+            Some(':') => self.skip_tag(1, |_| Token::Colon),
+
+            Some('"') => self.skip_tag(1, |_| Token::DoubleQuote),
+            Some('{') => self.skip_tag(1, |_| Token::OpenBrace),
+            Some('}') => self.skip_tag(1, |_| Token::CloseBrace),
+            Some('[') => self.skip_tag(1, |_| Token::OpenBracket),
+            Some(']') => self.skip_tag(1, |_| Token::CloseBracket),
+            Some('(') => self.skip_tag(1, |_| Token::OpenParen),
+            Some(')') => self.skip_tag(1, |_| Token::CloseParen),
+            Some(',') => self.skip_tag(1, |_| Token::Comma),
+
+            Some(c) => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedChar(c)))),
+            None => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedEof))),
+        }
+    }
+
+    pub fn next_key(mut self) -> LexResult<'a, (usize, Tagged<Token<'a>>)> {
+        self = self.skip_whitespace();
+
+        match self.peek() {
+            Some('}') => self.skip_tag_col(1, |_| Token::CloseBrace),
+            Some('$') => self.skip_tag_col(1, |_| Token::Dollar),
+            Some('"') => self.skip_tag_col(1, |_| Token::DoubleQuote),
+            Some('.') if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') => self.skip_tag_col(3, |_| Token::Ellipsis),
+            Some(_) => self.next_name(&KEY),
+            None => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedEof))),
+        }
+    }
+
+    pub fn next_multistring(mut self, col: usize) -> LexResult<'a, Tagged<Token<'a>>> {
+        let orig = self;
+
+        let end = self.code.find('\n').unwrap_or(self.code.len() - 1);
+        self = self.skip(end + 1, 1);
+
+        loop {
+            let skipped = self.skip_indent();
+            if skipped.col <= col {
+                break;
+            }
+
+            self = skipped;
+
+            let end = self.code.find('\n').unwrap_or(self.code.len() - 1);
+            self = self.skip(end + 1, 1);
+        }
+
+        let tok = Token::MultiString(&orig.code[..(self.offset - orig.offset)]).tag(Location {
+            offset: orig.offset,
+            line: orig.line,
+            length: self.offset - orig.offset,
+        });
+
+        Ok((self, tok))
+    }
+
+    pub fn next_string(self) -> LexResult<'a, Tagged<Token<'a>>> {
+        match self.peek() {
+            None => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedEof))),
+
+            Some('"') => self.skip_tag(1, |_| Token::DoubleQuote),
+            Some('$') => self.skip_tag(1, |_| Token::Dollar),
+            Some('\n') => self.skip_tag(1, |_| Token::Unexpected('\n')),
 
             _ => {
                 let mut it = self.code.char_indices();
                 loop {
                     match it.next() {
-                        Some((end, '"')) => {
+                        Some((end, '"' | '$' | '\n')) => {
                             return self.skip_tag(end, Token::StringLit);
                         }
 
-                        Some((end, '$')) => {
-                            return self.skip_tag(end, Token::StringLit);
-                        }
-
-                        Some((end, '\n')) => {
-                            self.push((Ctx::Error, Delim::Error));
-                            self.skip(end, 0);
-                            return self.skip_tag(1, |_| Token::Unexpected('\n'));
-                        }
-
-                        Some((_, '\\')) => {
-                            if let Some((end, '\n')) = it.next() {
-                                self.push((Ctx::Error, Delim::Error));
-                                self.skip(end, 0);
-                                return self.skip_tag(1, |_| Token::Unexpected('\n'));
+                        Some((end, '\\')) => {
+                            let c = it.next();
+                            if let Some((_, '"' | '\\' | '$')) = c {
+                                continue;
+                            } else if let Some((_, cc)) = c {
+                                return self.skip(end + 1, 0).skip_tag(1, |_| Token::Unexpected(cc))
                             }
                             continue;
                         }
@@ -220,127 +265,5 @@ impl<'a> Lexer<'a> {
                 }
             }
         }
-    }
-}
-
-
-impl<'a> Iterator for Lexer<'a> {
-    type Item = Tagged<Token<'a>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-
-        match (self.context(), self.peek()) {
-
-            // Error state: immediate bail
-            ((Ctx::Error, _), _) => {
-                return None;
-            }
-
-            // String state with terminating quote
-            ((Ctx::String, Delim::DoubleQuote), Some('"')) => {
-                self.pop();
-                return self.skip_tag(1, |_| Token::DoubleQuote);
-            }
-
-            // String state with interpolation
-            ((Ctx::String, Delim::DoubleQuote), Some('$')) => {
-                self.push((Ctx::IntName, Delim::Dollar));
-                return self.skip_tag(1, |_| Token::Dollar);
-            }
-
-            // String state with other character
-            ((Ctx::String, Delim::DoubleQuote), _) => {
-                return self.next_string();
-            }
-
-            // Interpolation state with curly brace
-            ((Ctx::IntName, Delim::Dollar), Some('{')) => {
-                self.pop();
-                self.push((Ctx::Default, Delim::Brace));
-                return self.skip_tag(1, |_| Token::OpenBrace);
-            }
-
-            // Interpolation state with any other character
-            ((Ctx::IntName, Delim::Dollar), _) => {
-                self.pop();
-                return self.next_name();
-            }
-
-            _ => {}
-        }
-
-        self.skip_whitespace();
-
-        match (self.context(), self.double_peek()) {
-
-            // Closing scopes
-            ((_, Delim::Brace), (Some('}'), _)) => {
-                self.pop();
-                return self.skip_tag(1, |_| Token::CloseBrace);
-            }
-
-            ((_, Delim::Bracket), (Some(']'), _)) => {
-                self.pop();
-                return self.skip_tag(1, |_| Token::CloseBracket);
-            }
-
-            ((_, Delim::Paren), (Some(')'), _)) => {
-                self.pop();
-                return self.skip_tag(1, |_| Token::CloseParen);
-            }
-
-            // Opening scopes
-            ((Ctx::Default, _), (Some('"'), _)) => {
-                self.push((Ctx::String, Delim::DoubleQuote));
-                return self.skip_tag(1, |_| Token::DoubleQuote);
-            }
-
-            ((Ctx::Default, _), (Some('['), _)) => {
-                self.push((Ctx::Default, Delim::Bracket));
-                return self.skip_tag(1, |_| Token::OpenBracket);
-            }
-
-            ((Ctx::Default, _), (Some('{'), _)) => {
-                self.push((Ctx::Default, Delim::Brace));
-                return self.skip_tag(1, |_| Token::OpenBrace);
-            }
-
-            ((Ctx::Default, _), (Some('('), _)) => {
-                self.push((Ctx::Default, Delim::Paren));
-                return self.skip_tag(1, |_| Token::OpenParen);
-            }
-
-            // Other
-            ((Ctx::Default, _), (Some(','), _)) => {
-                return self.skip_tag(1, |_| Token::Comma);
-            }
-
-            ((Ctx::Default, _), (Some(':'), _)) => {
-                return self.skip_tag(1, |_| Token::Colon);
-            }
-
-            ((Ctx::Default, _), (Some('.'), Some('.')))
-            if self.code.chars().nth(2) == Some('.') => {
-                return self.skip_tag(3, |_| Token::Ellipsis);
-            }
-
-            ((Ctx::Default, _), (Some(x), _))
-            if x.is_ascii_digit() => {
-                return self.next_number();
-            }
-
-            ((Ctx::Default, _), (Some('.'), Some(x)))
-            if x.is_ascii_digit() => {
-                return self.next_number();
-            }
-
-            ((Ctx::Default, _), _) => {
-                return self.next_name();
-            }
-
-            _ => {}
-        }
-
-        None
     }
 }

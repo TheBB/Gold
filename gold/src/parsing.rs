@@ -20,7 +20,8 @@ use nom::{
 };
 
 use crate::ast::*;
-use crate::error::{Error, Location, Tagged, Syntax, SyntaxElement, Reason, Action};
+use crate::error::{Error, Location, Tagged, Syntax, SyntaxError, SyntaxElement, Reason, Action};
+use crate::lexing::Lexer;
 use crate::object::{Object, Key};
 use crate::traits::{Boxable, Taggable, Validatable};
 
@@ -33,22 +34,6 @@ impl<'a> From<Span<'a>> for Location {
             offset: x.location_offset(),
             line: x.location_line(),
             length: 0,
-        }
-    }
-}
-
-
-// Custom error type
-#[derive(Debug)]
-struct SyntaxError(Location, Option<Syntax>);
-
-impl SyntaxError {
-    fn to_error(self) -> Error {
-        let SyntaxError(loc, reason) = self;
-        Error {
-            locations: Some(vec![(loc, Action::Parse)]),
-            reason: reason.map(Reason::Syntax),
-            rendered: None,
         }
     }
 }
@@ -1972,8 +1957,8 @@ fn file<'a, E: CompleteError<'a>>(
 
 /// Parse the input and return a [`File`] object.
 pub fn parse(input: &str) -> Result<File, Error> {
-    let span = Span::new(input);
-    file::<SyntaxError>(span).map_or_else(
+    let lexer = Span::new(input);
+    file::<SyntaxError>(lexer).map_or_else(
         |err| match err {
             NomError::Incomplete(_) => Err(Error::default()),
             NomError::Error(e) | NomError::Failure(e) => Err(e.to_error()),

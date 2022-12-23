@@ -174,6 +174,21 @@ impl<T> From<&Tagged<T>> for Location {
 }
 
 
+#[derive(Debug, PartialEq)]
+pub struct SyntaxError(pub Location, pub Option<Syntax>);
+
+impl SyntaxError {
+    pub fn to_error(self) -> Error {
+        let SyntaxError(loc, reason) = self;
+        Error {
+            locations: Some(vec![(loc, Action::Parse)]),
+            reason: reason.map(Reason::Syntax),
+            rendered: None,
+        }
+    }
+}
+
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SyntaxElement {
     // Characters
@@ -210,13 +225,19 @@ pub enum SyntaxElement {
     MapBindingElement,
     MapElement,
     MapValue,
+    Number,
     Operand,
     PosParam,
+
+    // Other
+    Whitespace,
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Syntax {
+    UnexpectedEof,
+    UnexpectedChar(char),
     ExpectedOne(SyntaxElement),
     ExpectedTwo(SyntaxElement, SyntaxElement),
     ExpectedThree(SyntaxElement, SyntaxElement, SyntaxElement),
@@ -448,6 +469,7 @@ impl Display for SyntaxElement {
             Self::MapBindingElement => "map binding pattern",
             Self::MapElement => "map element",
             Self::MapValue => "map value",
+            Self::Number => "number",
             Self::OpenBrace => "'{'",
             Self::OpenParen => "'('",
             Self::Operand => "operand",
@@ -455,6 +477,7 @@ impl Display for SyntaxElement {
             Self::PosParam => "positional parameter",
             Self::Semicolon => "';'",
             Self::Then => "'then'",
+            Self::Whitespace => "whitespace",
         };
 
         f.write_str(s)
@@ -476,6 +499,8 @@ impl Display for Reason {
         match self {
             Self::None => f.write_str("unknown reason - this should not happen, please file a bug report"),
 
+            Self::Syntax(Syntax::UnexpectedEof) => f.write_str("unexpected end of input"),
+            Self::Syntax(Syntax::UnexpectedChar(c)) => f.write_fmt(format_args!("unexpected {}", c)),
             Self::Syntax(Syntax::ExpectedOne(x)) => f.write_fmt(format_args!("expected {}", x)),
             Self::Syntax(Syntax::ExpectedTwo(x, y)) => f.write_fmt(format_args!("expected {} or {}", x, y)),
             Self::Syntax(Syntax::ExpectedThree(x, y, z)) => f.write_fmt(format_args!("expected {}, {} or {}", x, y, z)),
