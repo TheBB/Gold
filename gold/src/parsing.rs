@@ -34,6 +34,7 @@ impl<'a> From<Span<'a>> for Location {
             offset: x.location_offset(),
             line: x.location_line(),
             length: 0,
+            column: (x.get_column() - 1) as u32,
         }
     }
 }

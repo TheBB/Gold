@@ -422,7 +422,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit(5).line(2), "here's some text".expr(8..26).line(2)).mel(),
+            ("z".lit(5).line(2).col(3), "here's some text".expr(8..26).line(2).col(6)).mel(),
         )).tag(0..27)),
     );
 
@@ -434,7 +434,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit(5).line(2), "here's some\ntext".expr(8..33).line(2)).mel(),
+            ("z".lit(5).line(2).col(3), "here's some\ntext".expr(8..33).line(2).col(6)).mel(),
         )).tag(0..34)),
     );
 
@@ -446,7 +446,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit(5).line(2), "here's some\ntext".expr(8..31).line(2)).mel(),
+            ("z".lit(5).line(2).col(3), "here's some\ntext".expr(8..31).line(2).col(6)).mel(),
         )).tag(0..32)),
     );
 
@@ -459,7 +459,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit(5).line(2), "here's some\ntext".expr(8..36).line(2)).mel(),
+            ("z".lit(5).line(2).col(3), "here's some\ntext".expr(8..36).line(2).col(6)).mel(),
         )).tag(0..37)),
     );
 
@@ -472,7 +472,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit(5).line(2), "here's some\n  text".expr(8..38).line(2)).mel(),
+            ("z".lit(5).line(2).col(3), "here's some\n  text".expr(8..38).line(2).col(6)).mel(),
         )).tag(0..39)),
     );
 
@@ -485,7 +485,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit(5).line(2), "  here's some\ntext".expr(8..38).line(2)).mel(),
+            ("z".lit(5).line(2).col(3), "  here's some\ntext".expr(8..38).line(2).col(6)).mel(),
         )).tag(0..39)),
     );
 
@@ -497,8 +497,8 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("a".lit(6).line(2), "x".expr(9..12).line(2)).mel(),
-            ("b".lit(16).line(3), "y".key(19).line(3).wraptag(Expr::Identifier)).mel(),
+            ("a".lit(6).line(2).col(4), "x".expr(9..12).line(2).col(7)).mel(),
+            ("b".lit(16).line(3).col(4), "y".key(19).line(3).col(7).wraptag(Expr::Identifier)).mel(),
         )).tag(0..23)),
     );
 

@@ -13,19 +13,21 @@ use crate::object::{Key, Type};
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Location {
     pub offset: usize,
-    pub line: u32,
     pub length: usize,
+    pub line: u32,
+    pub column: u32,
 }
 
 impl Location {
-    pub fn new(offset: usize, line: u32, length: usize) -> Location {
-        Location { offset, line, length }
+    pub fn new(offset: usize, line: u32, column: u32, length: usize) -> Location {
+        Location { offset, line, column, length }
     }
 
     pub fn span(l: Location, r: Location) -> Location {
         Location {
             offset: l.offset,
             line: l.line,
+            column: l.column,
             length: r.offset + r.length - l.offset,
         }
     }
@@ -33,7 +35,17 @@ impl Location {
     pub fn line(&self, l: u32) -> Location {
         Location {
             offset: self.offset,
+            column: 0,
             line: l,
+            length: self.length,
+        }
+    }
+
+    pub fn col(&self, c: u32) -> Location {
+        Location {
+            offset: self.offset,
+            column: c,
+            line: self.line,
             length: self.length,
         }
     }
@@ -43,6 +55,7 @@ impl From<Range<u32>> for Location {
     fn from(value: Range<u32>) -> Self {
         Location {
             offset: value.start as usize,
+            column: value.start,
             line: 1,
             length: (value.end - value.start) as usize,
         }
@@ -53,6 +66,7 @@ impl From<usize> for Location {
     fn from(value: usize) -> Self {
         Location {
             offset: value,
+            column: value as u32,
             line: 1,
             length: 1,
         }
@@ -80,6 +94,11 @@ impl<T> Tagged<T> {
 
     pub fn unwrap(self) -> T {
         self.contents
+    }
+
+    pub fn col(self, l: u32) -> Tagged<T> {
+        let loc = self.location.col(l);
+        self.retag(loc)
     }
 
     pub fn line(self, l: u32) -> Tagged<T> {
@@ -149,7 +168,7 @@ impl<X> Tagged<Option<X>> {
 impl<T: Debug> Debug for Tagged<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.contents.fmt(f)?;
-        f.write_fmt(format_args!(".tag({}, {}, {})", self.location.offset, self.location.line, self.location.length))
+        f.write_fmt(format_args!(".tag({}, {}, {}, {})", self.location.offset, self.location.line, self.location.column, self.location.length))
     }
 }
 
@@ -588,7 +607,7 @@ impl<'a> Display for ErrorRenderer<'a> {
         f.write_fmt(format_args!("Error: {}", err.reason.as_ref().unwrap_or(&Reason::None)))?;
         if let Some(locs) = err.locations.as_ref() {
             for (loc, act) in locs.iter() {
-                let Location { offset, line, length } = loc;
+                let Location { offset, line, length, .. } = loc;
                 let col = code[0..*offset].rfind('\n').map(|x| offset - x - 1).unwrap_or(*offset);
                 let bol = offset - col;
                 let eol = code[bol+1..].find('\n').map(|x| x + bol + 1).unwrap_or(code.len());

@@ -38,7 +38,7 @@ pub(crate) struct Lexer<'a> {
     code: &'a str,
     offset: usize,
     line: u32,
-    col: usize,
+    col: u32,
 }
 
 
@@ -67,6 +67,7 @@ impl<'a> Lexer<'a> {
         Location {
             offset: self.offset,
             line: self.line,
+            column: self.col as u32,
             length: 0,
         }
     }
@@ -84,7 +85,7 @@ impl<'a> Lexer<'a> {
             code: &self.code[offset..],
             offset: self.offset + offset,
             line: self.line + delta_line,
-            col: if delta_line > 0 { 0 } else { self.col + offset }
+            col: if delta_line > 0 { 0 } else { self.col + offset as u32 }
         }
     }
 
@@ -92,6 +93,7 @@ impl<'a> Lexer<'a> {
     {
         let ret = self.code[..offset].tag(Location {
             offset: self.offset,
+            column: self.col,
             line: self.line,
             length: offset,
         }).map(mapper);
@@ -99,18 +101,19 @@ impl<'a> Lexer<'a> {
         Ok((self.skip(offset, 0), ret))
     }
 
-    fn skip_tag_col<T>(self, offset: usize, mapper: impl FnOnce(&'a str) -> T) -> LexResult<'a, (usize, Tagged<T>)>
-    {
-        let col = self.col;
-        let (lex, tok) = self.skip_tag(offset, mapper).unwrap();
-        Ok((lex, (col, tok)))
-    }
+    // fn skip_tag_col<T>(self, offset: usize, mapper: impl FnOnce(&'a str) -> T) -> LexResult<'a, (usize, Tagged<T>)>
+    // {
+    //     let col = self.col;
+    //     let (lex, tok) = self.skip_tag(offset, mapper).unwrap();
+    //     Ok((lex, (col, tok)))
+    // }
 
     fn traverse(self, regex: &'a Regex, element: SyntaxElement) -> LexResult<Tagged<&'a str>> {
         regex.find(self.code).map(|m| {
             let ret = m.as_str().tag(Location {
                 offset: self.offset + m.start(),
                 line: self.line,
+                column: self.col,
                 length: m.end() - m.start(),
             });
 
@@ -155,10 +158,10 @@ impl<'a> Lexer<'a> {
         .or_else(|_| self.traverse(&DIGITS, SyntaxElement::Number).map(|(lex, tok)| (lex, tok.map(Token::Integer))))
     }
 
-    fn next_name(self, regex: &'a Regex) -> LexResult<'a, (usize, Tagged<Token<'a>>)> {
+    fn next_name(self, regex: &'a Regex) -> LexResult<'a, Tagged<Token<'a>>> {
         let col = self.col;
         self.traverse(regex, SyntaxElement::Identifier).map(
-            |(lex, tok)| (lex, (col, tok.map(Token::Name)))
+            |(lex, tok)| (lex, tok.map(Token::Name))
         )
     }
 
@@ -166,7 +169,7 @@ impl<'a> Lexer<'a> {
         self = self.skip_whitespace();
 
         match self.peek() {
-            Some('a'..='z') | Some('A'..='Z') | Some('_') => self.next_name(&NAME).map(|(lex, (_, tok))| (lex, tok)),
+            Some('a'..='z') | Some('A'..='Z') | Some('_') => self.next_name(&NAME),
 
             Some(x) if x.is_ascii_digit() => self.next_number(),
             Some('.') if self.satisfies_at(1, |x| x.is_ascii_digit()) => self.next_number(),
@@ -190,20 +193,20 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn next_key(mut self) -> LexResult<'a, (usize, Tagged<Token<'a>>)> {
+    pub fn next_key(mut self) -> LexResult<'a, Tagged<Token<'a>>> {
         self = self.skip_whitespace();
 
         match self.peek() {
-            Some('}') => self.skip_tag_col(1, |_| Token::CloseBrace),
-            Some('$') => self.skip_tag_col(1, |_| Token::Dollar),
-            Some('"') => self.skip_tag_col(1, |_| Token::DoubleQuote),
-            Some('.') if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') => self.skip_tag_col(3, |_| Token::Ellipsis),
+            Some('}') => self.skip_tag(1, |_| Token::CloseBrace),
+            Some('$') => self.skip_tag(1, |_| Token::Dollar),
+            Some('"') => self.skip_tag(1, |_| Token::DoubleQuote),
+            Some('.') if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') => self.skip_tag(3, |_| Token::Ellipsis),
             Some(_) => self.next_name(&KEY),
             None => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedEof))),
         }
     }
 
-    pub fn next_multistring(mut self, col: usize) -> LexResult<'a, Tagged<Token<'a>>> {
+    pub fn next_multistring(mut self, col: u32) -> LexResult<'a, Tagged<Token<'a>>> {
         let orig = self;
 
         let end = self.code.find('\n').unwrap_or(self.code.len() - 1);
@@ -224,6 +227,7 @@ impl<'a> Lexer<'a> {
         let tok = Token::MultiString(&orig.code[..(self.offset - orig.offset)]).tag(Location {
             offset: orig.offset,
             line: orig.line,
+            column: orig.col,
             length: self.offset - orig.offset,
         });
 

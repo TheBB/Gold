@@ -330,17 +330,17 @@ fn lists() {
 fn maps() {
     let mut lex = Lexer::new("{}");
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (1, Token::CloseBrace.tag(1)));
+    lex = tok!(lex.next_key(), Token::CloseBrace.tag(1));
     stop!(lex);
 
     let mut lex = Lexer::new("{  }");
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (3, Token::CloseBrace.tag(3)));
+    lex = tok!(lex.next_key(), Token::CloseBrace.tag(3));
     stop!(lex);
 
     let mut lex = Lexer::new("{a: 1}");
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (1, Token::Name("a").tag(1)));
+    lex = tok!(lex.next_key(), Token::Name("a").tag(1));
     lex = tok!(lex.next_token(), Token::Colon.tag(2));
     lex = tok!(lex.next_token(), Token::Integer("1").tag(4));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(5));
@@ -348,7 +348,7 @@ fn maps() {
 
     let mut lex = Lexer::new("{a: 1,}");
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (1, Token::Name("a").tag(1)));
+    lex = tok!(lex.next_key(), Token::Name("a").tag(1));
     lex = tok!(lex.next_token(), Token::Colon.tag(2));
     lex = tok!(lex.next_token(), Token::Integer("1").tag(4));
     lex = tok!(lex.next_token(), Token::Comma.tag(5));
@@ -357,7 +357,7 @@ fn maps() {
 
     let mut lex = Lexer::new("{che9: false}");
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (1, Token::Name("che9").tag(1..5)));
+    lex = tok!(lex.next_key(), Token::Name("che9").tag(1..5));
     lex = tok!(lex.next_token(), Token::Colon.tag(5));
     lex = tok!(lex.next_token(), Token::Name("false").tag(7..12));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(12));
@@ -365,7 +365,7 @@ fn maps() {
 
     let mut lex = Lexer::new("{fable: \"fable\"}");
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (1, Token::Name("fable").tag(1..6)));
+    lex = tok!(lex.next_key(), Token::Name("fable").tag(1..6));
     lex = tok!(lex.next_token(), Token::Colon.tag(6));
     lex = tok!(lex.next_token(), Token::DoubleQuote.tag(8));
     lex = tok!(lex.next_string(), Token::StringLit("fable").tag(9..14));
@@ -375,25 +375,25 @@ fn maps() {
 
     let mut lex = Lexer::new("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}");
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (1, Token::Name("a").tag(1)));
+    lex = tok!(lex.next_key(), Token::Name("a").tag(1));
     lex = tok!(lex.next_token(), Token::Colon.tag(2));
     lex = tok!(lex.next_token(), Token::Integer("1").tag(4));
     lex = tok!(lex.next_token(), Token::Comma.tag(5));
-    lex = tok!(lex.next_key(), (7, Token::Name("b").tag(7)));
+    lex = tok!(lex.next_key(), Token::Name("b").tag(7));
     lex = tok!(lex.next_token(), Token::Colon.tag(8));
     lex = tok!(lex.next_token(), Token::Name("true").tag(10..14));
     lex = tok!(lex.next_token(), Token::Comma.tag(14));
-    lex = tok!(lex.next_key(), (16, Token::Name("c").tag(16)));
+    lex = tok!(lex.next_key(), Token::Name("c").tag(16));
     lex = tok!(lex.next_token(), Token::Colon.tag(17));
     lex = tok!(lex.next_token(), Token::Float("2.e1").tag(19..23));
     lex = tok!(lex.next_token(), Token::Comma.tag(23));
-    lex = tok!(lex.next_key(), (25, Token::Name("d").tag(25)));
+    lex = tok!(lex.next_key(), Token::Name("d").tag(25));
     lex = tok!(lex.next_token(), Token::Colon.tag(26));
     lex = tok!(lex.next_token(), Token::DoubleQuote.tag(28));
     lex = tok!(lex.next_string(), Token::StringLit("hoho").tag(29..33));
     lex = tok!(lex.next_string(), Token::DoubleQuote.tag(33));
     lex = tok!(lex.next_token(), Token::Comma.tag(34));
-    lex = tok!(lex.next_key(), (36, Token::Name("e").tag(36)));
+    lex = tok!(lex.next_key(), Token::Name("e").tag(36));
     lex = tok!(lex.next_token(), Token::Colon.tag(37));
     lex = tok!(lex.next_token(), Token::Float("1e1").tag(39..42));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(42));
@@ -401,7 +401,7 @@ fn maps() {
 
     let mut lex = Lexer::new("{ident-with-hyphen: 1}");
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (1, Token::Name("ident-with-hyphen").tag(1..18)));
+    lex = tok!(lex.next_key(), Token::Name("ident-with-hyphen").tag(1..18));
     lex = tok!(lex.next_token(), Token::Colon.tag(18));
     lex = tok!(lex.next_token(), Token::Integer("1").tag(20));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(21));
@@ -409,7 +409,7 @@ fn maps() {
 
     let mut lex = Lexer::new("{$z: y}");
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (1, Token::Dollar.tag(1)));
+    lex = tok!(lex.next_key(), Token::Dollar.tag(1));
     lex = tok!(lex.next_token(), Token::Name("z").tag(2));
     lex = tok!(lex.next_token(), Token::Colon.tag(3));
     lex = tok!(lex.next_token(), Token::Name("y").tag(5));
@@ -418,7 +418,7 @@ fn maps() {
 
     let mut lex = Lexer::new("{$\"z\": y}");
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (1, Token::Dollar.tag(1)));
+    lex = tok!(lex.next_key(), Token::Dollar.tag(1));
     lex = tok!(lex.next_token(), Token::DoubleQuote.tag(2));
     lex = tok!(lex.next_string(), Token::StringLit("z").tag(3));
     lex = tok!(lex.next_string(), Token::DoubleQuote.tag(4));
@@ -433,9 +433,9 @@ fn maps() {
         "}\n",
     ));
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (3, Token::Name("z").tag(5).line(2)));
-    lex = tok!(lex.next_token(), Token::DoubleComma.tag(6..8).line(2));
-    lex = tok!(lex.next_multistring(3), Token::MultiString(" here's some text\n").tag(8..26).line(2));
+    lex = tok!(lex.next_key(), Token::Name("z").tag(5).line(2).col(3));
+    lex = tok!(lex.next_token(), Token::DoubleComma.tag(6..8).line(2).col(4));
+    lex = tok!(lex.next_multistring(3), Token::MultiString(" here's some text\n").tag(8..26).line(2).col(6));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(26).line(3));
     stop!(lex);
 
@@ -446,9 +446,9 @@ fn maps() {
         "}\n",
     ));
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (3, Token::Name("z").tag(5).line(2)));
-    lex = tok!(lex.next_token(), Token::DoubleComma.tag(6..8).line(2));
-    lex = tok!(lex.next_multistring(3), Token::MultiString(" here's some\n       text\n").tag(8..33).line(2));
+    lex = tok!(lex.next_key(), Token::Name("z").tag(5).line(2).col(3));
+    lex = tok!(lex.next_token(), Token::DoubleComma.tag(6..8).line(2).col(4));
+    lex = tok!(lex.next_multistring(3), Token::MultiString(" here's some\n       text\n").tag(8..33).line(2).col(6));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(33).line(4));
     stop!(lex);
 
@@ -459,9 +459,9 @@ fn maps() {
         "}\n",
     ));
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (3, Token::Name("z").tag(5).line(2)));
-    lex = tok!(lex.next_token(), Token::DoubleComma.tag(6..8).line(2));
-    lex = tok!(lex.next_multistring(3), Token::MultiString(" here's some\n     text\n").tag(8..31).line(2));
+    lex = tok!(lex.next_key(), Token::Name("z").tag(5).line(2).col(3));
+    lex = tok!(lex.next_token(), Token::DoubleComma.tag(6..8).line(2).col(4));
+    lex = tok!(lex.next_multistring(3), Token::MultiString(" here's some\n     text\n").tag(8..31).line(2).col(6));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(31).line(4));
     stop!(lex);
 
@@ -473,9 +473,9 @@ fn maps() {
         "}\n",
     ));
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (3, Token::Name("z").tag(5).line(2)));
-    lex = tok!(lex.next_token(), Token::DoubleComma.tag(6..8).line(2));
-    lex = tok!(lex.next_multistring(3), Token::MultiString("\n     here's some\n     text\n").tag(8..36).line(2));
+    lex = tok!(lex.next_key(), Token::Name("z").tag(5).line(2).col(3));
+    lex = tok!(lex.next_token(), Token::DoubleComma.tag(6..8).line(2).col(4));
+    lex = tok!(lex.next_multistring(3), Token::MultiString("\n     here's some\n     text\n").tag(8..36).line(2).col(6));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(36).line(5));
     stop!(lex);
 
@@ -487,9 +487,9 @@ fn maps() {
         "}\n",
     ));
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (3, Token::Name("z").tag(5).line(2)));
-    lex = tok!(lex.next_token(), Token::DoubleComma.tag(6..8).line(2));
-    lex = tok!(lex.next_multistring(3), Token::MultiString("\n     here's some\n       text\n").tag(8..38).line(2));
+    lex = tok!(lex.next_key(), Token::Name("z").tag(5).line(2).col(3));
+    lex = tok!(lex.next_token(), Token::DoubleComma.tag(6..8).line(2).col(4));
+    lex = tok!(lex.next_multistring(3), Token::MultiString("\n     here's some\n       text\n").tag(8..38).line(2).col(6));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(38).line(5));
     stop!(lex);
 
@@ -501,9 +501,9 @@ fn maps() {
         "}\n",
     ));
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (3, Token::Name("z").tag(5).line(2)));
-    lex = tok!(lex.next_token(), Token::DoubleComma.tag(6..8).line(2));
-    lex = tok!(lex.next_multistring(3), Token::MultiString("\n       here's some\n     text\n").tag(8..38).line(2));
+    lex = tok!(lex.next_key(), Token::Name("z").tag(5).line(2).col(3));
+    lex = tok!(lex.next_token(), Token::DoubleComma.tag(6..8).line(2).col(4));
+    lex = tok!(lex.next_multistring(3), Token::MultiString("\n       here's some\n     text\n").tag(8..38).line(2).col(6));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(38).line(5));
     stop!(lex);
 
@@ -514,22 +514,22 @@ fn maps() {
         "}\n",
     ));
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (4, Token::Name("a").tag(6).line(2)));
-    lex = tok!(lex.next_token(), Token::DoubleComma.tag(7..9).line(2));
-    lex = tok!(lex.next_multistring(4), Token::MultiString(" x\n").tag(9..12).line(2));
-    lex = tok!(lex.next_key(), (4, Token::Name("b").tag(16).line(3)));
-    lex = tok!(lex.next_token(), Token::Colon.tag(17).line(3));
-    lex = tok!(lex.next_token(), Token::Name("y").tag(19).line(3));
-    lex = tok!(lex.next_token(), Token::Comma.tag(20).line(3));
+    lex = tok!(lex.next_key(), Token::Name("a").tag(6).line(2).col(4));
+    lex = tok!(lex.next_token(), Token::DoubleComma.tag(7..9).line(2).col(5));
+    lex = tok!(lex.next_multistring(4), Token::MultiString(" x\n").tag(9..12).line(2).col(7));
+    lex = tok!(lex.next_key(), Token::Name("b").tag(16).line(3).col(4));
+    lex = tok!(lex.next_token(), Token::Colon.tag(17).line(3).col(5));
+    lex = tok!(lex.next_token(), Token::Name("y").tag(19).line(3).col(7));
+    lex = tok!(lex.next_token(), Token::Comma.tag(20).line(3).col(8));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(22).line(4));
     stop!(lex);
 
     let mut lex = Lexer::new("{...y, x: 1}");
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (1, Token::Ellipsis.tag(1..4)));
+    lex = tok!(lex.next_key(), Token::Ellipsis.tag(1..4));
     lex = tok!(lex.next_token(), Token::Name("y").tag(4));
     lex = tok!(lex.next_token(), Token::Comma.tag(5));
-    lex = tok!(lex.next_key(), (7, Token::Name("x").tag(7)));
+    lex = tok!(lex.next_key(), Token::Name("x").tag(7));
     lex = tok!(lex.next_token(), Token::Colon.tag(8));
     lex = tok!(lex.next_token(), Token::Integer("1").tag(10));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(11));
@@ -537,7 +537,7 @@ fn maps() {
 
     let mut lex = Lexer::new("{for [x,y] in z: x: y}");
     lex = tok!(lex.next_token(), Token::OpenBrace.tag(0));
-    lex = tok!(lex.next_key(), (1, Token::Name("for").tag(1..4)));
+    lex = tok!(lex.next_key(), Token::Name("for").tag(1..4));
     lex = tok!(lex.next_token(), Token::OpenBracket.tag(5));
     lex = tok!(lex.next_token(), Token::Name("x").tag(6));
     lex = tok!(lex.next_token(), Token::Comma.tag(7));
@@ -546,7 +546,7 @@ fn maps() {
     lex = tok!(lex.next_token(), Token::Name("in").tag(11..13));
     lex = tok!(lex.next_token(), Token::Name("z").tag(14));
     lex = tok!(lex.next_token(), Token::Colon.tag(15));
-    lex = tok!(lex.next_key(), (17, Token::Name("x").tag(17)));
+    lex = tok!(lex.next_key(), Token::Name("x").tag(17));
     lex = tok!(lex.next_token(), Token::Colon.tag(18));
     lex = tok!(lex.next_token(), Token::Name("y").tag(20));
     lex = tok!(lex.next_token(), Token::CloseBrace.tag(21));
