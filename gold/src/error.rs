@@ -607,21 +607,20 @@ impl<'a> Display for ErrorRenderer<'a> {
         f.write_fmt(format_args!("Error: {}", err.reason.as_ref().unwrap_or(&Reason::None)))?;
         if let Some(locs) = err.locations.as_ref() {
             for (loc, act) in locs.iter() {
-                let Location { offset, line, length, .. } = loc;
-                let col = code[0..*offset].rfind('\n').map(|x| offset - x - 1).unwrap_or(*offset);
-                let bol = offset - col;
+                let Location { offset, line, length, column } = loc;
+                let bol = offset - *column as usize;
                 let eol = code[bol+1..].find('\n').map(|x| x + bol + 1).unwrap_or(code.len());
                 let span_end = min(offset + length, eol) - offset;
                 f.write_char('\n')?;
                 f.write_str(&code[bol..eol])?;
                 f.write_char('\n')?;
-                for _ in 0..col {
+                for _ in 0..*column {
                     f.write_char(' ')?;
                 }
                 for _ in 0..span_end {
                     f.write_char('^')?;
                 }
-                f.write_fmt(format_args!("\nwhile {} at {}:{}", act, line, col))?;
+                f.write_fmt(format_args!("\nwhile {} at {}:{}", act, line, column + 1))?;
             }
         }
 
