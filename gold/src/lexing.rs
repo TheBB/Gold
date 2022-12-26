@@ -8,10 +8,10 @@ use crate::traits::Taggable;
 type LexResult<'a, T> = Result<(Lexer<'a>, T), SyntaxError>;
 
 
-#[derive(Debug, PartialEq)]
-pub(crate) enum Token<'a> {
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub(crate) enum TokenType {
     Dollar,
-    DoubleComma,
+    DoubleColon,
     DoubleQuote,
     OpenBrace,
     OpenBracket,
@@ -23,13 +23,18 @@ pub(crate) enum Token<'a> {
     Comma,
     Ellipsis,
 
-    Name(&'a str),
-    Float(&'a str),
-    Integer(&'a str),
-    StringLit(&'a str),
-    MultiString(&'a str),
+    Name,
+    Float,
+    Integer,
+    StringLit,
+    MultiString,
+}
 
-    Unexpected(char),
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub(crate) struct Token<'a> {
+    pub kind: TokenType,
+    pub span: &'a str,
 }
 
 
@@ -89,35 +94,22 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn skip_tag<T>(self, offset: usize, mapper: impl FnOnce(&'a str) -> T) -> LexResult<'a, Tagged<T>>
+    fn skip_tag(self, offset: usize, delta_line: u32, kind: TokenType) -> LexResult<'a, Tagged<Token<'a>>>
     {
-        let ret = self.code[..offset].tag(Location {
+        let code = self.code[..offset].tag(Location {
             offset: self.offset,
             column: self.col,
             line: self.line,
             length: offset,
-        }).map(mapper);
+        });
 
-        Ok((self.skip(offset, 0), ret))
+        Ok((self.skip(offset, delta_line), code.map(|span| Token { kind, span })))
     }
 
-    // fn skip_tag_col<T>(self, offset: usize, mapper: impl FnOnce(&'a str) -> T) -> LexResult<'a, (usize, Tagged<T>)>
-    // {
-    //     let col = self.col;
-    //     let (lex, tok) = self.skip_tag(offset, mapper).unwrap();
-    //     Ok((lex, (col, tok)))
-    // }
-
-    fn traverse(self, regex: &'a Regex, element: SyntaxElement) -> LexResult<Tagged<&'a str>> {
+    fn traverse(self, regex: &'a Regex, element: SyntaxElement, kind: TokenType) -> LexResult<'a, Tagged<Token<'a>>> {
         regex.find(self.code).map(|m| {
-            let ret = m.as_str().tag(Location {
-                offset: self.offset + m.start(),
-                line: self.line,
-                column: self.col,
-                length: m.end() - m.start(),
-            });
-
-            (self.skip(m.end(), 0), ret)
+            let lex = self.skip(m.start(), 0);
+            self.skip_tag(m.end() - m.start(), 0, kind).unwrap()
         }).ok_or_else(
             || SyntaxError(self.loc(), Some(Syntax::from(element)))
         )
@@ -147,22 +139,18 @@ impl<'a> Lexer<'a> {
 
     fn skip_indent(self) -> Self {
         // The WHITESPACE regex cannot fail to match, so unwrapping is safe
-        self.traverse(&WHITESPACE, SyntaxElement::Whitespace).unwrap().0
+        WHITESPACE.find(self.code).map(|m| self.skip(m.end(), 0)).unwrap()
     }
 
     fn next_number(self) -> LexResult<'a, Tagged<Token<'a>>> {
-        self.traverse(&FLOAT_A, SyntaxElement::Number)
-        .or_else(|_| self.traverse(&FLOAT_B, SyntaxElement::Number))
-        .or_else(|_| self.traverse(&FLOAT_C, SyntaxElement::Number))
-        .map(|(lex, tok)| (lex, tok.map(Token::Float)))
-        .or_else(|_| self.traverse(&DIGITS, SyntaxElement::Number).map(|(lex, tok)| (lex, tok.map(Token::Integer))))
+        self.traverse(&FLOAT_A, SyntaxElement::Number, TokenType::Float)
+        .or_else(|_| self.traverse(&FLOAT_B, SyntaxElement::Number, TokenType::Float))
+        .or_else(|_| self.traverse(&FLOAT_C, SyntaxElement::Number, TokenType::Float))
+        .or_else(|_| self.traverse(&DIGITS, SyntaxElement::Number, TokenType::Integer))
     }
 
     fn next_name(self, regex: &'a Regex) -> LexResult<'a, Tagged<Token<'a>>> {
-        let col = self.col;
-        self.traverse(regex, SyntaxElement::Identifier).map(
-            |(lex, tok)| (lex, tok.map(Token::Name))
-        )
+        self.traverse(regex, SyntaxElement::Identifier, TokenType::Name)
     }
 
     pub fn next_token(mut self) -> LexResult<'a, Tagged<Token<'a>>> {
@@ -174,19 +162,19 @@ impl<'a> Lexer<'a> {
             Some(x) if x.is_ascii_digit() => self.next_number(),
             Some('.') if self.satisfies_at(1, |x| x.is_ascii_digit()) => self.next_number(),
 
-            Some('.') if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') => self.skip_tag(3, |_| Token::Ellipsis),
+            Some('.') if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') => self.skip_tag(3, 0, TokenType::Ellipsis),
 
-            Some(':') if self.satisfies_at(1, |x| x == ':') => self.skip_tag(2, |_| Token::DoubleComma),
-            Some(':') => self.skip_tag(1, |_| Token::Colon),
+            Some(':') if self.satisfies_at(1, |x| x == ':') => self.skip_tag(2, 0, TokenType::DoubleColon),
+            Some(':') => self.skip_tag(1, 0, TokenType::Colon),
 
-            Some('"') => self.skip_tag(1, |_| Token::DoubleQuote),
-            Some('{') => self.skip_tag(1, |_| Token::OpenBrace),
-            Some('}') => self.skip_tag(1, |_| Token::CloseBrace),
-            Some('[') => self.skip_tag(1, |_| Token::OpenBracket),
-            Some(']') => self.skip_tag(1, |_| Token::CloseBracket),
-            Some('(') => self.skip_tag(1, |_| Token::OpenParen),
-            Some(')') => self.skip_tag(1, |_| Token::CloseParen),
-            Some(',') => self.skip_tag(1, |_| Token::Comma),
+            Some('"') => self.skip_tag(1, 0, TokenType::DoubleQuote),
+            Some('{') => self.skip_tag(1, 0, TokenType::OpenBrace),
+            Some('}') => self.skip_tag(1, 0, TokenType::CloseBrace),
+            Some('[') => self.skip_tag(1, 0, TokenType::OpenBracket),
+            Some(']') => self.skip_tag(1, 0, TokenType::CloseBracket),
+            Some('(') => self.skip_tag(1, 0, TokenType::OpenParen),
+            Some(')') => self.skip_tag(1, 0, TokenType::CloseParen),
+            Some(',') => self.skip_tag(1, 0, TokenType::Comma),
 
             Some(c) => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedChar(c)))),
             None => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedEof))),
@@ -197,10 +185,10 @@ impl<'a> Lexer<'a> {
         self = self.skip_whitespace();
 
         match self.peek() {
-            Some('}') => self.skip_tag(1, |_| Token::CloseBrace),
-            Some('$') => self.skip_tag(1, |_| Token::Dollar),
-            Some('"') => self.skip_tag(1, |_| Token::DoubleQuote),
-            Some('.') if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') => self.skip_tag(3, |_| Token::Ellipsis),
+            Some('}') => self.skip_tag(1, 0, TokenType::CloseBrace),
+            Some('$') => self.skip_tag(1, 0, TokenType::Dollar),
+            Some('"') => self.skip_tag(1, 0, TokenType::DoubleQuote),
+            Some('.') if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') => self.skip_tag(3, 0, TokenType::Ellipsis),
             Some(_) => self.next_name(&KEY),
             None => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedEof))),
         }
@@ -224,7 +212,10 @@ impl<'a> Lexer<'a> {
             self = self.skip(end + 1, 1);
         }
 
-        let tok = Token::MultiString(&orig.code[..(self.offset - orig.offset)]).tag(Location {
+        let tok = Token {
+            kind: TokenType::MultiString,
+            span: &orig.code[..(self.offset - orig.offset)],
+        }.tag(Location {
             offset: orig.offset,
             line: orig.line,
             column: orig.col,
@@ -238,16 +229,16 @@ impl<'a> Lexer<'a> {
         match self.peek() {
             None => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedEof))),
 
-            Some('"') => self.skip_tag(1, |_| Token::DoubleQuote),
-            Some('$') => self.skip_tag(1, |_| Token::Dollar),
-            Some('\n') => self.skip_tag(1, |_| Token::Unexpected('\n')),
+            Some('"') => self.skip_tag(1, 0, TokenType::DoubleQuote),
+            Some('$') => self.skip_tag(1, 0, TokenType::Dollar),
+            Some('\n') => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedChar('\n')))),
 
             _ => {
                 let mut it = self.code.char_indices();
                 loop {
                     match it.next() {
                         Some((end, '"' | '$' | '\n')) => {
-                            return self.skip_tag(end, Token::StringLit);
+                            return self.skip_tag(end, 0, TokenType::StringLit);
                         }
 
                         Some((end, '\\')) => {
@@ -255,13 +246,14 @@ impl<'a> Lexer<'a> {
                             if let Some((_, '"' | '\\' | '$')) = c {
                                 continue;
                             } else if let Some((_, cc)) = c {
-                                return self.skip(end + 1, 0).skip_tag(1, |_| Token::Unexpected(cc))
+                                let lex = self.skip(end + 1, 0);
+                                return Err(SyntaxError(lex.loc(), Some(Syntax::UnexpectedChar(cc))));
                             }
                             continue;
                         }
 
                         None => {
-                            return self.skip_tag(self.code.len(), Token::StringLit);
+                            return self.skip_tag(self.code.len(), 0, TokenType::StringLit);
                         }
 
                         _ => { continue; }
