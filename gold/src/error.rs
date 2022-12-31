@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
 
 use crate::ast::{BinOp, UnOp};
+use crate::lexing::TokenType;
 use crate::object::{Key, Type};
 
 
@@ -257,10 +258,17 @@ pub enum SyntaxElement {
 pub enum Syntax {
     UnexpectedEof,
     UnexpectedChar(char),
+    ExpectedToken(TokenType),
     ExpectedOne(SyntaxElement),
     ExpectedTwo(SyntaxElement, SyntaxElement),
     ExpectedThree(SyntaxElement, SyntaxElement, SyntaxElement),
     MultiSlurp,
+}
+
+impl From<TokenType> for Syntax {
+    fn from(value: TokenType) -> Self {
+        Self::ExpectedToken(value)
+    }
 }
 
 impl From<SyntaxElement> for Syntax {
@@ -520,6 +528,7 @@ impl Display for Reason {
 
             Self::Syntax(Syntax::UnexpectedEof) => f.write_str("unexpected end of input"),
             Self::Syntax(Syntax::UnexpectedChar(c)) => f.write_fmt(format_args!("unexpected {}", c)),
+            Self::Syntax(Syntax::ExpectedToken(x)) => f.write_fmt(format_args!("expected {}", x)),
             Self::Syntax(Syntax::ExpectedOne(x)) => f.write_fmt(format_args!("expected {}", x)),
             Self::Syntax(Syntax::ExpectedTwo(x, y)) => f.write_fmt(format_args!("expected {} or {}", x, y)),
             Self::Syntax(Syntax::ExpectedThree(x, y, z)) => f.write_fmt(format_args!("expected {}, {} or {}", x, y, z)),
