@@ -1,3 +1,4 @@
+use std::cell::UnsafeCell;
 use std::fmt::Display;
 use std::iter::Iterator;
 use regex::Regex;
@@ -8,7 +9,9 @@ use crate::error::{Location, Tagged, SyntaxError, Syntax, SyntaxElement};
 use crate::traits::Taggable;
 
 
-pub(crate) type LexResult<'a, T> = Result<(Lexer<'a>, T), SyntaxError>;
+pub(crate) type LexResult<'a> = Result<(Lexer<'a>, Tagged<Token<'a>>), SyntaxError>;
+pub(crate) type CachedLexResult<'a> = Result<(CachedLexer<'a>, Tagged<Token<'a>>), SyntaxError>;
+pub(crate) type LexCache<'a> = UnsafeCell<Option<(Ctx, usize, LexResult<'a>)>>;
 
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -49,6 +52,15 @@ pub enum TokenType {
     Integer,
     StringLit,
     MultiString,
+}
+
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub(crate) enum Ctx {
+    Default,
+    String,
+    Map,
+    MultiString(u32),
 }
 
 
@@ -141,6 +153,14 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    pub fn cache() -> LexCache<'a> {
+        UnsafeCell::default()
+    }
+
+    pub fn with_cache(self, cache: &'a LexCache<'a>) -> CachedLexer<'a> {
+        CachedLexer::new(self, cache)
+    }
+
     fn peek(&self) -> Option<char> {
         self.code.chars().next()
     }
@@ -154,12 +174,11 @@ impl<'a> Lexer<'a> {
             code: &self.code[offset..],
             offset: self.offset + offset,
             line: self.line + delta_line,
-            col: if delta_line > 0 { 0 } else { self.col + offset as u32 }
+            col: if delta_line > 0 { 0 } else { self.col + offset as u32 },
         }
     }
 
-    fn skip_tag(self, offset: usize, delta_line: u32, kind: TokenType) -> LexResult<'a, Tagged<Token<'a>>>
-    {
+    fn skip_tag(self, offset: usize, delta_line: u32, kind: TokenType) -> LexResult<'a> {
         let code = self.code[..offset].tag(Location {
             offset: self.offset,
             column: self.col,
@@ -170,7 +189,7 @@ impl<'a> Lexer<'a> {
         Ok((self.skip(offset, delta_line), code.map(|span| Token { kind, span })))
     }
 
-    fn traverse(self, regex: &'a Regex, element: SyntaxElement, kind: TokenType) -> LexResult<'a, Tagged<Token<'a>>> {
+    fn traverse(self, regex: &'a Regex, element: SyntaxElement, kind: TokenType) -> LexResult<'a> {
         regex.find(self.code).map(|m| {
             let lex = self.skip(m.start(), 0);
             lex.skip_tag(m.end() - m.start(), 0, kind).unwrap()
@@ -206,21 +225,39 @@ impl<'a> Lexer<'a> {
         WHITESPACE.find(self.code).map(|m| self.skip(m.end(), 0)).unwrap()
     }
 
-    fn next_number(self) -> LexResult<'a, Tagged<Token<'a>>> {
+    fn next_number(self) -> LexResult<'a> {
         self.traverse(&FLOAT_A, SyntaxElement::Number, TokenType::Float)
         .or_else(|_| self.traverse(&FLOAT_B, SyntaxElement::Number, TokenType::Float))
         .or_else(|_| self.traverse(&FLOAT_C, SyntaxElement::Number, TokenType::Float))
         .or_else(|_| self.traverse(&DIGITS, SyntaxElement::Number, TokenType::Integer))
     }
 
-    fn next_name(self, regex: &'a Regex) -> LexResult<'a, Tagged<Token<'a>>> {
+    fn next_name(self, regex: &'a Regex) -> LexResult<'a> {
         self.traverse(regex, SyntaxElement::Identifier, TokenType::Name)
     }
 
-    pub fn next_token(mut self) -> LexResult<'a, Tagged<Token<'a>>> {
+    pub fn next(self, ctx: Ctx, cache: &LexCache<'a>) -> LexResult<'a> {
+        if let Some((tok_ctx, tok_offset, result)) = unsafe { &*cache.get() } {
+            if tok_ctx == &ctx && tok_offset == &self.offset {
+                return *result;
+            }
+        }
+
+        let result = match ctx {
+            Ctx::Default => self.tokenize_default(),
+            Ctx::Map => self.tokenize_map(),
+            Ctx::String => self.tokenize_string(),
+            Ctx::MultiString(col) => self.tokenize_multistring(col),
+        };
+
+        unsafe { *cache.get() = Some((ctx, self.offset, result)); }
+        result
+    }
+
+    fn tokenize_default(mut self) -> LexResult<'a> {
         self = self.skip_whitespace();
 
-        let s = match self.peek() {
+        match self.peek() {
             Some('a'..='z') | Some('A'..='Z') | Some('_') => self.next_name(&NAME),
 
             Some(x) if x.is_ascii_digit() => self.next_number(),
@@ -260,14 +297,10 @@ impl<'a> Lexer<'a> {
 
             Some(c) => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedChar(c)))),
             None => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedEof))),
-        };
-
-        // println!("returning token: {:?}", s.as_ref().map(|x| x.1));
-
-        s
+        }
     }
 
-    pub fn next_key(mut self) -> LexResult<'a, Tagged<Token<'a>>> {
+    fn tokenize_map(mut self) -> LexResult<'a> {
         self = self.skip_whitespace();
 
         match self.peek() {
@@ -282,7 +315,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn next_multistring(mut self, col: u32) -> LexResult<'a, Tagged<Token<'a>>> {
+    fn tokenize_multistring(mut self, col: u32) -> LexResult<'a> {
         let orig = self;
 
         let end = self.code.find('\n').unwrap_or(self.code.len() - 1);
@@ -313,7 +346,7 @@ impl<'a> Lexer<'a> {
         Ok((self, tok))
     }
 
-    pub fn next_string(self) -> LexResult<'a, Tagged<Token<'a>>> {
+    fn tokenize_string(self) -> LexResult<'a> {
         match self.peek() {
             None => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedEof))),
 
@@ -355,5 +388,58 @@ impl<'a> Lexer<'a> {
 impl<'a> InputLength for Lexer<'a> {
     fn input_len(&self) -> usize {
         self.code.len()
+    }
+}
+
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CachedLexer<'a> {
+    lexer: Lexer<'a>,
+    cache: &'a LexCache<'a>,
+}
+
+impl<'a> CachedLexer<'a> {
+    pub fn new(lexer: Lexer<'a>, cache: &'a LexCache<'a>) -> CachedLexer<'a> {
+        CachedLexer { lexer, cache }
+    }
+
+    fn cachify(&self, lexer: Lexer<'a>) -> CachedLexer<'a> {
+        CachedLexer { lexer, cache: self.cache }
+    }
+
+    fn next(self, ctx: Ctx) -> CachedLexResult<'a> {
+        self.lexer.next(ctx, self.cache).map(
+            |(lex, tok)| (self.cachify(lex), tok)
+        )
+    }
+
+    pub fn next_token(self) -> CachedLexResult<'a> {
+        self.next(Ctx::Default)
+    }
+
+    pub fn next_key(self) -> CachedLexResult<'a> {
+        self.next(Ctx::Map)
+    }
+
+    pub fn next_string(self) -> CachedLexResult<'a> {
+        self.next(Ctx::String)
+    }
+
+    pub fn next_multistring(self, col: u32) -> CachedLexResult<'a> {
+        self.next(Ctx::MultiString(col))
+    }
+
+    pub fn loc(&self) -> Location {
+        self.lexer.loc()
+    }
+
+    pub fn skip_whitespace(self) -> CachedLexer<'a> {
+        self.lexer.skip_whitespace().with_cache(self.cache)
+    }
+}
+
+impl<'a> InputLength for CachedLexer<'a> {
+    fn input_len(&self) -> usize {
+        self.lexer.input_len()
     }
 }

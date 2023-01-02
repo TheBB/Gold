@@ -41,27 +41,29 @@ fn closeparen() -> Token<'static> { Token { kind: TokenType::CloseParen, span: "
 
 #[test]
 fn whitespace() {
-    let mut lex = Lexer::new("dingbob");
+    let cache = Lexer::cache();
+
+    let mut lex = Lexer::new("dingbob").with_cache(&cache);
     lex = tok!(lex.next_token(), name("dingbob").tag(0..7));
     stop!(lex);
 
-    let mut lex = Lexer::new("\ndingbob");
+    let mut lex = Lexer::new("\ndingbob").with_cache(&cache);
     lex = tok!(lex.next_token(), name("dingbob").tag(1..8).line(2));
     stop!(lex);
 
-    let mut lex = Lexer::new("# this is a comment\ndingbob");
+    let mut lex = Lexer::new("# this is a comment\ndingbob").with_cache(&cache);
     lex = tok!(lex.next_token(), name("dingbob").tag(20..27).line(2));
     stop!(lex);
 
-    let mut lex = Lexer::new("dingbob\n#this is a comment");
+    let mut lex = Lexer::new("dingbob\n#this is a comment").with_cache(&cache);
     lex = tok!(lex.next_token(), name("dingbob").tag(0..7));
     stop!(lex);
 
-    let mut lex = Lexer::new("dingbob#this is a comment");
+    let mut lex = Lexer::new("dingbob#this is a comment").with_cache(&cache);
     lex = tok!(lex.next_token(), name("dingbob").tag(0..7));
     stop!(lex);
 
-    let mut lex = Lexer::new("# this is a comment\n#a\n#b\ndingbob");
+    let mut lex = Lexer::new("# this is a comment\n#a\n#b\ndingbob").with_cache(&cache);
     lex = tok!(lex.next_token(), name("dingbob").tag(26..33).line(4));
     stop!(lex);
 }
@@ -69,15 +71,17 @@ fn whitespace() {
 
 #[test]
 fn booleans_and_null() {
-    let mut lex = Lexer::new("true");
+    let cache = Lexer::cache();
+
+    let mut lex = Lexer::new("true").with_cache(&cache);
     lex = tok!(lex.next_token(), name("true").tag(0..4));
     stop!(lex);
 
-    let mut lex = Lexer::new("false");
+    let mut lex = Lexer::new("false").with_cache(&cache);
     lex = tok!(lex.next_token(), name("false").tag(0..5));
     stop!(lex);
 
-    let mut lex = Lexer::new("null");
+    let mut lex = Lexer::new("null").with_cache(&cache);
     lex = tok!(lex.next_token(), name("null").tag(0..4));
     stop!(lex);
 }
@@ -85,39 +89,41 @@ fn booleans_and_null() {
 
 #[test]
 fn floats() {
-    let mut lex = Lexer::new("0.0");
+    let cache = Lexer::cache();
+
+    let mut lex = Lexer::new("0.0").with_cache(&cache);
     lex = tok!(lex.next_token(), float("0.0").tag(0..3));
     stop!(lex);
 
-    let mut lex = Lexer::new("0.");
+    let mut lex = Lexer::new("0.").with_cache(&cache);
     lex = tok!(lex.next_token(), float("0.").tag(0..2));
     stop!(lex);
 
-    let mut lex = Lexer::new(".0");
+    let mut lex = Lexer::new(".0").with_cache(&cache);
     lex = tok!(lex.next_token(), float(".0").tag(0..2));
     stop!(lex);
 
-    let mut lex = Lexer::new("0e0");
+    let mut lex = Lexer::new("0e0").with_cache(&cache);
     lex = tok!(lex.next_token(), float("0e0").tag(0..3));
     stop!(lex);
 
-    let mut lex = Lexer::new("0e1");
+    let mut lex = Lexer::new("0e1").with_cache(&cache);
     lex = tok!(lex.next_token(), float("0e1").tag(0..3));
     stop!(lex);
 
-    let mut lex = Lexer::new("1.");
+    let mut lex = Lexer::new("1.").with_cache(&cache);
     lex = tok!(lex.next_token(), float("1.").tag(0..2));
     stop!(lex);
 
-    let mut lex = Lexer::new("1e+1");
+    let mut lex = Lexer::new("1e+1").with_cache(&cache);
     lex = tok!(lex.next_token(), float("1e+1").tag(0..4));
     stop!(lex);
 
-    let mut lex = Lexer::new("1e1");
+    let mut lex = Lexer::new("1e1").with_cache(&cache);
     lex = tok!(lex.next_token(), float("1e1").tag(0..3));
     stop!(lex);
 
-    let mut lex = Lexer::new("1e-1");
+    let mut lex = Lexer::new("1e-1").with_cache(&cache);
     lex = tok!(lex.next_token(), float("1e-1").tag(0..4));
     stop!(lex);
 }
@@ -125,43 +131,45 @@ fn floats() {
 
 #[test]
 fn strings() {
-    let mut lex = Lexer::new("\"\"");
+    let cache = Lexer::cache();
+
+    let mut lex = Lexer::new("\"\"").with_cache(&cache);
     lex = tok!(lex.next_token(), dquote().tag(0));
     lex = tok!(lex.next_string(), dquote().tag(1));
     stop!(lex);
 
-    let mut lex = Lexer::new("\"dingbob\"");
+    let mut lex = Lexer::new("\"dingbob\"").with_cache(&cache);
     lex = tok!(lex.next_token(), dquote().tag(0));
     lex = tok!(lex.next_string(), stringlit("dingbob").tag(1..8));
     lex = tok!(lex.next_string(), dquote().tag(8));
     stop!(lex);
 
-    let mut lex = Lexer::new("\"ding\\\"bob\"");
+    let mut lex = Lexer::new("\"ding\\\"bob\"").with_cache(&cache);
     lex = tok!(lex.next_token(), dquote().tag(0));
     lex = tok!(lex.next_string(), stringlit("ding\\\"bob").tag(1..10));
     lex = tok!(lex.next_string(), dquote().tag(10));
     stop!(lex);
 
-    let mut lex = Lexer::new("\"ding\\\\bob\"");
+    let mut lex = Lexer::new("\"ding\\\\bob\"").with_cache(&cache);
     lex = tok!(lex.next_token(), dquote().tag(0));
     lex = tok!(lex.next_string(), stringlit("ding\\\\bob").tag(1..10));
     lex = tok!(lex.next_string(), dquote().tag(10));
     stop!(lex);
 
-    let mut lex = Lexer::new("\"dingbob$");
+    let mut lex = Lexer::new("\"dingbob$").with_cache(&cache);
     lex = tok!(lex.next_token(), dquote().tag(0));
     lex = tok!(lex.next_string(), stringlit("dingbob").tag(1..8));
     lex = tok!(lex.next_string(), dollar().tag(8));
     stop!(lex);
 
-    let mut lex = Lexer::new("\"dingbob$do");
+    let mut lex = Lexer::new("\"dingbob$do").with_cache(&cache);
     lex = tok!(lex.next_token(), dquote().tag(0));
     lex = tok!(lex.next_string(), stringlit("dingbob").tag(1..8));
     lex = tok!(lex.next_string(), dollar().tag(8));
     lex = tok!(lex.next_token(), name("do").tag(9..11));
     stop!(lex);
 
-    let mut lex = Lexer::new("\"a + b = $a + $b\"");
+    let mut lex = Lexer::new("\"a + b = $a + $b\"").with_cache(&cache);
     lex = tok!(lex.next_token(), dquote().tag(0));
     lex = tok!(lex.next_string(), stringlit("a + b = ").tag(1..9));
     lex = tok!(lex.next_string(), dollar().tag(9));
@@ -172,7 +180,7 @@ fn strings() {
     lex = tok!(lex.next_token(), dquote().tag(16));
     stop!(lex);
 
-    let mut lex = Lexer::new("\"a + b = $a + $b = ${sum}\"");
+    let mut lex = Lexer::new("\"a + b = $a + $b = ${sum}\"").with_cache(&cache);
     lex = tok!(lex.next_token(), dquote().tag(0));
     lex = tok!(lex.next_string(), stringlit("a + b = ").tag(1..9));
     lex = tok!(lex.next_string(), dollar().tag(9));
@@ -188,7 +196,7 @@ fn strings() {
     lex = tok!(lex.next_string(), dquote().tag(25));
     stop!(lex);
 
-    let mut lex = Lexer::new("\"dingbob${a}\"");
+    let mut lex = Lexer::new("\"dingbob${a}\"").with_cache(&cache);
     lex = tok!(lex.next_token(), dquote().tag(0));
     lex = tok!(lex.next_string(), stringlit("dingbob").tag(1..8));
     lex = tok!(lex.next_string(), dollar().tag(8));
@@ -198,7 +206,7 @@ fn strings() {
     lex = tok!(lex.next_string(), dquote().tag(12));
     stop!(lex);
 
-    let mut lex = Lexer::new("\"dingbob${ a}\"");
+    let mut lex = Lexer::new("\"dingbob${ a}\"").with_cache(&cache);
     lex = tok!(lex.next_token(), dquote().tag(0));
     lex = tok!(lex.next_string(), stringlit("dingbob").tag(1..8));
     lex = tok!(lex.next_string(), dollar().tag(8));
@@ -208,7 +216,7 @@ fn strings() {
     lex = tok!(lex.next_string(), dquote().tag(13));
     stop!(lex);
 
-    let mut lex = Lexer::new("\"alpha\" \"bravo\"");
+    let mut lex = Lexer::new("\"alpha\" \"bravo\"").with_cache(&cache);
     lex = tok!(lex.next_token(), dquote().tag(0));
     lex = tok!(lex.next_string(), stringlit("alpha").tag(1..6));
     lex = tok!(lex.next_string(), dquote().tag(6));
@@ -221,19 +229,21 @@ fn strings() {
 
 #[test]
 fn identifiers() {
-    let mut lex = Lexer::new("dingbob");
+    let cache = Lexer::cache();
+
+    let mut lex = Lexer::new("dingbob").with_cache(&cache);
     lex = tok!(lex.next_token(), name("dingbob").tag(0..7));
     stop!(lex);
 
-    let mut lex = Lexer::new("lets");
+    let mut lex = Lexer::new("lets").with_cache(&cache);
     lex = tok!(lex.next_token(), name("lets").tag(0..4));
     stop!(lex);
 
-    let mut lex = Lexer::new("not1");
+    let mut lex = Lexer::new("not1").with_cache(&cache);
     lex = tok!(lex.next_token(), name("not1").tag(0..4));
     stop!(lex);
 
-    let mut lex = Lexer::new("null1");
+    let mut lex = Lexer::new("null1").with_cache(&cache);
     lex = tok!(lex.next_token(), name("null1").tag(0..5));
     stop!(lex);
 }
@@ -241,37 +251,39 @@ fn identifiers() {
 
 #[test]
 fn lists() {
-    let mut lex = Lexer::new("[]");
+    let cache = Lexer::cache();
+
+    let mut lex = Lexer::new("[]").with_cache(&cache);
     lex = tok!(lex.next_token(), openbracket().tag(0));
     lex = tok!(lex.next_token(), closebracket().tag(1));
     stop!(lex);
 
-    let mut lex = Lexer::new("[   ]");
+    let mut lex = Lexer::new("[   ]").with_cache(&cache);
     lex = tok!(lex.next_token(), openbracket().tag(0));
     lex = tok!(lex.next_token(), closebracket().tag(4));
     stop!(lex);
 
-    let mut lex = Lexer::new("[true]");
+    let mut lex = Lexer::new("[true]").with_cache(&cache);
     lex = tok!(lex.next_token(), openbracket().tag(0));
     lex = tok!(lex.next_token(), name("true").tag(1..5));
     lex = tok!(lex.next_token(), closebracket().tag(5));
     stop!(lex);
 
-    let mut lex = Lexer::new("[\"\"]");
+    let mut lex = Lexer::new("[\"\"]").with_cache(&cache);
     lex = tok!(lex.next_token(), openbracket().tag(0));
     lex = tok!(lex.next_token(), dquote().tag(1));
     lex = tok!(lex.next_string(), dquote().tag(2));
     lex = tok!(lex.next_token(), closebracket().tag(3));
     stop!(lex);
 
-    let mut lex = Lexer::new("[1,]");
+    let mut lex = Lexer::new("[1,]").with_cache(&cache);
     lex = tok!(lex.next_token(), openbracket().tag(0));
     lex = tok!(lex.next_token(), int("1").tag(1));
     lex = tok!(lex.next_token(), comma().tag(2));
     lex = tok!(lex.next_token(), closebracket().tag(3));
     stop!(lex);
 
-    let mut lex = Lexer::new("[1, false, 2.3, \"fable\", lel]");
+    let mut lex = Lexer::new("[1, false, 2.3, \"fable\", lel]").with_cache(&cache);
     lex = tok!(lex.next_token(), openbracket().tag(0));
     lex = tok!(lex.next_token(), int("1").tag(1));
     lex = tok!(lex.next_token(), comma().tag(2));
@@ -287,7 +299,7 @@ fn lists() {
     lex = tok!(lex.next_token(), closebracket().tag(28));
     stop!(lex);
 
-    let mut lex = Lexer::new("[1, ...x, y]");
+    let mut lex = Lexer::new("[1, ...x, y]").with_cache(&cache);
     lex = tok!(lex.next_token(), openbracket().tag(0));
     lex = tok!(lex.next_token(), int("1").tag(1));
     lex = tok!(lex.next_token(), comma().tag(2));
@@ -298,7 +310,7 @@ fn lists() {
     lex = tok!(lex.next_token(), closebracket().tag(11));
     stop!(lex);
 
-    let mut lex = Lexer::new("[1, for x in y: x, 2]");
+    let mut lex = Lexer::new("[1, for x in y: x, 2]").with_cache(&cache);
     lex = tok!(lex.next_token(), openbracket().tag(0));
     lex = tok!(lex.next_token(), int("1").tag(1));
     lex = tok!(lex.next_token(), comma().tag(2));
@@ -313,7 +325,7 @@ fn lists() {
     lex = tok!(lex.next_token(), closebracket().tag(20));
     stop!(lex);
 
-    let mut lex = Lexer::new("[when f(x): x]");
+    let mut lex = Lexer::new("[when f(x): x]").with_cache(&cache);
     lex = tok!(lex.next_token(), openbracket().tag(0));
     lex = tok!(lex.next_token(), name("when").tag(1..5));
     lex = tok!(lex.next_token(), name("f").tag(6));
@@ -325,7 +337,7 @@ fn lists() {
     lex = tok!(lex.next_token(), closebracket().tag(13));
     stop!(lex);
 
-    let mut lex = Lexer::new("[[]]");
+    let mut lex = Lexer::new("[[]]").with_cache(&cache);
     lex = tok!(lex.next_token(), openbracket().tag(0));
     lex = tok!(lex.next_token(), openbracket().tag(1));
     lex = tok!(lex.next_token(), closebracket().tag(2));
@@ -336,17 +348,19 @@ fn lists() {
 
 #[test]
 fn maps() {
-    let mut lex = Lexer::new("{}");
+    let cache = Lexer::cache();
+
+    let mut lex = Lexer::new("{}").with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), closebrace().tag(1));
     stop!(lex);
 
-    let mut lex = Lexer::new("{  }");
+    let mut lex = Lexer::new("{  }").with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), closebrace().tag(3));
     stop!(lex);
 
-    let mut lex = Lexer::new("{a: 1}");
+    let mut lex = Lexer::new("{a: 1}").with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("a").tag(1));
     lex = tok!(lex.next_token(), colon().tag(2));
@@ -354,7 +368,7 @@ fn maps() {
     lex = tok!(lex.next_token(), closebrace().tag(5));
     stop!(lex);
 
-    let mut lex = Lexer::new("{a: 1,}");
+    let mut lex = Lexer::new("{a: 1,}").with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("a").tag(1));
     lex = tok!(lex.next_token(), colon().tag(2));
@@ -363,7 +377,7 @@ fn maps() {
     lex = tok!(lex.next_token(), closebrace().tag(6));
     stop!(lex);
 
-    let mut lex = Lexer::new("{che9: false}");
+    let mut lex = Lexer::new("{che9: false}").with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("che9").tag(1..5));
     lex = tok!(lex.next_token(), colon().tag(5));
@@ -371,7 +385,7 @@ fn maps() {
     lex = tok!(lex.next_token(), closebrace().tag(12));
     stop!(lex);
 
-    let mut lex = Lexer::new("{fable: \"fable\"}");
+    let mut lex = Lexer::new("{fable: \"fable\"}").with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("fable").tag(1..6));
     lex = tok!(lex.next_token(), colon().tag(6));
@@ -381,7 +395,7 @@ fn maps() {
     lex = tok!(lex.next_token(), closebrace().tag(15));
     stop!(lex);
 
-    let mut lex = Lexer::new("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}");
+    let mut lex = Lexer::new("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}").with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("a").tag(1));
     lex = tok!(lex.next_token(), colon().tag(2));
@@ -407,7 +421,7 @@ fn maps() {
     lex = tok!(lex.next_token(), closebrace().tag(42));
     stop!(lex);
 
-    let mut lex = Lexer::new("{ident-with-hyphen: 1}");
+    let mut lex = Lexer::new("{ident-with-hyphen: 1}").with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("ident-with-hyphen").tag(1..18));
     lex = tok!(lex.next_token(), colon().tag(18));
@@ -415,7 +429,7 @@ fn maps() {
     lex = tok!(lex.next_token(), closebrace().tag(21));
     stop!(lex);
 
-    let mut lex = Lexer::new("{$z: y}");
+    let mut lex = Lexer::new("{$z: y}").with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), dollar().tag(1));
     lex = tok!(lex.next_token(), name("z").tag(2));
@@ -424,7 +438,7 @@ fn maps() {
     lex = tok!(lex.next_token(), closebrace().tag(6));
     stop!(lex);
 
-    let mut lex = Lexer::new("{$\"z\": y}");
+    let mut lex = Lexer::new("{$\"z\": y}").with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), dollar().tag(1));
     lex = tok!(lex.next_token(), dquote().tag(2));
@@ -439,7 +453,7 @@ fn maps() {
         "{\n",
         "   z:: here's some text\n",
         "}\n",
-    ));
+    )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("z").tag(5).line(2).col(3));
     lex = tok!(lex.next_token(), dcolon().tag(6..8).line(2).col(4));
@@ -452,7 +466,7 @@ fn maps() {
         "   z:: here's some\n",
         "       text\n",
         "}\n",
-    ));
+    )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("z").tag(5).line(2).col(3));
     lex = tok!(lex.next_token(), dcolon().tag(6..8).line(2).col(4));
@@ -465,7 +479,7 @@ fn maps() {
         "   z:: here's some\n",
         "     text\n",
         "}\n",
-    ));
+    )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("z").tag(5).line(2).col(3));
     lex = tok!(lex.next_token(), dcolon().tag(6..8).line(2).col(4));
@@ -479,7 +493,7 @@ fn maps() {
         "     here's some\n",
         "     text\n",
         "}\n",
-    ));
+    )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("z").tag(5).line(2).col(3));
     lex = tok!(lex.next_token(), dcolon().tag(6..8).line(2).col(4));
@@ -493,7 +507,7 @@ fn maps() {
         "     here's some\n",
         "       text\n",
         "}\n",
-    ));
+    )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("z").tag(5).line(2).col(3));
     lex = tok!(lex.next_token(), dcolon().tag(6..8).line(2).col(4));
@@ -507,7 +521,7 @@ fn maps() {
         "       here's some\n",
         "     text\n",
         "}\n",
-    ));
+    )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("z").tag(5).line(2).col(3));
     lex = tok!(lex.next_token(), dcolon().tag(6..8).line(2).col(4));
@@ -520,7 +534,7 @@ fn maps() {
         "    a:: x\n",
         "    b: y,\n",
         "}\n",
-    ));
+    )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("a").tag(6).line(2).col(4));
     lex = tok!(lex.next_token(), dcolon().tag(7..9).line(2).col(5));
@@ -532,7 +546,7 @@ fn maps() {
     lex = tok!(lex.next_token(), closebrace().tag(22).line(4));
     stop!(lex);
 
-    let mut lex = Lexer::new("{...y, x: 1}");
+    let mut lex = Lexer::new("{...y, x: 1}").with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), ellipsis().tag(1..4));
     lex = tok!(lex.next_token(), name("y").tag(4));
@@ -543,7 +557,7 @@ fn maps() {
     lex = tok!(lex.next_token(), closebrace().tag(11));
     stop!(lex);
 
-    let mut lex = Lexer::new("{for [x,y] in z: x: y}");
+    let mut lex = Lexer::new("{for [x,y] in z: x: y}").with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
     lex = tok!(lex.next_key(), name("for").tag(1..4));
     lex = tok!(lex.next_token(), openbracket().tag(5));

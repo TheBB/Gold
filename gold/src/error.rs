@@ -194,7 +194,7 @@ impl<T> From<&Tagged<T>> for Location {
 }
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SyntaxError(pub Location, pub Option<Syntax>);
 
 impl SyntaxError {

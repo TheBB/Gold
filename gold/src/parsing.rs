@@ -16,55 +16,55 @@ use nom::{
 
 use crate::ast::*;
 use crate::error::{Error, Location, Tagged, Syntax, SyntaxError, SyntaxElement};
-use crate::lexing::{Lexer, TokenType, Token, LexResult};
+use crate::lexing::{Lexer, TokenType, CachedLexer, CachedLexResult};
 use crate::object::{Object, Key};
 use crate::traits::{Boxable, Taggable, Validatable};
 
 
 trait ExplainError {
-    fn error<'a, T>(lex: Lexer<'a>, reason: T) -> Self where Syntax: From<T>;
+    fn error<'a, T>(lex: CachedLexer<'a>, reason: T) -> Self where Syntax: From<T>;
 }
 
 impl ExplainError for SyntaxError {
-    fn error<'a, T>(lex: Lexer<'a>, reason: T) -> Self where Syntax: From<T> {
+    fn error<'a, T>(lex: CachedLexer<'a>, reason: T) -> Self where Syntax: From<T> {
         Self(lex.loc(), Some(Syntax::from(reason)))
     }
 }
 
-impl<'a> ParseError<Lexer<'a>> for SyntaxError {
-    fn from_error_kind(lex: Lexer<'a>, _: ErrorKind) -> Self {
+impl<'a> ParseError<In<'a>> for SyntaxError {
+    fn from_error_kind(lex: In<'a>, _: ErrorKind) -> Self {
         Self(lex.loc(), None)
     }
 
-    fn from_char(lex: Lexer<'a>, _: char) -> Self {
+    fn from_char(lex: In<'a>, _: char) -> Self {
         Self(lex.loc(), None)
     }
 
-    fn append(_: Lexer<'a>, _: ErrorKind, other: Self) -> Self {
+    fn append(_: In<'a>, _: ErrorKind, other: Self) -> Self {
         other
     }
 }
 
-impl<'a> ContextError<Lexer<'a>> for SyntaxError {
-    fn add_context(_: Lexer<'a>, _: &'static str, other: Self) -> Self {
+impl<'a> ContextError<In<'a>> for SyntaxError {
+    fn add_context(_: In<'a>, _: &'static str, other: Self) -> Self {
         other
     }
 }
 
-impl<'a> FromExternalError<Lexer<'a>, ParseIntError> for SyntaxError {
-    fn from_external_error(lex: Lexer<'a>, _: ErrorKind, _: ParseIntError) -> Self {
+impl<'a> FromExternalError<In<'a>, ParseIntError> for SyntaxError {
+    fn from_external_error(lex: In<'a>, _: ErrorKind, _: ParseIntError) -> Self {
         Self(lex.loc(), None)
     }
 }
 
-impl<'a> FromExternalError<Lexer<'a>, ParseBigIntError> for SyntaxError {
-    fn from_external_error(lex: Lexer<'a>, _: ErrorKind, _: ParseBigIntError) -> Self {
+impl<'a> FromExternalError<In<'a>, ParseBigIntError> for SyntaxError {
+    fn from_external_error(lex: In<'a>, _: ErrorKind, _: ParseBigIntError) -> Self {
         Self(lex.loc(), None)
     }
 }
 
-impl<'a> FromExternalError<Lexer<'a>, ParseFloatError> for SyntaxError {
-    fn from_external_error(lex: Lexer<'a>, _: ErrorKind, _: ParseFloatError) -> Self {
+impl<'a> FromExternalError<In<'a>, ParseFloatError> for SyntaxError {
+    fn from_external_error(lex: In<'a>, _: ErrorKind, _: ParseFloatError) -> Self {
         Self(lex.loc(), None)
     }
 }
@@ -182,32 +182,9 @@ type PExpr = Paren<Expr>;
 type PList = Paren<ListElement>;
 type PMap = Paren<MapElement>;
 
-
-// trait CompleteError<'a>:
-//     Debug +
-//     ExplainError<Lexer<'a>> +
-//     ParseError<Lexer<'a>> +
-//     ContextError<Lexer<'a>> +
-//     FromExternalError<Lexer<'a>, ParseIntError> +
-//     FromExternalError<Lexer<'a>, ParseBigIntError> +
-//     FromExternalError<Lexer<'a>, ParseFloatError> +
-//     FromExternalError<Lexer<'a>, SyntaxError> {}
-
-// impl<'a, T> CompleteError<'a> for T
-// where T:
-//     Debug +
-//     ExplainError<Lexer<'a>> +
-//     ParseError<Lexer<'a>> +
-//     ContextError<Lexer<'a>> +
-//     FromExternalError<Lexer<'a>, ParseIntError> +
-//     FromExternalError<Lexer<'a>, ParseBigIntError> +
-//     FromExternalError<Lexer<'a>, ParseFloatError> +
-//     FromExternalError<Lexer<'a>, SyntaxError> {}
-
-
 type OpCons = fn(Tagged<Expr>, loc: Location) -> Operator;
 
-type In<'a> = Lexer<'a>;
+type In<'a> = CachedLexer<'a>;
 type Out<'a, T> = IResult<In<'a>, T, SyntaxError>;
 
 trait Parser<'a, T>: NomParser<In<'a>, T, SyntaxError> {}
@@ -222,8 +199,7 @@ fn fail<'a, O, T>(
 where Syntax: From<T>, T: Copy
 {
     move |input: In<'a>| {
-        // let x = parser.parse(input);
-        parser.parse(input).map_err(
+        parser.parse(input.clone()).map_err(
             |err| match err {
                 NomError::Failure(e) => NomError::Failure(e),
                 NomError::Error(_) => {
@@ -287,7 +263,7 @@ where
     U: Copy,
     ItemR: Debug,
 {
-    move |mut i: Lexer<'a>| {
+    move |mut i: In<'a>| {
         let (j, initr) = initializer.parse(i)?;
         i = j;
 
@@ -401,12 +377,13 @@ fn naked<'a, U>(
 /// Never failing parser that obtains the current column.  Useful for
 /// indentation-sensitive rules.
 fn column<'a>(input: In<'a>) -> Out<'a, u32> {
-    Ok((input, input.loc().column))
+    let col = input.loc().column;
+    Ok((input, col))
 }
 
 
 fn token<'a>(
-    getter: impl Fn(In<'a>) -> LexResult<'a, Tagged<Token<'a>>>,
+    getter: impl Fn(In<'a>) -> CachedLexResult<'a>,
     kind: TokenType,
 ) -> impl Parser<'a, Tagged<&'a str>> {
     move |lex: In<'a>| {
@@ -429,13 +406,13 @@ fn token<'a>(
 macro_rules! tok {
     ($pname:ident, $toktype:ident) => {
         fn $pname<'a>(input: In<'a>) -> Out<Tagged<&'a str>> {
-            token(Lexer::next_token, TokenType::$toktype).parse(input)
+            token(CachedLexer::next_token, TokenType::$toktype).parse(input)
         }
     };
 
     ($pname:ident, $toktype:ident, $getter:ident) => {
         fn $pname<'a>(input: In<'a>) -> Out<Tagged<&'a str>> {
-            token(Lexer::$getter, TokenType::$toktype).parse(input)
+            token(CachedLexer::$getter, TokenType::$toktype).parse(input)
         }
     };
 }
@@ -1512,7 +1489,7 @@ where
     T: Copy,
     U: Copy,
 {
-    move |input: Lexer<'a>| map(
+    move |input: In<'a>| map(
         seplist(
             initializer,
             map_binding_element,
@@ -1586,7 +1563,7 @@ fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
     let (j, kwargs) = if end == ";" {
         // println!("keyword args");
         let (j, kwargs) = map_binding(
-            |i: Lexer<'a>| Ok((i, "".tag(i.loc()))),
+            |i: In<'a>| { let loc = i.loc(); Ok((i, "".tag(loc))) },
             |i| pipe(i),
             (SyntaxElement::Pipe, SyntaxElement::KeywordParam),
             (SyntaxElement::Pipe, SyntaxElement::Comma),
@@ -1781,7 +1758,8 @@ fn file<'a>(input: In<'a>) -> Out<'a, File> {
 
 /// Parse the input and return a [`File`] object.
 pub fn parse(input: &str) -> Result<File, Error> {
-    let lexer = Lexer::new(input);
+    let cache = Lexer::cache();
+    let lexer = Lexer::new(input).with_cache(&cache);
     file(lexer).map_or_else(
         |err| match err {
             NomError::Incomplete(_) => Err(Error::default()),
