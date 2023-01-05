@@ -27,17 +27,17 @@ trait ExplainError {
 
 impl ExplainError for SyntaxError {
     fn error<'a, T>(lex: CachedLexer<'a>, reason: T) -> Self where Syntax: From<T> {
-        Self(lex.position(), Some(Syntax::from(reason)))
+        lex.error(Syntax::from(reason))
     }
 }
 
 impl<'a> ParseError<In<'a>> for SyntaxError {
     fn from_error_kind(lex: In<'a>, _: ErrorKind) -> Self {
-        Self(lex.position(), None)
+        Self::new(lex.position(), None)
     }
 
     fn from_char(lex: In<'a>, _: char) -> Self {
-        Self(lex.position(), None)
+        Self::new(lex.position(), None)
     }
 
     fn append(_: In<'a>, _: ErrorKind, other: Self) -> Self {
@@ -53,19 +53,19 @@ impl<'a> ContextError<In<'a>> for SyntaxError {
 
 impl<'a> FromExternalError<In<'a>, ParseIntError> for SyntaxError {
     fn from_external_error(lex: In<'a>, _: ErrorKind, _: ParseIntError) -> Self {
-        Self(lex.position(), None)
+        Self::new(lex.position(), None)
     }
 }
 
 impl<'a> FromExternalError<In<'a>, ParseBigIntError> for SyntaxError {
     fn from_external_error(lex: In<'a>, _: ErrorKind, _: ParseBigIntError) -> Self {
-        Self(lex.position(), None)
+        Self::new(lex.position(), None)
     }
 }
 
 impl<'a> FromExternalError<In<'a>, ParseFloatError> for SyntaxError {
     fn from_external_error(lex: In<'a>, _: ErrorKind, _: ParseFloatError) -> Self {
-        Self(lex.position(), None)
+        Self::new(lex.position(), None)
     }
 }
 
@@ -169,10 +169,10 @@ impl<T> Paren<T> {
         }
     }
 
-    fn wraptag<F, U>(self, f: F) -> Paren<U> where F: FnOnce(Tagged<T>) -> U {
+    fn map_wrap<F, U>(self, f: F) -> Paren<U> where F: FnOnce(Tagged<T>) -> U {
         match self {
-            Self::Naked(x) => Paren::<U>::Naked(x.wraptag(f)),
-            Self::Parenthesized(x) => Paren::<U>::Parenthesized(x.map(|y| y.wraptag(f))),
+            Self::Naked(x) => Paren::<U>::Naked(x.wrap(f)),
+            Self::Parenthesized(x) => Paren::<U>::Parenthesized(x.map(|y| y.wrap(f))),
         }
     }
 }
@@ -671,7 +671,7 @@ fn atomic<'a>(input: In<'a>) -> Out<'a, PExpr> {
         boolean,
         number,
         string,
-        naked(map(identifier, |x| x.wraptag(Expr::Identifier)))
+        naked(map(identifier, |x| x.wrap(Expr::Identifier)))
     ))(input)
 }
 
@@ -742,7 +742,7 @@ fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
         )),
 
         // Singleton
-        map(expression, |x| x.wraptag(ListElement::Singleton))
+        map(expression, |x| x.map_wrap(ListElement::Singleton))
 
     ))(input)
 }
@@ -1519,8 +1519,9 @@ fn binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
                 (TokenType::CloseBracket, TokenType::Comma),
             ),
             |(x,_)| {
-                let loc = x.span();
-                x.wrap(Binding::List, loc)
+                x.wrap(Binding::List)
+                // let loc = x.span();
+                // x.wrap(Binding::List, x.loc)
             },
         ),
 
@@ -1533,8 +1534,9 @@ fn binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
                 (TokenType::CloseBrace, TokenType::Comma),
             ),
             |x| {
-                let loc = x.span();
-                x.wrap(Binding::Map, loc)
+                x.wrap(Binding::Map)
+                // let loc = x.span();
+                // x.wrap(Binding::Map, loc)
             },
         )
     ))(input)

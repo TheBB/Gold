@@ -16,7 +16,7 @@ trait IdAble {
 
 impl<U> IdAble for U where U: KeyAble {
     fn id<T>(self, loc: T) -> Tagged<Expr> where Span: From<T> {
-        self.key(loc).wraptag(Expr::Identifier)
+        self.key(loc).wrap(Expr::Identifier)
     }
 }
 
@@ -56,7 +56,7 @@ trait ListElementAble {
 
 impl<U> ListElementAble for U where Object: From<U> {
     fn lel<T>(self, loc: T) -> Tagged<ListElement> where Span: From<T> {
-        Expr::Literal(Object::from(self)).tag(loc).wraptag(ListElement::Singleton)
+        Expr::Literal(Object::from(self)).tag(loc).wrap(ListElement::Singleton)
     }
 }
 
@@ -224,8 +224,8 @@ fn lists() {
         parse("[1, ...x, y]"),
         Ok(Expr::list((
             1.lel(1),
-            "x".id(7).wrap(ListElement::Splat, 4..8),
-            "y".id(10).wraptag(ListElement::Singleton),
+            "x".id(7).wrap(ListElement::Splat).retag(4..8),
+            "y".id(10).wrap(ListElement::Singleton),
         )).tag(0..12)),
     );
 
@@ -236,7 +236,7 @@ fn lists() {
             ListElement::Loop {
                 binding: "x".bid(8),
                 iterable: "y".id(13),
-                element: "x".id(16).wraptag(ListElement::Singleton).to_box(),
+                element: "x".id(16).wrap(ListElement::Singleton).to_box(),
             }.tag(4..17),
             2.lel(19),
         )).tag(0..21)),
@@ -247,9 +247,9 @@ fn lists() {
         Ok(Expr::list((
             ListElement::Cond {
                 condition: "f".id(6).funcall((
-                    "x".id(8).wraptag(ArgElement::Singleton),
+                    "x".id(8).wrap(ArgElement::Singleton),
                 ), 7..10).tag(6..10),
-                element: "x".id(12).wraptag(ListElement::Singleton).to_box(),
+                element: "x".id(12).wrap(ListElement::Singleton).to_box(),
             }.tag(1..13),
         )).tag(0..14)),
     );
@@ -258,15 +258,15 @@ fn lists() {
         parse("[ 1 , ... x , when x : y , for x in y : z , ]"),
         Ok(Expr::list((
             1.lel(2),
-            "x".id(10).wrap(ListElement::Splat, 6..11),
+            "x".id(10).wrap(ListElement::Splat).retag(6..11),
             ListElement::Cond {
                 condition: "x".id(19),
-                element: "y".id(23).wraptag(ListElement::Singleton).to_box(),
+                element: "y".id(23).wrap(ListElement::Singleton).to_box(),
             }.tag(14..24),
             ListElement::Loop {
                 binding: "x".bid(31),
                 iterable: "y".id(36),
-                element: "z".id(40).wraptag(ListElement::Singleton).to_box(),
+                element: "z".id(40).wrap(ListElement::Singleton).to_box(),
             }.tag(27..41),
         )).tag(0..45)),
     );
@@ -275,15 +275,15 @@ fn lists() {
         parse("[ (1) , ... (x), when x: (y) , for x in y: (z) ]"),
         Ok(Expr::list((
             1.lel(3),
-            "x".id(13).wrap(ListElement::Splat, 8..15),
+            "x".id(13).wrap(ListElement::Splat).retag(8..15),
             ListElement::Cond {
                 condition: "x".id(22),
-                element: "y".id(26).wraptag(ListElement::Singleton).to_box(),
+                element: "y".id(26).wrap(ListElement::Singleton).to_box(),
             }.tag(17..28),
             ListElement::Loop {
                 binding: "x".bid(35),
                 iterable: "y".id(40),
-                element: "z".id(44).wraptag(ListElement::Singleton).to_box(),
+                element: "z".id(44).wrap(ListElement::Singleton).to_box(),
             }.tag(31..46),
         )).tag(0..48)),
     );
@@ -294,7 +294,7 @@ fn nested_lists() {
     assert_eq!(
         parse("[[]]"),
         Ok(Expr::list((
-            Expr::list(()).tag(1..3).wraptag(ListElement::Singleton),
+            Expr::list(()).tag(1..3).wrap(ListElement::Singleton),
         )).tag(0..4)),
     );
 
@@ -304,7 +304,7 @@ fn nested_lists() {
             1.lel(1),
             Expr::list((
                 2.lel(5),
-            )).tag(4..7).wraptag(ListElement::Singleton),
+            )).tag(4..7).wrap(ListElement::Singleton),
         )).tag(0..8)),
     );
 }
@@ -499,7 +499,7 @@ fn maps() {
         )),
         Ok(Expr::map((
             ("a".lit(6).with_coord(1,4), "x".expr(9..12).with_coord(1,7)).mel(),
-            ("b".lit(16).with_coord(2,4), "y".key(19).with_coord(2,7).wraptag(Expr::Identifier)).mel(),
+            ("b".lit(16).with_coord(2,4), "y".key(19).with_coord(2,7).wrap(Expr::Identifier)).mel(),
         )).tag(0..23)),
     );
 
@@ -638,8 +638,8 @@ fn let_blocks() {
                 ),
             ],
             expression: Box::new(Expr::list((
-                "a".id(26).wraptag(ListElement::Singleton),
-                "b".id(29).wraptag(ListElement::Singleton),
+                "a".id(26).wrap(ListElement::Singleton),
+                "b".id(29).wrap(ListElement::Singleton),
             )).tag(25..31)),
         }.tag(0..31)),
     );
@@ -879,17 +879,17 @@ fn funcall() {
     assert_eq!(
         parse("func(1, 2, 3,)"),
         Ok("func".id(0..4).funcall((
-            1.expr(5).wraptag(ArgElement::Singleton),
-            2.expr(8).wraptag(ArgElement::Singleton),
-            3.expr(11).wraptag(ArgElement::Singleton),
+            1.expr(5).wrap(ArgElement::Singleton),
+            2.expr(8).wrap(ArgElement::Singleton),
+            3.expr(11).wrap(ArgElement::Singleton),
         ), 4..14).tag(0..14)),
     );
 
     assert_eq!(
         parse("func(1, 2, a: 3)"),
         Ok("func".id(0..4).funcall((
-            1.expr(5).wraptag(ArgElement::Singleton),
-            2.expr(8).wraptag(ArgElement::Singleton),
+            1.expr(5).wrap(ArgElement::Singleton),
+            2.expr(8).wrap(ArgElement::Singleton),
             ArgElement::Keyword(
                 "a".key(11),
                 3.expr(14),
@@ -928,8 +928,8 @@ fn funcall() {
                 keywords: None,
                 expression: "x".id(7).add("y".id(9), 8).tag(7..10).to_box(),
             }.tag(1..10).funcall((
-                1.expr(12).wraptag(ArgElement::Singleton),
-                2.expr(14).wraptag(ArgElement::Singleton),
+                1.expr(12).wrap(ArgElement::Singleton),
+                2.expr(14).wrap(ArgElement::Singleton),
             ), 11..16).tag(0..16)
         ),
     );
@@ -937,7 +937,7 @@ fn funcall() {
     assert_eq!(
         parse("func(1, ...y, z: 2, ...q)"),
         Ok("func".id(0..4).funcall((
-            1.expr(5).wraptag(ArgElement::Singleton),
+            1.expr(5).wrap(ArgElement::Singleton),
             ArgElement::Splat("y".id(11)).tag(8..12),
             ArgElement::Keyword(
                 "z".key(14),

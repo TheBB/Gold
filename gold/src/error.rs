@@ -1,5 +1,5 @@
 use std::cmp::min;
-use std::ops::{Range, Sub};
+use std::ops::{Deref, Range, Sub};
 
 use std::fmt::{Debug, Display, Write};
 use std::path::PathBuf;
@@ -176,6 +176,11 @@ impl From<usize> for Span {
 }
 
 
+/// A wrapper for marking any object with a text span pointing to its origin in
+/// a source file.
+///
+/// The AST (see ast.rs) makes heavy use of Tagged objects, so that errors can
+/// be accurately reported.
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Tagged<T> {
     span: Span,
@@ -183,6 +188,7 @@ pub struct Tagged<T> {
 }
 
 impl<T> Tagged<T> {
+    /// Construct a new Tagged wrapper.
     pub fn new(location: Span, contents: T) -> Tagged<T> {
         Tagged::<T> {
             span: location,
@@ -190,54 +196,55 @@ impl<T> Tagged<T> {
         }
     }
 
+    /// Return the text span.
     pub fn span(&self) -> Span {
         self.span
     }
 
+    /// Destroy the wrapper and return its contents.
     pub fn unwrap(self) -> T {
         self.contents
     }
 
+    /// Wrapper for [`Span::with_line`].
     pub fn with_line(self, line: u32) -> Tagged<T> {
         let loc = self.span.with_line(line);
         self.retag(loc)
     }
 
+    /// Wrapper for [`Span::with_column`].
     pub fn with_column(self, col: u32) -> Tagged<T> {
         let loc = self.span.with_column(col);
         self.retag(loc)
     }
 
+    /// Wrapper for [`Span::with_coord`].
     pub fn with_coord(self, line: u32, col: u32) -> Tagged<T> {
         let loc = self.span.with_coord(line, col);
         self.retag(loc)
     }
 
-    pub fn map<F, U>(self, f: F) -> Tagged<U> where F: FnOnce(T) -> U {
+    /// Map the wrapped object and return a new tagged wrapper.
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Tagged<U>
+    {
         Tagged::<U> {
             span: self.span,
             contents: f(self.contents),
         }
     }
 
-    pub fn wraptag<F, U>(self, f: F) -> Tagged<U> where F: FnOnce(Tagged<T>) -> U {
+    /// Map the whole tagged object and return a new tagged wrapper.
+    ///
+    /// Useful for creating longer layers of tagged objects.
+    pub fn wrap<U>(self, f: impl FnOnce(Tagged<T>) -> U) -> Tagged<U>
+    {
         Tagged::<U> {
             span: self.span,
             contents: f(self),
         }
     }
 
-    pub fn wrap<F, U, V>(self, f: F, loc: V) -> Tagged<U>
-    where
-        F: FnOnce(Tagged<T>) -> U,
-        Span: From<V>
-    {
-        Tagged::<U> {
-            span: Span::from(loc),
-            contents: f(self),
-        }
-    }
-
+    /// Substitute the text span with a new one.
     pub fn retag<U>(self, loc: U) -> Tagged<T>
     where
         Span: From<U>,
@@ -248,27 +255,12 @@ impl<T> Tagged<T> {
         }
     }
 
+    /// Return a function that can apply a tag to error objects.
+    ///
+    /// Useful for `Result<_, Error>::map_err(result, _.tag_error(...))`
     pub fn tag_error(&self, action: Action) -> impl Fn(Error) -> Error {
-        let loc = self.span();
-        move |err: Error| err.tag(loc, action)
-    }
-}
-
-impl<X, Y> Tagged<Result<X,Y>> {
-    pub fn transpose(self) -> Result<Tagged<X>,Y> {
-        match self.contents {
-            Ok(x) => Ok(Tagged { span: self.span, contents: x }),
-            Err(y) => Err(y),
-        }
-    }
-}
-
-impl<X> Tagged<Option<X>> {
-    pub fn transpose(self) -> Option<Tagged<X>> {
-        match self.contents {
-            Some(x) => Some(Tagged { span: self.span, contents: x }),
-            None => None,
-        }
+        let span = self.span();
+        move |err: Error| err.tag(span, action)
     }
 }
 
@@ -280,6 +272,13 @@ impl<T: Debug> Debug for Tagged<T> {
     }
 }
 
+impl<T> Deref for Tagged<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.contents
+    }
+}
+
 impl<T> AsRef<T> for Tagged<T> {
     fn as_ref(&self) -> &T {
         &self.contents
@@ -288,28 +287,38 @@ impl<T> AsRef<T> for Tagged<T> {
 
 impl<T> From<&Tagged<T>> for Span {
     fn from(value: &Tagged<T>) -> Self {
-        value.span
+        value.span()
     }
 }
 
 impl From<Range<Span>> for Span {
-    fn from(value: Range<Span>) -> Self {
+    fn from(Range { start, end }: Range<Span>) -> Self {
         Span {
-            start: value.start.start(),
-            length: value.end.offset() + value.end.length() - value.start.offset(),
+            start: start.start(),
+            length: end.offset() + end.length() - start.offset(),
         }
     }
 }
 
 
+/// General error type used by both parsing and lexing.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SyntaxError(pub Position, pub Option<Syntax>);
+pub struct SyntaxError {
+    position: Position,
+    reason: Option<Syntax>,
+}
 
 impl SyntaxError {
+    /// Create a new syntax error.
+    pub fn new(position: Position, reason: Option<Syntax>) -> SyntaxError {
+        SyntaxError { position, reason }
+    }
+
+    /// Convert to the general error type.
     pub fn to_error(self) -> Error {
-        let SyntaxError(pos, reason) = self;
+        let SyntaxError { position, reason } = self;
         Error {
-            locations: Some(vec![(pos.with_length(0), Action::Parse)]),
+            locations: Some(vec![(position.with_length(0), Action::Parse)]),
             reason: reason.map(Reason::Syntax),
             rendered: None,
         }
@@ -317,6 +326,8 @@ impl SyntaxError {
 }
 
 
+/// A complete enumeration of all grammatical elements in the Gold language,
+/// including tokens as well as composite structures.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SyntaxElement {
     // Keywords
@@ -356,14 +367,25 @@ impl From<TokenType> for SyntaxElement {
 }
 
 
+/// Enumerates all the possible reasons for a syntax error.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Syntax {
+    /// Input ended too soon (thrown by the lexer)
     UnexpectedEof,
+
+    /// An unexpected character (thrown by the lexer)
     UnexpectedChar(char),
-    ExpectedToken(TokenType),
+
+    /// Expected a grammatical element but found another (thrown by the parser)
     ExpectedOne(SyntaxElement),
+
+    /// Expected one of two grammatical element but found another (thrown by the parser)
     ExpectedTwo(SyntaxElement, SyntaxElement),
+
+    /// Expected one of three grammatical element but found another (thrown by the parser)
     ExpectedThree(SyntaxElement, SyntaxElement, SyntaxElement),
+
+    /// Multiple slurps in one collection (thrown by the validator)
     MultiSlurp,
 }
 
@@ -392,12 +414,14 @@ impl<T,U,V> From<(T,U,V)> for Syntax where SyntaxElement: From<T> + From<U> + Fr
 }
 
 
+/// Enumerates possible reasons for internal errors (which shouldn't happen).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Internal {
     SetInFrozenNamespace,
 }
 
 
+/// Enumerates possible binding types.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BindingType {
     Identifier,
@@ -406,6 +430,7 @@ pub enum BindingType {
 }
 
 
+/// Enumerates different reasons why unpacking might fail.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Unpack {
     ListTooShort,
@@ -415,6 +440,7 @@ pub enum Unpack {
 }
 
 
+/// Enumerates different type mismatch reasons.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeMismatch {
     Iterate(Type),
@@ -433,6 +459,7 @@ pub enum TypeMismatch {
 }
 
 
+/// Enumerates different value-based error reasons.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     OutOfRange,
@@ -442,6 +469,7 @@ pub enum Value {
 }
 
 
+/// Enumerates different file system error reasons.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FileSystem {
     NoParent(PathBuf),
@@ -449,6 +477,7 @@ pub enum FileSystem {
 }
 
 
+/// Grand enumeration of all possible error reasons.
 #[derive(Debug, PartialEq)]
 pub enum Reason {
     None,
@@ -501,6 +530,8 @@ impl From<Value> for Reason {
 }
 
 
+/// Enumerates all different 'actions' - things that Gold might try to do which
+/// can cause an error.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Action {
     Parse,
@@ -516,14 +547,22 @@ pub enum Action {
 }
 
 
+/// The general error type of Gold.
 #[derive(Debug, PartialEq, Default)]
 pub struct Error {
+    /// Stack trace of locations where the error happened.
     pub locations: Option<Vec<(Span, Action)>>,
+
+    /// Reason for the error.
     pub reason: Option<Reason>,
+
+    /// Human friendly string representation.
     pub rendered: Option<String>,
 }
 
 impl Error {
+    /// Append a location to the stack. Takes ownership and returns the same
+    /// object, for ease of use with `Result::map_err`.
     pub fn tag<T>(mut self, loc: T, action: Action) -> Self where Span: From<T> {
         match &mut self.locations {
             None => { self.locations = Some(vec![(Span::from(loc), action)]); },
@@ -532,6 +571,7 @@ impl Error {
         self
     }
 
+    /// Construct a new error with an empty stack.
     pub fn new<T>(reason: T) -> Self where Reason: From<T> {
         Self {
             locations: None,
@@ -540,10 +580,12 @@ impl Error {
         }
     }
 
+    /// Construct error with the 'unboud name' reason.
     pub fn unbound(key: Key) -> Self {
         Self::new(Reason::Unbound(key))
     }
 
+    /// Remove the human-friendly string representation.
     pub fn unrender(self) -> Self {
         Self {
             locations: self.locations,
@@ -552,6 +594,7 @@ impl Error {
         }
     }
 
+    /// Add a human-friendly string representation.
     pub fn render(self, code: &str) -> Self {
         let rendered = format!("{}", ErrorRenderer(&self, code));
         Self {
@@ -561,9 +604,6 @@ impl Error {
         }
     }
 }
-
-
-struct ErrorRenderer<'a>(&'a Error, &'a str);
 
 impl Display for SyntaxElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -610,7 +650,6 @@ impl Display for Reason {
 
             Self::Syntax(Syntax::UnexpectedEof) => f.write_str("unexpected end of input"),
             Self::Syntax(Syntax::UnexpectedChar(c)) => f.write_fmt(format_args!("unexpected {}", c)),
-            Self::Syntax(Syntax::ExpectedToken(x)) => f.write_fmt(format_args!("expected {}", x)),
             Self::Syntax(Syntax::ExpectedOne(x)) => f.write_fmt(format_args!("expected {}", x)),
             Self::Syntax(Syntax::ExpectedTwo(x, y)) => f.write_fmt(format_args!("expected {} or {}", x, y)),
             Self::Syntax(Syntax::ExpectedThree(x, y, z)) => f.write_fmt(format_args!("expected {}, {} or {}", x, y, z)),
@@ -690,6 +729,13 @@ impl Display for Action {
         }
     }
 }
+
+
+/// Utility struct for facilitating error rendering.
+///
+/// Has access to both the error and the code, so that it can just implement the
+/// Display trait.
+struct ErrorRenderer<'a>(&'a Error, &'a str);
 
 impl<'a> Display for ErrorRenderer<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

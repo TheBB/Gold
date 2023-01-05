@@ -176,9 +176,7 @@ impl<'a> Lexer<'a> {
         regex.find(self.code).map(|m| {
             let lex = self.skip(m.start(), 0);
             lex.skip_tag(m.end() - m.start(), 0, kind).unwrap()
-        }).ok_or_else(
-            || SyntaxError(self.position(), Some(Syntax::from(element)))
-        )
+        }).ok_or_else(|| self.error(Syntax::from(element)))
     }
 
     pub fn skip_whitespace(mut self) -> Self {
@@ -217,6 +215,10 @@ impl<'a> Lexer<'a> {
 
     fn next_name(self, regex: &'a Regex) -> LexResult<'a> {
         self.traverse(regex, SyntaxElement::Identifier, TokenType::Name)
+    }
+
+    pub fn error(&self, reason: Syntax) -> SyntaxError {
+        SyntaxError::new(self.position, Some(reason))
     }
 
     pub fn next(self, ctx: Ctx, cache: &LexCache<'a>) -> LexResult<'a> {
@@ -278,8 +280,8 @@ impl<'a> Lexer<'a> {
             Some('|') => self.skip_tag(1, 0, TokenType::Pipe),
             Some(';') => self.skip_tag(1, 0, TokenType::SemiColon),
 
-            Some(c) => Err(SyntaxError(self.position, Some(Syntax::UnexpectedChar(c)))),
-            None => Err(SyntaxError(self.position, Some(Syntax::UnexpectedEof))),
+            Some(c) => Err(self.error(Syntax::UnexpectedChar(c))),
+            None => Err(self.error(Syntax::UnexpectedEof)),
         }
     }
 
@@ -294,7 +296,7 @@ impl<'a> Lexer<'a> {
             Some(':') => self.skip_tag(1, 0, TokenType::Colon),
             Some('.') if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') => self.skip_tag(3, 0, TokenType::Ellipsis),
             Some(_) => self.next_name(&KEY),
-            None => Err(SyntaxError(self.position, Some(Syntax::UnexpectedEof))),
+            None => Err(self.error(Syntax::UnexpectedEof)),
         }
     }
 
@@ -327,11 +329,11 @@ impl<'a> Lexer<'a> {
 
     fn tokenize_string(self) -> LexResult<'a> {
         match self.peek() {
-            None => Err(SyntaxError(self.position, Some(Syntax::UnexpectedEof))),
+            None => Err(self.error(Syntax::UnexpectedEof)),
 
             Some('"') => self.skip_tag(1, 0, TokenType::DoubleQuote),
             Some('$') => self.skip_tag(1, 0, TokenType::Dollar),
-            Some('\n') => Err(SyntaxError(self.position, Some(Syntax::UnexpectedChar('\n')))),
+            Some('\n') => Err(self.error(Syntax::UnexpectedChar('\n'))),
 
             _ => {
                 let mut it = self.code.char_indices();
@@ -347,7 +349,7 @@ impl<'a> Lexer<'a> {
                                 continue;
                             } else if let Some((_, cc)) = c {
                                 let lex = self.skip(end + 1, 0);
-                                return Err(SyntaxError(lex.position, Some(Syntax::UnexpectedChar(cc))));
+                                return Err(lex.error(Syntax::UnexpectedChar(cc)));
                             }
                             continue;
                         }
@@ -388,6 +390,10 @@ impl<'a> CachedLexer<'a> {
 
     fn cachify(&self, lexer: Lexer<'a>) -> CachedLexer<'a> {
         CachedLexer { lexer, cache: self.cache }
+    }
+
+    pub fn error(&self, reason: Syntax) -> SyntaxError {
+        self.lexer.error(reason)
     }
 
     fn next(self, ctx: Ctx) -> CachedLexResult<'a> {
