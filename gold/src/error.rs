@@ -1,5 +1,5 @@
 use std::cmp::min;
-use std::ops::Range;
+use std::ops::{Range, Sub};
 
 use std::fmt::{Debug, Display, Write};
 use std::path::PathBuf;
@@ -11,64 +11,165 @@ use crate::lexing::TokenType;
 use crate::object::{Key, Type};
 
 
+/// Marks a position in a text buffer.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct Location {
-    pub offset: usize,
-    pub length: usize,
-    pub line: u32,
-    pub column: u32,
+pub struct Position {
+    offset: usize,
+    line: u32,
+    column: u32,
 }
 
-impl Location {
-    pub fn new(offset: usize, line: u32, column: u32, length: usize) -> Location {
-        Location { offset, line, column, length }
+impl Position {
+    /// Construct a new position from offset, line and column (all 0-indexed).
+    pub fn new(offset: usize, line: u32, column: u32) -> Position {
+        Position { offset, line, column }
     }
 
-    pub fn span(l: Location, r: Location) -> Location {
-        Location {
-            offset: l.offset,
-            line: l.line,
-            column: l.column,
-            length: r.offset + r.length - l.offset,
-        }
-    }
-
-    pub fn line(&self, l: u32) -> Location {
-        Location {
-            offset: self.offset,
+    /// Construct a new position pointing to the beginning of a buffer.
+    pub fn zero() -> Position {
+        Position {
+            offset: 0,
+            line: 0,
             column: 0,
-            line: l,
-            length: self.length,
         }
     }
 
-    pub fn col(&self, c: u32) -> Location {
-        Location {
+    /// Add a positive displacement to a position and return a new one.
+    ///
+    /// Use `adjust(offset, 0)` to move within a line. Use `adjuct(offset, n)`
+    /// to move to the beginning of a line.
+    ///
+    /// Do NOT use this method to jump to the middle of a new line. To do that,
+    /// compose two calls to `adjust`.
+    pub fn adjust(&self, offset: usize, delta_line: u32) -> Position {
+        Position {
+            offset: self.offset + offset,
+            line: self.line + delta_line,
+            column: if delta_line > 0 { 0 } else { self.column + offset as u32 }
+        }
+    }
+
+    /// Return the zero-indexed offset into the buffer.
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    /// Return the zero-indexed line number.
+    pub fn line(&self) -> u32 {
+        self.line
+    }
+
+    /// Return the zero-indexed column number.
+    pub fn column(&self) -> u32 {
+        self.column
+    }
+
+    /// Return a new span starting at this position with a certain length.
+    pub fn with_length(&self, length: usize) -> Span {
+        Span { start: *self, length }
+    }
+
+    /// Return a new position by changing the line number.
+    pub fn with_line(self, line: u32) -> Position {
+        Position {
             offset: self.offset,
-            column: c,
+            column: self.column,
+            line,
+        }
+    }
+
+    /// Return a new position by changing the column number.
+    pub fn with_column(self, col: u32) -> Position {
+        Position {
+            offset: self.offset,
             line: self.line,
-            length: self.length,
+            column: col,
         }
     }
 }
 
-impl From<Range<u32>> for Location {
+impl Sub<Position> for Position {
+    type Output = Span;
+
+    /// Create a span marking the interval between two positions.
+    fn sub(self, rhs: Position) -> Self::Output {
+        rhs.with_length(self.offset - rhs.offset)
+    }
+}
+
+
+/// Mark an interval of text in a buffer starting at a `Position` with a length.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Span {
+    start: Position,
+    length: usize,
+}
+
+impl Span {
+    /// The starting position if the text span.
+    pub fn start(&self) -> Position {
+        self.start
+    }
+
+    /// The offset of the start of the span into the buffer.
+    pub fn offset(&self) -> usize {
+        self.start.offset
+    }
+
+    /// The zero-indexed line number of the start of the span.
+    pub fn line(&self) -> u32 {
+        self.start.line
+    }
+
+    /// The zero-indexed column number of the start of the span.
+    pub fn column(&self) -> u32 {
+        self.start.column
+    }
+
+    /// The length of the span.
+    pub fn length(&self) -> usize {
+        self.length
+    }
+
+    /// Return a new span by changing the line number.
+    pub(crate) fn with_line(self, line: u32) -> Self {
+        Span {
+            start: self.start.with_line(line),
+            length: self.length
+        }
+    }
+
+    /// Return a new span by changing the column number.
+    pub(crate) fn with_column(self, col: u32) -> Self {
+        Span {
+            start: self.start.with_column(col),
+            length: self.length
+        }
+    }
+
+    /// Return a new span by changing the line and column numbers.
+    pub(crate) fn with_coord(self, line: u32, col: u32) -> Self {
+        self.with_line(line).with_column(col)
+    }
+}
+
+impl From<Range<u32>> for Span {
+    /// Convert a range of offsets to a text span, assuming the interval begins
+    /// on the first line. Use `with_line` if not.
     fn from(value: Range<u32>) -> Self {
-        Location {
-            offset: value.start as usize,
-            column: value.start,
-            line: 1,
+        Span {
+            start: Position::new(value.start as usize, 0, value.start),
             length: (value.end - value.start) as usize,
         }
     }
 }
 
-impl From<usize> for Location {
+impl From<usize> for Span {
+    /// Convert an offset to a text span with length one, assuming the interval
+    /// begins on the first line. Use `with_line` if not.
     fn from(value: usize) -> Self {
-        Location {
-            offset: value,
-            column: value as u32,
-            line: 1,
+        Span {
+            start: Position::new(value, 0, value as u32),
             length: 1,
         }
     }
@@ -77,46 +178,51 @@ impl From<usize> for Location {
 
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Tagged<T> {
-    pub location: Location,
-    pub contents: T,
+    span: Span,
+    contents: T,
 }
 
 impl<T> Tagged<T> {
-    pub fn new(location: Location, contents: T) -> Tagged<T> {
+    pub fn new(location: Span, contents: T) -> Tagged<T> {
         Tagged::<T> {
-            location,
+            span: location,
             contents,
         }
     }
 
-    pub fn loc(&self) -> Location {
-        self.location
+    pub fn span(&self) -> Span {
+        self.span
     }
 
     pub fn unwrap(self) -> T {
         self.contents
     }
 
-    pub fn col(self, l: u32) -> Tagged<T> {
-        let loc = self.location.col(l);
+    pub fn with_line(self, line: u32) -> Tagged<T> {
+        let loc = self.span.with_line(line);
         self.retag(loc)
     }
 
-    pub fn line(self, l: u32) -> Tagged<T> {
-        let loc = self.location.line(l);
+    pub fn with_column(self, col: u32) -> Tagged<T> {
+        let loc = self.span.with_column(col);
+        self.retag(loc)
+    }
+
+    pub fn with_coord(self, line: u32, col: u32) -> Tagged<T> {
+        let loc = self.span.with_coord(line, col);
         self.retag(loc)
     }
 
     pub fn map<F, U>(self, f: F) -> Tagged<U> where F: FnOnce(T) -> U {
         Tagged::<U> {
-            location: self.location,
+            span: self.span,
             contents: f(self.contents),
         }
     }
 
     pub fn wraptag<F, U>(self, f: F) -> Tagged<U> where F: FnOnce(Tagged<T>) -> U {
         Tagged::<U> {
-            location: self.location,
+            span: self.span,
             contents: f(self),
         }
     }
@@ -124,26 +230,26 @@ impl<T> Tagged<T> {
     pub fn wrap<F, U, V>(self, f: F, loc: V) -> Tagged<U>
     where
         F: FnOnce(Tagged<T>) -> U,
-        Location: From<V>
+        Span: From<V>
     {
         Tagged::<U> {
-            location: Location::from(loc),
+            span: Span::from(loc),
             contents: f(self),
         }
     }
 
     pub fn retag<U>(self, loc: U) -> Tagged<T>
     where
-        Location: From<U>,
+        Span: From<U>,
     {
         Tagged::<T> {
-            location: Location::from(loc),
+            span: Span::from(loc),
             contents: self.contents,
         }
     }
 
     pub fn tag_error(&self, action: Action) -> impl Fn(Error) -> Error {
-        let loc = self.loc();
+        let loc = self.span();
         move |err: Error| err.tag(loc, action)
     }
 }
@@ -151,7 +257,7 @@ impl<T> Tagged<T> {
 impl<X, Y> Tagged<Result<X,Y>> {
     pub fn transpose(self) -> Result<Tagged<X>,Y> {
         match self.contents {
-            Ok(x) => Ok(Tagged { location: self.location, contents: x }),
+            Ok(x) => Ok(Tagged { span: self.span, contents: x }),
             Err(y) => Err(y),
         }
     }
@@ -160,7 +266,7 @@ impl<X, Y> Tagged<Result<X,Y>> {
 impl<X> Tagged<Option<X>> {
     pub fn transpose(self) -> Option<Tagged<X>> {
         match self.contents {
-            Some(x) => Some(Tagged { location: self.location, contents: x }),
+            Some(x) => Some(Tagged { span: self.span, contents: x }),
             None => None,
         }
     }
@@ -169,7 +275,8 @@ impl<X> Tagged<Option<X>> {
 impl<T: Debug> Debug for Tagged<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.contents.fmt(f)?;
-        f.write_fmt(format_args!(".tag({}, {}, {}, {})", self.location.offset, self.location.line, self.location.column, self.location.length))
+        let span = self.span;
+        f.write_fmt(format_args!(".tag({}:{}, {}..{})", span.line() + 1, span.column() + 1, span.offset(), span.offset() + span.length()))
     }
 }
 
@@ -179,29 +286,30 @@ impl<T> AsRef<T> for Tagged<T> {
     }
 }
 
-impl<U,V> From<(U,V)> for Location where Location: From<U> + From<V> {
-    fn from((left, right): (U, V)) -> Self {
-        let l = Location::from(left);
-        let r = Location::from(right);
-        Location::span(l, r)
+impl<T> From<&Tagged<T>> for Span {
+    fn from(value: &Tagged<T>) -> Self {
+        value.span
     }
 }
 
-impl<T> From<&Tagged<T>> for Location {
-    fn from(value: &Tagged<T>) -> Self {
-        value.location
+impl From<Range<Span>> for Span {
+    fn from(value: Range<Span>) -> Self {
+        Span {
+            start: value.start.start(),
+            length: value.end.offset() + value.end.length() - value.start.offset(),
+        }
     }
 }
 
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SyntaxError(pub Location, pub Option<Syntax>);
+pub struct SyntaxError(pub Position, pub Option<Syntax>);
 
 impl SyntaxError {
     pub fn to_error(self) -> Error {
-        let SyntaxError(loc, reason) = self;
+        let SyntaxError(pos, reason) = self;
         Error {
-            locations: Some(vec![(loc, Action::Parse)]),
+            locations: Some(vec![(pos.with_length(0), Action::Parse)]),
             reason: reason.map(Reason::Syntax),
             rendered: None,
         }
@@ -211,21 +319,6 @@ impl SyntaxError {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SyntaxElement {
-    // Characters
-    CloseBrace,
-    CloseBracket,
-    CloseCurlyPipe,
-    CloseParen,
-    Colon,
-    Comma,
-    DoubleArrow,
-    DoubleQuote,
-    Equals,
-    OpenBrace,
-    OpenParen,
-    Pipe,
-    Semicolon,
-
     // Keywords
     As,
     Else,
@@ -251,6 +344,15 @@ pub enum SyntaxElement {
 
     // Other
     Whitespace,
+
+    // Tokens
+    Token(TokenType),
+}
+
+impl From<TokenType> for SyntaxElement {
+    fn from(value: TokenType) -> Self {
+        Self::Token(value)
+    }
 }
 
 
@@ -265,33 +367,27 @@ pub enum Syntax {
     MultiSlurp,
 }
 
-impl From<TokenType> for Syntax {
-    fn from(value: TokenType) -> Self {
-        Self::ExpectedToken(value)
+impl<T> From<T> for Syntax where SyntaxElement: From<T> {
+    fn from(value: T) -> Self {
+        Self::ExpectedOne(SyntaxElement::from(value))
     }
 }
 
-impl From<SyntaxElement> for Syntax {
-    fn from(v: SyntaxElement) -> Self {
-        Self::ExpectedOne(v)
+impl<T> From<(T,)> for Syntax where SyntaxElement: From<T> {
+    fn from((value,): (T,)) -> Self {
+        Self::ExpectedOne(SyntaxElement::from(value))
     }
 }
 
-impl From<(SyntaxElement,)> for Syntax {
-    fn from((v,): (SyntaxElement,)) -> Self {
-        Self::ExpectedOne(v)
+impl<T,U> From<(T,U)> for Syntax where SyntaxElement: From<T> + From<U> {
+    fn from((x,y): (T,U)) -> Self {
+        Self::ExpectedTwo(SyntaxElement::from(x), SyntaxElement::from(y))
     }
 }
 
-impl From<(SyntaxElement,SyntaxElement)> for Syntax {
-    fn from((u,v): (SyntaxElement,SyntaxElement)) -> Self {
-        Self::ExpectedTwo(u,v)
-    }
-}
-
-impl From<(SyntaxElement,SyntaxElement,SyntaxElement)> for Syntax {
-    fn from((u,v,w): (SyntaxElement,SyntaxElement,SyntaxElement)) -> Self {
-        Self::ExpectedThree(u,v,w)
+impl<T,U,V> From<(T,U,V)> for Syntax where SyntaxElement: From<T> + From<U> + From<V> {
+    fn from((x,y,z): (T,U,V)) -> Self {
+        Self::ExpectedThree(SyntaxElement::from(x), SyntaxElement::from(y), SyntaxElement::from(z))
     }
 }
 
@@ -422,16 +518,16 @@ pub enum Action {
 
 #[derive(Debug, PartialEq, Default)]
 pub struct Error {
-    pub locations: Option<Vec<(Location, Action)>>,
+    pub locations: Option<Vec<(Span, Action)>>,
     pub reason: Option<Reason>,
     pub rendered: Option<String>,
 }
 
 impl Error {
-    pub fn tag<T>(mut self, loc: T, action: Action) -> Self where Location: From<T> {
+    pub fn tag<T>(mut self, loc: T, action: Action) -> Self where Span: From<T> {
         match &mut self.locations {
-            None => { self.locations = Some(vec![(Location::from(loc), action)]); },
-            Some(vec) => { vec.push((Location::from(loc), action)); },
+            None => { self.locations = Some(vec![(Span::from(loc), action)]); },
+            Some(vec) => { vec.push((Span::from(loc), action)); },
         }
         self
     }
@@ -471,43 +567,29 @@ struct ErrorRenderer<'a>(&'a Error, &'a str);
 
 impl Display for SyntaxElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            Self::ArgElement => "function argument",
-            Self::As => "'as'",
-            Self::Binding => "binding pattern",
-            Self::CloseBrace => "'}'",
-            Self::CloseBracket => "']'",
-            Self::CloseCurlyPipe => "|}",
-            Self::CloseParen => "')'",
-            Self::Colon => "':'",
-            Self::Comma => "','",
-            Self::DoubleArrow => "'=>'",
-            Self::DoubleQuote => "'\"'",
-            Self::Else => "'else'",
-            Self::EndOfInput => "end of input",
-            Self::Equals => "'='",
-            Self::Expression => "expression",
-            Self::Identifier => "identifier",
-            Self::ImportPath => "import path",
-            Self::In => "'in'",
-            Self::KeywordParam => "keyword parameter",
-            Self::ListBindingElement => "list binding pattern",
-            Self::ListElement => "list element",
-            Self::MapBindingElement => "map binding pattern",
-            Self::MapElement => "map element",
-            Self::MapValue => "map value",
-            Self::Number => "number",
-            Self::OpenBrace => "'{'",
-            Self::OpenParen => "'('",
-            Self::Operand => "operand",
-            Self::Pipe => "|",
-            Self::PosParam => "positional parameter",
-            Self::Semicolon => "';'",
-            Self::Then => "'then'",
-            Self::Whitespace => "whitespace",
-        };
-
-        f.write_str(s)
+        match self {
+            Self::ArgElement => f.write_str("function argument"),
+            Self::As => f.write_str("'as'"),
+            Self::Binding => f.write_str("binding pattern"),
+            Self::Else => f.write_str("'else'"),
+            Self::EndOfInput => f.write_str("end of input"),
+            Self::Expression => f.write_str("expression"),
+            Self::Identifier => f.write_str("identifier"),
+            Self::ImportPath => f.write_str("import path"),
+            Self::In => f.write_str("'in'"),
+            Self::KeywordParam => f.write_str("keyword parameter"),
+            Self::ListBindingElement => f.write_str("list binding pattern"),
+            Self::ListElement => f.write_str("list element"),
+            Self::MapBindingElement => f.write_str("map binding pattern"),
+            Self::MapElement => f.write_str("map element"),
+            Self::MapValue => f.write_str("map value"),
+            Self::Number => f.write_str("number"),
+            Self::Operand => f.write_str("operand"),
+            Self::PosParam => f.write_str("positional parameter"),
+            Self::Then => f.write_str("'then'"),
+            Self::Whitespace => f.write_str("whitespace"),
+            Self::Token(t) => f.write_fmt(format_args!("{}", t)),
+        }
     }
 }
 
@@ -616,20 +698,19 @@ impl<'a> Display for ErrorRenderer<'a> {
         f.write_fmt(format_args!("Error: {}", err.reason.as_ref().unwrap_or(&Reason::None)))?;
         if let Some(locs) = err.locations.as_ref() {
             for (loc, act) in locs.iter() {
-                let Location { offset, line, length, column } = loc;
-                let bol = offset - *column as usize;
+                let bol = loc.offset() - loc.column() as usize;
                 let eol = code[bol+1..].find('\n').map(|x| x + bol + 1).unwrap_or(code.len());
-                let span_end = min(offset + length, eol) - offset;
+                let span_end = min(loc.offset() + loc.length(), eol) - loc.offset();
                 f.write_char('\n')?;
                 f.write_str(&code[bol..eol])?;
                 f.write_char('\n')?;
-                for _ in 0..*column {
+                for _ in 0..loc.column() {
                     f.write_char(' ')?;
                 }
                 for _ in 0..span_end {
                     f.write_char('^')?;
                 }
-                f.write_fmt(format_args!("\nwhile {} at {}:{}", act, line, column + 1))?;
+                f.write_fmt(format_args!("\nwhile {} at {}:{}", act, loc.line() + 1, loc.column() + 1))?;
             }
         }
 

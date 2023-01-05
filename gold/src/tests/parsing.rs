@@ -1,5 +1,6 @@
 use crate::ast::*;
-use crate::error::{Location, Tagged, Error, Reason, Syntax, SyntaxElement, Action};
+use crate::error::{Span, Tagged, Error, Reason, Syntax, SyntaxElement as S, Action};
+use crate::lexing::{TokenType as T};
 use crate::object::{Object, Key};
 use crate::parsing::{parse as parse_file};
 use crate::traits::{Boxable, Taggable};
@@ -10,51 +11,51 @@ fn parse(input: &str) -> Result<Tagged<Expr>, Error> {
 }
 
 trait IdAble {
-    fn id<T>(self, loc: T) -> Tagged<Expr> where Location: From<T>;
+    fn id<T>(self, loc: T) -> Tagged<Expr> where Span: From<T>;
 }
 
 impl<U> IdAble for U where U: KeyAble {
-    fn id<T>(self, loc: T) -> Tagged<Expr> where Location: From<T> {
+    fn id<T>(self, loc: T) -> Tagged<Expr> where Span: From<T> {
         self.key(loc).wraptag(Expr::Identifier)
     }
 }
 
 trait LitAble {
-    fn lit<T>(self, loc: T) -> Tagged<Expr> where Location: From<T>;
+    fn lit<T>(self, loc: T) -> Tagged<Expr> where Span: From<T>;
 }
 
 impl<U> LitAble for U where U: KeyAble {
-    fn lit<T>(self, loc: T) -> Tagged<Expr> where Location: From<T> {
+    fn lit<T>(self, loc: T) -> Tagged<Expr> where Span: From<T> {
         self.key(loc).map(Object::IntString).map(Expr::Literal)
     }
 }
 
 trait BindingIdAble {
-    fn bid<T>(self, loc: T) -> Tagged<Binding> where Location: From<T>, T: Copy;
+    fn bid<T>(self, loc: T) -> Tagged<Binding> where Span: From<T>, T: Copy;
 }
 
 impl<U> BindingIdAble for U where U: KeyAble {
-    fn bid<T>(self, loc: T) -> Tagged<Binding> where Location: From<T>, T: Copy {
+    fn bid<T>(self, loc: T) -> Tagged<Binding> where Span: From<T>, T: Copy {
         Binding::Identifier(self.key(loc)).tag(loc)
     }
 }
 
 trait KeyAble {
-    fn key<T>(self, loc: T) -> Tagged<Key> where Location: From<T>;
+    fn key<T>(self, loc: T) -> Tagged<Key> where Span: From<T>;
 }
 
 impl<U> KeyAble for U where U: AsRef<str> {
-    fn key<T>(self, loc: T) -> Tagged<Key> where Location: From<T> {
+    fn key<T>(self, loc: T) -> Tagged<Key> where Span: From<T> {
         Key::new(self).tag(loc)
     }
 }
 
 trait ListElementAble {
-    fn lel<T>(self, loc: T) -> Tagged<ListElement> where Location: From<T>;
+    fn lel<T>(self, loc: T) -> Tagged<ListElement> where Span: From<T>;
 }
 
 impl<U> ListElementAble for U where Object: From<U> {
-    fn lel<T>(self, loc: T) -> Tagged<ListElement> where Location: From<T> {
+    fn lel<T>(self, loc: T) -> Tagged<ListElement> where Span: From<T> {
         Expr::Literal(Object::from(self)).tag(loc).wraptag(ListElement::Singleton)
     }
 }
@@ -65,7 +66,7 @@ trait MapElementAble {
 
 impl MapElementAble for (Tagged<Expr>, Tagged<Expr>) {
     fn mel(self) -> Tagged<MapElement> {
-        let loc = Location::from((&self.0, &self.1));
+        let loc = Span::from(self.0.span()..self.1.span());
         MapElement::Singleton {
             key: self.0,
             value: self.1
@@ -74,11 +75,11 @@ impl MapElementAble for (Tagged<Expr>, Tagged<Expr>) {
 }
 
 trait ExprAble {
-    fn expr<T>(self, loc: T) -> Tagged<Expr> where Location: From<T>;
+    fn expr<T>(self, loc: T) -> Tagged<Expr> where Span: From<T>;
 }
 
 impl<U> ExprAble for U where Object: From<U> {
-    fn expr<T>(self, loc: T) -> Tagged<Expr> where Location: From<T> {
+    fn expr<T>(self, loc: T) -> Tagged<Expr> where Span: From<T> {
         Expr::Literal(Object::from(self)).tag(loc)
     }
 }
@@ -422,7 +423,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit(5).line(2).col(3), "here's some text".expr(8..26).line(2).col(6)).mel(),
+            ("z".lit(5).with_coord(1,3), "here's some text".expr(8..26).with_coord(1,6)).mel(),
         )).tag(0..27)),
     );
 
@@ -434,7 +435,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit(5).line(2).col(3), "here's some\ntext".expr(8..33).line(2).col(6)).mel(),
+            ("z".lit(5).with_coord(1,3), "here's some\ntext".expr(8..33).with_coord(1,6)).mel(),
         )).tag(0..34)),
     );
 
@@ -446,7 +447,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit(5).line(2).col(3), "here's some\ntext".expr(8..31).line(2).col(6)).mel(),
+            ("z".lit(5).with_coord(1,3), "here's some\ntext".expr(8..31).with_coord(1,6)).mel(),
         )).tag(0..32)),
     );
 
@@ -459,7 +460,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit(5).line(2).col(3), "here's some\ntext".expr(8..36).line(2).col(6)).mel(),
+            ("z".lit(5).with_coord(1,3), "here's some\ntext".expr(8..36).with_coord(1,6)).mel(),
         )).tag(0..37)),
     );
 
@@ -472,7 +473,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit(5).line(2).col(3), "here's some\n  text".expr(8..38).line(2).col(6)).mel(),
+            ("z".lit(5).with_coord(1,3), "here's some\n  text".expr(8..38).with_coord(1,6)).mel(),
         )).tag(0..39)),
     );
 
@@ -485,7 +486,7 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("z".lit(5).line(2).col(3), "  here's some\ntext".expr(8..38).line(2).col(6)).mel(),
+            ("z".lit(5).with_coord(1,3), "  here's some\ntext".expr(8..38).with_coord(1,6)).mel(),
         )).tag(0..39)),
     );
 
@@ -497,8 +498,8 @@ fn maps() {
             "}\n",
         )),
         Ok(Expr::map((
-            ("a".lit(6).line(2).col(4), "x".expr(9..12).line(2).col(7)).mel(),
-            ("b".lit(16).line(3).col(4), "y".key(19).line(3).col(7).wraptag(Expr::Identifier)).mel(),
+            ("a".lit(6).with_coord(1,4), "x".expr(9..12).with_coord(1,7)).mel(),
+            ("b".lit(16).with_coord(2,4), "y".key(19).with_coord(2,7).wraptag(Expr::Identifier)).mel(),
         )).tag(0..23)),
     );
 
@@ -1190,20 +1191,13 @@ fn functions() {
 }
 
 
-macro_rules! syntax_element {
-    ($elt:ident) => { SyntaxElement::$elt };
-    ($elta:ident, $eltb:ident) => { (SyntaxElement::$elta, SyntaxElement::$eltb) };
-    ($elta:ident, $eltb:ident, $eltc:ident) => { (SyntaxElement::$elta, SyntaxElement::$eltb, SyntaxElement::$eltc) };
-}
-
-
 macro_rules! err {
-    ($code:expr, $offset:expr, $elt:ident $(,$elts:ident)*) => {
+    ($code:expr, $offset:expr, $elt:expr $(,$elts:expr)*) => {
         assert_eq!(
             parse($code),
             Err(Error {
-                locations: Some(vec![(Location::from($offset..$offset), Action::Parse)]),
-                reason: Some(Reason::Syntax(Syntax::from(syntax_element!($elt $(,$elts)*)))),
+                locations: Some(vec![(Span::from($offset..$offset), Action::Parse)]),
+                reason: Some(Reason::Syntax(Syntax::from(($elt $(,$elts)*)))),
                 rendered: None,
             })
         )
@@ -1216,7 +1210,7 @@ macro_rules! errl {
         assert_eq!(
             parse($code),
             Err(Error {
-                locations: Some(vec![(Location::from($offset), Action::Parse)]),
+                locations: Some(vec![(Span::from($offset), Action::Parse)]),
                 reason: Some(Reason::Syntax($elt)),
                 rendered: None,
             })
@@ -1227,114 +1221,114 @@ macro_rules! errl {
 
 #[test]
 fn errors() {
-    err!("let", 3, Binding);
-    err!("let a", 5, Equals);
-    err!("let a =", 7, Expression);
-    err!("let a = 1", 9, In);
-    err!("let a = 1 in", 12, Expression);
+    err!("let", 3, S::Binding);
+    err!("let a", 5, T::Eq);
+    err!("let a =", 7, S::Expression);
+    err!("let a = 1", 9, S::In);
+    err!("let a = 1 in", 12, S::Expression);
 
-    err!("if", 2, Expression);
-    err!("if true", 7, Then);
-    err!("if true then", 12, Expression);
-    err!("if true then 1", 14, Else);
-    err!("if true then 1 else", 19, Expression);
+    err!("if", 2, S::Expression);
+    err!("if true", 7, S::Then);
+    err!("if true then", 12, S::Expression);
+    err!("if true then 1", 14, S::Else);
+    err!("if true then 1 else", 19, S::Expression);
 
-    err!("[", 1, CloseBracket, ListElement);
-    err!("[1", 2, CloseBracket, Comma);
-    err!("[1,", 3, CloseBracket, ListElement);
-    err!("[...", 4, Expression);
-    err!("[when", 5, Expression);
-    err!("[when x", 7, Colon);
-    err!("[when x:", 8, ListElement);
-    err!("[when x: 1", 10, CloseBracket, Comma);
-    err!("[for", 4, Binding);
-    err!("[for x", 6, In);
-    err!("[for x in", 9, Expression);
-    err!("[for x in y", 11, Colon);
-    err!("[for x in y:", 12, ListElement);
-    err!("[for x in y: z", 14, CloseBracket, Comma);
+    err!("[", 1, T::CloseBracket, S::ListElement);
+    err!("[1", 2, T::CloseBracket, T::Comma);
+    err!("[1,", 3, T::CloseBracket, S::ListElement);
+    err!("[...", 4, S::Expression);
+    err!("[when", 5, S::Expression);
+    err!("[when x", 7, T::Colon);
+    err!("[when x:", 8, S::ListElement);
+    err!("[when x: 1", 10, T::CloseBracket, T::Comma);
+    err!("[for", 4, S::Binding);
+    err!("[for x", 6, S::In);
+    err!("[for x in", 9, S::Expression);
+    err!("[for x in y", 11, T::Colon);
+    err!("[for x in y:", 12, S::ListElement);
+    err!("[for x in y: z", 14, T::CloseBracket, T::Comma);
 
-    err!("{", 1, CloseBrace, MapElement);
-    err!("{x", 2, Colon);
-    err!("{x:", 3, Expression);
-    err!("{x: y", 5, CloseBrace, Comma);
-    err!("{x: y,", 6, CloseBrace, MapElement);
-    err!("{$", 2, Expression);
-    err!("{$x", 3, Colon);
-    err!("{$x:", 4, Expression);
-    err!("{$x: y", 6, CloseBrace, Comma);
-    err!("{$x: y,", 7, CloseBrace, MapElement);
-    err!("{...", 4, Expression);
-    err!("{when", 5, Expression);
-    err!("{when x", 7, Colon);
-    err!("{when x:", 8, MapElement);
-    err!("{when x: y", 10, Colon);
-    err!("{when x: y:", 11, Expression);
-    err!("{when x: y: 1", 13, CloseBrace, Comma);
-    err!("{for", 4, Binding);
-    err!("{for x", 6, In);
-    err!("{for x in", 9, Expression);
-    err!("{for x in y", 11, Colon);
-    err!("{for x in y:", 12, MapElement);
-    err!("{for x in y: z", 14, Colon);
-    err!("{for x in y: z:", 15, Expression);
-    err!("{for x in y: z: v", 17, CloseBrace, Comma);
+    err!("{", 1, T::CloseBrace, S::MapElement);
+    err!("{x", 2, T::Colon);
+    err!("{x:", 3, S::Expression);
+    err!("{x: y", 5, T::CloseBrace, T::Comma);
+    err!("{x: y,", 6, T::CloseBrace, S::MapElement);
+    err!("{$", 2, S::Expression);
+    err!("{$x", 3, T::Colon);
+    err!("{$x:", 4, S::Expression);
+    err!("{$x: y", 6, T::CloseBrace, T::Comma);
+    err!("{$x: y,", 7, T::CloseBrace, S::MapElement);
+    err!("{...", 4, S::Expression);
+    err!("{when", 5, S::Expression);
+    err!("{when x", 7, T::Colon);
+    err!("{when x:", 8, S::MapElement);
+    err!("{when x: y", 10, T::Colon);
+    err!("{when x: y:", 11, S::Expression);
+    err!("{when x: y: 1", 13, T::CloseBrace, T::Comma);
+    err!("{for", 4, S::Binding);
+    err!("{for x", 6, S::In);
+    err!("{for x in", 9, S::Expression);
+    err!("{for x in y", 11, T::Colon);
+    err!("{for x in y:", 12, S::MapElement);
+    err!("{for x in y: z", 14, T::Colon);
+    err!("{for x in y: z:", 15, S::Expression);
+    err!("{for x in y: z: v", 17, T::CloseBrace, T::Comma);
 
-    err!("let", 3, Binding);
-    err!("let [", 5, CloseBracket, ListBindingElement);
-    err!("let [x", 6, CloseBracket, Comma);
-    err!("let [x,", 7, CloseBracket, ListBindingElement);
-    err!("let [x =", 8, Expression);
-    err!("let [x = 1", 10, CloseBracket, Comma);
-    err!("let [...", 8, CloseBracket, Comma);
-    err!("let {", 5, CloseBrace, MapBindingElement);
+    err!("let", 3, S::Binding);
+    err!("let [", 5, T::CloseBracket, S::ListBindingElement);
+    err!("let [x", 6, T::CloseBracket, T::Comma);
+    err!("let [x,", 7, T::CloseBracket, S::ListBindingElement);
+    err!("let [x =", 8, S::Expression);
+    err!("let [x = 1", 10, T::CloseBracket, T::Comma);
+    err!("let [...", 8, T::CloseBracket, T::Comma);
+    err!("let {", 5, T::CloseBrace, S::MapBindingElement);
 
-    err!("let {y", 6, CloseBrace, Comma);
-    err!("let {y,", 7, CloseBrace, MapBindingElement);
-    err!("let {y =", 8, Expression);
-    err!("let {y = 1", 10, CloseBrace, Comma);
-    err!("let {y as", 9, Binding);
-    err!("let {y as x =", 13, Expression);
-    err!("let {...", 8, Identifier);
-    err!("let {...x", 9, CloseBrace, Comma);
+    err!("let {y", 6, T::CloseBrace, T::Comma);
+    err!("let {y,", 7, T::CloseBrace, S::MapBindingElement);
+    err!("let {y =", 8, S::Expression);
+    err!("let {y = 1", 10, T::CloseBrace, T::Comma);
+    err!("let {y as", 9, S::Binding);
+    err!("let {y as x =", 13, S::Expression);
+    err!("let {...", 8, S::Identifier);
+    err!("let {...x", 9, T::CloseBrace, T::Comma);
 
-    err!("(", 1, Expression);
-    err!("(1", 2, CloseParen);
+    err!("(", 1, S::Expression);
+    err!("(1", 2, T::CloseParen);
 
-    err!("|", 1, Pipe, Semicolon, PosParam);
-    err!("|x", 2, Pipe, Semicolon, Comma);
-    err!("|x,", 3, Pipe, Semicolon, PosParam);
-    err!("|;", 2, Pipe, KeywordParam);
-    err!("|;y", 3, Pipe, Comma);
-    err!("|;y,", 4, Pipe, KeywordParam);
-    err!("||", 2, Expression);
-    err!("{|", 2, CloseCurlyPipe, KeywordParam);
-    err!("{|x", 3, CloseCurlyPipe, Comma);
-    err!("{|x,", 4, CloseCurlyPipe, KeywordParam);
-    err!("{||}", 4, Expression);
+    err!("|", 1, T::Pipe, T::SemiColon, S::PosParam);
+    err!("|x", 2, T::Pipe, T::SemiColon, T::Comma);
+    err!("|x,", 3, T::Pipe, T::SemiColon, S::PosParam);
+    err!("|;", 2, T::Pipe, S::KeywordParam);
+    err!("|;y", 3, T::Pipe, T::Comma);
+    err!("|;y,", 4, T::Pipe, S::KeywordParam);
+    err!("||", 2, S::Expression);
+    err!("{|", 2, T::CloseBracePipe, S::KeywordParam);
+    err!("{|x", 3, T::CloseBracePipe, T::Comma);
+    err!("{|x,", 4, T::CloseBracePipe, S::KeywordParam);
+    err!("{||}", 4, S::Expression);
 
-    err!("\"alpha", 6, DoubleQuote);
-    err!("\"alpha$", 7, OpenBrace);
-    err!("\"alpha${", 8, Expression);
-    err!("\"alpha${1", 9, CloseBrace);
-    err!("\"alpha${1}", 10, DoubleQuote);
+    err!("\"alpha", 6, T::DoubleQuote);
+    err!("\"alpha$", 7, T::OpenBrace);
+    err!("\"alpha${", 8, S::Expression);
+    err!("\"alpha${1", 9, T::CloseBrace);
+    err!("\"alpha${1}", 10, T::DoubleQuote);
 
-    err!("a.", 2, Identifier);
-    err!("a[", 2, Expression);
-    err!("a[1", 3, CloseBracket);
-    err!("a(", 2, CloseParen, ArgElement);
-    err!("a(1", 3, CloseParen, Comma);
-    err!("a(1,", 4, CloseParen, ArgElement);
-    err!("a(x:", 4, Expression);
-    err!("a(...", 5, Expression);
+    err!("a.", 2, S::Identifier);
+    err!("a[", 2, S::Expression);
+    err!("a[1", 3, T::CloseBracket);
+    err!("a(", 2, T::CloseParen, S::ArgElement);
+    err!("a(1", 3, T::CloseParen, T::Comma);
+    err!("a(1,", 4, T::CloseParen, S::ArgElement);
+    err!("a(x:", 4, S::Expression);
+    err!("a(...", 5, S::Expression);
 
-    err!("-", 1, Operand);
-    err!("1+", 2, Operand);
+    err!("-", 1, S::Operand);
+    err!("1+", 2, S::Operand);
 
-    err!("import", 6, ImportPath);
-    err!("import \"path\"", 13, As);
-    err!("import \"path\" as", 16, Binding);
-    err!("import \"path\" as y", 18, Expression);
+    err!("import", 6, S::ImportPath);
+    err!("import \"path\"", 13, S::As);
+    err!("import \"path\" as", 16, S::Binding);
+    err!("import \"path\" as y", 18, S::Expression);
 
     errl!("let [x, ..., y, ...] = z in 2", 16..19, Syntax::MultiSlurp);
     errl!("let {x, ...a, y, ...b} = z in 2", 17..21, Syntax::MultiSlurp);

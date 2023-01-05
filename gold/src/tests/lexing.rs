@@ -20,23 +20,23 @@ macro_rules! stop {
 }
 
 
-fn name(s: &'static str) -> Token { Token { kind: TokenType::Name, span: s } }
-fn float(s: &'static str) -> Token { Token { kind: TokenType::Float, span: s } }
-fn int(s: &'static str) -> Token { Token { kind: TokenType::Integer, span: s } }
-fn stringlit(s: &'static str) -> Token { Token { kind: TokenType::StringLit, span: s } }
-fn multistring(s: &'static str) -> Token { Token { kind: TokenType::MultiString, span: s } }
-fn dquote() -> Token<'static> { Token { kind: TokenType::DoubleQuote, span: "\"" } }
-fn dollar() -> Token<'static> { Token { kind: TokenType::Dollar, span: "$" } }
-fn comma() -> Token<'static> { Token { kind: TokenType::Comma, span: "," } }
-fn colon() -> Token<'static> { Token { kind: TokenType::Colon, span: ":" } }
-fn dcolon() -> Token<'static> { Token { kind: TokenType::DoubleColon, span: "::" } }
-fn ellipsis() -> Token<'static> { Token { kind: TokenType::Ellipsis, span: "..." } }
-fn openbrace() -> Token<'static> { Token { kind: TokenType::OpenBrace, span: "{" } }
-fn closebrace() -> Token<'static> { Token { kind: TokenType::CloseBrace, span: "}" } }
-fn openbracket() -> Token<'static> { Token { kind: TokenType::OpenBracket, span: "[" } }
-fn closebracket() -> Token<'static> { Token { kind: TokenType::CloseBracket, span: "]" } }
-fn openparen() -> Token<'static> { Token { kind: TokenType::OpenParen, span: "(" } }
-fn closeparen() -> Token<'static> { Token { kind: TokenType::CloseParen, span: ")" } }
+fn name(s: &'static str) -> Token { Token { kind: TokenType::Name, text: s } }
+fn float(s: &'static str) -> Token { Token { kind: TokenType::Float, text: s } }
+fn int(s: &'static str) -> Token { Token { kind: TokenType::Integer, text: s } }
+fn stringlit(s: &'static str) -> Token { Token { kind: TokenType::StringLit, text: s } }
+fn multistring(s: &'static str) -> Token { Token { kind: TokenType::MultiString, text: s } }
+fn dquote() -> Token<'static> { Token { kind: TokenType::DoubleQuote, text: "\"" } }
+fn dollar() -> Token<'static> { Token { kind: TokenType::Dollar, text: "$" } }
+fn comma() -> Token<'static> { Token { kind: TokenType::Comma, text: "," } }
+fn colon() -> Token<'static> { Token { kind: TokenType::Colon, text: ":" } }
+fn dcolon() -> Token<'static> { Token { kind: TokenType::DoubleColon, text: "::" } }
+fn ellipsis() -> Token<'static> { Token { kind: TokenType::Ellipsis, text: "..." } }
+fn openbrace() -> Token<'static> { Token { kind: TokenType::OpenBrace, text: "{" } }
+fn closebrace() -> Token<'static> { Token { kind: TokenType::CloseBrace, text: "}" } }
+fn openbracket() -> Token<'static> { Token { kind: TokenType::OpenBracket, text: "[" } }
+fn closebracket() -> Token<'static> { Token { kind: TokenType::CloseBracket, text: "]" } }
+fn openparen() -> Token<'static> { Token { kind: TokenType::OpenParen, text: "(" } }
+fn closeparen() -> Token<'static> { Token { kind: TokenType::CloseParen, text: ")" } }
 
 
 #[test]
@@ -48,11 +48,11 @@ fn whitespace() {
     stop!(lex);
 
     let mut lex = Lexer::new("\ndingbob").with_cache(&cache);
-    lex = tok!(lex.next_token(), name("dingbob").tag(1..8).line(2));
+    lex = tok!(lex.next_token(), name("dingbob").tag(1..8).with_coord(1,0));
     stop!(lex);
 
     let mut lex = Lexer::new("# this is a comment\ndingbob").with_cache(&cache);
-    lex = tok!(lex.next_token(), name("dingbob").tag(20..27).line(2));
+    lex = tok!(lex.next_token(), name("dingbob").tag(20..27).with_coord(1,0));
     stop!(lex);
 
     let mut lex = Lexer::new("dingbob\n#this is a comment").with_cache(&cache);
@@ -64,7 +64,7 @@ fn whitespace() {
     stop!(lex);
 
     let mut lex = Lexer::new("# this is a comment\n#a\n#b\ndingbob").with_cache(&cache);
-    lex = tok!(lex.next_token(), name("dingbob").tag(26..33).line(4));
+    lex = tok!(lex.next_token(), name("dingbob").tag(26..33).with_coord(3,0));
     stop!(lex);
 }
 
@@ -455,10 +455,10 @@ fn maps() {
         "}\n",
     )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
-    lex = tok!(lex.next_key(), name("z").tag(5).line(2).col(3));
-    lex = tok!(lex.next_token(), dcolon().tag(6..8).line(2).col(4));
-    lex = tok!(lex.next_multistring(3), multistring(" here's some text\n").tag(8..26).line(2).col(6));
-    lex = tok!(lex.next_token(), closebrace().tag(26).line(3));
+    lex = tok!(lex.next_key(), name("z").tag(5).with_coord(1,3));
+    lex = tok!(lex.next_token(), dcolon().tag(6..8).with_coord(1,4));
+    lex = tok!(lex.next_multistring(3), multistring(" here's some text\n").tag(8..26).with_coord(1,6));
+    lex = tok!(lex.next_token(), closebrace().tag(26).with_coord(2,0));
     stop!(lex);
 
     let mut lex = Lexer::new(concat!(
@@ -468,10 +468,10 @@ fn maps() {
         "}\n",
     )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
-    lex = tok!(lex.next_key(), name("z").tag(5).line(2).col(3));
-    lex = tok!(lex.next_token(), dcolon().tag(6..8).line(2).col(4));
-    lex = tok!(lex.next_multistring(3), multistring(" here's some\n       text\n").tag(8..33).line(2).col(6));
-    lex = tok!(lex.next_token(), closebrace().tag(33).line(4));
+    lex = tok!(lex.next_key(), name("z").tag(5).with_coord(1,3));
+    lex = tok!(lex.next_token(), dcolon().tag(6..8).with_coord(1,4));
+    lex = tok!(lex.next_multistring(3), multistring(" here's some\n       text\n").tag(8..33).with_coord(1,6));
+    lex = tok!(lex.next_token(), closebrace().tag(33).with_coord(3,0));
     stop!(lex);
 
     let mut lex = Lexer::new(concat!(
@@ -481,10 +481,10 @@ fn maps() {
         "}\n",
     )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
-    lex = tok!(lex.next_key(), name("z").tag(5).line(2).col(3));
-    lex = tok!(lex.next_token(), dcolon().tag(6..8).line(2).col(4));
-    lex = tok!(lex.next_multistring(3), multistring(" here's some\n     text\n").tag(8..31).line(2).col(6));
-    lex = tok!(lex.next_token(), closebrace().tag(31).line(4));
+    lex = tok!(lex.next_key(), name("z").tag(5).with_coord(1,3));
+    lex = tok!(lex.next_token(), dcolon().tag(6..8).with_coord(1,4));
+    lex = tok!(lex.next_multistring(3), multistring(" here's some\n     text\n").tag(8..31).with_coord(1,6));
+    lex = tok!(lex.next_token(), closebrace().tag(31).with_coord(3,0));
     stop!(lex);
 
     let mut lex = Lexer::new(concat!(
@@ -495,10 +495,10 @@ fn maps() {
         "}\n",
     )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
-    lex = tok!(lex.next_key(), name("z").tag(5).line(2).col(3));
-    lex = tok!(lex.next_token(), dcolon().tag(6..8).line(2).col(4));
-    lex = tok!(lex.next_multistring(3), multistring("\n     here's some\n     text\n").tag(8..36).line(2).col(6));
-    lex = tok!(lex.next_token(), closebrace().tag(36).line(5));
+    lex = tok!(lex.next_key(), name("z").tag(5).with_coord(1,3));
+    lex = tok!(lex.next_token(), dcolon().tag(6..8).with_coord(1,4));
+    lex = tok!(lex.next_multistring(3), multistring("\n     here's some\n     text\n").tag(8..36).with_coord(1,6));
+    lex = tok!(lex.next_token(), closebrace().tag(36).with_coord(4,0));
     stop!(lex);
 
     let mut lex = Lexer::new(concat!(
@@ -509,10 +509,10 @@ fn maps() {
         "}\n",
     )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
-    lex = tok!(lex.next_key(), name("z").tag(5).line(2).col(3));
-    lex = tok!(lex.next_token(), dcolon().tag(6..8).line(2).col(4));
-    lex = tok!(lex.next_multistring(3), multistring("\n     here's some\n       text\n").tag(8..38).line(2).col(6));
-    lex = tok!(lex.next_token(), closebrace().tag(38).line(5));
+    lex = tok!(lex.next_key(), name("z").tag(5).with_coord(1,3));
+    lex = tok!(lex.next_token(), dcolon().tag(6..8).with_coord(1,4));
+    lex = tok!(lex.next_multistring(3), multistring("\n     here's some\n       text\n").tag(8..38).with_coord(1,6));
+    lex = tok!(lex.next_token(), closebrace().tag(38).with_coord(4,0));
     stop!(lex);
 
     let mut lex = Lexer::new(concat!(
@@ -523,10 +523,10 @@ fn maps() {
         "}\n",
     )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
-    lex = tok!(lex.next_key(), name("z").tag(5).line(2).col(3));
-    lex = tok!(lex.next_token(), dcolon().tag(6..8).line(2).col(4));
-    lex = tok!(lex.next_multistring(3), multistring("\n       here's some\n     text\n").tag(8..38).line(2).col(6));
-    lex = tok!(lex.next_token(), closebrace().tag(38).line(5));
+    lex = tok!(lex.next_key(), name("z").tag(5).with_coord(1,3));
+    lex = tok!(lex.next_token(), dcolon().tag(6..8).with_coord(1,4));
+    lex = tok!(lex.next_multistring(3), multistring("\n       here's some\n     text\n").tag(8..38).with_coord(1,6));
+    lex = tok!(lex.next_token(), closebrace().tag(38).with_coord(4,0));
     stop!(lex);
 
     let mut lex = Lexer::new(concat!(
@@ -536,14 +536,14 @@ fn maps() {
         "}\n",
     )).with_cache(&cache);
     lex = tok!(lex.next_token(), openbrace().tag(0));
-    lex = tok!(lex.next_key(), name("a").tag(6).line(2).col(4));
-    lex = tok!(lex.next_token(), dcolon().tag(7..9).line(2).col(5));
-    lex = tok!(lex.next_multistring(4), multistring(" x\n").tag(9..12).line(2).col(7));
-    lex = tok!(lex.next_key(), name("b").tag(16).line(3).col(4));
-    lex = tok!(lex.next_token(), colon().tag(17).line(3).col(5));
-    lex = tok!(lex.next_token(), name("y").tag(19).line(3).col(7));
-    lex = tok!(lex.next_token(), comma().tag(20).line(3).col(8));
-    lex = tok!(lex.next_token(), closebrace().tag(22).line(4));
+    lex = tok!(lex.next_key(), name("a").tag(6).with_coord(1,4));
+    lex = tok!(lex.next_token(), dcolon().tag(7..9).with_coord(1,5));
+    lex = tok!(lex.next_multistring(4), multistring(" x\n").tag(9..12).with_coord(1,7));
+    lex = tok!(lex.next_key(), name("b").tag(16).with_coord(2,4));
+    lex = tok!(lex.next_token(), colon().tag(17).with_coord(2,5));
+    lex = tok!(lex.next_token(), name("y").tag(19).with_coord(2,7));
+    lex = tok!(lex.next_token(), comma().tag(20).with_coord(2,8));
+    lex = tok!(lex.next_token(), closebrace().tag(22).with_coord(3,0));
     stop!(lex);
 
     let mut lex = Lexer::new("{...y, x: 1}").with_cache(&cache);

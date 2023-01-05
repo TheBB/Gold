@@ -15,7 +15,7 @@ use nom::{
 };
 
 use crate::ast::*;
-use crate::error::{Error, Location, Tagged, Syntax, SyntaxError, SyntaxElement};
+use crate::error::{Error, Span, Tagged, Syntax, SyntaxError, SyntaxElement};
 use crate::lexing::{Lexer, TokenType, CachedLexer, CachedLexResult};
 use crate::object::{Object, Key};
 use crate::traits::{Boxable, Taggable, Validatable};
@@ -27,17 +27,17 @@ trait ExplainError {
 
 impl ExplainError for SyntaxError {
     fn error<'a, T>(lex: CachedLexer<'a>, reason: T) -> Self where Syntax: From<T> {
-        Self(lex.loc(), Some(Syntax::from(reason)))
+        Self(lex.position(), Some(Syntax::from(reason)))
     }
 }
 
 impl<'a> ParseError<In<'a>> for SyntaxError {
     fn from_error_kind(lex: In<'a>, _: ErrorKind) -> Self {
-        Self(lex.loc(), None)
+        Self(lex.position(), None)
     }
 
     fn from_char(lex: In<'a>, _: char) -> Self {
-        Self(lex.loc(), None)
+        Self(lex.position(), None)
     }
 
     fn append(_: In<'a>, _: ErrorKind, other: Self) -> Self {
@@ -53,19 +53,19 @@ impl<'a> ContextError<In<'a>> for SyntaxError {
 
 impl<'a> FromExternalError<In<'a>, ParseIntError> for SyntaxError {
     fn from_external_error(lex: In<'a>, _: ErrorKind, _: ParseIntError) -> Self {
-        Self(lex.loc(), None)
+        Self(lex.position(), None)
     }
 }
 
 impl<'a> FromExternalError<In<'a>, ParseBigIntError> for SyntaxError {
     fn from_external_error(lex: In<'a>, _: ErrorKind, _: ParseBigIntError) -> Self {
-        Self(lex.loc(), None)
+        Self(lex.position(), None)
     }
 }
 
 impl<'a> FromExternalError<In<'a>, ParseFloatError> for SyntaxError {
     fn from_external_error(lex: In<'a>, _: ErrorKind, _: ParseFloatError) -> Self {
-        Self(lex.loc(), None)
+        Self(lex.position(), None)
     }
 }
 
@@ -162,10 +162,10 @@ impl<T> Paren<T> {
     /// Return the outermost location span, either parenthesized or not.
     ///
     /// Use this when combining two spans.
-    fn outer(&self) -> Location {
+    fn outer(&self) -> Span {
         match self {
-            Self::Naked(x) => x.loc(),
-            Self::Parenthesized(x) => x.loc(),
+            Self::Naked(x) => x.span(),
+            Self::Parenthesized(x) => x.span(),
         }
     }
 
@@ -182,7 +182,7 @@ type PExpr = Paren<Expr>;
 type PList = Paren<ListElement>;
 type PMap = Paren<MapElement>;
 
-type OpCons = fn(Tagged<Expr>, loc: Location) -> Operator;
+type OpCons = fn(Tagged<Expr>, loc: Span) -> Operator;
 
 type In<'a> = CachedLexer<'a>;
 type Out<'a, T> = IResult<In<'a>, T, SyntaxError>;
@@ -377,7 +377,7 @@ fn naked<'a, U>(
 /// Never failing parser that obtains the current column.  Useful for
 /// indentation-sensitive rules.
 fn column<'a>(input: In<'a>) -> Out<'a, u32> {
-    let col = input.loc().column;
+    let col = input.position().column();
     Ok((input, col))
 }
 
@@ -389,16 +389,10 @@ fn token<'a>(
     move |lex: In<'a>| {
         let (lex, tok) = getter(lex).map_err(NomError::Error)?;
         if tok.as_ref().kind == kind {
-            Ok((lex, tok.as_ref().span.tag(&tok)))
+            Ok((lex, tok.as_ref().text.tag(&tok)))
         } else {
             Err(NomError::Error(SyntaxError::error(lex, kind)))
         }
-        // match tok.as_ref() {
-        //     Token { kind: kind, span } => Ok((lex, (*span).tag(&tok))),
-        //     _ => Err(NomError::Error(
-        //             SyntaxError::error(lex, kind)
-        //     )),
-        // }
     }
 }
 
@@ -465,7 +459,7 @@ tok!{string_double_quote, DoubleQuote, next_string}
 /// Match a single multiline string starting at a column.
 fn multistring<'a>(col: u32) -> impl Parser<'a, Tagged<&'a str>> {
     move |lex: In<'a>| lex.next_multistring(col)
-        .map(|(lex, tok)| (lex, tok.as_ref().span.tag(&tok)))
+        .map(|(lex, tok)| (lex, tok.as_ref().text.tag(&tok)))
         .map_err(NomError::Error)
 }
 
@@ -606,10 +600,10 @@ fn string_interp<'a>(input: In<'a>) -> Out<'a, StringElement> {
         delimited(
             terminated(
                 string_dollar,
-                fail(open_brace, SyntaxElement::OpenBrace),
+                fail(open_brace, TokenType::OpenBrace),
             ),
             fail(expression, SyntaxElement::Expression),
-            fail(close_brace, SyntaxElement::CloseBrace),
+            fail(close_brace, TokenType::CloseBrace),
         ),
 
         |x| StringElement::Interpolate(x.inner()),
@@ -627,10 +621,10 @@ fn string_part<'a>(input: In<'a>) -> Out<'a, Tagged<Vec<StringElement>>> {
         tuple((
             double_quote,
             many0(alt((string_interp, string_data))),
-            fail(string_double_quote, SyntaxElement::DoubleQuote),
+            fail(string_double_quote, TokenType::DoubleQuote),
         )),
 
-        |(a, x, b)| x.tag((&a, &b))
+        |(a, x, b)| x.tag(a.span()..b.span())
     )(input)
 }
 
@@ -643,10 +637,10 @@ fn string<'a>(input: In<'a>) -> Out<'a, PExpr> {
     naked(map(
         many1(string_part),
         |x| {
-            let start = x.first().unwrap().loc();
-            let end = x.last().unwrap().loc();
+            let start = x.first().unwrap().span();
+            let end = x.last().unwrap().span();
             let elements: Vec<StringElement> = x.into_iter().map(Tagged::unwrap).flatten().collect();
-            Expr::string(elements).tag((start, end))
+            Expr::string(elements).tag(start..end)
         }
     )).parse(input)
 }
@@ -699,8 +693,8 @@ fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
                 fail(expression, SyntaxElement::Expression),
             )),
             |(start, expr)| {
-                let loc = Location::from((&start, expr.outer()));
-                ListElement::Splat(expr.inner()).tag(loc)
+                let span = start.span()..expr.outer();
+                ListElement::Splat(expr.inner()).tag(span)
             },
         )),
 
@@ -714,17 +708,17 @@ fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
                     fail(expression, SyntaxElement::Expression),
                 ),
                 preceded(
-                    fail(colon, SyntaxElement::Colon),
+                    fail(colon, TokenType::Colon),
                     fail(list_element, SyntaxElement::ListElement)
                 ),
             )),
             |(start, binding, iterable, expr)| {
-                let loc = Location::from((&start, expr.outer()));
+                let span = start.span()..expr.outer();
                 ListElement::Loop {
                     binding,
                     iterable: iterable.inner(),
                     element: Box::new(expr.inner()),
-                }.tag(loc)
+                }.tag(span)
             }
         )),
 
@@ -734,16 +728,16 @@ fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
                 keyword("when"),
                 fail(expression, SyntaxElement::Expression),
                 preceded(
-                    fail(colon, SyntaxElement::Colon),
+                    fail(colon, TokenType::Colon),
                     fail(list_element, SyntaxElement::ListElement),
                 ),
             )),
             |(start, condition, expr)| {
-                let loc = Location::from((&start, expr.outer()));
+                let span = start.span()..expr.outer();
                 ListElement::Cond {
                     condition: condition.inner(),
                     element: Box::new(expr.inner()),
-                }.tag(loc)
+                }.tag(span)
             },
         )),
 
@@ -766,11 +760,11 @@ fn list<'a>(input: In<'a>) -> Out<'a, PExpr> {
             list_element,
             comma,
             close_bracket,
-            (SyntaxElement::CloseBracket, SyntaxElement::ListElement),
-            (SyntaxElement::CloseBracket, SyntaxElement::Comma),
+            (TokenType::CloseBracket, SyntaxElement::ListElement),
+            (TokenType::CloseBracket, TokenType::Comma),
         ),
 
-        |(a, x, b)| Expr::List(x.into_iter().map(|y| y.inner()).collect()).tag((&a, &b)),
+        |(a, x, b)| Expr::List(x.into_iter().map(|y| y.inner()).collect()).tag(a.span()..b.span()),
     )).parse(input)
 }
 
@@ -790,8 +784,8 @@ fn map_key_singleton<'a>(input: In<'a>) -> Out<'a, (u32, PExpr)> {
                     fail(expression, SyntaxElement::Expression),
                 )),
                 |(d, ex)| {
-                    let loc = Location::from((&d, ex.outer()));
-                    PExpr::Parenthesized(ex.inner().tag(loc))
+                    let span = d.span()..ex.outer();
+                    PExpr::Parenthesized(ex.inner().tag(span))
                 }
             ),
 
@@ -821,7 +815,7 @@ fn map_value_singleton<'a>(col: u32, input: In<'a>) -> Out<'a, (PExpr, bool)> {
         ))),
 
         dont_skip(preceded(
-            fail(map_colon, SyntaxElement::Colon),
+            fail(map_colon, TokenType::Colon),
             fail(expression, SyntaxElement::Expression),
         )),
     ))(input)
@@ -835,8 +829,8 @@ fn map_element_singleton<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
     let (input, (col, key)) = map_key_singleton(input)?;
     let (input, (value, skip_sep)) = map_value_singleton(col, input)?;
 
-    let loc = Location::from((key.outer(), value.outer()));
-    let ret = MapElement::Singleton { key: key.inner(), value: value.inner() }.tag(loc);
+    let span = key.outer()..value.outer();
+    let ret = MapElement::Singleton { key: key.inner(), value: value.inner() }.tag(span);
 
     Ok((input, (PMap::Naked(ret), skip_sep)))
 }
@@ -859,8 +853,8 @@ fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
                 fail(expression, SyntaxElement::Expression),
             )),
             |(start, expr)| {
-                let loc = Location::from((&start, expr.outer()));
-                MapElement::Splat(expr.inner()).tag(loc)
+                let span = start.span()..expr.outer();
+                MapElement::Splat(expr.inner()).tag(span)
             },
         ))),
 
@@ -874,17 +868,17 @@ fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
                     fail(expression, SyntaxElement::Expression),
                 ),
                 preceded(
-                    fail(colon, SyntaxElement::Colon),
+                    fail(colon, TokenType::Colon),
                     fail(map_element, SyntaxElement::MapElement),
                 ),
             )),
             |(start, binding, iterable, (expr, skip))| {
-                let loc = Location::from((&start, expr.outer()));
+                let span = start.span()..expr.outer();
                 let ret = MapElement::Loop {
                     binding,
                     iterable: iterable.inner(),
                     element: Box::new(expr.inner()),
-                }.tag(loc);
+                }.tag(span);
                 (PMap::Naked(ret), skip)
             },
         ),
@@ -895,16 +889,16 @@ fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
                 map_keyword("when"),
                 fail(expression, SyntaxElement::Expression),
                 preceded(
-                    fail(colon, SyntaxElement::Colon),
+                    fail(colon, TokenType::Colon),
                     fail(map_element, SyntaxElement::MapElement),
                 ),
             )),
             |(start, condition, (expr, skip))| {
-                let loc = Location::from((&start, expr.outer()));
+                let span = start.span()..expr.outer();
                 let ret = MapElement::Cond {
                     condition: condition.inner(),
                     element: Box::new(expr.inner())
-                }.tag(loc);
+                }.tag(span);
                 (PMap::Naked(ret), skip)
             },
         ),
@@ -928,11 +922,11 @@ fn mapping<'a>(input: In<'a>) -> Out<'a, PExpr> {
             map_element,
             comma,
             close_brace,
-            (SyntaxElement::CloseBrace, SyntaxElement::MapElement),
-            (SyntaxElement::CloseBrace, SyntaxElement::Comma),
+            (TokenType::CloseBrace, SyntaxElement::MapElement),
+            (TokenType::CloseBrace, TokenType::Comma),
         ),
 
-        |(a, x, b)| Expr::Map(x.into_iter().map(|y| y.inner()).collect()).tag((&a, &b)),
+        |(a, x, b)| Expr::Map(x.into_iter().map(|y| y.inner()).collect()).tag(a.span()..b.span()),
     )).parse(input)
 }
 
@@ -946,13 +940,10 @@ fn paren<'a>(input: In<'a>) -> Out<'a, PExpr> {
         tuple((
             open_paren,
             fail(expression, SyntaxElement::Expression),
-            fail(close_paren, SyntaxElement::CloseParen),
+            fail(close_paren, TokenType::CloseParen),
         )),
 
-        |(start, expr, end)| {
-            let loc = Location::from((&start, &end));
-            PExpr::Parenthesized(expr.inner().tag(loc))
-        }
+        |(start, expr, end)| PExpr::Parenthesized(expr.inner().tag(start.span()..end.span()))
     )(input)
 }
 
@@ -983,7 +974,7 @@ fn object_access<'a>(input: In<'a>) -> Out<'a, Tagged<Operator>> {
         |(dot, out)| Operator::BinOp(
             BinOp::Index.tag(&dot),
             out.map(Object::IntString).map(Expr::Literal).to_box(),
-        ).tag((&dot, &out)),
+        ).tag(dot.span()..out.span()),
     )(input)
 }
 
@@ -996,9 +987,12 @@ fn object_index<'a>(input: In<'a>) -> Out<'a, Tagged<Operator>> {
         tuple((
             open_bracket,
             fail(expression, SyntaxElement::Expression),
-            fail(close_bracket, SyntaxElement::CloseBracket),
+            fail(close_bracket, TokenType::CloseBracket),
         )),
-        |(a, expr, b)| Operator::BinOp(BinOp::Index.tag((&a, &b)), expr.inner().to_box()).tag((&a, &b)),
+        |(a, expr, b)| {
+            let span = Span::from(a.span()..b.span());
+            Operator::BinOp(BinOp::Index.tag(span), expr.inner().to_box()).tag(span)
+        },
     )(input)
 }
 
@@ -1019,9 +1013,9 @@ fn function_arg<'a>(input: In<'a>) -> Out<'a, Tagged<ArgElement>> {
                 fail(expression, SyntaxElement::Expression),
             )),
             |(x, y)| {
-                let rloc = y.outer();
-                ArgElement::Splat(y.inner()).tag((&x, rloc))
-            },
+                let span = x.span()..y.outer();
+                ArgElement::Splat(y.inner()).tag(span)
+            }
         ),
 
         // Keyword
@@ -1034,8 +1028,8 @@ fn function_arg<'a>(input: In<'a>) -> Out<'a, Tagged<ArgElement>> {
                 ),
             )),
             |(name, expr)| {
-                let loc = Location::from((&name, expr.outer()));
-                ArgElement::Keyword(name, expr.inner()).tag(loc)
+                let span = name.span()..expr.outer();
+                ArgElement::Keyword(name, expr.inner()).tag(span)
             },
         ),
 
@@ -1043,8 +1037,8 @@ fn function_arg<'a>(input: In<'a>) -> Out<'a, Tagged<ArgElement>> {
         map(
             expression,
             |x| {
-                let loc = x.outer();
-                ArgElement::Singleton(x.inner()).tag(loc)
+                let span = x.outer();
+                ArgElement::Singleton(x.inner()).tag(span)
             },
         ),
 
@@ -1064,10 +1058,13 @@ fn function_call<'a>(input: In<'a>) -> Out<'a, Tagged<Operator>> {
             function_arg,
             comma,
             close_paren,
-            (SyntaxElement::CloseParen, SyntaxElement::ArgElement),
-            (SyntaxElement::CloseParen, SyntaxElement::Comma),
+            (TokenType::CloseParen, SyntaxElement::ArgElement),
+            (TokenType::CloseParen, TokenType::Comma),
         ),
-        |(a, expr, b)| Operator::FunCall(expr.tag((&a, &b))).tag((&a, &b)),
+        |(a, expr, b)| {
+            let span = Span::from(a.span()..b.span());
+            Operator::FunCall(expr.tag(span)).tag(span)
+        },
     )(input)
 }
 
@@ -1091,11 +1088,11 @@ fn postfixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
             ops.into_iter().fold(
                 expr,
                 |expr, operator| {
-                    let loc = Location::from((expr.outer(), &operator));
+                    let span = expr.outer()..operator.span();
                     PExpr::Naked(Expr::Operator {
                         operand: Box::new(expr.inner()),
                         operator: operator.unwrap()
-                    }.tag(loc))
+                    }.tag(span))
                 },
             )
         },
@@ -1125,11 +1122,11 @@ fn prefixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
                 ops.into_iter().rev().fold(
                     expr,
                     |expr, operator| {
-                        let loc = Location::from((&operator, expr.outer()));
+                        let span = operator.span()..expr.outer();
                         PExpr::Naked(Expr::Operator {
                             operand: Box::new(expr.inner()),
                             operator: Operator::UnOp(operator)
-                        }.tag(loc))
+                        }.tag(span))
                     },
                 )
             },
@@ -1159,8 +1156,8 @@ fn binop<'a>(
             fail(operand, SyntaxElement::Operand),
         )),
         |(func, expr)| {
-            let loc = Location::span(func.loc(), expr.outer());
-            func.as_ref()(expr.inner(), func.loc()).direct_tag(loc)
+            let span = func.span()..expr.outer();
+            func.as_ref()(expr.inner(), func.span()).direct_tag(span)
         },
     )
 }
@@ -1182,11 +1179,11 @@ fn binops<'a>(
         )),
         move |(expr, ops)| {
             let acc = |expr: PExpr, operator: Tagged<Operator>| {
-                let loc = Location::from((expr.outer(), &operator));
+                let span = expr.outer()..operator.span();
                 PExpr::Naked(Expr::Operator {
                     operand: Box::new(expr.inner()),
                     operator: operator.unwrap(),
-                }.tag(loc))
+                }.tag(span))
             };
             if right {
                 ops.into_iter().rev().fold(expr, acc)
@@ -1331,9 +1328,9 @@ fn list_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListBindingElement>
             )),
             |(e, ident)| {
                 let loc = if let Some(i) = ident {
-                    Location::from((e.loc(), i.loc()))
+                    Span::from(e.span()..i.span())
                 } else {
-                    e.loc()
+                    e.span()
                 };
                 ident.map(ListBindingElement::SlurpTo).unwrap_or(ListBindingElement::Slurp).tag(loc)
             },
@@ -1350,16 +1347,16 @@ fn list_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListBindingElement>
             )),
 
             |(b, e)| {
-                let loc = if let Some(d) = &e {
-                    Location::from((&b, d.outer()))
+                let span = if let Some(d) = &e {
+                    Span::from(b.span()..d.outer())
                 } else {
-                    b.loc()
+                    b.span()
                 };
 
                 ListBindingElement::Binding {
                     binding: b,
                     default: e.map(PExpr::inner)
-                }.tag(loc)
+                }.tag(span)
             },
         ),
 
@@ -1391,7 +1388,7 @@ where
             err_terminator_or_item,
             err_terminator_or_separator,
         ),
-        |(a, x, b)| (ListBinding(x).tag((&a, &b)), b.unwrap()),
+        |(a, x, b)| (ListBinding(x).tag(a.span()..b.span()), b.unwrap()),
     )(input)
 }
 
@@ -1413,7 +1410,7 @@ fn map_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapBindingElement>> 
                 ellipsis,
                 fail(identifier, SyntaxElement::Identifier),
             )),
-            |(e, i)| MapBindingElement::SlurpTo(i).tag((&e, &i)),
+            |(e, i)| MapBindingElement::SlurpTo(i).tag(e.span()..i.span()),
         ),
 
         // All variants of singleton bindings
@@ -1451,9 +1448,9 @@ fn map_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapBindingElement>> 
             )),
 
             |((name, binding), default)| {
-                let mut loc = name.loc();
-                if let Some(b) = &binding { loc = Location::from((loc, b.loc())); };
-                if let Some(d) = &default { loc = Location::from((loc, d.outer())); };
+                let mut loc = name.span();
+                if let Some(b) = &binding { loc = Span::from(loc..b.span()); };
+                if let Some(d) = &default { loc = Span::from(loc..d.outer()); };
                 let rval = match binding {
                     None => MapBindingElement::Binding {
                         key: name,
@@ -1498,7 +1495,7 @@ where
             err_terminator_or_item,
             err_terminator_or_separator,
         ),
-        |(a, x, b)| MapBinding(x).tag((&a, &b)),
+        |(a, x, b)| MapBinding(x).tag(a.span()..b.span()),
     )(input)
 }
 
@@ -1518,11 +1515,11 @@ fn binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
             list_binding(
                 |i| open_bracket(i),
                 |i| close_bracket(i),
-                (SyntaxElement::CloseBracket, SyntaxElement::ListBindingElement),
-                (SyntaxElement::CloseBracket, SyntaxElement::Comma),
+                (TokenType::CloseBracket, SyntaxElement::ListBindingElement),
+                (TokenType::CloseBracket, TokenType::Comma),
             ),
             |(x,_)| {
-                let loc = x.loc();
+                let loc = x.span();
                 x.wrap(Binding::List, loc)
             },
         ),
@@ -1532,11 +1529,11 @@ fn binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
             map_binding(
                 |i| open_brace(i),
                 |i| close_brace(i),
-                (SyntaxElement::CloseBrace, SyntaxElement::MapBindingElement),
-                (SyntaxElement::CloseBrace, SyntaxElement::Comma),
+                (TokenType::CloseBrace, SyntaxElement::MapBindingElement),
+                (TokenType::CloseBrace, TokenType::Comma),
             ),
             |x| {
-                let loc = x.loc();
+                let loc = x.span();
                 x.wrap(Binding::Map, loc)
             },
         )
@@ -1554,8 +1551,8 @@ fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
     let (i, (args, end)) = list_binding(
         |i| pipe(i),
         |i| alt((pipe, semicolon))(i),
-        (SyntaxElement::Pipe, SyntaxElement::Semicolon, SyntaxElement::PosParam),
-        (SyntaxElement::Pipe, SyntaxElement::Semicolon, SyntaxElement::Comma),
+        (TokenType::Pipe, TokenType::SemiColon, SyntaxElement::PosParam),
+        (TokenType::Pipe, TokenType::SemiColon, TokenType::Comma),
     ).parse(input)?;
 
     // println!("parsing normal function, end is {:?}", end);
@@ -1563,10 +1560,10 @@ fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
     let (j, kwargs) = if end == ";" {
         // println!("keyword args");
         let (j, kwargs) = map_binding(
-            |i: In<'a>| { let loc = i.loc(); Ok((i, "".tag(loc))) },
+            |i: In<'a>| { let loc = i.position(); Ok((i, "".tag(loc.with_length(0)))) },
             |i| pipe(i),
-            (SyntaxElement::Pipe, SyntaxElement::KeywordParam),
-            (SyntaxElement::Pipe, SyntaxElement::Comma),
+            (TokenType::Pipe, SyntaxElement::KeywordParam),
+            (TokenType::Pipe, TokenType::Comma),
         )(i)?;
         (j, Some(kwargs))
     } else {
@@ -1574,13 +1571,13 @@ fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
     };
 
     let (l, expr) = fail(expression, SyntaxElement::Expression).parse(j)?;
-    let loc = Location::from((args.loc(), expr.outer()));
+    let span = args.span()..expr.outer();
 
     let result = PExpr::Naked(Expr::Function {
         positional: args.unwrap(),
         keywords: kwargs.map(Tagged::unwrap),
         expression: expr.inner().to_box(),
-    }.tag(loc));
+    }.tag(span));
 
     Ok((l, result))
 }
@@ -1596,19 +1593,19 @@ fn keyword_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
             map_binding(
                 |i| open_brace_pipe(i),
                 |i| close_brace_pipe(i),
-                (SyntaxElement::CloseCurlyPipe, SyntaxElement::KeywordParam),
-                (SyntaxElement::CloseCurlyPipe, SyntaxElement::Comma),
+                (TokenType::CloseBracePipe, SyntaxElement::KeywordParam),
+                (TokenType::CloseBracePipe, TokenType::Comma),
             ),
             fail(expression, SyntaxElement::Expression),
         )),
 
         |(kwargs, expr)| {
-            let loc = Location::from((&kwargs, expr.outer()));
+            let span = kwargs.span()..expr.outer();
             PExpr::Naked(Expr::Function {
                 positional: ListBinding(vec![]),
                 keywords: Some(kwargs.unwrap()),
                 expression: Box::new(expr.inner()),
-            }.tag(loc))
+            }.tag(span))
         },
     )(input)
 }
@@ -1642,7 +1639,7 @@ fn let_block<'a>(input: In<'a>) -> Out<'a, PExpr> {
                     keyword("let"),
                     fail(binding, SyntaxElement::Binding),
                     preceded(
-                        fail(eq, SyntaxElement::Equals),
+                        fail(eq, TokenType::Eq),
                         fail(expression, SyntaxElement::Expression),
                     ),
                 )),
@@ -1653,11 +1650,11 @@ fn let_block<'a>(input: In<'a>) -> Out<'a, PExpr> {
             ),
         )),
         |(bindings, expr)| {
-            let loc = Location::from((&bindings.first().unwrap().0, expr.outer()));
+            let span = bindings.first().unwrap().0.span()..expr.outer();
             PExpr::Naked(Expr::Let {
                 bindings: bindings.into_iter().map(|(_,x,y)| (x,y.inner())).collect(),
                 expression: Box::new(expr.inner())
-            }.tag(loc))
+            }.tag(span))
         },
     )(input)
 }
@@ -1683,12 +1680,12 @@ fn branch<'a>(input: In<'a>) -> Out<'a, PExpr> {
         )),
 
         |(start, condition, true_branch, false_branch)| {
-            let loc = Location::from((&start, false_branch.outer()));
+            let span = start.span()..false_branch.outer();
             PExpr::Naked(Expr::Branch {
                 condition: Box::new(condition.inner()),
                 true_branch: Box::new(true_branch.inner()),
                 false_branch: Box::new(false_branch.inner()),
-            }.tag(loc))
+            }.tag(span))
         },
     )(input)
 }
@@ -1728,7 +1725,7 @@ fn import<'a>(input: In<'a>) -> Out<'a, TopLevel> {
                 fail(tuple((
                     double_quote,
                     raw_string,
-                    fail(double_quote, SyntaxElement::DoubleQuote),
+                    fail(double_quote, TokenType::DoubleQuote),
                 )), SyntaxElement::ImportPath),
             ),
             preceded(
@@ -1736,7 +1733,7 @@ fn import<'a>(input: In<'a>) -> Out<'a, TopLevel> {
                 fail(binding, SyntaxElement::Binding),
             )
         )),
-        |((a, path, b), binding)| TopLevel::Import(path.tag((&a, &b)), binding),
+        |((a, path, b), binding)| TopLevel::Import(path.tag(a.span()..b.span()), binding),
     )(input)
 }
 

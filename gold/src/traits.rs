@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use indexmap::IndexMap;
 use symbol_table::GlobalSymbol;
 
-use crate::error::{Error, Location, Tagged};
+use crate::error::{Error, Span, Tagged};
 use crate::object::Key;
 
 
@@ -63,17 +63,17 @@ impl<T: FreeAndBound> FreeAndBound for Tagged<T> {
 // ----------------------------------------------------------------
 
 pub trait Taggable: Sized {
-    fn tag<T>(self, loc: T) -> Tagged<Self> where Location: From<T>;
-    fn direct_tag(self, loc: Location) -> Tagged<Self>;
+    fn tag<T>(self, loc: T) -> Tagged<Self> where Span: From<T>;
+    fn direct_tag<T>(self, loc: T) -> Tagged<Self> where Span: From<T>;
 }
 
 impl<T> Taggable for T where T: Sized {
-    fn direct_tag(self, loc: Location) -> Tagged<Self> {
-        Tagged::<Self>::new(loc, self)
+    fn direct_tag<U>(self, loc: U) -> Tagged<Self> where Span: From<U>{
+        Tagged::<Self>::new(Span::from(loc), self)
     }
 
-    fn tag<U>(self, loc: U) -> Tagged<Self> where Location: From<U> {
-        Tagged::<Self>::new(Location::from(loc), self)
+    fn tag<U>(self, loc: U) -> Tagged<Self> where Span: From<U> {
+        Tagged::<Self>::new(Span::from(loc), self)
     }
 }
 

@@ -5,7 +5,7 @@ use regex::Regex;
 
 use nom::InputLength;
 
-use crate::error::{Location, Tagged, SyntaxError, Syntax, SyntaxElement};
+use crate::error::{Tagged, SyntaxError, Syntax, SyntaxElement, Position};
 use crate::traits::Taggable;
 
 
@@ -110,16 +110,14 @@ impl Display for TokenType {
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub(crate) struct Token<'a> {
     pub kind: TokenType,
-    pub span: &'a str,
+    pub text: &'a str,
 }
 
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Lexer<'a> {
     pub code: &'a str,
-    offset: usize,
-    line: u32,
-    col: u32,
+    pub position: Position,
 }
 
 
@@ -138,19 +136,12 @@ impl<'a> Lexer<'a> {
     pub fn new(code: &'a str) -> Lexer<'a> {
         Lexer {
             code,
-            offset: 0,
-            line: 1,
-            col: 0,
+            position: Position::zero(),
         }
     }
 
-    pub fn loc(&self) -> Location {
-        Location {
-            offset: self.offset,
-            line: self.line,
-            column: self.col as u32,
-            length: 0,
-        }
+    pub fn position(&self) -> Position {
+        self.position
     }
 
     pub fn cache() -> LexCache<'a> {
@@ -172,21 +163,13 @@ impl<'a> Lexer<'a> {
     fn skip(self, offset: usize, delta_line: u32) -> Self {
         Lexer {
             code: &self.code[offset..],
-            offset: self.offset + offset,
-            line: self.line + delta_line,
-            col: if delta_line > 0 { 0 } else { self.col + offset as u32 },
+            position: self.position.adjust(offset, delta_line)
         }
     }
 
     fn skip_tag(self, offset: usize, delta_line: u32, kind: TokenType) -> LexResult<'a> {
-        let code = self.code[..offset].tag(Location {
-            offset: self.offset,
-            column: self.col,
-            line: self.line,
-            length: offset,
-        });
-
-        Ok((self.skip(offset, delta_line), code.map(|span| Token { kind, span })))
+        let code = self.code[..offset].tag(self.position.with_length(offset));
+        Ok((self.skip(offset, delta_line), code.map(|span| Token { kind, text: span })))
     }
 
     fn traverse(self, regex: &'a Regex, element: SyntaxElement, kind: TokenType) -> LexResult<'a> {
@@ -194,7 +177,7 @@ impl<'a> Lexer<'a> {
             let lex = self.skip(m.start(), 0);
             lex.skip_tag(m.end() - m.start(), 0, kind).unwrap()
         }).ok_or_else(
-            || SyntaxError(self.loc(), Some(Syntax::from(element)))
+            || SyntaxError(self.position(), Some(Syntax::from(element)))
         )
     }
 
@@ -238,7 +221,7 @@ impl<'a> Lexer<'a> {
 
     pub fn next(self, ctx: Ctx, cache: &LexCache<'a>) -> LexResult<'a> {
         if let Some((tok_ctx, tok_offset, result)) = unsafe { &*cache.get() } {
-            if tok_ctx == &ctx && tok_offset == &self.offset {
+            if tok_ctx == &ctx && tok_offset == &self.position.offset() {
                 return *result;
             }
         }
@@ -250,7 +233,7 @@ impl<'a> Lexer<'a> {
             Ctx::MultiString(col) => self.tokenize_multistring(col),
         };
 
-        unsafe { *cache.get() = Some((ctx, self.offset, result)); }
+        unsafe { *cache.get() = Some((ctx, self.position.offset(), result)); }
         result
     }
 
@@ -295,8 +278,8 @@ impl<'a> Lexer<'a> {
             Some('|') => self.skip_tag(1, 0, TokenType::Pipe),
             Some(';') => self.skip_tag(1, 0, TokenType::SemiColon),
 
-            Some(c) => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedChar(c)))),
-            None => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedEof))),
+            Some(c) => Err(SyntaxError(self.position, Some(Syntax::UnexpectedChar(c)))),
+            None => Err(SyntaxError(self.position, Some(Syntax::UnexpectedEof))),
         }
     }
 
@@ -311,7 +294,7 @@ impl<'a> Lexer<'a> {
             Some(':') => self.skip_tag(1, 0, TokenType::Colon),
             Some('.') if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') => self.skip_tag(3, 0, TokenType::Ellipsis),
             Some(_) => self.next_name(&KEY),
-            None => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedEof))),
+            None => Err(SyntaxError(self.position, Some(Syntax::UnexpectedEof))),
         }
     }
 
@@ -323,7 +306,7 @@ impl<'a> Lexer<'a> {
 
         loop {
             let skipped = self.skip_indent();
-            if skipped.col <= col {
+            if skipped.position.column() <= col {
                 break;
             }
 
@@ -333,26 +316,22 @@ impl<'a> Lexer<'a> {
             self = self.skip(end + 1, 1);
         }
 
+        let span = self.position - orig.position;
         let tok = Token {
             kind: TokenType::MultiString,
-            span: &orig.code[..(self.offset - orig.offset)],
-        }.tag(Location {
-            offset: orig.offset,
-            line: orig.line,
-            column: orig.col,
-            length: self.offset - orig.offset,
-        });
+            text: &orig.code[..span.length()],
+        }.tag(span);
 
         Ok((self, tok))
     }
 
     fn tokenize_string(self) -> LexResult<'a> {
         match self.peek() {
-            None => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedEof))),
+            None => Err(SyntaxError(self.position, Some(Syntax::UnexpectedEof))),
 
             Some('"') => self.skip_tag(1, 0, TokenType::DoubleQuote),
             Some('$') => self.skip_tag(1, 0, TokenType::Dollar),
-            Some('\n') => Err(SyntaxError(self.loc(), Some(Syntax::UnexpectedChar('\n')))),
+            Some('\n') => Err(SyntaxError(self.position, Some(Syntax::UnexpectedChar('\n')))),
 
             _ => {
                 let mut it = self.code.char_indices();
@@ -368,7 +347,7 @@ impl<'a> Lexer<'a> {
                                 continue;
                             } else if let Some((_, cc)) = c {
                                 let lex = self.skip(end + 1, 0);
-                                return Err(SyntaxError(lex.loc(), Some(Syntax::UnexpectedChar(cc))));
+                                return Err(SyntaxError(lex.position, Some(Syntax::UnexpectedChar(cc))));
                             }
                             continue;
                         }
@@ -403,6 +382,10 @@ impl<'a> CachedLexer<'a> {
         CachedLexer { lexer, cache }
     }
 
+    pub fn position(&self) -> Position {
+        self.lexer.position()
+    }
+
     fn cachify(&self, lexer: Lexer<'a>) -> CachedLexer<'a> {
         CachedLexer { lexer, cache: self.cache }
     }
@@ -427,10 +410,6 @@ impl<'a> CachedLexer<'a> {
 
     pub fn next_multistring(self, col: u32) -> CachedLexResult<'a> {
         self.next(Ctx::MultiString(col))
-    }
-
-    pub fn loc(&self) -> Location {
-        self.lexer.loc()
     }
 
     pub fn skip_whitespace(self) -> CachedLexer<'a> {
