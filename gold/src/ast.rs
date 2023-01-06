@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{BindingType, Location, Syntax};
+use crate::error::{BindingType, Span, Syntax};
 
 use super::error::{Error, Tagged, Action};
 use super::object::{Object, Key};
@@ -62,7 +62,7 @@ impl FreeAndBound for ListBindingElement {
             ListBindingElement::Binding { binding, default } => {
                 binding_element_free_and_bound(binding, default.as_ref(), free, bound);
             },
-            ListBindingElement::SlurpTo(name) => { bound.insert(*name.as_ref()); },
+            ListBindingElement::SlurpTo(name) => { bound.insert(**name); },
             _ => {},
         }
     }
@@ -88,7 +88,7 @@ impl FreeAndBound for MapBindingElement {
             MapBindingElement::Binding { key: _, binding, default } => {
                 binding_element_free_and_bound(binding, default.as_ref(), free, bound);
             },
-            MapBindingElement::SlurpTo(name) => { bound.insert(*name.as_ref()); },
+            MapBindingElement::SlurpTo(name) => { bound.insert(**name); },
         }
     }
 }
@@ -128,7 +128,7 @@ impl Validatable for ListBinding {
         let mut found_slurp = false;
         for element in &self.0 {
             element.validate()?;
-            if let ListBindingElement::Binding { .. } = element.as_ref() { }
+            if let ListBindingElement::Binding { .. } = **element { }
             else {
                 if found_slurp {
                     return Err(Error::new(Syntax::MultiSlurp).tag(element, Action::Parse))
@@ -160,7 +160,7 @@ impl Validatable for MapBinding {
         let mut found_slurp = false;
         for element in &self.0 {
             element.validate()?;
-            if let MapBindingElement::SlurpTo(_) = element.as_ref() {
+            if let MapBindingElement::SlurpTo(_) = **element {
                 if found_slurp {
                     return Err(Error::new(Syntax::MultiSlurp).tag(element, Action::Parse))
                 }
@@ -195,7 +195,7 @@ impl Binding {
 impl FreeAndBound for Binding {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
-            Binding::Identifier(name) => { bound.insert(*name.as_ref()); },
+            Binding::Identifier(name) => { bound.insert(**name); },
             Binding::List(elements) => elements.free_and_bound(free, bound),
             Binding::Map(elements) => elements.free_and_bound(free, bound),
         }
@@ -231,7 +231,7 @@ impl StringElement {
 impl Validatable for StringElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            StringElement::Interpolate(node) => { node.as_ref().validate()?; }
+            StringElement::Interpolate(node) => { node.validate()?; }
             _ => {},
         }
         Ok(())
@@ -260,17 +260,17 @@ pub enum ListElement {
 impl FreeImpl for ListElement {
     fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
-            ListElement::Singleton(expr) => expr.as_ref().free_impl(free),
-            ListElement::Splat(expr) => expr.as_ref().free_impl(free),
+            ListElement::Singleton(expr) => expr.free_impl(free),
+            ListElement::Splat(expr) => expr.free_impl(free),
             ListElement::Cond { condition, element } => {
-                condition.as_ref().free_impl(free);
-                element.as_ref().as_ref().free_impl(free);
+                condition.free_impl(free);
+                element.free_impl(free);
             },
             ListElement::Loop { binding, iterable, element } => {
-                iterable.as_ref().free_impl(free);
+                iterable.free_impl(free);
                 let mut bound: HashSet<Key> = HashSet::new();
-                binding.as_ref().free_and_bound(free, &mut bound);
-                for ident in element.as_ref().as_ref().free() {
+                binding.free_and_bound(free, &mut bound);
+                for ident in element.free() {
                     if !bound.contains(&ident) {
                         free.insert(ident);
                     }
@@ -283,16 +283,16 @@ impl FreeImpl for ListElement {
 impl Validatable for ListElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            ListElement::Singleton(node) => { node.as_ref().validate()?; },
-            ListElement::Splat(node) => { node.as_ref().validate()?; },
+            ListElement::Singleton(node) => { node.validate()?; },
+            ListElement::Splat(node) => { node.validate()?; },
             ListElement::Loop { binding, iterable, element } => {
-                binding.as_ref().validate()?;
-                iterable.as_ref().validate()?;
-                element.as_ref().as_ref().validate()?;
+                binding.validate()?;
+                iterable.validate()?;
+                element.validate()?;
             },
             ListElement::Cond { condition, element } => {
-                condition.as_ref().validate()?;
-                element.as_ref().as_ref().validate()?;
+                condition.validate()?;
+                element.validate()?;
             },
         }
         Ok(())
@@ -325,19 +325,19 @@ impl FreeImpl for MapElement {
     fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
             MapElement::Singleton { key, value } => {
-                key.as_ref().free_impl(free);
-                value.as_ref().free_impl(free);
+                key.free_impl(free);
+                value.free_impl(free);
             },
-            MapElement::Splat(expr) => expr.as_ref().free_impl(free),
+            MapElement::Splat(expr) => expr.free_impl(free),
             MapElement::Cond { condition, element } => {
-                condition.as_ref().free_impl(free);
-                element.as_ref().as_ref().free_impl(free);
+                condition.free_impl(free);
+                element.free_impl(free);
             },
             MapElement::Loop { binding, iterable, element } => {
-                iterable.as_ref().free_impl(free);
+                iterable.free_impl(free);
                 let mut bound: HashSet<Key> = HashSet::new();
-                binding.as_ref().free_and_bound(free, &mut bound);
-                for ident in element.as_ref().as_ref().free() {
+                binding.free_and_bound(free, &mut bound);
+                for ident in element.free() {
                     if !bound.contains(&ident) {
                         free.insert(ident);
                     }
@@ -351,18 +351,18 @@ impl Validatable for MapElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
             MapElement::Singleton { key, value } => {
-                key.as_ref().validate()?;
-                value.as_ref().validate()?;
+                key.validate()?;
+                value.validate()?;
             },
-            MapElement::Splat(node) => { node.as_ref().validate()?; },
+            MapElement::Splat(node) => { node.validate()?; },
             MapElement::Loop { binding, iterable, element } => {
-                binding.as_ref().validate()?;
-                iterable.as_ref().validate()?;
-                element.as_ref().as_ref().validate()?;
+                binding.validate()?;
+                iterable.validate()?;
+                element.validate()?;
             },
             MapElement::Cond { condition, element } => {
-                condition.as_ref().validate()?;
-                element.as_ref().as_ref().validate()?;
+                condition.validate()?;
+                element.validate()?;
             },
         }
         Ok(())
@@ -383,9 +383,9 @@ pub enum ArgElement {
 impl FreeImpl for ArgElement {
     fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
-            ArgElement::Singleton(expr) => { expr.as_ref().free_impl(free); },
-            ArgElement::Splat(expr) => { expr.as_ref().free_impl(free); },
-            ArgElement::Keyword(_, expr) => { expr.as_ref().free_impl(free); },
+            ArgElement::Singleton(expr) => { expr.free_impl(free); },
+            ArgElement::Splat(expr) => { expr.free_impl(free); },
+            ArgElement::Keyword(_, expr) => { expr.free_impl(free); },
         }
     }
 }
@@ -393,9 +393,9 @@ impl FreeImpl for ArgElement {
 impl Validatable for ArgElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            ArgElement::Singleton(node) => { node.as_ref().validate()?; },
-            ArgElement::Splat(node) => { node.as_ref().validate()?; },
-            ArgElement::Keyword(_, value) => { value.as_ref().validate()?; },
+            ArgElement::Singleton(node) => { node.validate()?; },
+            ArgElement::Splat(node) => { node.validate()?; },
+            ArgElement::Keyword(_, value) => { value.validate()?; },
         }
         Ok(())
     }
@@ -439,30 +439,30 @@ pub enum Operator {
 }
 
 impl Operator {
-    pub fn index<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Index.tag(l), x.to_box()) }
-    pub fn power<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Power.tag(l), x.to_box()) }
-    pub fn multiply<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Multiply.tag(l), x.to_box()) }
-    pub fn integer_divide<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::IntegerDivide.tag(l), x.to_box()) }
-    pub fn divide<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Divide.tag(l), x.to_box()) }
-    pub fn add<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Add.tag(l), x.to_box()) }
-    pub fn subtract<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Subtract.tag(l), x.to_box()) }
-    pub fn less<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Less.tag(l), x.to_box()) }
-    pub fn greater<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Greater.tag(l), x.to_box()) }
-    pub fn less_equal<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::LessEqual.tag(l), x.to_box()) }
-    pub fn greater_equal<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::GreaterEqual.tag(l), x.to_box()) }
-    pub fn equal<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Equal.tag(l), x.to_box()) }
-    pub fn not_equal<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::NotEqual.tag(l), x.to_box()) }
-    pub fn and<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::And.tag(l), x.to_box()) }
-    pub fn or<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Location: From<U> { Operator::BinOp(BinOp::Or.tag(l), x.to_box()) }
+    pub fn index<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::Index.tag(l), x.to_box()) }
+    pub fn power<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::Power.tag(l), x.to_box()) }
+    pub fn multiply<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::Multiply.tag(l), x.to_box()) }
+    pub fn integer_divide<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::IntegerDivide.tag(l), x.to_box()) }
+    pub fn divide<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::Divide.tag(l), x.to_box()) }
+    pub fn add<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::Add.tag(l), x.to_box()) }
+    pub fn subtract<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::Subtract.tag(l), x.to_box()) }
+    pub fn less<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::Less.tag(l), x.to_box()) }
+    pub fn greater<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::Greater.tag(l), x.to_box()) }
+    pub fn less_equal<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::LessEqual.tag(l), x.to_box()) }
+    pub fn greater_equal<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::GreaterEqual.tag(l), x.to_box()) }
+    pub fn equal<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::Equal.tag(l), x.to_box()) }
+    pub fn not_equal<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::NotEqual.tag(l), x.to_box()) }
+    pub fn and<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::And.tag(l), x.to_box()) }
+    pub fn or<T, U>(x: T, l: U) -> Operator where T: Boxable<Tagged<Expr>>, Span: From<U> { Operator::BinOp(BinOp::Or.tag(l), x.to_box()) }
 }
 
 impl Validatable for Operator {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            Operator::BinOp(_, node) => { node.as_ref().as_ref().validate()?; },
+            Operator::BinOp(_, node) => { node.validate()?; },
             Operator::FunCall(args) => {
                 for arg in args.as_ref() {
-                    arg.as_ref().validate()?;
+                    arg.validate()?;
                 }
             },
             _ => {},
@@ -535,27 +535,27 @@ pub enum Expr {
 }
 
 impl Tagged<Expr> {
-    pub fn add<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> {
+    pub fn add<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
         self.operate(Operator::add(rhs, l))
     }
 
-    pub fn sub<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> {
+    pub fn sub<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
         self.operate(Operator::subtract(rhs, l))
     }
 
-    pub fn mul<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> {
+    pub fn mul<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
         self.operate(Operator::multiply(rhs, l))
     }
 
-    pub fn div<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> {
+    pub fn div<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
         self.operate(Operator::divide(rhs, l))
     }
 
-    pub fn neg<U>(self, l: U) -> Expr where Location: From<U> {
+    pub fn neg<U>(self, l: U) -> Expr where Span: From<U> {
         self.operate(Operator::UnOp(UnOp::ArithmeticalNegate.tag(l)))
     }
 
-    pub fn not<U>(self, l: U) -> Expr where Location: From<U> {
+    pub fn not<U>(self, l: U) -> Expr where Span: From<U> {
         self.operate(Operator::UnOp(UnOp::LogicalNegate.tag(l)))
     }
 
@@ -566,22 +566,22 @@ impl Tagged<Expr> {
         }
     }
 
-    pub fn idiv<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::integer_divide(rhs, l)) }
-    pub fn lt<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::less(rhs, l)) }
-    pub fn gt<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::greater(rhs, l)) }
-    pub fn lte<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::less_equal(rhs, l)) }
-    pub fn gte<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::greater_equal(rhs, l)) }
-    pub fn eql<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::equal(rhs, l)) }
-    pub fn neql<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::not_equal(rhs, l)) }
-    pub fn and<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::and(rhs, l)) }
-    pub fn or<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::or(rhs, l)) }
-    pub fn pow<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::power(rhs, l)) }
-    pub fn index<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Location: From<U> { self.operate(Operator::index(rhs, l)) }
+    pub fn idiv<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> { self.operate(Operator::integer_divide(rhs, l)) }
+    pub fn lt<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> { self.operate(Operator::less(rhs, l)) }
+    pub fn gt<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> { self.operate(Operator::greater(rhs, l)) }
+    pub fn lte<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> { self.operate(Operator::less_equal(rhs, l)) }
+    pub fn gte<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> { self.operate(Operator::greater_equal(rhs, l)) }
+    pub fn eql<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> { self.operate(Operator::equal(rhs, l)) }
+    pub fn neql<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> { self.operate(Operator::not_equal(rhs, l)) }
+    pub fn and<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> { self.operate(Operator::and(rhs, l)) }
+    pub fn or<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> { self.operate(Operator::or(rhs, l)) }
+    pub fn pow<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> { self.operate(Operator::power(rhs, l)) }
+    pub fn index<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> { self.operate(Operator::index(rhs, l)) }
 
     pub fn funcall<T, U>(self, args: T, l: U) -> Expr
     where
         T: ToVec<Tagged<ArgElement>>,
-        Location: From<U>
+        Span: From<U>
     {
         self.operate(Operator::FunCall(args.to_vec().tag(l)))
     }
@@ -617,10 +617,10 @@ impl FreeImpl for Expr {
                     }
                 }
             },
-            Expr::Identifier(name) => { free.insert(*name.as_ref()); },
+            Expr::Identifier(name) => { free.insert(**name); },
             Expr::List(elements) => {
                 for element in elements {
-                    element.as_ref().free_impl(free);
+                    element.free_impl(free);
                 }
             },
             Expr::Map(elements) => {
@@ -636,7 +636,7 @@ impl FreeImpl for Expr {
                             free.insert(id);
                         }
                     }
-                    binding.as_ref().free_and_bound(free, &mut bound);
+                    binding.free_and_bound(free, &mut bound);
                 }
                 for id in expression.free() {
                     if !bound.contains(&id) {
@@ -685,7 +685,7 @@ impl Validatable for Expr {
             },
             Expr::List(elements) => {
                 for element in elements {
-                    element.as_ref().validate()?;
+                    element.validate()?;
                 }
             },
             Expr::Map(elements) => {
@@ -695,7 +695,7 @@ impl Validatable for Expr {
             },
             Expr::Let { bindings, expression } => {
                 for (binding, node) in bindings {
-                    binding.as_ref().validate()?;
+                    binding.validate()?;
                     node.validate()?;
                 }
                 expression.validate()?;
@@ -732,7 +732,7 @@ pub enum TopLevel {
 impl Validatable for TopLevel {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            Self::Import(_, binding) => { binding.as_ref().validate()?; },
+            Self::Import(_, binding) => { binding.validate()?; },
         }
         Ok(())
     }

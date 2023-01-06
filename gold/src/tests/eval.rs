@@ -1,5 +1,5 @@
 use crate::ast::{BinOp, UnOp};
-use crate::error::{Error, Reason, Unpack, Location, Action, BindingType, TypeMismatch, Value};
+use crate::error::{Error, Reason, Unpack, Span, Action, BindingType, TypeMismatch, Value};
 use crate::eval_raw;
 use crate::object::{Object, Key, Type};
 
@@ -608,7 +608,7 @@ fn builtins() {
 
 macro_rules! loc {
     ($loc:expr, $act:ident) => {
-        (Location::from($loc), Action::$act)
+        (Span::from($loc), Action::$act)
     };
 }
 
