@@ -106,7 +106,7 @@ pub struct Span {
 }
 
 impl Span {
-    /// The starting position if the text span.
+    /// The starting position in the text span.
     pub fn start(&self) -> Position {
         self.start
     }
