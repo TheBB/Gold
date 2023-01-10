@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::io::{Read, Write};
 use std::iter::Step;
+use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -22,6 +23,9 @@ use crate::ast::{ListBinding, MapBinding, Expr, BinOp, UnOp};
 use crate::error::{Error, Tagged, TypeMismatch, Value, Reason};
 use crate::eval::Namespace;
 use crate::util;
+
+
+// A Gold object is represented by the
 
 
 
@@ -65,9 +69,9 @@ impl From<&StrVariant> for GlobalSymbol {
     }
 }
 
-impl ToString for StrVariant {
-    fn to_string(&self) -> String {
-        format!("\"{}\"", escape(self.as_str()))
+impl Display for StrVariant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("\"{}\"", escape(self.as_str())))
     }
 }
 
@@ -184,51 +188,51 @@ impl From<usize> for IntVariant {
     }
 }
 
-impl TryFrom<IntVariant> for u32 {
+impl TryFrom<&IntVariant> for u32 {
     type Error = ();
 
-    fn try_from(value: IntVariant) -> Result<Self, Self::Error> {
+    fn try_from(value: &IntVariant) -> Result<Self, Self::Error> {
         match value {
-            IntVariant::Small(x) => Self::try_from(x).map_err(|_| ()),
+            IntVariant::Small(x) => Self::try_from(*x).map_err(|_| ()),
             IntVariant::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
         }
     }
 }
 
-impl TryFrom<IntVariant> for i64 {
+impl TryFrom<&IntVariant> for i64 {
     type Error = ();
 
-    fn try_from(value: IntVariant) -> Result<Self, Self::Error> {
+    fn try_from(value: &IntVariant) -> Result<Self, Self::Error> {
         match value {
-            IntVariant::Small(x) => Ok(x),
+            IntVariant::Small(x) => Ok(*x),
             IntVariant::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
         }
     }
 }
 
-impl TryFrom<IntVariant> for usize {
+impl TryFrom<&IntVariant> for usize {
     type Error = ();
 
-    fn try_from(value: IntVariant) -> Result<Self, Self::Error> {
+    fn try_from(value: &IntVariant) -> Result<Self, Self::Error> {
         match value {
-            IntVariant::Small(x) => Self::try_from(x).map_err(|_| ()),
+            IntVariant::Small(x) => Self::try_from(*x).map_err(|_| ()),
             IntVariant::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
         }
     }
 }
 
-impl ToString for IntVariant {
-    fn to_string(&self) -> String {
+impl Display for IntVariant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Small(r) => r.to_string(),
-            Self::Big(r) => r.to_string(),
+            Self::Small(r) => f.write_fmt(format_args!("{}", r)),
+            Self::Big(r) => f.write_fmt(format_args!("{}", r)),
         }
     }
 }
 
 impl Step for IntVariant {
     fn steps_between(start: &Self, end: &Self) -> Option<usize> {
-        usize::try_from(end.sub(start)).ok()
+        usize::try_from(&end.sub(start)).ok()
     }
 
     fn forward_checked(start: Self, count: usize) -> Option<Self> {
@@ -304,7 +308,7 @@ impl IntVariant {
     }
 
     fn medium_pow(&self, other: &IntVariant) -> Option<IntVariant> {
-        let yy: u32 = other.clone().try_into().ok()?;
+        let yy: u32 = other.try_into().ok()?;
 
         match self {
             Self::Big(x) => Some(Self::from(x.pow(yy))),
@@ -486,7 +490,7 @@ impl FuncVariant {
         }
     }
 
-    fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+    pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
         match self {
             Self::Builtin(Builtin { func, .. }) => func(args, kwargs),
             Self::Closure(Closure(func)) => func(args, kwargs),
@@ -548,7 +552,7 @@ impl Display for Type {
 
 
 #[derive(Clone, Serialize, Deserialize)]
-pub enum Object {
+pub enum ObjectVariant {
     Int(IntVariant),
     Float(f64),
     Str(StrVariant),
@@ -559,8 +563,8 @@ pub enum Object {
     Null,
 }
 
-impl PartialEq<Object> for Object {
-    fn eq(&self, other: &Object) -> bool {
+impl PartialEq<ObjectVariant> for ObjectVariant {
+    fn eq(&self, other: &ObjectVariant) -> bool {
         match (self, other) {
             (Self::Int(x), Self::Int(y)) => x.eq(y),
             (Self::Float(x), Self::Float(y)) => x.eq(y),
@@ -574,35 +578,39 @@ impl PartialEq<Object> for Object {
     }
 }
 
-impl PartialOrd<Object> for Object {
-    fn partial_cmp(&self, other: &Object) -> Option<Ordering> {
+impl PartialOrd<ObjectVariant> for ObjectVariant {
+    fn partial_cmp(&self, other: &ObjectVariant) -> Option<Ordering> {
         match (self, other) {
-            (Object::Int(x), Object::Int(y)) => x.partial_cmp(y),
-            (Object::Int(x), Object::Float(y)) => x.partial_cmp(y),
-            (Object::Float(_), Object::Int(_)) => other.partial_cmp(self).map(Ordering::reverse),
-            (Object::Float(x), Object::Float(y)) => x.partial_cmp(y),
-            (Object::Str(x), Object::Str(y)) => x.partial_cmp(y),
+            (Self::Int(x), Self::Int(y)) => x.partial_cmp(y),
+            (Self::Int(x), Self::Float(y)) => x.partial_cmp(y),
+            (Self::Float(_), Self::Int(_)) => other.partial_cmp(self).map(Ordering::reverse),
+            (Self::Float(x), Self::Float(y)) => x.partial_cmp(y),
+            (Self::Str(x), Self::Str(y)) => x.partial_cmp(y),
             _ => None,
         }
     }
 }
 
-impl Debug for Object {
+impl Debug for ObjectVariant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Int(x) => f.debug_tuple("Object::Int").field(x).finish(),
-            Self::Float(x) => f.debug_tuple("Object::Float").field(x).finish(),
-            Self::Str(x) => f.debug_tuple("Object::Str").field(x).finish(),
-            Self::Boolean(x) => f.debug_tuple("Object::Boolean").field(x).finish(),
-            Self::List(x) => f.debug_tuple("Object::List").field(x.as_ref()).finish(),
-            Self::Map(x) => f.debug_tuple("Object::Map").field(x.as_ref()).finish(),
-            Self::Func(x) => f.debug_tuple("Object::Function").field(x).finish(),
-            Self::Null => f.debug_tuple("Object::Null").finish(),
+            Self::Int(x) => f.debug_tuple("ObjectVariant::Int").field(x).finish(),
+            Self::Float(x) => f.debug_tuple("ObjectVariant::Float").field(x).finish(),
+            Self::Str(x) => f.debug_tuple("ObjectVariant::Str").field(x).finish(),
+            Self::Boolean(x) => f.debug_tuple("ObjectVariant::Boolean").field(x).finish(),
+            Self::List(x) => f.debug_tuple("ObjectVariant::List").field(x.as_ref()).finish(),
+            Self::Map(x) => f.debug_tuple("ObjectVariant::Map").field(x.as_ref()).finish(),
+            Self::Func(x) => f.debug_tuple("ObjectVariant::Function").field(x).finish(),
+            Self::Null => f.debug_tuple("ObjectVariant::Null").finish(),
         }
     }
 }
 
-impl Object {
+impl ObjectVariant {
+    pub fn object(self) -> Object {
+        Object(self)
+    }
+
     pub fn type_of(&self) -> Type {
         match self {
             Self::Int(_) => Type::Integer,
@@ -616,32 +624,16 @@ impl Object {
         }
     }
 
-    pub fn interned<T: AsRef<str>>(x: T) -> Self {
-        Self::Str(StrVariant::interned(x))
+    pub fn list<T>(x: T) -> Self where T: ToVec<Object> {
+        Self::List(Arc::new(x.to_vec()))
     }
 
-    pub fn natural_string<T: AsRef<str>>(x: T) -> Object {
-        Self::Str(StrVariant::natural(x))
+    pub fn map<T>(x: T) -> Self where T: ToMap<Key, Object> {
+        Self::Map(Arc::new(x.to_map()))
     }
 
-    pub fn bigint(x: &str) -> Option<Object> {
-        BigInt::from_str(x).ok().map(Object::from)
-    }
-
-    pub fn literal(&self) -> Expr {
-        Expr::Literal(self.clone())
-    }
-
-    pub fn list<T>(x: T) -> Object where T: ToVec<Object> {
-        Object::List(Arc::new(x.to_vec()))
-    }
-
-    pub fn map<T>(x: T) -> Object where T: ToMap<Key, Object> {
-        Object::Map(Arc::new(x.to_map()))
-    }
-
-    pub fn function<T>(x: T) -> Object where FuncVariant: From<T> {
-        Object::Func(FuncVariant::from(x))
+    pub fn function<T>(x: T) -> Self where FuncVariant: From<T> {
+        Self::Func(FuncVariant::from(x))
     }
 
     pub fn numeric_normalize(self) -> Self {
@@ -654,43 +646,43 @@ impl Object {
 
     pub fn format(&self) -> Result<String, Error> {
         match self {
-            Object::Str(r) => Ok(r.format()),
-            Object::Int(r) => Ok(r.to_string()),
-            Object::Float(r) => Ok(r.to_string()),
-            Object::Boolean(true) => Ok("true".to_string()),
-            Object::Boolean(false) => Ok("false".to_string()),
-            Object::Null => Ok("null".to_string()),
+            Self::Str(r) => Ok(r.format()),
+            Self::Int(r) => Ok(r.to_string()),
+            Self::Float(r) => Ok(r.to_string()),
+            Self::Boolean(true) => Ok("true".to_string()),
+            Self::Boolean(false) => Ok("false".to_string()),
+            Self::Null => Ok("null".to_string()),
             _ => Err(Error::new(TypeMismatch::Interpolate(self.type_of()))),
         }
     }
 
     pub fn truthy(&self) -> bool {
         match self {
-            Object::Null => false,
-            Object::Boolean(val) => *val,
-            Object::Int(r) => r.nonzero(),
-            Object::Float(r) => *r != 0.0,
+            Self::Null => false,
+            Self::Boolean(val) => *val,
+            Self::Int(r) => r.nonzero(),
+            Self::Float(r) => *r != 0.0,
             _ => true,
         }
     }
 
-    pub fn user_eq(&self, other: &Object) -> bool {
+    pub fn user_eq(&self, other: &Self) -> bool {
         match (self, other) {
 
             // Equality between disparate types
-            (Object::Float(x), Object::Int(y)) => y.eq(x),
-            (Object::Int(x), Object::Float(y)) => x.eq(y),
+            (Self::Float(x), Self::Int(y)) => y.eq(x),
+            (Self::Int(x), Self::Float(y)) => x.eq(y),
 
             // Structural equality
-            (Object::Int(x), Object::Int(y)) => x.user_eq(y),
-            (Object::Float(x), Object::Float(y)) => x.eq(y),
-            (Object::Str(x), Object::Str(y)) => x.user_eq(y),
-            (Object::Boolean(x), Object::Boolean(y)) => x.eq(y),
-            (Object::Null, Object::Null) => true,
-            (Object::Func(x), Object::Func(y)) => x.user_eq(y),
+            (Self::Int(x), Self::Int(y)) => x.user_eq(y),
+            (Self::Float(x), Self::Float(y)) => x.eq(y),
+            (Self::Str(x), Self::Str(y)) => x.user_eq(y),
+            (Self::Boolean(x), Self::Boolean(y)) => x.eq(y),
+            (Self::Null, Self::Null) => true,
+            (Self::Func(x), Self::Func(y)) => x.user_eq(y),
 
             // Composite objects => use user equality
-            (Object::List(x), Object::List(y)) => {
+            (Self::List(x), Self::List(y)) => {
                 if x.len() != y.len() {
                     return false
                 }
@@ -702,7 +694,7 @@ impl Object {
                 true
             },
 
-            (Object::Map(x), Object::Map(y)) => {
+            (Self::Map(x), Self::Map(y)) => {
                 if x.len() != y.len() {
                     return false
                 }
@@ -723,110 +715,82 @@ impl Object {
         }
     }
 
-    pub fn serialize(&self) -> Option<Vec<u8>> {
-        let data = (SERIALIZE_VERSION, SystemTime::now(), self);
-        encode::to_vec(&data).ok()
-    }
-
-    pub fn serialize_write<T: Write + ?Sized>(&self, out: &mut T) -> Result<(), String> {
-        let data = (SERIALIZE_VERSION, SystemTime::now(), self);
-        encode::write(out, &data).map_err(|x| x.to_string())
-    }
-
-    pub fn deserialize(data: &Vec<u8>) -> Option<(Object, SystemTime)> {
-        let (version, time, retval) = decode::from_slice::<(i32, SystemTime, Object)>(data.as_slice()).ok()?;
-        if version < SERIALIZE_VERSION {
-            None
-        } else {
-            Some((retval, time))
-        }
-    }
-
-    pub fn deserialize_read<T: Read>(data: T) -> Result<(Object, SystemTime), String> {
-        let (version, time, retval) = decode::from_read::<T, (i32, SystemTime, Object)>(data).map_err(|x| x.to_string())?;
-        if version < SERIALIZE_VERSION {
-            Err("wrong version".to_string())
-        } else {
-            Ok((retval, time))
-        }
-    }
-
-    pub fn neg(&self) -> Result<Object, Error> {
+    pub fn neg(&self) -> Result<Self, Error> {
         match self {
-            Object::Int(x) => Ok(Object::Int(x.neg())),
-            Object::Float(x) => Ok(Object::from(-x)),
+            Self::Int(x) => Ok(Self::Int(x.neg())),
+            Self::Float(x) => Ok(Self::Float(-x)),
             _ => Err(Error::new(TypeMismatch::UnOp(self.type_of(), UnOp::ArithmeticalNegate))),
         }
     }
 
-    pub fn add(&self, other: &Object) -> Result<Object, Error> {
+    pub fn add(&self, other: &Self) -> Result<Self, Error> {
         match (&self, &other) {
-            (Object::List(x), Object::List(y)) => Ok(Object::from(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())),
-            (Object::Str(x), Object::Str(y)) => Ok(Object::Str(x.add(y))),
+            (Self::List(x), Self::List(y)) => Ok(Self::list(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())),
+            (Self::Str(x), Self::Str(y)) => Ok(Self::Str(x.add(y))),
             _ => self.operate(other, IntVariant::add, |x,y| x + y, BinOp::Add),
         }
     }
 
-    pub fn sub(&self, other: &Object) -> Result<Object, Error> {
+    pub fn sub(&self, other: &Self) -> Result<Self, Error> {
         self.operate(other, IntVariant::sub, |x,y| x - y, BinOp::Subtract)
     }
 
-    pub fn mul(&self, other: &Object) -> Result<Object, Error> {
+    pub fn mul(&self, other: &Self) -> Result<Self, Error> {
         self.operate(other, IntVariant::mul, |x,y| x * y, BinOp::Multiply)
     }
 
-    pub fn div(&self, other: &Object) -> Result<Object, Error> {
+    pub fn div(&self, other: &Self) -> Result<Self, Error> {
         self.operate(other, IntVariant::div, |x,y| x / y, BinOp::Divide)
     }
 
-    pub fn idiv(self, other: &Object) -> Result<Object, Error> {
+    pub fn idiv(&self, other: &Self) -> Result<Self, Error> {
         self.operate(other, IntVariant::idiv, |x,y| (x / y).floor() as f64, BinOp::IntegerDivide)
     }
 
-    fn operate<F,G,S,T>(&self, other: &Object, ixi: F, fxf: G, op: BinOp) -> Result<Object, Error>
+    fn operate<F,G,S,T>(&self, other: &Self, ixi: F, fxf: G, op: BinOp) -> Result<Self, Error>
     where
         F: Fn(&IntVariant, &IntVariant) -> S,
         G: Fn(f64, f64) -> T,
-        Object: From<S> + From<T>,
+        Self: From<S> + From<T>,
     {
         match (self, other) {
-            (Object::Int(xx), Object::Int(yy)) => Ok(Object::from(ixi(xx, yy))),
-            (Object::Int(xx), Object::Float(yy)) => Ok(Object::from(fxf(xx.to_f64(), *yy))),
-            (Object::Float(xx), Object::Int(yy)) => Ok(Object::from(fxf(*xx, yy.to_f64()))),
-            (Object::Float(xx), Object::Float(yy)) => Ok(Object::from(fxf(*xx, *yy))),
+            (Self::Int(xx), Self::Int(yy)) => Ok(Self::from(ixi(xx, yy))),
+            (Self::Int(xx), Self::Float(yy)) => Ok(Self::from(fxf(xx.to_f64(), *yy))),
+            (Self::Float(xx), Self::Int(yy)) => Ok(Self::from(fxf(*xx, yy.to_f64()))),
+            (Self::Float(xx), Self::Float(yy)) => Ok(Self::from(fxf(*xx, *yy))),
 
             _ => Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), op))),
         }
     }
 
-    pub fn pow(&self, other: &Object) -> Result<Object, Error> {
-        if let (Object::Int(x), Object::Int(y)) = (self, other) {
+    pub fn pow(&self, other: &Self) -> Result<Self, Error> {
+        if let (Self::Int(x), Self::Int(y)) = (self, other) {
             if let Some(r) = x.pow(y) {
-                return Ok(Object::from(r));
+                return Ok(Self::from(r));
             }
         }
 
         let (xx, yy) = self.to_f64()
             .and_then(|x| other.to_f64().map(|y| (x, y)))
             .ok_or_else(|| Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Power)))?;
-        Ok(Object::from(xx.powf(yy)))
+        Ok(Self::from(xx.powf(yy)))
     }
 
-    pub fn cmp_bool(&self, other: &Object, ordering: Ordering) -> Option<bool> {
+    pub fn cmp_bool(&self, other: &Self, ordering: Ordering) -> Option<bool> {
         self.partial_cmp(other).map(|x| x == ordering)
     }
 
     pub fn index(&self, other: &Object) -> Result<Object, Error> {
-        match (self, other) {
-            (Object::List(x), Object::Int(y)) => {
-                let i: usize = y.clone().try_into().map_err(|_| Error::new(Value::OutOfRange))?;
+        match (self, &other.0) {
+            (Self::List(x), Self::Int(y)) => {
+                let i: usize = y.try_into().map_err(|_| Error::new(Value::OutOfRange))?;
                 if i >= x.len() {
                     Err(Error::new(Value::OutOfRange))
                 } else {
                     Ok(x[i].clone())
                 }
             }
-            (Object::Map(x), Object::Str(y)) => {
+            (Self::Map(x), Self::Str(y)) => {
                 let yy = GlobalSymbol::from(y);
                 x.get(&yy).ok_or_else(|| Error::new(Reason::Unassigned(yy))).map(Object::clone)
             }
@@ -836,7 +800,7 @@ impl Object {
 
     pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
         match self {
-            Object::Func(func) => func.call(args, kwargs),
+            Self::Func(func) => func.call(args, kwargs),
             _ => Err(Error::new(TypeMismatch::Call(self.type_of()))),
         }
     }
@@ -855,97 +819,339 @@ impl Object {
         }
     }
 
+    pub fn get_key(&self) -> Option<Key> {
+        match self {
+            Self::Str(x) => Some(Key::from(x)),
+            _ => None,
+        }
+    }
+
+    pub fn get_str(&self) -> Option<&str> {
+        match self {
+            Self::Str(x) => Some(x.as_str()),
+            _ => None,
+        }
+    }
+
+    pub fn get_int(&self) -> Option<&IntVariant> {
+        match self {
+            Self::Int(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn get_float(&self) -> Option<f64> {
+        match self {
+            Self::Float(x) => Some(*x),
+            _ => None,
+        }
+    }
+
+    pub fn get_bool(&self) -> Option<bool> {
+        match self {
+            Self::Boolean(x) => Some(*x),
+            _ => None,
+        }
+    }
+
+    pub fn get_func(&self) -> Option<&FuncVariant> {
+        match self {
+            Self::Func(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    pub fn get_null(&self) -> Option<()> {
+        match self {
+            Self::Null => Some(()),
+            _ => None,
+        }
+    }
+
+    pub fn is_null(&self) -> bool {
+        match self {
+            ObjectVariant::Null => true,
+            _ => false,
+        }
+    }
+
     pub fn to_f64(&self) -> Option<f64> {
         match self {
-            Object::Int(x) => Some(x.to_f64()),
-            Object::Float(x) => Some(*x),
+            Self::Int(x) => Some(x.to_f64()),
+            Self::Float(x) => Some(*x),
             _ => None,
         }
     }
 }
 
-impl<T> From<T> for Object where IntVariant: From<T> {
+impl<T> From<T> for ObjectVariant where IntVariant: From<T> {
     fn from(value: T) -> Self {
-        Object::Int(IntVariant::from(value))
+        Self::Int(IntVariant::from(value))
     }
 }
 
-impl From<f64> for Object {
-    fn from(x: f64) -> Object { Object::Float(x) }
+impl From<f64> for ObjectVariant {
+    fn from(x: f64) -> Self { Self::Float(x) }
 }
 
-impl From<&str> for Object {
-    fn from(x: &str) -> Object {
-        if x.len() < 20 {
-            Object::interned(x)
-        } else {
-            Object::natural_string(x)
-        }
-    }
-}
-
-impl From<Key> for Object where {
-    fn from(value: Key) -> Self {
-        Self::Str(StrVariant::Interned(value))
-    }
-}
-
-impl From<bool> for Object {
-    fn from(x: bool) -> Object { Object::Boolean(x) }
-}
-
-impl From<List> for Object {
-    fn from(value: List) -> Self {
-        Object::List(Arc::new(value))
-    }
-}
-
-impl From<Map> for Object {
-    fn from(value: Map) -> Self {
-        Object::Map(Arc::new(value))
-    }
-}
-
-impl ToString for Object {
-    fn to_string(&self) -> String {
+impl Display for ObjectVariant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Object::Str(r) => r.to_string(),
-            Object::Int(r) => r.to_string(),
-            Object::Float(r) => r.to_string(),
-            Object::Boolean(true) => "true".to_string(),
-            Object::Boolean(false) => "false".to_string(),
-            Object::Null => "null".to_string(),
+            Self::Str(r) => f.write_fmt(format_args!("{}", r)),
+            Self::Int(r) => f.write_fmt(format_args!("{}", r)),
+            Self::Float(r) => f.write_fmt(format_args!("{}", r)),
+            Self::Boolean(true) => f.write_str("true"),
+            Self::Boolean(false) => f.write_str("false"),
+            Self::Null => f.write_str("null"),
 
-            Object::List(elements) => {
-                let mut retval = "[".to_string();
+            Self::List(elements) => {
+                f.write_str("[")?;
                 let mut iter = elements.iter().peekable();
                 while let Some(element) = iter.next() {
-                    retval += &element.to_string();
+                    f.write_fmt(format_args!("{}", element))?;
                     if iter.peek().is_some() {
-                        retval += ", ";
+                        f.write_str(", ")?;
                     }
                 }
-                retval += "]";
-                retval
+                f.write_str("]")
             }
 
-            Object::Map(elements) => {
-                let mut retval = "{".to_string();
+            Self::Map(elements) => {
+                f.write_str("{")?;
                 let mut iter = elements.iter().peekable();
                 while let Some((k, v)) = iter.next() {
-                    retval += k.as_str();
-                    retval += ": ";
-                    retval += &v.to_string();
+                    f.write_fmt(format_args!("{}: {}", k, v))?;
                     if iter.peek().is_some() {
-                        retval += ", ";
+                        f.write_str(", ")?;
                     }
                 }
-                retval += "}";
-                retval
+                f.write_str("}")
             }
 
-            _ => "?".to_string(),
+            _ => f.write_str("?"),
         }
+    }
+}
+
+impl TryFrom<ObjectVariant> for JsonValue {
+    type Error = Error;
+
+    fn try_from(value: ObjectVariant) -> Result<Self, Self::Error> {
+        match value {
+            ObjectVariant::Int(x) => i64::try_from(&x).map_err(|_| Error::new(Value::TooLarge)).map(JsonValue::from),
+            ObjectVariant::Float(x) => Ok(JsonValue::from(x)),
+            ObjectVariant::Str(x) => Ok(JsonValue::from(x.as_str())),
+            ObjectVariant::Boolean(x) => Ok(JsonValue::from(x)),
+            ObjectVariant::List(x) => {
+                let mut val = JsonValue::new_array();
+                for element in x.as_ref() {
+                    val.push(JsonValue::try_from(element.clone())?).unwrap();
+                }
+                Ok(val)
+            },
+            ObjectVariant::Map(x) => {
+                let mut val = JsonValue::new_object();
+                for (key, element) in x.as_ref() {
+                    val[key.as_str()] = JsonValue::try_from(element.clone())?;
+                }
+                Ok(val)
+            },
+            ObjectVariant::Null => Ok(JsonValue::Null),
+            _ => Err(Error::new(TypeMismatch::Json(value.type_of()))),
+        }
+    }
+}
+
+
+
+macro_rules! wrap1 {
+    ($name:ident) => {
+        pub fn $name(&self) -> Result<Self, Error> {
+            self.0.$name().map(Self)
+        }
+    };
+}
+
+macro_rules! wrap2 {
+    ($name:ident) => {
+        pub fn $name(&self, other: &Self) -> Result<Self, Error> {
+            self.0.$name(&other.0).map(Self)
+        }
+    };
+}
+
+
+macro_rules! extract {
+    ($index:expr , $args:ident , str) => { $args.get($index).and_then(|x| x.get_str()) };
+    ($index:expr , $args:ident , int) => { $args.get($index).and_then(|x| x.get_int()) };
+    ($index:expr , $args:ident , float) => { $args.get($index).and_then(|x| x.get_float()) };
+    ($index:expr , $args:ident , bool) => { $args.get($index).and_then(|x| x.get_bool()) };
+    ($index:expr , $args:ident , list) => { $args.get($index).and_then(|x| x.get_list()) };
+    ($index:expr , $args:ident , map) => { $args.get($index).and_then(|x| x.get_map()) };
+    ($index:expr , $args:ident , func) => { $args.get($index).and_then(|x| x.get_func()) };
+    ($index:expr , $args:ident , null) => { $args.get($index).and_then(|x| x.get_null()) };
+
+    ($index:expr , $args:ident , any) => { $args.get($index) };
+
+    ($index:expr , $args:ident , tofloat) => {
+        $args.get($index).and_then(|x| x.get_float()).or_else(
+            || $args.get($index).and_then(|x| x.get_int().map(|x| x.to_f64()))
+        )
+    };
+}
+
+
+#[macro_export]
+macro_rules! signature {
+    ($args:ident = [ $($param:ident : $type:ident),* ] $block:block) => {
+        signature!(0 ; $args [ $($param : $type),* ] , $block)
+    };
+
+    ($index:expr ; $args:ident [ $param:ident : $type:ident , $($params:ident : $types:ident),+ ] , $block:block) => {
+        if let Some($param) = extract!($index, $args, $type) {
+            signature!($index + 1 ; $args [ $($params : $types),* ] , $block)
+        }
+    };
+
+    ($index:expr ; $args:ident [ $param:ident : $type:ident ] , $block:block) => {
+        if let Some($param) = extract!($index, $args, $type) {
+            signature!($index + 1 ; $args [ ] , $block)
+        }
+    };
+
+    ($index:expr ; $args:ident [ ] , $block:block) => {
+        if $args.len() == $index $block
+    };
+}
+
+pub use signature;
+
+
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Object(ObjectVariant);
+
+impl Object {
+    pub fn str_interned(val: impl AsRef<str>) -> Self {
+        Self(ObjectVariant::Str(StrVariant::interned(val)))
+    }
+
+    pub fn str_natural(val: impl AsRef<str>) -> Self {
+        Self(ObjectVariant::Str(StrVariant::natural(val)))
+    }
+
+    pub fn str(val: impl AsRef<str>) -> Self {
+        if val.as_ref().len() < 20 {
+            Self::str_interned(val)
+        } else {
+            Self::str_natural(val)
+        }
+    }
+
+    pub fn key(val: Key) -> Self {
+        Self(ObjectVariant::Str(StrVariant::Interned(val)))
+    }
+
+    pub fn int<T>(val: T) -> Self
+    where
+        IntVariant: From<T>
+    {
+        Self(ObjectVariant::Int(IntVariant::from(val)))
+    }
+
+    pub fn bigint(x: impl AsRef<str>) -> Option<Self> {
+        BigInt::from_str(x.as_ref()).ok().map(|x| Self(ObjectVariant::from(x)))
+    }
+
+    pub fn float(val: f64) -> Self {
+        Self(ObjectVariant::Float(val))
+    }
+
+    pub fn bool(val: bool) -> Self {
+        Self(ObjectVariant::Boolean(val))
+    }
+
+    pub fn null() -> Self {
+        Self(ObjectVariant::Null)
+    }
+
+    pub fn func<T>(val: T) -> Self
+    where
+        FuncVariant: From<T>
+    {
+        Self(ObjectVariant::Func(FuncVariant::from(val)))
+    }
+
+    pub fn list(x: impl ToVec<Object>) -> Self {
+        Self(ObjectVariant::list(x))
+    }
+
+    pub fn map<T>(x: T) -> Self where T: ToMap<Key, Object> {
+        Self(ObjectVariant::map(x))
+    }
+
+    pub fn variant(&self) -> &ObjectVariant {
+        &self.0
+    }
+
+    pub fn serialize(&self) -> Option<Vec<u8>> {
+        let data = (SERIALIZE_VERSION, SystemTime::now(), self);
+        encode::to_vec(&data).ok()
+    }
+
+    pub fn serialize_write<T: Write + ?Sized>(&self, out: &mut T) -> Result<(), String> {
+        let data = (SERIALIZE_VERSION, SystemTime::now(), self);
+        encode::write(out, &data).map_err(|x| x.to_string())
+    }
+
+    pub fn deserialize(data: &Vec<u8>) -> Option<(Self, SystemTime)> {
+        let (version, time, retval) = decode::from_slice::<(i32, SystemTime, Self)>(data.as_slice()).ok()?;
+        if version < SERIALIZE_VERSION {
+            None
+        } else {
+            Some((retval, time))
+        }
+    }
+
+    pub fn deserialize_read<T: Read>(data: T) -> Result<(Self, SystemTime), String> {
+        let (version, time, retval) = decode::from_read::<T, (i32, SystemTime, Self)>(data).map_err(|x| x.to_string())?;
+        if version < SERIALIZE_VERSION {
+            Err("wrong version".to_string())
+        } else {
+            Ok((retval, time))
+        }
+    }
+
+    pub fn numeric_normalize(self) -> Self {
+        Self(self.0.numeric_normalize())
+    }
+
+    wrap1!{neg}
+    wrap2!{add}
+    wrap2!{sub}
+    wrap2!{mul}
+    wrap2!{div}
+    wrap2!{idiv}
+    wrap2!{pow}
+}
+
+impl Deref for Object {
+    type Target = ObjectVariant;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl FromIterator<Object> for Object {
+    fn from_iter<T: IntoIterator<Item = Object>>(iter: T) -> Self {
+        Object(ObjectVariant::List(Arc::new(iter.into_iter().collect())))
+    }
+}
+
+impl Display for Object {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self.0))
     }
 }
 
@@ -953,27 +1159,44 @@ impl TryFrom<Object> for JsonValue {
     type Error = Error;
 
     fn try_from(value: Object) -> Result<Self, Self::Error> {
-        match value {
-            Object::Int(x) => i64::try_from(x).map_err(|_| Error::new(Value::TooLarge)).map(JsonValue::from),
-            Object::Float(x) => Ok(JsonValue::from(x)),
-            Object::Str(x) => Ok(JsonValue::from(x.as_str())),
-            Object::Boolean(x) => Ok(JsonValue::from(x)),
-            Object::List(x) => {
-                let mut val = JsonValue::new_array();
-                for element in x.as_ref() {
-                    val.push(JsonValue::try_from(element.clone())?).unwrap();
-                }
-                Ok(val)
-            },
-            Object::Map(x) => {
-                let mut val = JsonValue::new_object();
-                for (key, element) in x.as_ref() {
-                    val[key.as_str()] = JsonValue::try_from(element.clone())?;
-                }
-                Ok(val)
-            },
-            Object::Null => Ok(JsonValue::Null),
-            _ => Err(Error::new(TypeMismatch::Json(value.type_of()))),
-        }
+        Self::try_from(value.0)
     }
 }
+
+impl From<bool> for Object {
+    fn from(value: bool) -> Self {
+        Object::bool(value)
+    }
+}
+
+impl From<i32> for Object {
+    fn from(value: i32) -> Self {
+        Object::int(value)
+    }
+}
+
+impl From<i64> for Object {
+    fn from(value: i64) -> Self {
+        Object::int(value)
+    }
+}
+
+impl From<f64> for Object {
+    fn from(value: f64) -> Self {
+        Object::float(value)
+    }
+}
+
+impl From<&str> for Object {
+    fn from(value: &str) -> Self {
+        Object::str(value)
+    }
+}
+
+impl From<Key> for Object {
+    fn from(value: Key) -> Self {
+        Object::key(value)
+    }
+}
+
+

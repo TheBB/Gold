@@ -70,9 +70,9 @@ impl<'a> FromExternalError<In<'a>, ParseFloatError> for SyntaxError {
 }
 
 
-fn literal<T>(x: T) -> Expr where Object: From<T> {
-    Object::from(x).literal()
-}
+// fn literal<T>(x: T) -> Expr where Object: From<T> {
+//     Object::from(x).literal()
+// }
 
 
 /// Convert a multiline string from source code to string by removing leading
@@ -531,12 +531,14 @@ fn map_identifier<'a>(input: In<'a>) -> Out<'a, Tagged<Key>> {
 fn number<'a>(input: In<'a>) -> Out<'a, PExpr> {
     naked(
         alt((
-            map_res(float, |span| span.as_ref().replace('_', "").parse::<f64>().map(|x| literal(x).tag(&span))),
+            map_res(float, |span| span.as_ref().replace('_', "").parse::<f64>().map(|x| Expr::Literal(Object::float(x)).tag(&span))),
             map_res(
                 integer,
                 |span| {
                     let text = span.as_ref().replace('_', "");
-                    let y = text.parse::<i64>().map(literal).or_else(|_| text.parse::<BigInt>().map(literal));
+                    let y = text.parse::<i64>().map(Object::int).or_else(
+                        |_| text.parse::<BigInt>().map(Object::int)
+                    ).map(Expr::Literal);
                     y.map(|x| x.tag(&span))
                 },
             ),
@@ -649,15 +651,15 @@ fn string<'a>(input: In<'a>) -> Out<'a, PExpr> {
 /// Matches a boolean literal.
 fn boolean<'a>(input: In<'a>) -> Out<'a, PExpr> {
     naked(alt((
-        map(keyword("false"), |tok| literal(false).tag(&tok)),
-        map(keyword("true"), |tok| literal(true).tag(&tok)),
+        map(keyword("false"), |tok| Expr::Literal(Object::bool(false)).tag(&tok)),
+        map(keyword("true"), |tok| Expr::Literal(Object::bool(true)).tag(&tok)),
     ))).parse(input)
 }
 
 
 /// Matches a null literal.
 fn null<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    naked(map(keyword("null"), |tok| literal(Object::Null).tag(&tok))).parse(input)
+    naked(map(keyword("null"), |tok| Expr::Literal(Object::null()).tag(&tok))).parse(input)
 }
 
 
@@ -793,7 +795,7 @@ fn map_key_singleton<'a>(input: In<'a>) -> Out<'a, (u32, PExpr)> {
 
             naked(map(
                 map_identifier,
-                |key| key.map(Object::from).map(Expr::Literal),
+                |key| key.map(Object::key).map(Expr::Literal),
             )),
         ))
     ))(input)
@@ -973,7 +975,7 @@ fn object_access<'a>(input: In<'a>) -> Out<'a, Tagged<Operator>> {
         tuple((dot, fail(identifier, SyntaxElement::Identifier))),
         |(dot, out)| Operator::BinOp(
             BinOp::Index.tag(&dot),
-            out.map(Object::from).map(Expr::Literal).to_box(),
+            out.map(Object::key).map(Expr::Literal).to_box(),
         ).tag(dot.span()..out.span()),
     )(input)
 }

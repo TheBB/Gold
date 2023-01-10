@@ -108,7 +108,7 @@ impl<'a> Namespace<'a> {
 
     pub fn get(&self, key: &Key) -> Result<Object, Error> {
         match self {
-            Namespace::Empty => BUILTINS.get(key.as_str()).cloned().map(Object::function).ok_or_else(|| Error::unbound(key.clone())),
+            Namespace::Empty => BUILTINS.get(key.as_str()).cloned().map(Object::func).ok_or_else(|| Error::unbound(key.clone())),
             Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| Error::unbound(key.clone())),
             Namespace::Mutable { names, prev } => names.get(key).map(Object::clone).ok_or(()).or_else(|_| prev.get(key))
         }
@@ -149,7 +149,7 @@ impl<'a> Namespace<'a> {
                             Some(val) => values.push(val.clone()),
                         }
                     }
-                    self.set(&*name, Object::from(values))?;
+                    self.set(&*name, Object::list(values))?;
                 }
             }
         }
@@ -193,21 +193,23 @@ impl<'a> Namespace<'a> {
                 }
             }
 
-            self.set(target, Object::from(values))?;
+            self.set(target, Object::map(values))?;
         }
 
         Ok(())
     }
 
     pub fn bind(&mut self, binding: &Tagged<Binding>, value: Object) -> Result<(), Error> {
-        match (binding.as_ref(), &value) {
-            (Binding::Identifier(key), val) => {
-                self.set(&*key, val.clone())?;
-                Ok(())
-            },
-            (Binding::List(bindings), Object::List(values)) => self.bind_list(&bindings.0, values).map_err(binding.tag_error(Action::Bind)),
-            (Binding::Map(bindings), Object::Map(values)) => self.bind_map(&bindings.0, values).map_err(binding.tag_error(Action::Bind)),
-            _ => Err(Error::new(Unpack::TypeMismatch(binding.type_of(), value.type_of())).tag(binding, Action::Bind)),
+        match binding.as_ref() {
+            Binding::Identifier(key) => self.set(&*key, value),
+            Binding::List(bindings) => {
+                let list = value.get_list().ok_or_else(|| Error::new(Unpack::TypeMismatch(binding.type_of(), value.type_of())).tag(binding, Action::Bind))?;
+                self.bind_list(&bindings.0, list).map_err(bindings.tag_error(Action::Bind))
+            }
+            Binding::Map(bindings) => {
+                let obj = value.get_map().ok_or_else(|| Error::new(Unpack::TypeMismatch(binding.type_of(), value.type_of())).tag(binding, Action::Bind))?;
+                self.bind_map(&bindings.0, obj).map_err(bindings.tag_error(Action::Bind))
+            }
         }
     }
 
@@ -221,7 +223,7 @@ impl<'a> Namespace<'a> {
 
             ListElement::Splat(node) => {
                 let val = self.eval(node)?;
-                if let Object::List(from_values) = val {
+                if let Some(from_values) = val.get_list() {
                     values.extend_from_slice(&*from_values);
                     Ok(())
                 } else {
@@ -239,7 +241,7 @@ impl<'a> Namespace<'a> {
 
             ListElement::Loop { binding, iterable, element } => {
                 let val = self.eval(iterable)?;
-                if let Object::List(from_values) = val {
+                if let Some(from_values) = val.get_list() {
                     let mut sub = self.subtend();
                     for entry in &*from_values {
                         sub.bind(binding, entry.clone())?;
@@ -256,21 +258,19 @@ impl<'a> Namespace<'a> {
     fn fill_map(&self, element: &Tagged<MapElement>, values: &mut Map) -> Result<(), Error> {
         match element.as_ref() {
             MapElement::Singleton { key, value } => {
-                match &self.eval(key)? {
-                    Object::Str(k) => {
-                        let v = self.eval(value)?;
-                        values.insert(Key::from(k), v);
-                        Ok(())
-                    },
-                    k => Err(
-                        Error::new(TypeMismatch::MapKey(k.type_of())).tag(key, Action::Assign)
-                    ),
+                let k = self.eval(key)?;
+                if let Some(k) = k.get_key() {
+                    let v = self.eval(value)?;
+                    values.insert(k, v);
+                    Ok(())
+                } else {
+                    Err(Error::new(TypeMismatch::MapKey(k.type_of())).tag(key, Action::Assign))
                 }
             },
 
             MapElement::Splat(node) => {
                 let val = self.eval(node)?;
-                if let Object::Map(from_values) = val {
+                if let Some(from_values) = val.get_map() {
                     for (k, v) in &*from_values {
                         values.insert(k.clone(), v.clone());
                     }
@@ -290,9 +290,9 @@ impl<'a> Namespace<'a> {
 
             MapElement::Loop { binding, iterable, element } => {
                 let val = self.eval(iterable)?;
-                if let Object::List(from_values) = val {
+                if let Some(from_values) = val.get_list() {
                     let mut sub = self.subtend();
-                    for entry in from_values.as_ref() {
+                    for entry in from_values {
                         sub.bind(&binding, entry.clone())?;
                         sub.fill_map(element, values)?;
                     }
@@ -309,31 +309,27 @@ impl<'a> Namespace<'a> {
             ArgElement::Singleton(node) => {
                 let val = self.eval(node)?;
                 args.push(val);
-                Ok(())
             },
 
             ArgElement::Splat(node) => {
                 let val = self.eval(node)?;
-                match val {
-                    Object::List(vals) => {
-                        args.extend_from_slice(&vals);
-                        Ok(())
-                    },
-                    Object::Map(vals) => {
-                        for (k, v) in vals.as_ref() {
-                            kwargs.insert(k.clone(), v.clone());
-                        }
-                        Ok(())
-                    },
-                    _ => Err(Error::new(TypeMismatch::SplatArg(val.type_of())).tag(node, Action::Splat)),
+                if let Some(list) = val.get_list() {
+                    args.extend_from_slice(list);
+                } else if let Some(obj) = val.get_map() {
+                    for (k, v) in obj {
+                        kwargs.insert(k.clone(), v.clone());
+                    }
+                } else {
+                    return Err(Error::new(TypeMismatch::SplatArg(val.type_of())).tag(node, Action::Splat))
                 }
             },
 
             ArgElement::Keyword(key, value) => {
                 kwargs.insert(**key, self.eval(value)?);
-                Ok(())
             }
         }
+
+        Ok(())
     }
 
     fn operate(&self, operator: &Operator, value: Object) -> Result<Object, Error> {
@@ -341,7 +337,7 @@ impl<'a> Namespace<'a> {
             Operator::UnOp(op) => {
                 match op.as_ref() {
                     UnOp::Passthrough => Ok(value),
-                    UnOp::LogicalNegate => Ok(Object::from(!value.truthy())),
+                    UnOp::LogicalNegate => Ok(Object::bool(!value.truthy())),
                     UnOp::ArithmeticalNegate => value.neg(),
                 }.map_err(op.tag_error(Action::Evaluate))
             },
@@ -364,15 +360,15 @@ impl<'a> Namespace<'a> {
                     BinOp::Less | BinOp::GreaterEqual => {
                         value.cmp_bool(&rhs, Ordering::Less)
                         .ok_or_else(|| Error::new(TypeMismatch::BinOp(value.type_of(), rhs.type_of(), **op)))
-                        .map(|x| Object::from(if **op == BinOp::Less { x } else { !x }))
+                        .map(|x| Object::bool(if **op == BinOp::Less { x } else { !x }))
                     }
                     BinOp::Greater | BinOp::LessEqual => {
                         value.cmp_bool(&rhs, Ordering::Greater)
                         .ok_or_else(|| Error::new(TypeMismatch::BinOp(value.type_of(), rhs.type_of(), **op)))
-                        .map(|x| Object::from(if **op == BinOp::Greater { x } else { !x }))
+                        .map(|x| Object::bool(if **op == BinOp::Greater { x } else { !x }))
                     }
-                    BinOp::Equal => Ok(Object::from(value.user_eq(&rhs))),
-                    BinOp::NotEqual => Ok(Object::from(!value.user_eq(&rhs))),
+                    BinOp::Equal => Ok(Object::bool(value.user_eq(&rhs))),
+                    BinOp::NotEqual => Ok(Object::bool(!value.user_eq(&rhs))),
                     BinOp::Index => value.index(&self.eval(node)?),
 
                     // Unreachable
@@ -420,7 +416,7 @@ impl<'a> Namespace<'a> {
                         }
                     }
                 }
-                Ok(Object::natural_string(rval))
+                Ok(Object::str_natural(rval))
             },
 
             Expr::Identifier(name) => self.get(name).map_err(node.tag_error(Action::LookupName)),
@@ -430,7 +426,7 @@ impl<'a> Namespace<'a> {
                 for element in elements {
                     self.fill_list(element, &mut values)?;
                 }
-                Ok(Object::from(values))
+                Ok(Object::list(values))
             },
 
             Expr::Map(elements) => {
@@ -438,7 +434,7 @@ impl<'a> Namespace<'a> {
                 for element in elements {
                     self.fill_map(element, &mut values)?;
                 }
-                Ok(Object::from(values))
+                Ok(Object::map(values))
             }
 
             Expr::Let { bindings, expression } => {
@@ -470,7 +466,7 @@ impl<'a> Namespace<'a> {
                     let val = self.get(&ident)?;
                     closure.insert(ident, val);
                 }
-                Ok(Object::function(Func {
+                Ok(Object::func(Func {
                     args: positional.clone(),
                     kwargs: keywords.clone(),
                     closure,

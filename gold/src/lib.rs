@@ -4,6 +4,9 @@
 #[macro_use]
 extern crate lazy_static;
 
+#[macro_use]
+pub mod object;
+
 mod ast;
 mod builtins;
 pub mod error;
@@ -13,10 +16,11 @@ mod parsing;
 mod traits;
 mod util;
 
-pub mod object;
-
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "python")]
+pub mod python;
 
 use std::fs::read_to_string;
 use std::path::Path;

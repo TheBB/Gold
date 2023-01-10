@@ -3,6 +3,9 @@ name = "gold"
 version = "2.0.4"
 edition = "2021"
 
+[features]
+python = ["dep:pyo3"]
+
 [dependencies]
 clap = { version = "4.0.18", features = ["derive"] }
 indexmap = { version = "1.9.2", features = ["serde"] }
@@ -12,6 +15,7 @@ nom = "7.1.1"
 nom_locate = "4.0.0"
 num-bigint = { version = "0.4.3", features = ["serde"] }
 num-traits = "0.2.15"
+pyo3 = { version = "0.17.3", optional = true }
 regex = "1.7.0"
 rmp-serde = "1.1.1"
 serde = { version = "1.0.147", features = ["rc", "serde_derive"] }
