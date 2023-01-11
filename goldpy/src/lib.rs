@@ -2,17 +2,13 @@ use std::path::PathBuf;
 
 use pyo3::prelude::*;
 
-use gold::{CallableResolver, Object};
-use gold::python::{err_to_py, Function};
+use gold::{Object};
+use gold::python::{err_to_py, Function, ImportConfig};
 
 
 #[pyfunction]
-fn eval(x: String, path: Option<String>, resolver: CallableResolver) -> PyResult<Object> {
-    gold::eval(
-        x.as_ref(),
-        path.map(PathBuf::from).as_ref().map(PathBuf::as_ref),
-        &resolver,
-    ).map_err(err_to_py)
+fn eval(x: String, resolver: ImportConfig) -> PyResult<Object> {
+    gold::eval(x.as_ref(), &resolver.to_gold()).map_err(err_to_py)
 }
 
 
@@ -35,6 +31,7 @@ fn eval_file(x: String) -> PyResult<Object> {
 #[pymodule]
 fn goldpy(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Function>()?;
+    m.add_class::<ImportConfig>()?;
     m.add_function(wrap_pyfunction!(eval, m)?)?;
     m.add_function(wrap_pyfunction!(eval_raw, m)?)?;
     m.add_function(wrap_pyfunction!(eval_file, m)?)?;

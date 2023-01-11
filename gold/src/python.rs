@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use num_bigint::BigInt;
@@ -7,7 +8,7 @@ use pyo3::types::{PyList, PyDict, PyTuple, PyString};
 use pyo3::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError, PyException, PySyntaxError, PyNameError, PyKeyError, PyOSError, PyImportError};
 
-use crate::eval::{CallableResolver, ResolveFunc};
+use crate::eval::{ImportConfig as GoldImportConfig};
 use crate::object::{Object, FuncVariant, List, Map, Key, Closure, ObjectVariant, IntVariant};
 use crate::error::{Error, Reason};
 
@@ -145,27 +146,56 @@ impl pyo3::IntoPy<PyObject> for Object {
 }
 
 
-/// Convert Python callables to CallableResolver.
-impl<'s> FromPyObject<'s> for CallableResolver {
+struct ImportFunction(Arc<dyn Fn(&str) -> Result<Option<Object>, Error> + Send + Sync>);
+
+impl<'s> FromPyObject<'s> for ImportFunction {
     fn extract(obj: &'s PyAny) -> PyResult<Self> {
         if obj.is_callable() {
             let func: Py<PyAny> = obj.into();
-            let closure = ResolveFunc(Arc::new(
-                move |path: &str| {
-                    let result = Python::with_gil(|py| {
-                        let s = PyString::new(py, path);
-                        let a = PyTuple::new(py, vec![s]);
-                        let result = func.call(py, a, None).ok()?.extract::<Option<Object>>(py).ok()?;
-                        result
-                    });
-                    result.ok_or_else(Error::default)
-                }
-            ));
-            Ok(CallableResolver { resolver: closure })
+            let closure = move |path: &str| {
+                let result = Python::with_gil(|py| {
+                    let pypath = PyString::new(py, path);
+                    let pyargs = PyTuple::new(py, vec![pypath]);
+                    let result = func.call(py, pyargs, None)?;
+                    result.extract::<Option<Object>>(py)
+                });
+
+                result.map_err(|err| Error::new(Reason::External(err.to_string())))
+            };
+            Ok(ImportFunction(Arc::new(closure)))
         } else {
             Err(PyTypeError::new_err(
-                format!("uncovertible type: {}, expected callable", obj.get_type().name().unwrap_or("unknown"))
+                format!("got {}, expected callable", obj.get_type().name().unwrap_or("unknown"))
             ))
+        }
+    }
+}
+
+
+#[pyclass]
+#[derive(Clone)]
+pub struct ImportConfig {
+    pub root_path: Option<String>,
+    pub custom: Option<Arc<dyn Fn(&str) -> Result<Option<Object>, Error> + Send + Sync>>,
+}
+
+#[pymethods]
+impl ImportConfig {
+    #[new]
+    #[args(root = "None", custom = "None")]
+    fn new(root: Option<String>, custom: Option<ImportFunction>) -> Self {
+        ImportConfig {
+            root_path: root,
+            custom: custom.map(|x| x.0),
+        }
+    }
+}
+
+impl ImportConfig {
+    pub fn to_gold(&self) -> GoldImportConfig {
+        GoldImportConfig {
+            root_path: self.root_path.as_ref().map(|x| PathBuf::from(x)),
+            custom: self.custom.clone(),
         }
     }
 }

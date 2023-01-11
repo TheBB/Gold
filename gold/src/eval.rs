@@ -13,70 +13,35 @@ use crate::traits::Free;
 const STDLIB: &str = include_str!("std.gold");
 
 
-pub trait ImportResolver {
-    fn resolve(&self, path: &str) -> Result<Object, Error>;
+#[derive(Clone, Default)]
+pub struct ImportConfig {
+    pub root_path: Option<PathBuf>,
+    pub custom: Option<Arc<dyn Fn(&str) -> Result<Option<Object>, Error> + Send + Sync>>,
 }
 
+impl ImportConfig {
+    pub fn with_path(path: PathBuf) -> Self {
+        Self {
+            root_path: Some(path),
+            ..Default::default()
+        }
+    }
 
-pub struct StdResolver { }
-
-impl ImportResolver for StdResolver {
     fn resolve(&self, path: &str) -> Result<Object, Error> {
         match path {
-            "std" => eval_str(STDLIB),
-            _ => Err(Error::new(Reason::UnknownImport(path.to_owned()))),
-        }
-    }
-}
-
-
-pub struct FileResolver {
-    pub root: PathBuf,
-}
-
-impl ImportResolver for FileResolver {
-    fn resolve(&self, path: &str) -> Result<Object, Error> {
-        let target = self.root.join(path);
-        eval_file(&target)
-    }
-}
-
-
-pub struct ResolveFunc(
-    pub Arc<dyn Fn(&str) -> Result<Object, Error> + Send + Sync>
-);
-
-pub struct CallableResolver {
-    pub resolver: ResolveFunc,
-}
-
-impl ImportResolver for CallableResolver {
-    fn resolve(&self, path: &str) -> Result<Object, Error> {
-        self.resolver.0.as_ref()(path)
-    }
-}
-
-
-pub struct SeqResolver<'a> {
-    pub resolvers: Vec<Box<&'a dyn ImportResolver>>,
-}
-
-impl<'a> ImportResolver for SeqResolver<'a> {
-    fn resolve(&self, path: &str) -> Result<Object, Error> {
-        for resolver in &self.resolvers {
-            if let Ok(obj) = resolver.resolve(path) {
-                return Ok(obj)
+            "std" => { return eval_str(STDLIB) },
+            _ => {
+                if let Some(resolver) = &self.custom {
+                    if let Some(result) = resolver(path)? {
+                        return Ok(result);
+                    }
+                }
+                if let Some(root) = &self.root_path {
+                    let target = root.join(path);
+                    return eval_file(&target)
+                }
             }
         }
-        Err(Error::new(Reason::UnknownImport(path.to_owned())))
-    }
-}
-
-
-pub struct NullResolver {}
-
-impl ImportResolver for NullResolver {
-    fn resolve(&self, path: &str) -> Result<Object, Error> {
         Err(Error::new(Reason::UnknownImport(path.to_owned())))
     }
 }
@@ -387,7 +352,7 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    pub fn eval_file<T: ImportResolver>(&mut self, file: &File, importer: &T) -> Result<Object, Error> {
+    pub fn eval_file(&mut self, file: &File, importer: &ImportConfig) -> Result<Object, Error> {
         let mut ns = self.subtend();
         for statement in &file.statements {
             match statement {
@@ -478,26 +443,6 @@ impl<'a> Namespace<'a> {
 }
 
 
-pub fn eval_raw<T: ImportResolver>(file: &File, resolver: &T) -> Result<Object, Error> {
-    let resolver = SeqResolver {
-        resolvers: vec![
-            Box::new(&StdResolver {}),
-            Box::new(resolver),
-        ],
-    };
-    Namespace::Empty.eval_file(file, &resolver)
-}
-
-
-pub fn eval_path<T: ImportResolver>(file: &File, path: &Path, resolver: &T) -> Result<Object, Error> {
-    let parent = path.parent().ok_or_else(|| Error::new(FileSystem::NoParent(path.to_owned())))?;
-    let file_resolver = FileResolver { root: parent.to_owned() };
-    let resolver = SeqResolver {
-        resolvers: vec![
-            Box::new(&StdResolver {}),
-            Box::new(resolver),
-            Box::new(&file_resolver),
-        ],
-    };
-    Namespace::Empty.eval_file(file, &resolver)
+pub fn eval(file: &File, importer: &ImportConfig) -> Result<Object, Error> {
+    Namespace::Empty.eval_file(file, importer)
 }
