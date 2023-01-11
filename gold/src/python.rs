@@ -172,10 +172,15 @@ impl<'s> FromPyObject<'s> for ImportFunction {
 }
 
 
+/// Python version of the [`ImportConfig`] struct.
 #[pyclass]
 #[derive(Clone)]
 pub struct ImportConfig {
+
+    /// Corresponds to [`ImportConfig::root_path`].
     pub root_path: Option<String>,
+
+    /// Corresponds to [`ImportConfig::custom`].
     pub custom: Option<Arc<dyn Fn(&str) -> Result<Option<Object>, Error> + Send + Sync>>,
 }
 
@@ -192,6 +197,7 @@ impl ImportConfig {
 }
 
 impl ImportConfig {
+    /// Convert the Python object to a Rust object.
     pub fn to_gold(&self) -> GoldImportConfig {
         GoldImportConfig {
             root_path: self.root_path.as_ref().map(|x| PathBuf::from(x)),
