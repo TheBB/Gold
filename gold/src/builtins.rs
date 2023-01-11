@@ -133,7 +133,7 @@ macro_rules! argcount {
 
 
 /// Return the size of a collection or the length of a string.
-pub fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
         return Ok(Object::int(x.chars().count()))
     });
@@ -153,7 +153,7 @@ pub fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Works similarly to Python's function of the same name.
-pub fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [start: int, stop: int] {
         return Ok((start.clone()..stop.clone()).map(Object::int).collect())
     });
@@ -172,7 +172,7 @@ pub fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Convert the argument to an integer
-pub fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
         return Ok(Object::int(x.clone()))
     });
@@ -198,7 +198,7 @@ pub fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Convert the argument to a float
-pub fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
         return Ok(Object::float(x.to_f64()))
     });
@@ -224,7 +224,7 @@ pub fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Convert the argument to a bool (this never fails, see Gold's truthiness rules)
-pub fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: any] {
         return Ok(Object::bool(x.truthy()))
     });
@@ -234,7 +234,7 @@ pub fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Convert the argument to a string
-pub fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
         return Ok(Object::str(x))
     });
@@ -252,7 +252,7 @@ pub fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// ```ignore
 /// [for x in y: f(x)]
 /// ```
-pub fn map(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn map(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [f: func, x: list] {
         let mut ret = List::new();
         for obj in x {
@@ -274,7 +274,7 @@ pub fn map(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// ```ignore
 /// [for x in y: when f(x): x]
 /// ```
-pub fn filter(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn filter(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [f: func, x: list] {
         let mut ret = List::new();
         for obj in x {
@@ -294,7 +294,7 @@ pub fn filter(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Return a list of key-value pairs from a map.
-pub fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: map] {
         let mut ret = List::new();
         for (key, val) in x {
@@ -316,7 +316,7 @@ pub fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 ///
 /// `exp(x)` is equivalent to `exp(x, base: 2.71828...)` while `exp(x, base: y)`
 /// computes y to the power x (which is the same as `y^x`).
-pub fn exp(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+fn exp(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [exp: tofloat] kwargs = {base: tofloat} {
         return Ok(Object::float(base.powf(exp)))
     });
@@ -337,7 +337,7 @@ pub fn exp(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
 ///
 /// `log(x)` is equivalent to `log(x, base: 2.71828...)` (the natural logarithm),
 /// while `log(x, base: y)` computes the logarith of `x` to the base `y`.
-pub fn log(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+fn log(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [num: tofloat] kwargs = {base: tofloat} {
         return Ok(Object::float(num.log(base)))
     });
@@ -355,7 +355,7 @@ pub fn log(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Return the unicode codepoint corresponding to a single-character string.
-pub fn ord(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn ord(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
         let mut chars = x.chars();
         let c = chars.next();
@@ -373,7 +373,7 @@ pub fn ord(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 /// Return the character (as a single-character string) that corresponds to
 /// a unicode codepoint.
-pub fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
         let codepoint = u32::try_from(x).map_err(|_| Error::new(Value::OutOfRange))?;
         let c = char::try_from(codepoint).map_err(|_| Error::new(Value::OutOfRange))?;
@@ -387,7 +387,7 @@ pub fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Check whether the argument is an integer.
-pub fn isint(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn isint(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: int] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
@@ -395,7 +395,7 @@ pub fn isint(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Check whether the argument is a string.
-pub fn isstr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn isstr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: str] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
@@ -403,7 +403,7 @@ pub fn isstr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Check whether the argument is null.
-pub fn isnull(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn isnull(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: null] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
@@ -411,7 +411,7 @@ pub fn isnull(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Check whether the argument is a boolean.
-pub fn isbool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn isbool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: bool] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
@@ -419,7 +419,7 @@ pub fn isbool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Check whether the argument is a float.
-pub fn isfloat(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn isfloat(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: float] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
@@ -427,7 +427,7 @@ pub fn isfloat(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Check whether the argument is a number (integer or float).
-pub fn isnumber(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn isnumber(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: float] { return Ok(Object::bool(true)); });
     signature!(args = [_x: int] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
@@ -436,7 +436,7 @@ pub fn isnumber(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Check whether the argument is an object (a mapping).
-pub fn isobject(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn isobject(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: map] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
@@ -444,7 +444,7 @@ pub fn isobject(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Check whether the argument is a list.
-pub fn islist(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn islist(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: list] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
@@ -452,7 +452,7 @@ pub fn islist(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Check whether the argument is a function.
-pub fn isfunc(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+fn isfunc(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: func] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
