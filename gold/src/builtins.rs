@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::collections::HashMap;
 
 use crate::error::Value;
-use crate::object::{Object, List, Map, Builtin, Type, signature, IntVariant, Key};
+use crate::object::{Object, List, Map, Builtin, Type, signature, IntVariant};
 use crate::error::{Error, TypeMismatch};
 
 
@@ -23,7 +23,7 @@ macro_rules! builtin {
             stringify!($e),
             Builtin {
                 func: $e,
-                name: Key::new(stringify!($e).to_string()),
+                name: $crate::object::Key::new(stringify!($e).to_string()),
             },
         )
     };

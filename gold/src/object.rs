@@ -1202,10 +1202,10 @@ macro_rules! extract {
 
 
 macro_rules! extractkw {
-    ($kwargs:ident , $key:ident , any) => { $kwargs.and_then(|kws| kws.get(&Key::from(stringify!($key)))) };
+    ($kwargs:ident , $key:ident , any) => { $kwargs.and_then(|kws| kws.get(&$crate::object::Key::from(stringify!($key)))) };
 
     ($kwargs:ident , $key:ident , tofloat) => {{
-        let key = Key::from(stringify!($key));
+        let key = $crate::object::Key::from(stringify!($key));
         $kwargs.and_then(
             |kws| kws.get(&key).and_then(|x| x.get_float()).or_else(
                 || kws.get(&key).and_then(|x| x.get_int().map(|x| x.to_f64()))
