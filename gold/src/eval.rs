@@ -332,9 +332,9 @@ impl<'a> Namespace<'a> {
         Ok(())
     }
 
-    fn operate(&self, operator: &Operator, value: Object) -> Result<Object, Error> {
-        match operator {
-            Operator::UnOp(op) => {
+    fn transform(&self, transform: &Transform, value: Object) -> Result<Object, Error> {
+        match transform {
+            Transform::UnOp(op) => {
                 match op.as_ref() {
                     UnOp::Passthrough => Ok(value),
                     UnOp::LogicalNegate => Ok(Object::bool(!value.truthy())),
@@ -342,7 +342,7 @@ impl<'a> Namespace<'a> {
                 }.map_err(op.tag_error(Action::Evaluate))
             },
 
-            Operator::BinOp(op, node) => {
+            Transform::BinOp(op, node) => {
                 match op.as_ref() {
                     BinOp::And => return if value.truthy() { self.eval(node) } else { Ok(value) },
                     BinOp::Or => return if value.truthy() { Ok(value) } else { self.eval(node) },
@@ -376,7 +376,7 @@ impl<'a> Namespace<'a> {
                 }.map_err(op.tag_error(Action::Evaluate))
             },
 
-            Operator::FunCall(elements) => {
+            Transform::FunCall(elements) => {
                 let mut call_args: List = vec![];
                 let mut call_kwargs: Map = Map::new();
                 for element in elements.as_ref() {
@@ -446,9 +446,9 @@ impl<'a> Namespace<'a> {
                 sub.eval(expression)
             },
 
-            Expr::Operator { operand, operator } => {
+            Expr::Transformed { operand, transform } => {
                 let x = self.eval(operand)?;
-                self.operate(operator, x)
+                self.transform(transform, x)
             },
 
             Expr::Branch { condition, true_branch, false_branch } => {

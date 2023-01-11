@@ -1060,8 +1060,8 @@ fn operators() {
             .gt(2.expr(4), 2).tag(0..5)
             .lte(3.expr(9), 6..8).tag(0..10)
             .gte(4.expr(14), 11..13).tag(0..15)
-            .eql(5.expr(19), 16..18).tag(0..20)
-            .neql(6.expr(24), 21..23).tag(0..25)
+            .equal(5.expr(19), 16..18).tag(0..20)
+            .not_equal(6.expr(24), 21..23).tag(0..25)
         ),
     );
 

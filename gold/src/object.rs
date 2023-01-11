@@ -1,3 +1,17 @@
+//! A Gold object is represented by the [`Object`] type. Internally an Object
+//! just wraps the [`ObjectVariant`] enumeration, which is hidden for
+//! encapsulation purposes. Use the [`Object::variant`] method to access it.
+//!
+//! The [`ObjectVariant`] type, in turn, has only unit wrappers for each of its
+//! variants. Some of those variants are implemented in this module (e.g.
+//! [`StrVariant`] for interned and non-interned string and [`IntVariant`] for
+//! machine integers and bignums).
+//!
+//! User code should consider the internal structure of [`ObjectVariant`] and
+//! all its variants to be unstable. Public methods on [`Object`] and
+//! [`ObjectVariant`] (`Object` implements `Deref<ObjectVariant>`) are stable.
+
+
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::io::{Read, Write};
@@ -25,8 +39,64 @@ use crate::eval::Namespace;
 use crate::util;
 
 
-// A Gold object is represented by the
+/// This type is used for all interned strings, map keys, variable names, etc.
+pub type Key = GlobalSymbol;
 
+/// The basic type for a list of objects.
+pub type List = Vec<Object>;
+
+/// The basic type for a mapping of objects indexed by strings (in actuality, [`Key`]).
+pub type Map = IndexMap<Key, Object>;
+
+/// The current serialization format version.
+const SERIALIZE_VERSION: i32 = 1;
+
+
+/// Enumerates all the possible Gold object types.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Type {
+    /// IntVariant
+    Integer,
+
+    /// f64
+    Float,
+
+    /// StrVariant
+    String,
+
+    /// bool
+    Boolean,
+
+    /// Vec<Object>
+    List,
+
+    /// IndexMap<Key, Object>
+    Map,
+
+    /// FuncVariant
+    Function,
+
+    /// The empty variant
+    Null,
+}
+
+// It's desirable that these names correspond to the built-in conversion
+// functions. When Gold gets proper support for types, this source of ambiguity
+// will be rectified.
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Integer => f.write_str("int"),
+            Self::Float => f.write_str("float"),
+            Self::String => f.write_str("str"),
+            Self::Boolean => f.write_str("bool"),
+            Self::List => f.write_str("list"),
+            Self::Map => f.write_str("map"),
+            Self::Function => f.write_str("function"),
+            Self::Null => f.write_str("null"),
+        }
+    }
+}
 
 
 // String variant
@@ -48,9 +118,21 @@ fn escape(s: &str) -> String {
 }
 
 
+/// The string variant represents all possible Gold strings.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub enum StrVariant {
+
+    /// Interned string. All strings that fall in the following categories are interned:
+    /// - identifiers
+    /// - map keys
+    /// - strings no more than 20 characters long
+    ///
+    /// Note that Gold does not garbage-collect interned strings.
     Interned(Key),
+
+    /// Natural (non-interned) string. If a string is not interned, or if it
+    /// requires runtime evaluation (e.g. it is interpolated, or is the result
+    /// of concatenation), then it is not interned.
     Natural(Arc<String>),
 }
 
@@ -60,7 +142,7 @@ impl PartialOrd<StrVariant> for StrVariant {
     }
 }
 
-impl From<&StrVariant> for GlobalSymbol {
+impl From<&StrVariant> for Key {
     fn from(value: &StrVariant) -> Self {
         match value {
             StrVariant::Interned(x) => *x,
@@ -76,14 +158,17 @@ impl Display for StrVariant {
 }
 
 impl StrVariant {
+    /// Construct a new interned string.
     pub fn interned<T: AsRef<str>>(x: T) -> Self {
         Self::Interned(Key::new(x))
     }
 
+    /// Construct a new natural (non-interned string).
     pub fn natural<T: AsRef<str>>(x: T) -> Self {
         Self::Natural(Arc::new(x.as_ref().to_string()))
     }
 
+    /// Access the internal string slice.
     pub fn as_str(&self) -> &str {
         match self {
             Self::Interned(x) => x.as_str(),
@@ -91,19 +176,16 @@ impl StrVariant {
         }
     }
 
-    fn format(&self) -> String {
-        self.as_str().to_string()
-    }
-
+    /// User (non-structural) equality does not differentiate between interned
+    /// or non-interned strings.
     fn user_eq(&self, other: &StrVariant) -> bool {
         match (self, other) {
             (Self::Interned(x), Self::Interned(y)) => x == y,
-            (Self::Natural(x), Self::Interned(y)) => x.as_str() == y.as_str(),
-            (Self::Interned(x), Self::Natural(y)) => x.as_str() == y.as_str(),
-            (Self::Natural(x), Self::Natural(y)) => x.as_str() == y.as_str(),
+            _ => self.as_str() == other.as_str(),
         }
     }
 
+    /// Concatenate two string variants (the + operator for strings).
     fn add(&self, other: &StrVariant) -> StrVariant {
         Self::natural(format!("{}{}", self.as_str(), other.as_str()))
     }
@@ -115,9 +197,14 @@ impl StrVariant {
 // ------------------------------------------------------------------------------------------------
 
 
+/// The integer variant represents all possible Gold integers.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub enum IntVariant {
+
+    /// Machine integers.
     Small(i64),
+
+    /// Bignums.
     Big(Arc<BigInt>),
 }
 
@@ -143,7 +230,12 @@ impl PartialOrd<f64> for IntVariant {
         match self {
             Self::Small(x) => (*x as f64).partial_cmp(other),
             Self::Big(x) => {
+                // Unfortunately the bigint library doesn't perform comparison with floats.
+                // Compute the floor and ceil of the float in as bignums
                 let (lo, hi) = util::f64_to_bigs(*other);
+
+                // A bignum is equal to a float if the floor, ceil and bignum
+                // are all equal to each other.
                 if x.as_ref() < &lo || x.as_ref() == &lo && lo != hi {
                     Some(Ordering::Less)
                 } else if x.as_ref() > &hi || x.as_ref() == &hi && lo != hi {
@@ -159,12 +251,6 @@ impl PartialOrd<f64> for IntVariant {
 impl From<BigInt> for IntVariant {
     fn from(value: BigInt) -> Self {
         Self::Big(Arc::new(value))
-    }
-}
-
-impl From<&i64> for IntVariant {
-    fn from(x: &i64) -> Self {
-        Self::Small(*x)
     }
 }
 
@@ -245,18 +331,23 @@ impl Step for IntVariant {
 }
 
 impl IntVariant {
+
+    /// Sum of two integers. This implements the addition operator.
     fn add(&self, other: &IntVariant) -> IntVariant {
         IntVariant::normalize(self.operate(other, i64::checked_add, |x,y| x + y))
     }
 
+    /// Difference of two integers. This implements the subtraaction operator.
     fn sub(&self, other: &IntVariant) -> IntVariant {
         IntVariant::normalize(self.operate(other, i64::checked_sub, |x,y| x - y))
     }
 
+    /// Product of two integers. This implements the multiplication operator.
     fn mul(&self, other: &IntVariant) -> IntVariant {
         IntVariant::normalize(self.operate(other, i64::checked_mul, |x,y| x * y))
     }
 
+    /// Mathematical ratio of two integers. This implements the division operator.
     fn div(&self, other: &IntVariant) -> f64 {
         self.operate(
             other,
@@ -265,14 +356,26 @@ impl IntVariant {
         )
     }
 
+    /// Integer division.
     fn idiv(&self, other: &IntVariant) -> IntVariant {
         IntVariant::normalize(self.operate(other, i64::checked_div, |x,y| x / y))
     }
 
-    fn operate<F,G,S,T,U>(&self, other: &IntVariant, ixi: F, bxb: G) -> U
-    where
-        F: Fn(i64, i64) -> Option<S>,
-        G: Fn(&BigInt, &BigInt) -> T,
+    /// Universal utility method for implementing operators.
+    ///
+    /// If both operands are integers, the `ixi` function is applied, which is
+    /// allowed to fail (in case of overflow, say). If it fails, or if either
+    /// operand is not an integer, both operands are converted to bignums and
+    /// the `bxb` function is applied. This one may not fail.
+    ///
+    /// This method does not apply normalization to the result. That is the
+    /// responsibility of the caller.
+    fn operate<S,T,U>(
+        &self,
+        other: &IntVariant,
+        ixi: impl Fn(i64, i64) -> Option<S>,
+        bxb: impl Fn(&BigInt, &BigInt) -> T,
+    ) -> U where
         U: From<S> + From<T>,
     {
         match (self, other) {
@@ -285,6 +388,7 @@ impl IntVariant {
         }
     }
 
+    /// Unary (mathematical) negation.
     fn neg(&self) -> IntVariant {
         match self {
             Self::Small(x) => {
@@ -298,6 +402,8 @@ impl IntVariant {
         }
     }
 
+    /// Attempt 'small' exponentiation: if the exponent fits into `usize` and
+    /// the result fits into `i64`.
     fn small_pow(&self, other: &IntVariant) -> Option<IntVariant> {
         if let (Self::Small(x), Self::Small(y)) = (self, other) {
             let yy: usize = (*y).try_into().ok()?;
@@ -307,6 +413,8 @@ impl IntVariant {
         }
     }
 
+    /// Attempt 'medium' exponentiation: if the exponent fits into `u32`.
+    /// This uses the `BigInt::pow` method.
     fn medium_pow(&self, other: &IntVariant) -> Option<IntVariant> {
         let yy: u32 = other.try_into().ok()?;
 
@@ -316,6 +424,9 @@ impl IntVariant {
         }
     }
 
+    /// Attempt 'large' exponentiation: brute force multiplication of bignums.
+    /// Almost certainly pointless if `medium_pow` fails, but included for
+    /// completeness.
     fn big_pow(&self, other: &IntVariant) -> Option<IntVariant> {
         if other.eq(&IntVariant::from(0)) {
             return Some(IntVariant::from(1));
@@ -355,12 +466,18 @@ impl IntVariant {
         Some(IntVariant::from(acc))
     }
 
+    /// Attempt exponentiation. This will try, in order, three different
+    /// algorithms, from fast for small numbers to slow for large numbers.
+    /// Should only return None if the exponent is negative.
     fn pow(&self, other: &IntVariant) -> Option<IntVariant> {
         self.small_pow(other)
             .or_else(|| self.medium_pow(other))
             .or_else(|| self.big_pow(other))
+            .map(IntVariant::normalize)
     }
 
+    /// Normalize self by converting bignums to machine integers when possible.
+    /// Used as a postprocesssing step for most arithmetic operations.
     fn normalize(self) -> IntVariant {
         if let Self::Big(x) = &self {
             x.to_i64().map(IntVariant::Small).unwrap_or(self)
@@ -369,6 +486,7 @@ impl IntVariant {
         }
     }
 
+    /// Convert to a float.
     pub fn to_f64(&self) -> f64 {
         match self {
             Self::Small(x) => *x as f64,
@@ -376,6 +494,7 @@ impl IntVariant {
         }
     }
 
+    /// Return true if this number is nonzero.
     fn nonzero(&self) -> bool {
         match self {
             Self::Small(x) => *x != 0,
@@ -383,6 +502,10 @@ impl IntVariant {
         }
     }
 
+    /// User (not structural) equality does not differentiatie between bignums
+    /// and machine integers, even though it should be impossible to create two
+    /// distinct representations of the same number, as all arithmetic uses
+    /// [`IntVariant::normalize`] as a postprocessing step.
     fn user_eq(&self, other: &IntVariant) -> bool {
         match (self, other) {
             (Self::Small(x), Self::Small(y)) => x.eq(y),
@@ -399,11 +522,20 @@ impl IntVariant {
 // ------------------------------------------------------------------------------------------------
 
 
+/// A builtin function is a 'pure' function implemented in Rust associated with
+/// a name. The name is used for serializing. When deserializing, the name is
+/// looked up in the [`BUILTINS`] mapping.
 #[derive(Clone)]
 pub struct Builtin {
-    pub func: RFunc,
+
+    /// The rust callable for evaluating the function.
+    pub func: fn(&List, Option<&Map>) -> Result<Object, Error>,
+
+    /// The name of the function.
     pub name: Key,
 }
+
+// Custom serialization and deserialization logic.
 
 impl Serialize for Builtin {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -432,24 +564,46 @@ impl<'a> Deserialize<'a> for Builtin {
 }
 
 
+/// A function implemented in Gold.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Func {
+
+    /// A pattern for destructuring a list of positional arguments.
     pub args: ListBinding,
+
+    /// A pattern for destructuring a map of keyword arguments.
     pub kwargs: Option<MapBinding>,
+
+    /// A mapping of captured bindings from the point-of-definition of the
+    /// closure.
     pub closure: Map,
+
+    /// The expression to evaluate.
     pub expr: Tagged<Expr>,
 }
 
 
+/// A 'pure' function implemented in Rust. Unlike [`Builtin`], this form of
+/// function is backed by a dynamic callable object, which can be anything, such
+/// as a closure. Such objects can be created dynamically, and are thus
+/// necessary for implementing Gold-callable functions in other languages like
+/// Python. This also makes them inherently non-serializable.
 #[derive(Clone)]
 pub struct Closure(pub Arc<dyn Fn(&List, Option<&Map>) -> Result<Object, Error> + Send + Sync>);
 
 
+/// The function variant represents all possible forms of callable objects in
+/// Gold.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum FuncVariant {
+
+    /// Function implemented in Gold.
     Func(Arc<Func>),
+
+    /// Static (serializable) function implemented in Rust.
     Builtin(Builtin),
 
+    /// Dynamic (unserializable) function implemented in Rust.
     #[serde(skip)]
     Closure(Closure),
 }
@@ -483,6 +637,7 @@ impl From<Closure> for FuncVariant {
 }
 
 impl FuncVariant {
+    /// All functions in Gold compare different to each other except built-ins.
     fn user_eq(&self, other: &FuncVariant) -> bool {
         match (self, other) {
             (FuncVariant::Builtin(x), FuncVariant::Builtin(y)) => x.name == y.name,
@@ -490,6 +645,7 @@ impl FuncVariant {
         }
     }
 
+    /// Call this function with positional and keyword arguments.
     pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
         match self {
             Self::Builtin(Builtin { func, .. }) => func(args, kwargs),
@@ -497,16 +653,23 @@ impl FuncVariant {
             Self::Func(func) => {
                 let Func { args: fargs, kwargs: fkwargs, closure, expr } = func.as_ref();
 
+                // Create a new namespace from the enclosed-over bindings.
                 let ns = Namespace::Frozen(closure);
+
+                // Create a mutable sub-namespace for function parameters.
                 let mut sub = ns.subtend();
+
+                // Bind the positional arguments.
                 sub.bind_list(&fargs.0, args)?;
 
+                // Bind the keyword arguments.
                 match (fkwargs, kwargs) {
                     (Some(b), Some(k)) => { sub.bind_map(&b.0, k)?; },
                     (Some(b), None) => { sub.bind_map(&b.0, &Map::new())?; },
                     _ => {},
                 }
 
+                // Evaluate the function.
                 sub.eval(expr)
             }
         }
@@ -514,55 +677,43 @@ impl FuncVariant {
 }
 
 
-pub type Key = GlobalSymbol;
-pub type List = Vec<Object>;
-pub type Map = IndexMap<Key, Object>;
-pub type RFunc = fn(&List, Option<&Map>) -> Result<Object, Error>;
+
+// Object variant
+// ------------------------------------------------------------------------------------------------
 
 
-const SERIALIZE_VERSION: i32 = 1;
-
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Type {
-    Integer,
-    Float,
-    String,
-    Boolean,
-    List,
-    Map,
-    Function,
-    Null,
-}
-
-impl Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Integer => f.write_str("int"),
-            Self::Float => f.write_str("float"),
-            Self::String => f.write_str("str"),
-            Self::Boolean => f.write_str("bool"),
-            Self::List => f.write_str("list"),
-            Self::Map => f.write_str("map"),
-            Self::Function => f.write_str("function"),
-            Self::Null => f.write_str("null"),
-        }
-    }
-}
-
-
-#[derive(Clone, Serialize, Deserialize)]
+/// The object variant implements all possible variants of Gold objects,
+/// although it's not the user-facing type, which is [`Object`], an opaque
+/// struct enclosing an `ObjectVariant`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ObjectVariant {
+
+    /// Integers
     Int(IntVariant),
+
+    /// Floating-point numbers
     Float(f64),
+
+    /// Strings
     Str(StrVariant),
+
+    /// Booleans
     Boolean(bool),
+
+    /// Lists
     List(Arc<List>),
+
+    /// Mappings
     Map(Arc<Map>),
+
+    /// Functions
     Func(FuncVariant),
+
+    /// Null
     Null,
 }
 
+// FuncVariant doesn't implement PartialEq, so this has to be done manually.
 impl PartialEq<ObjectVariant> for ObjectVariant {
     fn eq(&self, other: &ObjectVariant) -> bool {
         match (self, other) {
@@ -591,26 +742,14 @@ impl PartialOrd<ObjectVariant> for ObjectVariant {
     }
 }
 
-impl Debug for ObjectVariant {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Int(x) => f.debug_tuple("ObjectVariant::Int").field(x).finish(),
-            Self::Float(x) => f.debug_tuple("ObjectVariant::Float").field(x).finish(),
-            Self::Str(x) => f.debug_tuple("ObjectVariant::Str").field(x).finish(),
-            Self::Boolean(x) => f.debug_tuple("ObjectVariant::Boolean").field(x).finish(),
-            Self::List(x) => f.debug_tuple("ObjectVariant::List").field(x.as_ref()).finish(),
-            Self::Map(x) => f.debug_tuple("ObjectVariant::Map").field(x.as_ref()).finish(),
-            Self::Func(x) => f.debug_tuple("ObjectVariant::Function").field(x).finish(),
-            Self::Null => f.debug_tuple("ObjectVariant::Null").finish(),
-        }
-    }
-}
-
 impl ObjectVariant {
+
+    /// Convert back into an object.
     pub fn object(self) -> Object {
         Object(self)
     }
 
+    /// Get the type of this object.
     pub fn type_of(&self) -> Type {
         match self {
             Self::Int(_) => Type::Integer,
@@ -624,18 +763,23 @@ impl ObjectVariant {
         }
     }
 
+    /// Construct a list.
     pub fn list<T>(x: T) -> Self where T: ToVec<Object> {
         Self::List(Arc::new(x.to_vec()))
     }
 
+    /// Construct a map.
     pub fn map<T>(x: T) -> Self where T: ToMap<Key, Object> {
         Self::Map(Arc::new(x.to_map()))
     }
 
+    /// Construct a function.
     pub fn function<T>(x: T) -> Self where FuncVariant: From<T> {
         Self::Func(FuncVariant::from(x))
     }
 
+    /// Normalize an integer variant, converting bignums to machine integers if
+    /// they fit.
     pub fn numeric_normalize(self) -> Self {
         if let Self::Int(x) = self {
             Self::Int(x.normalize())
@@ -644,9 +788,10 @@ impl ObjectVariant {
         }
     }
 
+    /// String representation of this object. Used for string interpolation.
     pub fn format(&self) -> Result<String, Error> {
         match self {
-            Self::Str(r) => Ok(r.format()),
+            Self::Str(r) => Ok(r.as_str().to_owned()),
             Self::Int(r) => Ok(r.to_string()),
             Self::Float(r) => Ok(r.to_string()),
             Self::Boolean(true) => Ok("true".to_string()),
@@ -656,6 +801,11 @@ impl ObjectVariant {
         }
     }
 
+    /// Check whether this object is truthy, as interpreted by if-then-else
+    /// expressions.
+    ///
+    /// Every object is truthy except for null, false and zeros. In particular,
+    /// empty collections are truthy!
     pub fn truthy(&self) -> bool {
         match self {
             Self::Null => false,
@@ -666,6 +816,10 @@ impl ObjectVariant {
         }
     }
 
+    /// User-facing (non-structural) equality.
+    ///
+    /// We use a stricter form of equality checking for testing purposes. This
+    /// method implements equality under Gold semantics.
     pub fn user_eq(&self, other: &Self) -> bool {
         match (self, other) {
 
@@ -681,7 +835,9 @@ impl ObjectVariant {
             (Self::Null, Self::Null) => true,
             (Self::Func(x), Self::Func(y)) => x.user_eq(y),
 
-            // Composite objects => use user equality
+            // Composite objects: we must implement equality the hard way, since
+            // `eq` would not delegate to checking contained objects using
+            // `user_eq`.
             (Self::List(x), Self::List(y)) => {
                 if x.len() != y.len() {
                     return false
@@ -710,11 +866,12 @@ impl ObjectVariant {
                 true
             },
 
-            // Note: functions always compare false
+            // Different types generally mean not equal
             _ => false,
         }
     }
 
+    /// Mathematical negation.
     pub fn neg(&self) -> Result<Self, Error> {
         match self {
             Self::Int(x) => Ok(Self::Int(x.neg())),
@@ -723,6 +880,7 @@ impl ObjectVariant {
         }
     }
 
+    /// The plus operator: concatenate strings and lists, or delegate to mathematical addition.
     pub fn add(&self, other: &Self) -> Result<Self, Error> {
         match (&self, &other) {
             (Self::List(x), Self::List(y)) => Ok(Self::list(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())),
@@ -731,26 +889,40 @@ impl ObjectVariant {
         }
     }
 
+    /// The minus operator: mathematical subtraction.
     pub fn sub(&self, other: &Self) -> Result<Self, Error> {
         self.operate(other, IntVariant::sub, |x,y| x - y, BinOp::Subtract)
     }
 
+    /// The asterisk operator: mathematical multiplication.
     pub fn mul(&self, other: &Self) -> Result<Self, Error> {
         self.operate(other, IntVariant::mul, |x,y| x * y, BinOp::Multiply)
     }
 
+    /// The slash operator: mathematical division.
     pub fn div(&self, other: &Self) -> Result<Self, Error> {
         self.operate(other, IntVariant::div, |x,y| x / y, BinOp::Divide)
     }
 
+    /// The double slash operator: integer division.
     pub fn idiv(&self, other: &Self) -> Result<Self, Error> {
         self.operate(other, IntVariant::idiv, |x,y| (x / y).floor() as f64, BinOp::IntegerDivide)
     }
 
-    fn operate<F,G,S,T>(&self, other: &Self, ixi: F, fxf: G, op: BinOp) -> Result<Self, Error>
-    where
-        F: Fn(&IntVariant, &IntVariant) -> S,
-        G: Fn(f64, f64) -> T,
+    /// Universal utility method for implementing mathematical operators.
+    ///
+    /// If both operands are integer variants, the `ixi` function is applied. If
+    /// either operand is not an integer, both operands are converted to floats
+    /// and the `fxf` function is applied.
+    ///
+    /// In case of type mismatch, an error is reported using `op`.
+    fn operate<S,T>(
+        &self,
+        other: &Self,
+        ixi: impl Fn(&IntVariant, &IntVariant) -> S,
+        fxf: impl Fn(f64, f64) -> T,
+        op: BinOp
+    ) -> Result<Self, Error> where
         Self: From<S> + From<T>,
     {
         match (self, other) {
@@ -763,6 +935,9 @@ impl ObjectVariant {
         }
     }
 
+    /// The exponentiation operator. This uses [`IntVariant::pow`] if both
+    /// operands are integers and if the exponent is non-negative. Otherwise it
+    /// delegates to floating-point exponentiation.
     pub fn pow(&self, other: &Self) -> Result<Self, Error> {
         if let (Self::Int(x), Self::Int(y)) = (self, other) {
             if let Some(r) = x.pow(y) {
@@ -776,10 +951,14 @@ impl ObjectVariant {
         Ok(Self::from(xx.powf(yy)))
     }
 
+    /// Returns `Some(true)` if `self` and `other` are comparable and that the
+    /// comparison is equal to `ordering`. Returns `Some(false)` if it is not.
+    /// Returns `None` if they are not comparable.
     pub fn cmp_bool(&self, other: &Self, ordering: Ordering) -> Option<bool> {
         self.partial_cmp(other).map(|x| x == ordering)
     }
 
+    /// The indexing operator (for both lists and maps).
     pub fn index(&self, other: &Object) -> Result<Object, Error> {
         match (self, &other.0) {
             (Self::List(x), Self::Int(y)) => {
@@ -798,6 +977,7 @@ impl ObjectVariant {
         }
     }
 
+    /// The function call operator.
     pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
         match self {
             Self::Func(func) => func.call(args, kwargs),
@@ -805,6 +985,7 @@ impl ObjectVariant {
         }
     }
 
+    /// Extract the list variant if applicable.
     pub fn get_list<'a>(&'a self) -> Option<&'a List> {
         match self {
             Self::List(x) => Some(x.as_ref()),
@@ -812,6 +993,7 @@ impl ObjectVariant {
         }
     }
 
+    /// Extract the map variant if applicable.
     pub fn get_map<'a>(&'a self) -> Option<&'a Map> {
         match self {
             Self::Map(x) => Some(x.as_ref()),
@@ -819,6 +1001,7 @@ impl ObjectVariant {
         }
     }
 
+    /// Extract the key variant if applicable (an interned string).
     pub fn get_key(&self) -> Option<Key> {
         match self {
             Self::Str(x) => Some(Key::from(x)),
@@ -826,6 +1009,7 @@ impl ObjectVariant {
         }
     }
 
+    /// Extract the string variant if applicable.
     pub fn get_str(&self) -> Option<&str> {
         match self {
             Self::Str(x) => Some(x.as_str()),
@@ -833,6 +1017,7 @@ impl ObjectVariant {
         }
     }
 
+    /// Extract the integer variant if applicable.
     pub fn get_int(&self) -> Option<&IntVariant> {
         match self {
             Self::Int(x) => Some(x),
@@ -840,6 +1025,7 @@ impl ObjectVariant {
         }
     }
 
+    /// Extract the floating-point variant if applicable.
     pub fn get_float(&self) -> Option<f64> {
         match self {
             Self::Float(x) => Some(*x),
@@ -847,6 +1033,7 @@ impl ObjectVariant {
         }
     }
 
+    /// Extract the bool variant if applicable. (See also [`ObjectVariant::truthy`].)
     pub fn get_bool(&self) -> Option<bool> {
         match self {
             Self::Boolean(x) => Some(*x),
@@ -854,6 +1041,7 @@ impl ObjectVariant {
         }
     }
 
+    /// Extract the function variant if applicable.
     pub fn get_func(&self) -> Option<&FuncVariant> {
         match self {
             Self::Func(x) => Some(x),
@@ -861,6 +1049,9 @@ impl ObjectVariant {
         }
     }
 
+    /// Extract the null variant if applicable.
+    ///
+    /// Note that `obj.get_null().is_some() == obj.is_null()`.
     pub fn get_null(&self) -> Option<()> {
         match self {
             Self::Null => Some(()),
@@ -868,6 +1059,7 @@ impl ObjectVariant {
         }
     }
 
+    /// Check whether the object is null.
     pub fn is_null(&self) -> bool {
         match self {
             ObjectVariant::Null => true,
@@ -875,6 +1067,7 @@ impl ObjectVariant {
         }
     }
 
+    /// Convert to f64 if possible.
     pub fn to_f64(&self) -> Option<f64> {
         match self {
             Self::Int(x) => Some(x.to_f64()),
@@ -964,16 +1157,21 @@ impl TryFrom<ObjectVariant> for JsonValue {
 
 
 
+// Utility macro for wrapping a unary operator.
 macro_rules! wrap1 {
     ($name:ident) => {
+        #[doc=concat!("Wrapper for [`ObjectVariant::", stringify!($name), "`]")]
         pub fn $name(&self) -> Result<Self, Error> {
             self.0.$name().map(Self)
         }
     };
 }
 
+
+// Utility macro for wrapping a binary operator.
 macro_rules! wrap2 {
     ($name:ident) => {
+        #[doc=concat!("Wrapper for [`ObjectVariant::", stringify!($name), "`]")]
         pub fn $name(&self, other: &Self) -> Result<Self, Error> {
             self.0.$name(&other.0).map(Self)
         }
@@ -981,6 +1179,8 @@ macro_rules! wrap2 {
 }
 
 
+// Utility macro for extracting a certain type from an object variant. Used for
+// facilitating writing Gold functions in Rust.
 macro_rules! extract {
     ($index:expr , $args:ident , str) => { $args.get($index).and_then(|x| x.get_str()) };
     ($index:expr , $args:ident , int) => { $args.get($index).and_then(|x| x.get_int()) };
@@ -1001,8 +1201,24 @@ macro_rules! extract {
 }
 
 
+/// Utility macro for capturing a certain calling convention. Used for writing
+/// Gold functions in Rust.
+///
+/// ```ignore
+/// signature!(args = [x: int, y: float] {
+///     // function body
+/// })
+/// ```
+///
+/// The function body is executed if the list `args` matches the given types.
+/// The number and types of the arguments must be exact. If the arguments don't
+/// match, or if the function body does not return, evaluation proceeds. You can
+/// therefore call this macro multiple times in succession to match different
+/// calling conventions.
 #[macro_export]
 macro_rules! signature {
+
+    // Entry point pattern.
     ($args:ident = [ $($param:ident : $type:ident),* ] $block:block) => {
         signature!(0 ; $args [ $($param : $type),* ] , $block)
     };
@@ -1028,18 +1244,32 @@ pub use signature;
 
 
 
+// Object
+// ------------------------------------------------------------------------------------------------
+
+
+/// The general type of Gold objects.
+///
+/// While this type wraps [`ObjectVariant`], a fact which can be revealed using
+/// the [`Object::variant`] method, this should be considered an implementation
+/// detail.
+///
+/// `Object` is `Deref<ObjectVariant>`, so supports all methods defined there.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Object(ObjectVariant);
 
 impl Object {
+    /// Construct an interned string.
     pub fn str_interned(val: impl AsRef<str>) -> Self {
         Self(ObjectVariant::Str(StrVariant::interned(val)))
     }
 
+    /// Construct a non-interned string.
     pub fn str_natural(val: impl AsRef<str>) -> Self {
         Self(ObjectVariant::Str(StrVariant::natural(val)))
     }
 
+    /// Construct a string, deciding based on length whether to intern or not.
     pub fn str(val: impl AsRef<str>) -> Self {
         if val.as_ref().len() < 20 {
             Self::str_interned(val)
@@ -1048,10 +1278,12 @@ impl Object {
         }
     }
 
+    /// Construct a string directly from an interned symbol.
     pub fn key(val: Key) -> Self {
         Self(ObjectVariant::Str(StrVariant::Interned(val)))
     }
 
+    /// Construct an integer.
     pub fn int<T>(val: T) -> Self
     where
         IntVariant: From<T>
@@ -1059,22 +1291,27 @@ impl Object {
         Self(ObjectVariant::Int(IntVariant::from(val)))
     }
 
+    /// Construct a big integer from a decimal string representation.
     pub fn bigint(x: impl AsRef<str>) -> Option<Self> {
-        BigInt::from_str(x.as_ref()).ok().map(|x| Self(ObjectVariant::from(x)))
+        BigInt::from_str(x.as_ref()).ok().map(|x| Self(ObjectVariant::from(x).numeric_normalize()))
     }
 
+    /// Construct a float.
     pub fn float(val: f64) -> Self {
         Self(ObjectVariant::Float(val))
     }
 
+    /// Construct a boolean.
     pub fn bool(val: bool) -> Self {
         Self(ObjectVariant::Boolean(val))
     }
 
+    /// Return the null object.
     pub fn null() -> Self {
         Self(ObjectVariant::Null)
     }
 
+    /// Construct a function.
     pub fn func<T>(val: T) -> Self
     where
         FuncVariant: From<T>
@@ -1082,28 +1319,34 @@ impl Object {
         Self(ObjectVariant::Func(FuncVariant::from(val)))
     }
 
+    /// Construct a list.
     pub fn list(x: impl ToVec<Object>) -> Self {
         Self(ObjectVariant::list(x))
     }
 
-    pub fn map<T>(x: T) -> Self where T: ToMap<Key, Object> {
+    /// Construct a map.
+    pub fn map(x: impl ToMap<Key, Object>) -> Self {
         Self(ObjectVariant::map(x))
     }
 
+    /// Peek the internal representation of this object.
     pub fn variant(&self) -> &ObjectVariant {
         &self.0
     }
 
+    /// Serialize this objcet to a byte vector.
     pub fn serialize(&self) -> Option<Vec<u8>> {
         let data = (SERIALIZE_VERSION, SystemTime::now(), self);
         encode::to_vec(&data).ok()
     }
 
-    pub fn serialize_write<T: Write + ?Sized>(&self, out: &mut T) -> Result<(), String> {
+    /// Serialize this objcet to a writable buffer.
+    pub fn serialize_write<T: Write + ?Sized>(&self, out: &mut T) -> Option<()> {
         let data = (SERIALIZE_VERSION, SystemTime::now(), self);
-        encode::write(out, &data).map_err(|x| x.to_string())
+        encode::write(out, &data).ok()
     }
 
+    /// Deserialize an object from a byte vector.
     pub fn deserialize(data: &Vec<u8>) -> Option<(Self, SystemTime)> {
         let (version, time, retval) = decode::from_slice::<(i32, SystemTime, Self)>(data.as_slice()).ok()?;
         if version < SERIALIZE_VERSION {
@@ -1113,19 +1356,22 @@ impl Object {
         }
     }
 
-    pub fn deserialize_read<T: Read>(data: T) -> Result<(Self, SystemTime), String> {
-        let (version, time, retval) = decode::from_read::<T, (i32, SystemTime, Self)>(data).map_err(|x| x.to_string())?;
+    /// Deserialize an object from a readable buffer.
+    pub fn deserialize_read<T: Read>(data: T) -> Option<(Self, SystemTime)> {
+        let (version, time, retval) = decode::from_read::<T, (i32, SystemTime, Self)>(data).ok()?;
         if version < SERIALIZE_VERSION {
-            Err("wrong version".to_string())
+            None
         } else {
-            Ok((retval, time))
+            Some((retval, time))
         }
     }
 
+    /// Wrap [`ObjectVariant::numeric_normalize`].
     pub fn numeric_normalize(self) -> Self {
         Self(self.0.numeric_normalize())
     }
 
+    // Auto-wrap some unary and binary operators.
     wrap1!{neg}
     wrap2!{add}
     wrap2!{sub}

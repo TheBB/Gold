@@ -6,6 +6,17 @@ use crate::object::{Object, List, Map, Builtin, Type, signature, IntVariant, Key
 use crate::error::{Error, TypeMismatch};
 
 
+/// Convert a function by name to a [`Builtin`] object and append it to a
+/// mapping.
+///
+/// ```ignore
+/// fn myfunc(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+///     todo!();
+/// }
+/// let mut map = HashMap::new();
+/// builtin!(map, func)
+/// // map["func"] is now available
+/// ```
 macro_rules! builtin {
     ($m: ident, $e: ident) => {
         $m.insert(
@@ -20,6 +31,7 @@ macro_rules! builtin {
 
 
 lazy_static! {
+    /// Table of all builtin functions.
     pub static ref BUILTINS: HashMap<&'static str, Builtin> = {
         let mut m = HashMap::new();
         builtin!(m, len);
@@ -49,6 +61,56 @@ lazy_static! {
 }
 
 
+/// Return an error indicating wrong type of argument.
+///
+/// ```ignore
+/// expected!(
+///     index_of_argument,
+///     name_of_args_vector,
+///     (allowed_types)...,
+/// )
+/// ```
+macro_rules! expected {
+    ($index:expr, $name:ident, $($types:ident),*) => {
+        return Err(Error::new(TypeMismatch::ExpectedArg {
+            index: $index,
+            allowed: vec![
+                $(Type::$types),*
+            ],
+            received: $name.type_of(),
+        }))
+    };
+}
+
+
+/// Return an error indicating wrong number of arguments.
+///
+/// ```ignore
+/// argcount!(num_of_args, name_of_args_vector)
+/// argcount!(
+///     min_num_of_args,
+///     max_num_of_args,
+///     name_of_args_vector,
+/// )
+macro_rules! argcount {
+    ($fixed:expr, $args:ident) => {
+        return Err(Error::new(TypeMismatch::ArgCount {
+            low: $fixed,
+            high: $fixed,
+            received: $args.len(),
+        }))
+    };
+    ($low:expr, $high:expr, $args:ident) => {
+        return Err(Error::new(TypeMismatch::ArgCount {
+            low: $low,
+            high: $high,
+            received: $args.len(),
+        }))
+    };
+}
+
+
+/// Return the size of a collection or the length of a string.
 pub fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
         return Ok(Object::int(x.chars().count()))
@@ -62,39 +124,32 @@ pub fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::int(x.len()))
     });
 
-    signature!(args = [x: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::String, Type::List, Type::Map], x.type_of())))
-    });
+    signature!(args = [x: any] { expected!(0, x, String, List, Map) });
 
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Works similarly to Python's function of the same name.
 pub fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [start: int, stop: int] {
         return Ok((start.clone()..stop.clone()).map(Object::int).collect())
     });
 
-    signature!(args = [x: any, _y: int] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::Integer], x.type_of())))
-    });
-
-    signature!(args = [_x: any, y: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::Integer], y.type_of())))
-    });
+    signature!(args = [x: any, _y: int] { expected!(0, x, Integer) });
+    signature!(args = [_x: any, y: any] { expected!(1, y, Integer) });
 
     signature!(args = [stop: int] {
         return Ok((IntVariant::from(0)..stop.clone()).map(Object::int).collect())
     });
 
-    signature!(args = [x: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Integer], x.type_of())))
-    });
+    signature!(args = [x: any] { expected!(0, x, Integer) });
 
-    Err(Error::new(TypeMismatch::ArgCount(1, 2, args.len())))
+    argcount!(1, 2, args)
 }
 
 
+/// Convert the argument to an integer
 pub fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
         return Ok(Object::int(x.clone()))
@@ -114,14 +169,13 @@ pub fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         ).map(|x| x.numeric_normalize())
     });
 
-    signature!(args = [x: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Integer, Type::Float, Type::Boolean, Type::String], x.type_of())))
-    });
+    signature!(args = [x: any] { expected!(0, x, Integer, Float, Boolean, String) });
 
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Convert the argument to a float
 pub fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
         return Ok(Object::float(x.to_f64()))
@@ -141,23 +195,23 @@ pub fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         ).map(Object::float)
     });
 
-    signature!(args = [x: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Integer, Type::Float, Type::Boolean, Type::String], x.type_of())))
-    });
+    signature!(args = [x: any] { expected!(0, x, Integer, Float, Boolean, String) });
 
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Convert the argument to a bool (this never fails, see Gold's truthiness rules)
 pub fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: any] {
         return Ok(Object::bool(x.truthy()))
     });
 
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Convert the argument to a string
 pub fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
         return Ok(Object::str(x))
@@ -167,10 +221,15 @@ pub fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::str(x.to_string()))
     });
 
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Map a function over a list. This can also be achieved in Gold with
+///
+/// ```ignore
+/// [for x in y: f(x)]
+/// ```
 pub fn map(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [f: func, x: list] {
         let mut ret = List::new();
@@ -181,18 +240,18 @@ pub fn map(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::list(ret))
     });
 
-    signature!(args = [f: any, _x: list] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Function], f.type_of())))
-    });
+    signature!(args = [f: any, _x: list] { expected!(0, f, Function) });
+    signature!(args = [_f: any, x: any] { expected!(1, x, List) });
 
-    signature!(args = [_f: any, x: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::List], x.type_of())))
-    });
-
-    Err(Error::new(TypeMismatch::ArgCount(2, 2, args.len())))
+    argcount!(2, args)
 }
 
 
+/// Filter a list through a function. This can also be achieved in Gold with
+///
+/// ```ignore
+/// [for x in y: when f(x): x]
+/// ```
 pub fn filter(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [f: func, x: list] {
         let mut ret = List::new();
@@ -205,18 +264,14 @@ pub fn filter(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::list(ret))
     });
 
-    signature!(args = [f: any, _x: list] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Function], f.type_of())))
-    });
+    signature!(args = [f: any, _x: list] { expected!(0, f, Function) });
+    signature!(args = [_f: any, x: any] { expected!(1, x, List) });
 
-    signature!(args = [_f: any, x: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::List], x.type_of())))
-    });
-
-    Err(Error::new(TypeMismatch::ArgCount(2, 2, args.len())))
+    argcount!(2, args)
 }
 
 
+/// Return a list of key-value pairs from a map.
 pub fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: map] {
         let mut ret = List::new();
@@ -229,64 +284,59 @@ pub fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::list(ret))
     });
 
-    signature!(args = [x: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Map], x.type_of())))
-    });
+    signature!(args = [x: any] { expected!(0, x, Map) });
 
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Compute the exponential function. This supports two signatures:
+///
+/// `exp(x)` is equivalent to `exp(x, 2.71828...)` while `exp(x, y)` computes y
+/// to the power x (which is the same as `y^x`).
 pub fn exp(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: tofloat] {
         return Ok(Object::float(x.exp()))
     });
 
-    signature!(args = [x: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Integer, Type::Float], x.type_of())))
-    });
+    signature!(args = [x: any] { expected!(0, x, Integer, Float) });
 
-    signature!(args = [base: tofloat, exp: tofloat] {
+    // TODO: We should make base a keyword argument, otherwise exp(x,y) is confusing.
+    signature!(args = [exp: tofloat, base: tofloat] {
         return Ok(Object::float(base.powf(exp)))
     });
 
-    signature!(args = [x: any, _y: tofloat] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Integer, Type::Float], x.type_of())))
-    });
+    signature!(args = [x: any, _y: tofloat] { expected!(0, x, Integer, Float) });
+    signature!(args = [_x: any, y: any] { expected!(1, y, Integer, Float) });
 
-    signature!(args = [_x: any, y: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::Integer, Type::Float], y.type_of())))
-    });
-
-    Err(Error::new(TypeMismatch::ArgCount(1, 2, args.len())))
+    argcount!(1, 2, args)
 }
 
 
+/// Compute the logaritm. This supports two signatures:
+///
+/// `log(x)` is equivalent to `log(x, 2.71828...)` (the natural logarithm),
+/// while `log(x, y)` computes the logarith of `x` to the base `y`.
 pub fn log(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: tofloat] {
         return Ok(Object::float(x.ln()))
     });
 
-    signature!(args = [x: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Integer, Type::Float], x.type_of())))
-    });
+    signature!(args = [x: any] { expected!(0, x, Integer, Float) });
 
+    // TODO: We should make base a keyword argument, otherwise log(x,y) is confusing.
     signature!(args = [num: tofloat, base: tofloat] {
         return Ok(Object::float(num.log(base)))
     });
 
-    signature!(args = [x: any, _y: tofloat] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(0, vec![Type::Integer, Type::Float], x.type_of())))
-    });
+    signature!(args = [x: any, _y: tofloat] { expected!(0, x, Integer, Float) });
+    signature!(args = [_x: any, y: any] { expected!(1, y, Integer, Float) });
 
-    signature!(args = [_x: any, y: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::Integer, Type::Float], y.type_of())))
-    });
-
-    Err(Error::new(TypeMismatch::ArgCount(1, 2, args.len())))
+    argcount!(1, 2, args)
 }
 
 
+/// Return the unicode codepoint corresponding to a single-character string.
 pub fn ord(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
         let mut chars = x.chars();
@@ -297,14 +347,14 @@ pub fn ord(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::int(c.unwrap() as i64))
     });
 
-    signature!(args = [x: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::String], x.type_of())));
-    });
+    signature!(args = [x: any] { expected!(0, x, String) });
 
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Return the character (as a single-character string) that corresponds to
+/// a unicode codepoint.
 pub fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
         let codepoint = u32::try_from(x).map_err(|_| Error::new(Value::OutOfRange))?;
@@ -312,73 +362,80 @@ pub fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::str(c.to_string()))
     });
 
-    signature!(args = [x: any] {
-        return Err(Error::new(TypeMismatch::ExpectedArg(1, vec![Type::Integer], x.type_of())));
-    });
+    signature!(args = [x: any] { expected!(0, x, Integer) });
 
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Check whether the argument is an integer.
 pub fn isint(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: int] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Check whether the argument is a string.
 pub fn isstr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: str] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Check whether the argument is null.
 pub fn isnull(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: null] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Check whether the argument is a boolean.
 pub fn isbool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: bool] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Check whether the argument is a float.
 pub fn isfloat(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: float] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Check whether the argument is a number (integer or float).
 pub fn isnumber(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: float] { return Ok(Object::bool(true)); });
     signature!(args = [_x: int] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Check whether the argument is an object (a mapping).
 pub fn isobject(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: map] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Check whether the argument is a list.
 pub fn islist(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: list] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }
 
 
+/// Check whether the argument is a function.
 pub fn isfunc(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: func] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
-    Err(Error::new(TypeMismatch::ArgCount(1, 1, args.len())))
+    argcount!(1, args)
 }

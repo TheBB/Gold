@@ -8,9 +8,12 @@ use crate::object::Key;
 
 
 // Boxable
-// ----------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
+/// Utility trait for converting any value to a boxed value.
 pub trait Boxable<T> where T: Sized {
+
+    /// Convert self to a boxed value.
     fn to_box(self) -> Box<T>;
 }
 
@@ -20,25 +23,47 @@ impl<T> Boxable<T> for T {
 
 
 // Free
-// ----------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
+/// Utility trait for traversing the AST to find free names.
+///
+/// A free name is a name in an expression that also isn't bound to a value in
+/// that expression. Thus, when evaluating such an expression, free names must
+/// be bound to values externally, prior to evaluation.
+///
+/// When evaluating (not calling) a function, free names must be captured from
+/// the surrounding environment into a closure.
+///
+/// A well-formed top level expression has no free names except those imported.
+///
+/// Most nodes should implement [`FreeImpl`] instead of [`Free`], relying on the
+/// default implementation of [`Free`].
 pub trait Free {
+
+    /// Return a set of all free names in this AST node.
     fn free(&self) -> HashSet<Key>;
 }
 
+/// Utility trait for implementing [`Free`] by mutating an existing set instead
+/// of creating new ones at each AST node.
 pub trait FreeImpl {
+
+    /// Add all free names in this AST node to the set `free`.
     fn free_impl(&self, free: &mut HashSet<Key>);
 }
 
+/// Since almost all AST nodes occur only as tagged objects, provide a
+/// pass-through implementation.
 impl<T: FreeImpl> FreeImpl for Tagged<T> {
     fn free_impl(&self, free: &mut HashSet<Key>) {
         self.as_ref().free_impl(free)
     }
 }
 
+/// Default implementation of [`Free`] for anything that implements [`FreeImpl`].
 impl<T: FreeImpl> Free for T {
     fn free(&self) -> HashSet<Key> {
-        let mut free: HashSet<Key> = HashSet::new();
+        let mut free = HashSet::new();
         self.free_impl(&mut free);
         free
     }
@@ -46,12 +71,23 @@ impl<T: FreeImpl> Free for T {
 
 
 // FreeAndBound
-// ----------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
+/// Utility trait for traversing the AST to find free and bound names.
+///
+/// This is used for AST nodes that may both bind new names and refer to
+/// existing names, such as binding patterns with default values. Such defaults
+/// may rely on previously-bound names in the same pattern, thus necessitating
+/// computing both free and bound names in the same traversal.
 pub trait FreeAndBound {
+
+    /// Add all free names in this AST node to the set `free`, and all bound
+    /// names to the set `bound`.
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>);
 }
 
+/// Since almost all AST nodes occur only as tagged objects, provide a
+/// pass-through implementation.
 impl<T: FreeAndBound> FreeAndBound for Tagged<T> {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         self.as_ref().free_and_bound(free, bound)
@@ -60,28 +96,36 @@ impl<T: FreeAndBound> FreeAndBound for Tagged<T> {
 
 
 // Taggable
-// ----------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
+/// This trait provides the `tag` method, for wrapping a value in a [`Tagged`]
+/// wrapper, which containts information about where in the source code this
+/// object originated. This is used to report error messages.
+///
+/// There's no need to implement this trait beyond the blanket implementation.
 pub trait Taggable: Sized {
+
+    /// Wrap this object in a tagged wrapper.
     fn tag<T>(self, loc: T) -> Tagged<Self> where Span: From<T>;
-    fn direct_tag<T>(self, loc: T) -> Tagged<Self> where Span: From<T>;
 }
 
 impl<T> Taggable for T where T: Sized {
-    fn direct_tag<U>(self, loc: U) -> Tagged<Self> where Span: From<U>{
-        Tagged::<Self>::new(Span::from(loc), self)
-    }
-
     fn tag<U>(self, loc: U) -> Tagged<Self> where Span: From<U> {
-        Tagged::<Self>::new(Span::from(loc), self)
+        Tagged::new(Span::from(loc), self)
     }
 }
 
 
 // Validatable
-// ----------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
+/// This trait is implemented by all AST nodes that require a validation step,
+/// to catch integrity errors which the parser either can't or won't catch.
 pub trait Validatable {
+
+    /// Validate this node and return a suitable error if necessary.
+    ///
+    /// By the Anna Karenina rule, there's no distinction on success.
     fn validate(&self) -> Result<(), Error>;
 }
 
@@ -93,8 +137,9 @@ impl<T: Validatable> Validatable for Tagged<T> {
 
 
 // ToVec
-// ----------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
+/// Utility trait for converting things to vectors. This is used by the Object::list constructor.
 pub trait ToVec<T> {
     fn to_vec(self) -> Vec<T>;
 }
@@ -111,91 +156,11 @@ impl<T> ToVec<T> for Vec<T> {
     }
 }
 
-// impl<T> ToVec<T> for () {
-//     fn to_vec(self) -> Vec<T> {
-//         vec![]
-//     }
-// }
-
-// impl<A,T> ToVec<T> for (A,)
-// where
-//     T: From<A>,
-// {
-//     fn to_vec(self) -> Vec<T> {
-//         vec![
-//             T::from(self.0),
-//         ]
-//     }
-// }
-
-// impl<A,B,T> ToVec<T> for (A,B)
-// where
-//     T: From<A>,
-//     T: From<B>,
-// {
-//     fn to_vec(self) -> Vec<T> {
-//         vec![
-//             T::from(self.0),
-//             T::from(self.1),
-//         ]
-//     }
-// }
-
-// impl<A,B,C,T> ToVec<T> for (A,B,C)
-// where
-//     T: From<A>,
-//     T: From<B>,
-//     T: From<C>,
-// {
-//     fn to_vec(self) -> Vec<T> {
-//         vec![
-//             T::from(self.0),
-//             T::from(self.1),
-//             T::from(self.2),
-//         ]
-//     }
-// }
-
-// impl<A,B,C,D,T> ToVec<T> for (A,B,C,D)
-// where
-//     T: From<A>,
-//     T: From<B>,
-//     T: From<C>,
-//     T: From<D>,
-// {
-//     fn to_vec(self) -> Vec<T> {
-//         vec![
-//             T::from(self.0),
-//             T::from(self.1),
-//             T::from(self.2),
-//             T::from(self.3),
-//         ]
-//     }
-// }
-
-// impl<A,B,C,D,E,T> ToVec<T> for (A,B,C,D,E)
-// where
-//     T: From<A>,
-//     T: From<B>,
-//     T: From<C>,
-//     T: From<D>,
-//     T: From<E>,
-// {
-//     fn to_vec(self) -> Vec<T> {
-//         vec![
-//             T::from(self.0),
-//             T::from(self.1),
-//             T::from(self.2),
-//             T::from(self.3),
-//             T::from(self.4),
-//         ]
-//     }
-// }
-
 
 // ToMap
-// ----------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
 
+/// Utility trait for converting things to maps. This is used by the Object::map constructor.
 pub trait ToMap<K,V> {
     fn to_map(self) -> IndexMap<K,V>;
 }
@@ -225,100 +190,3 @@ where
         ret
     }
 }
-
-
-// impl<K,V> ToMap<K,V> for () {
-//     fn to_map(self) -> IndexMap<K,V> {
-//         IndexMap::new()
-//     }
-// }
-
-// impl<Ak,Av,V> ToMap<GlobalSymbol,V> for ((Ak,Av),)
-// where
-//     Ak: AsRef<str>,
-//     V: From<Av>,
-// {
-//     fn to_map(self) -> IndexMap<GlobalSymbol,V> {
-//         let mut ret = IndexMap::new();
-//         ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
-//         ret
-//     }
-// }
-
-// impl<Ak,Av,Bk,Bv,V> ToMap<GlobalSymbol,V> for ((Ak,Av), (Bk,Bv))
-// where
-//     Ak: AsRef<str>,
-//     Bk: AsRef<str>,
-//     V: From<Av>,
-//     V: From<Bv>,
-// {
-//     fn to_map(self) -> IndexMap<GlobalSymbol,V> {
-//         let mut ret = IndexMap::new();
-//         ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
-//         ret.insert(GlobalSymbol::new(self.1.0), V::from(self.1.1));
-//         ret
-//     }
-// }
-
-// impl<Ak,Av,Bk,Bv,Ck,Cv,V> ToMap<GlobalSymbol,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv))
-// where
-//     Ak: AsRef<str>,
-//     Bk: AsRef<str>,
-//     Ck: AsRef<str>,
-//     V: From<Av>,
-//     V: From<Bv>,
-//     V: From<Cv>,
-// {
-//     fn to_map(self) -> IndexMap<GlobalSymbol,V> {
-//         let mut ret = IndexMap::new();
-//         ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
-//         ret.insert(GlobalSymbol::new(self.1.0), V::from(self.1.1));
-//         ret.insert(GlobalSymbol::new(self.2.0), V::from(self.2.1));
-//         ret
-//     }
-// }
-
-// impl<Ak,Av,Bk,Bv,Ck,Cv,Dk,Dv,V> ToMap<GlobalSymbol,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv), (Dk,Dv))
-// where
-//     Ak: AsRef<str>,
-//     Bk: AsRef<str>,
-//     Ck: AsRef<str>,
-//     Dk: AsRef<str>,
-//     V: From<Av>,
-//     V: From<Bv>,
-//     V: From<Cv>,
-//     V: From<Dv>,
-// {
-//     fn to_map(self) -> IndexMap<GlobalSymbol,V> {
-//         let mut ret = IndexMap::new();
-//         ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
-//         ret.insert(GlobalSymbol::new(self.1.0), V::from(self.1.1));
-//         ret.insert(GlobalSymbol::new(self.2.0), V::from(self.2.1));
-//         ret.insert(GlobalSymbol::new(self.3.0), V::from(self.3.1));
-//         ret
-//     }
-// }
-
-// impl<Ak,Av,Bk,Bv,Ck,Cv,Dk,Dv,Ek,Ev,V> ToMap<GlobalSymbol,V> for ((Ak,Av), (Bk,Bv), (Ck,Cv), (Dk,Dv), (Ek,Ev))
-// where
-//     Ak: AsRef<str>,
-//     Bk: AsRef<str>,
-//     Ck: AsRef<str>,
-//     Dk: AsRef<str>,
-//     Ek: AsRef<str>,
-//     V: From<Av>,
-//     V: From<Bv>,
-//     V: From<Cv>,
-//     V: From<Dv>,
-//     V: From<Ev>,
-// {
-//     fn to_map(self) -> IndexMap<GlobalSymbol,V> {
-//         let mut ret = IndexMap::new();
-//         ret.insert(GlobalSymbol::new(self.0.0), V::from(self.0.1));
-//         ret.insert(GlobalSymbol::new(self.1.0), V::from(self.1.1));
-//         ret.insert(GlobalSymbol::new(self.2.0), V::from(self.2.1));
-//         ret.insert(GlobalSymbol::new(self.3.0), V::from(self.3.1));
-//         ret.insert(GlobalSymbol::new(self.4.0), V::from(self.4.1));
-//         ret
-//     }
-// }
