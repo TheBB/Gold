@@ -70,9 +70,9 @@ impl<'a> FromExternalError<In<'a>, ParseFloatError> for SyntaxError {
 }
 
 
-fn literal<T>(x: T) -> Expr where Object: From<T> {
-    Object::from(x).literal()
-}
+// fn literal<T>(x: T) -> Expr where Object: From<T> {
+//     Object::from(x).literal()
+// }
 
 
 /// Convert a multiline string from source code to string by removing leading
@@ -182,7 +182,7 @@ type PExpr = Paren<Expr>;
 type PList = Paren<ListElement>;
 type PMap = Paren<MapElement>;
 
-type OpCons = fn(Tagged<Expr>, loc: Span) -> Operator;
+type OpCons = fn(Tagged<Expr>, loc: Span) -> Transform;
 
 type In<'a> = CachedLexer<'a>;
 type Out<'a, T> = IResult<In<'a>, T, SyntaxError>;
@@ -531,12 +531,14 @@ fn map_identifier<'a>(input: In<'a>) -> Out<'a, Tagged<Key>> {
 fn number<'a>(input: In<'a>) -> Out<'a, PExpr> {
     naked(
         alt((
-            map_res(float, |span| span.as_ref().replace('_', "").parse::<f64>().map(|x| literal(x).tag(&span))),
+            map_res(float, |span| span.as_ref().replace('_', "").parse::<f64>().map(|x| Expr::Literal(Object::float(x)).tag(&span))),
             map_res(
                 integer,
                 |span| {
                     let text = span.as_ref().replace('_', "");
-                    let y = text.parse::<i64>().map(literal).or_else(|_| text.parse::<BigInt>().map(literal));
+                    let y = text.parse::<i64>().map(Object::int).or_else(
+                        |_| text.parse::<BigInt>().map(Object::int)
+                    ).map(Expr::Literal);
                     y.map(|x| x.tag(&span))
                 },
             ),
@@ -649,15 +651,15 @@ fn string<'a>(input: In<'a>) -> Out<'a, PExpr> {
 /// Matches a boolean literal.
 fn boolean<'a>(input: In<'a>) -> Out<'a, PExpr> {
     naked(alt((
-        map(keyword("false"), |tok| literal(false).tag(&tok)),
-        map(keyword("true"), |tok| literal(true).tag(&tok)),
+        map(keyword("false"), |tok| Expr::Literal(Object::bool(false)).tag(&tok)),
+        map(keyword("true"), |tok| Expr::Literal(Object::bool(true)).tag(&tok)),
     ))).parse(input)
 }
 
 
 /// Matches a null literal.
 fn null<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    naked(map(keyword("null"), |tok| literal(Object::Null).tag(&tok))).parse(input)
+    naked(map(keyword("null"), |tok| Expr::Literal(Object::null()).tag(&tok))).parse(input)
 }
 
 
@@ -793,7 +795,7 @@ fn map_key_singleton<'a>(input: In<'a>) -> Out<'a, (u32, PExpr)> {
 
             naked(map(
                 map_identifier,
-                |key| key.map(Object::from).map(Expr::Literal),
+                |key| key.map(Object::key).map(Expr::Literal),
             )),
         ))
     ))(input)
@@ -968,12 +970,12 @@ fn postfixable<'a>(input: In<'a>) -> Out<'a, PExpr> {
 /// Matches a dot-syntax subscripting operator.
 ///
 /// This is a dot followed by an identifier.
-fn object_access<'a>(input: In<'a>) -> Out<'a, Tagged<Operator>> {
+fn object_access<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
     map(
         tuple((dot, fail(identifier, SyntaxElement::Identifier))),
-        |(dot, out)| Operator::BinOp(
+        |(dot, out)| Transform::BinOp(
             BinOp::Index.tag(&dot),
-            out.map(Object::IntString).map(Expr::Literal).to_box(),
+            out.map(Object::key).map(Expr::Literal).to_box(),
         ).tag(dot.span()..out.span()),
     )(input)
 }
@@ -982,7 +984,7 @@ fn object_access<'a>(input: In<'a>) -> Out<'a, Tagged<Operator>> {
 /// Matches a bracket-syntax subscripting operator.
 ///
 /// This is an open bracket followed by any expression and a closing bracket.
-fn object_index<'a>(input: In<'a>) -> Out<'a, Tagged<Operator>> {
+fn object_index<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
     map(
         tuple((
             open_bracket,
@@ -991,7 +993,7 @@ fn object_index<'a>(input: In<'a>) -> Out<'a, Tagged<Operator>> {
         )),
         |(a, expr, b)| {
             let span = Span::from(a.span()..b.span());
-            Operator::BinOp(BinOp::Index.tag(span), expr.inner().to_box()).tag(span)
+            Transform::BinOp(BinOp::Index.tag(span), expr.inner().to_box()).tag(span)
         },
     )(input)
 }
@@ -1051,7 +1053,7 @@ fn function_arg<'a>(input: In<'a>) -> Out<'a, Tagged<ArgElement>> {
 /// This is an open parenthesis followed by a possibly empty list of
 /// comma-separated argument elements, followed by an optional comma and a
 /// closin parenthesis.
-fn function_call<'a>(input: In<'a>) -> Out<'a, Tagged<Operator>> {
+fn function_call<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
     map(
         seplist(
             open_paren,
@@ -1063,7 +1065,7 @@ fn function_call<'a>(input: In<'a>) -> Out<'a, Tagged<Operator>> {
         ),
         |(a, expr, b)| {
             let span = Span::from(a.span()..b.span());
-            Operator::FunCall(expr.tag(span)).tag(span)
+            Transform::FunCall(expr.tag(span)).tag(span)
         },
     )(input)
 }
@@ -1089,9 +1091,9 @@ fn postfixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
                 expr,
                 |expr, operator| {
                     let span = expr.outer()..operator.span();
-                    PExpr::Naked(Expr::Operator {
+                    PExpr::Naked(Expr::Transformed {
                         operand: Box::new(expr.inner()),
-                        operator: operator.unwrap()
+                        transform: operator.unwrap()
                     }.tag(span))
                 },
             )
@@ -1123,9 +1125,9 @@ fn prefixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
                     expr,
                     |expr, operator| {
                         let span = operator.span()..expr.outer();
-                        PExpr::Naked(Expr::Operator {
+                        PExpr::Naked(Expr::Transformed {
                             operand: Box::new(expr.inner()),
-                            operator: Operator::UnOp(operator)
+                            transform: Transform::UnOp(operator)
                         }.tag(span))
                     },
                 )
@@ -1135,54 +1137,56 @@ fn prefixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
 }
 
 
-/// Utility parser for parsing a single binary operator with operand.
+/// Utility parser for parsing a single binary operator with operand,
+/// collectively termed a 'transform'.
 ///
-/// `operators` should return, loosely, a function Expr -> Operator.
-/// `operand` should return an Expr.
+/// * `transformer` - a parser whose result is, loosely, a function
+///   `Expr -> Transform`.
+/// * `operand` - a parser whose result is an `Expr`.
 ///
-/// The result, essentially, is the result of `operators` applied to the result
-/// of `operand`, thus, an Operator.
-///
-/// Note that in the Gold abstract syntax tree model, an operator is anything
-/// that 'acts' on an expression. In this interpretation, in an expression such
-/// as `1 + 2`, `+ 2` is the operator that acts on `1`.
+/// The result is the output of `transformer` applied to the output of
+/// `operand`, which is a `Transform`.
 fn binop<'a>(
-    operators: impl Parser<'a, Tagged<OpCons>>,
+    transformer: impl Parser<'a, Tagged<OpCons>>,
     operand: impl Parser<'a, PExpr>,
-) -> impl Parser<'a, Tagged<Operator>> {
+) -> impl Parser<'a, Tagged<Transform>> {
     map(
         tuple((
-            operators,
+            transformer,
             fail(operand, SyntaxElement::Operand),
         )),
         |(func, expr)| {
             let span = func.span()..expr.outer();
-            func.as_ref()(expr.inner(), func.span()).direct_tag(span)
+            func.as_ref()(expr.inner(), func.span()).tag(span)
         },
     )
 }
 
 
-/// Utility parser for parsing a left- or right-associative sequence of operators.
+/// Utility parser for parsing a left- or right-associative sequence of
+/// operators.
 ///
-/// `operators` is normally a parser created by [`binop`], that is, something
-/// that returns an `Operator`.
+/// * `transform` - a parser returning a `Transform`, normally created with
+///   `binop`.
+/// * `operand` -  a parser returning an expression to be acted upon by the
+///   transform
+/// * `right` - true if right-associative, false if left-associative.
 fn binops<'a>(
-    operators: impl Parser<'a, Tagged<Operator>>,
+    transform: impl Parser<'a, Tagged<Transform>>,
     operand: impl Parser<'a, PExpr>,
     right: bool,
 ) -> impl Parser<'a, PExpr> {
     map(
         tuple((
             operand,
-            many0(operators),
+            many0(transform),
         )),
         move |(expr, ops)| {
-            let acc = |expr: PExpr, operator: Tagged<Operator>| {
+            let acc = |expr: PExpr, operator: Tagged<Transform>| {
                 let span = expr.outer()..operator.span();
-                PExpr::Naked(Expr::Operator {
+                PExpr::Naked(Expr::Transformed {
                     operand: Box::new(expr.inner()),
-                    operator: operator.unwrap(),
+                    transform: operator.unwrap(),
                 }.tag(span))
             };
             if right {
@@ -1204,7 +1208,7 @@ fn power<'a>(input: In<'a>) -> Out<'a, PExpr> {
     binops(
         binop(
             alt((
-                map(caret, |x| (Operator::power as OpCons).tag(&x)),
+                map(caret, |x| (Transform::power as OpCons).tag(&x)),
             )),
             prefixed,
         ),
@@ -1228,9 +1232,9 @@ fn lbinop<'a>(
 fn product<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(asterisk, |x| (Operator::multiply as OpCons).tag(&x)),
-            map(double_slash, |x| (Operator::integer_divide as OpCons).tag(&x)),
-            map(slash, |x| (Operator::divide as OpCons).tag(&x)),
+            map(asterisk, |x| (Transform::multiply as OpCons).tag(&x)),
+            map(double_slash, |x| (Transform::integer_divide as OpCons).tag(&x)),
+            map(slash, |x| (Transform::divide as OpCons).tag(&x)),
         )),
         prefixed,
     ).parse(input)
@@ -1241,8 +1245,8 @@ fn product<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn sum<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(plus, |x| (Operator::add as OpCons).tag(&x)),
-            map(minus, |x| (Operator::subtract as OpCons).tag(&x)),
+            map(plus, |x| (Transform::add as OpCons).tag(&x)),
+            map(minus, |x| (Transform::subtract as OpCons).tag(&x)),
         )),
         product,
     ).parse(input)
@@ -1253,10 +1257,10 @@ fn sum<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn inequality<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(less_eq, |x| (Operator::less_equal as OpCons).tag(&x)),
-            map(less, |x| (Operator::less as OpCons).tag(&x)),
-            map(greater_eq, |x| (Operator::greater_equal as OpCons).tag(&x)),
-            map(greater, |x| (Operator::greater as OpCons).tag(&x)),
+            map(less_eq, |x| (Transform::less_equal as OpCons).tag(&x)),
+            map(less, |x| (Transform::less as OpCons).tag(&x)),
+            map(greater_eq, |x| (Transform::greater_equal as OpCons).tag(&x)),
+            map(greater, |x| (Transform::greater as OpCons).tag(&x)),
         )),
         sum,
     ).parse(input)
@@ -1267,8 +1271,8 @@ fn inequality<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn equality<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(double_eq, |x| (Operator::equal as OpCons).tag(&x)),
-            map(exclam_eq, |x| (Operator::not_equal as OpCons).tag(&x)),
+            map(double_eq, |x| (Transform::equal as OpCons).tag(&x)),
+            map(exclam_eq, |x| (Transform::not_equal as OpCons).tag(&x)),
         )),
         inequality,
     ).parse(input)
@@ -1279,7 +1283,7 @@ fn equality<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn conjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(keyword("and"), |x| (Operator::and as OpCons).tag(&x)),
+            map(keyword("and"), |x| (Transform::and as OpCons).tag(&x)),
         )),
         equality,
     ).parse(input)
@@ -1290,7 +1294,7 @@ fn conjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn disjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(keyword("or"), |x| (Operator::or as OpCons).tag(&x)),
+            map(keyword("or"), |x| (Transform::or as OpCons).tag(&x)),
         )),
         conjunction,
     ).parse(input)

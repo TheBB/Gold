@@ -1,90 +1,83 @@
 use std::cmp::Ordering;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::builtins::BUILTINS;
-use crate::error::{Error, Internal, Tagged, Unpack, TypeMismatch, FileSystem, Action, Reason};
-use crate::object::{Object, Function, Key, Map, List};
+use crate::error::{Error, Internal, Tagged, Unpack, TypeMismatch, Action, Reason};
+use crate::object::{Object, Func, Key, Map, List};
 use crate::traits::Free;
 
 
+/// Source code of the standard library (imported under the name 'std')
 const STDLIB: &str = include_str!("std.gold");
 
 
-pub trait ImportResolver {
-    fn resolve(&self, path: &str) -> Result<Object, Error>;
+/// Configure the import behavior when evaluating Gold code.
+#[derive(Clone, Default)]
+pub struct ImportConfig {
+
+    /// If set, unresolved imports will be loaded relative to this path.
+    pub root_path: Option<PathBuf>,
+
+    /// If set, this function will be called to resolve unknown imports.
+    ///
+    /// It should return Ok(None) to indicate that the path was unknown. In this
+    /// case, the importer will attempt to resolve the import to a path if
+    /// possible. If the function returns an error, import resolution will be
+    /// aborted.
+    pub custom: Option<Arc<dyn Fn(&str) -> Result<Option<Object>, Error> + Send + Sync>>,
 }
 
-
-pub struct StdResolver { }
-
-impl ImportResolver for StdResolver {
-    fn resolve(&self, path: &str) -> Result<Object, Error> {
-        match path {
-            "std" => eval_str(STDLIB),
-            _ => Err(Error::new(Reason::UnknownImport(path.to_owned()))),
+impl ImportConfig {
+    /// Construct a new import config with a relative path but no custom
+    /// import behavior.
+    pub fn with_path(path: PathBuf) -> Self {
+        Self {
+            root_path: Some(path),
+            ..Default::default()
         }
     }
-}
 
-
-pub struct FileResolver {
-    pub root: PathBuf,
-}
-
-impl ImportResolver for FileResolver {
+    /// Resolve an import path.
     fn resolve(&self, path: &str) -> Result<Object, Error> {
-        let target = self.root.join(path);
-        eval_file(&target)
-    }
-}
+        // Gold reserves all import paths starting with 'std'
+        if path.starts_with("std") {
+            match path {
+                "std" => eval_str(STDLIB),
+                _ => Err(Error::new(Reason::UnknownImport(path.to_owned())))
+            }
+        } else {
+            // The custom import resolver has precedence over paths
+            if let Some(resolver) = &self.custom {
+                if let Some(result) = resolver(path)? {
+                    return Ok(result)
+                }
+            }
 
-
-pub struct ResolveFunc(
-    pub Arc<dyn Fn(&str) -> Result<Object, Error> + Send + Sync>
-);
-
-pub struct CallableResolver {
-    pub resolver: ResolveFunc,
-}
-
-impl ImportResolver for CallableResolver {
-    fn resolve(&self, path: &str) -> Result<Object, Error> {
-        self.resolver.0.as_ref()(path)
-    }
-}
-
-
-pub struct SeqResolver<'a> {
-    pub resolvers: Vec<Box<&'a dyn ImportResolver>>,
-}
-
-impl<'a> ImportResolver for SeqResolver<'a> {
-    fn resolve(&self, path: &str) -> Result<Object, Error> {
-        for resolver in &self.resolvers {
-            if let Ok(obj) = resolver.resolve(path) {
-                return Ok(obj)
+            // Import by path
+            if let Some(root) = &self.root_path {
+                let target = root.join(path);
+                eval_file(&target)
+            } else {
+                Err(Error::new(Reason::UnknownImport(path.to_owned())))
             }
         }
-        Err(Error::new(Reason::UnknownImport(path.to_owned())))
     }
 }
 
 
-pub struct NullResolver {}
-
-impl ImportResolver for NullResolver {
-    fn resolve(&self, path: &str) -> Result<Object, Error> {
-        Err(Error::new(Reason::UnknownImport(path.to_owned())))
-    }
-}
-
-
+/// The Namespace object is the core type for AST evaluation.
 pub enum Namespace<'a> {
+
+    /// Empty namespace - no names bound
     Empty,
+
+    /// Frozen namespace - immutable
     Frozen(&'a Map),
+
+    /// Mutable namespace with a reference to a higher level namespace
     Mutable {
         names: Map,
         prev: &'a Namespace<'a>,
@@ -93,46 +86,68 @@ pub enum Namespace<'a> {
 
 
 impl<'a> Namespace<'a> {
+
+    /// Create a new sub-namespace with no bound names.
     pub fn subtend(&'a self) -> Namespace<'a> {
         Namespace::Mutable { names: Map::new(), prev: self }
     }
 
-    pub fn set(&mut self, key: &Key, value: Object) -> Result<(), Error> {
+    /// Bind a name to an object.
+    fn set(&mut self, key: &Key, value: Object) -> Result<(), Error> {
         if let Namespace::Mutable { names, .. } = self {
             names.insert(key.clone(), value);
             Ok(())
         } else {
+            // This should never happen.
             Err(Error::new(Internal::SetInFrozenNamespace))
         }
     }
 
-    pub fn get(&self, key: &Key) -> Result<Object, Error> {
+    /// Look up a name in the namespace.
+    fn get(&self, key: &Key) -> Result<Object, Error> {
         match self {
-            Namespace::Empty => BUILTINS.get(key.as_str()).cloned().map(Object::from).ok_or_else(|| Error::unbound(key.clone())),
+            // The top level namespace should always be empty, in which case we
+            // pass the ball to the builtins.
+            Namespace::Empty => BUILTINS.get(key.as_str()).cloned().map(Object::func).ok_or_else(|| Error::unbound(key.clone())),
+
             Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| Error::unbound(key.clone())),
             Namespace::Mutable { names, prev } => names.get(key).map(Object::clone).ok_or(()).or_else(|_| prev.get(key))
         }
     }
 
+    /// Match a list of values to a list of list binding elements. This binds
+    /// new names to the namespace.
     pub fn bind_list(&mut self, bindings: &Vec<Tagged<ListBindingElement>>, values: &List) -> Result<(), Error> {
         let mut value_iter = values.iter();
+
+        // In advance, calculate how many values a slurp should capture, in case
+        // we encounter one.
         let nslurp = values.len() as i64 - bindings.len() as i64 + 1;
 
         for binding_element in bindings {
             match binding_element.as_ref() {
+
+                // Standard binding
                 ListBindingElement::Binding { binding, default } => {
+
+                    // Calculate the next value in the list
                     let val = value_iter.next()
                         .map(Object::clone)
                         .ok_or(())
                         .or_else(|_| {
+                            // If none, get the default, or produce the
+                            // [`Unpack::ListTooShort`] error.
                             default.as_ref()
                                 .ok_or_else(|| Error::new(Unpack::ListTooShort).tag(binding_element, Action::Bind))
                                 .and_then(|node| self.eval(node))
                         })?;
 
+                    // Apply the binding.
                     self.bind(&binding, val)?;
                 },
 
+                // Anonymous slurp: consume the required number of values, or
+                // throw an error if we can't.
                 ListBindingElement::Slurp => {
                     for _ in 0..nslurp {
                         if let None = value_iter.next() {
@@ -141,6 +156,7 @@ impl<'a> Namespace<'a> {
                     }
                 },
 
+                // Named slurp: same as above, but assign to a name.
                 ListBindingElement::SlurpTo(name) => {
                     let mut values: List = vec![];
                     for _ in 0..nslurp {
@@ -149,11 +165,13 @@ impl<'a> Namespace<'a> {
                             Some(val) => values.push(val.clone()),
                         }
                     }
-                    self.set(&*name, Object::from(values))?;
+                    self.set(&*name, Object::list(values))?;
                 }
             }
         }
 
+        // At this point, we should have consumed all values. List bindings
+        // (unlike map bindings) don't suffer extraneous values.
         if let Some(_) = value_iter.next() {
             Err(Error::new(Unpack::ListTooLong))
         } else {
@@ -161,29 +179,45 @@ impl<'a> Namespace<'a> {
         }
     }
 
+    /// Match a map of values to a list of map binding elements. This binds new
+    /// names to the namespace.
     pub fn bind_map(&mut self, bindings: &Vec<Tagged<MapBindingElement>>, values: &Map) -> Result<(), Error> {
+
+        // If we encounter a slurp, change this. The slurp will happen at the end.
         let mut slurp_target: Option<&Key> = None;
 
         for binding_element in bindings {
             match binding_element.as_ref() {
+
+                // Standard binding.
                 MapBindingElement::Binding { key, binding, default } => {
+
+                    // Get the value from the map.
                     let val = values.get(key.as_ref())
                         .map(Object::clone)
                         .ok_or(())
                         .or_else(|_| {
+                            // If none, get the default, or produce the
+                            // [`Unpack::KeyMissing`] error.
                             default.as_ref()
                                 .ok_or_else(|| Error::new(Unpack::KeyMissing(key.unwrap())).tag(binding_element, Action::Bind))
                                 .and_then(|node| self.eval(node))
                         })?;
 
+                    // Apply the binding.
                     self.bind(&binding, val)?;
                 },
+
+                // Slurp: remember the target name.
                 MapBindingElement::SlurpTo(target) => {
                     slurp_target = Some(target);
                 },
             }
         }
 
+        // In case of slurp, we clone the original mapping, then remove all the
+        // keys that are explicitly referenced by the other bindings.
+        // TODO: Find a more efficient way to do this?
         if let Some(target) = slurp_target {
             let mut values: Map = values.clone();
 
@@ -193,35 +227,46 @@ impl<'a> Namespace<'a> {
                 }
             }
 
-            self.set(target, Object::from(values))?;
+            self.set(target, Object::map(values))?;
         }
 
         Ok(())
     }
 
+    /// Bind a pattern to a value.
     pub fn bind(&mut self, binding: &Tagged<Binding>, value: Object) -> Result<(), Error> {
-        match (binding.as_ref(), &value) {
-            (Binding::Identifier(key), val) => {
-                self.set(&*key, val.clone())?;
-                Ok(())
-            },
-            (Binding::List(bindings), Object::List(values)) => self.bind_list(&bindings.0, values).map_err(binding.tag_error(Action::Bind)),
-            (Binding::Map(bindings), Object::Map(values)) => self.bind_map(&bindings.0, values).map_err(binding.tag_error(Action::Bind)),
-            _ => Err(Error::new(Unpack::TypeMismatch(binding.type_of(), value.type_of())).tag(binding, Action::Bind)),
+        match binding.as_ref() {
+            Binding::Identifier(key) => self.set(&*key, value),
+            Binding::List(bindings) => {
+                let list = value.get_list().ok_or_else(
+                    || Error::new(Unpack::TypeMismatch(binding.type_of(), value.type_of())).tag(binding, Action::Bind)
+                )?;
+                self.bind_list(&bindings.0, list).map_err(bindings.tag_error(Action::Bind))
+            }
+            Binding::Map(bindings) => {
+                let obj = value.get_map().ok_or_else(
+                    || Error::new(Unpack::TypeMismatch(binding.type_of(), value.type_of())).tag(binding, Action::Bind)
+                )?;
+                self.bind_map(&bindings.0, obj).map_err(bindings.tag_error(Action::Bind))
+            }
         }
     }
 
+    /// Evaluate a list element and accumulate values in a list.
     fn fill_list(&self, element: &ListElement, values: &mut List) -> Result<(), Error> {
         match element {
+
+            // Singleton element: just evaluate it and add.
             ListElement::Singleton(node) => {
                 let val = self.eval(node)?;
                 values.push(val);
                 Ok(())
             }
 
+            // Splat: evaluate the expression, then add all its elements to the list.
             ListElement::Splat(node) => {
                 let val = self.eval(node)?;
-                if let Object::List(from_values) = val {
+                if let Some(from_values) = val.get_list() {
                     values.extend_from_slice(&*from_values);
                     Ok(())
                 } else {
@@ -229,6 +274,7 @@ impl<'a> Namespace<'a> {
                 }
             },
 
+            // Conditional element: evaluate the condition then recurse.
             ListElement::Cond { condition, element } => {
                 if self.eval(condition)?.truthy() {
                     self.fill_list(element, values)
@@ -237,9 +283,11 @@ impl<'a> Namespace<'a> {
                 }
             },
 
+            // Iterated element: evaluate the iterable, loop over its elements,
+            // bind to a pattern and then recurse.
             ListElement::Loop { binding, iterable, element } => {
                 let val = self.eval(iterable)?;
-                if let Object::List(from_values) = val {
+                if let Some(from_values) = val.get_list() {
                     let mut sub = self.subtend();
                     for entry in &*from_values {
                         sub.bind(binding, entry.clone())?;
@@ -253,29 +301,26 @@ impl<'a> Namespace<'a> {
         }
     }
 
+    /// Evaluate a map element and accumulate values in a map.
     fn fill_map(&self, element: &Tagged<MapElement>, values: &mut Map) -> Result<(), Error> {
         match element.as_ref() {
+
+            // Siengleton element: just evaluate it and insert.
             MapElement::Singleton { key, value } => {
-                match self.eval(key)? {
-                    Object::IntString(k) => {
-                        let v = self.eval(&value)?;
-                        values.insert(k, v);
-                        Ok(())
-                    },
-                    Object::NatString(k) => {
-                        let v = self.eval(&value)?;
-                        values.insert(Key::new(k.as_ref()), v);
-                        Ok(())
-                    },
-                    k => Err(
-                        Error::new(TypeMismatch::MapKey(k.type_of())).tag(key, Action::Assign)
-                    ),
+                let k = self.eval(key)?;
+                if let Some(k) = k.get_key() {
+                    let v = self.eval(value)?;
+                    values.insert(k, v);
+                    Ok(())
+                } else {
+                    Err(Error::new(TypeMismatch::MapKey(k.type_of())).tag(key, Action::Assign))
                 }
             },
 
+            // Splat: evaluate the expression, then insert all its pairs in the map.
             MapElement::Splat(node) => {
                 let val = self.eval(node)?;
-                if let Object::Map(from_values) = val {
+                if let Some(from_values) = val.get_map() {
                     for (k, v) in &*from_values {
                         values.insert(k.clone(), v.clone());
                     }
@@ -285,6 +330,7 @@ impl<'a> Namespace<'a> {
                 }
             },
 
+            // Conditional element: evaluate the condition then recurse.
             MapElement::Cond { condition, element } => {
                 if self.eval(condition)?.truthy() {
                     self.fill_map(&element, values)
@@ -293,11 +339,13 @@ impl<'a> Namespace<'a> {
                 }
             },
 
+            // Iterated element: evaluate the iterable, loop over its elements,
+            // biend to a pattern and then recurse.
             MapElement::Loop { binding, iterable, element } => {
                 let val = self.eval(iterable)?;
-                if let Object::List(from_values) = val {
+                if let Some(from_values) = val.get_list() {
                     let mut sub = self.subtend();
-                    for entry in from_values.as_ref() {
+                    for entry in from_values {
                         sub.bind(&binding, entry.clone())?;
                         sub.fill_map(element, values)?;
                     }
@@ -309,55 +357,64 @@ impl<'a> Namespace<'a> {
         }
     }
 
+    /// Evaluate a function argument element and accumulate values in a list or a map.
     fn fill_args(&self, element: &Tagged<ArgElement>, args: &mut List, kwargs: &mut Map) -> Result<(), Error> {
         match element.as_ref() {
+
+            // Singletons are positional arguments.
             ArgElement::Singleton(node) => {
                 let val = self.eval(node)?;
                 args.push(val);
-                Ok(())
             },
 
-            ArgElement::Splat(node) => {
-                let val = self.eval(node)?;
-                match val {
-                    Object::List(vals) => {
-                        args.extend_from_slice(&vals);
-                        Ok(())
-                    },
-                    Object::Map(vals) => {
-                        for (k, v) in vals.as_ref() {
-                            kwargs.insert(k.clone(), v.clone());
-                        }
-                        Ok(())
-                    },
-                    _ => Err(Error::new(TypeMismatch::SplatArg(val.type_of())).tag(node, Action::Splat)),
-                }
-            },
-
+            // Keyword elements are keyword arguments.
             ArgElement::Keyword(key, value) => {
                 kwargs.insert(**key, self.eval(value)?);
-                Ok(())
             }
+
+            // Splats can be either positional or keyword, depending on the type
+            // of the value.
+            ArgElement::Splat(node) => {
+                let val = self.eval(node)?;
+                if let Some(list) = val.get_list() {
+                    args.extend_from_slice(list);
+                } else if let Some(obj) = val.get_map() {
+                    for (k, v) in obj {
+                        kwargs.insert(k.clone(), v.clone());
+                    }
+                } else {
+                    return Err(Error::new(TypeMismatch::SplatArg(val.type_of())).tag(node, Action::Splat))
+                }
+            },
         }
+
+        Ok(())
     }
 
-    fn operate(&self, operator: &Operator, value: Object) -> Result<Object, Error> {
-        match operator {
-            Operator::UnOp(op) => {
+    /// Evaluate a transform (an operator, typically) applied to a value.
+    fn transform(&self, transform: &Transform, value: Object) -> Result<Object, Error> {
+        match transform {
+
+            // Unary operators
+            Transform::UnOp(op) => {
                 match op.as_ref() {
                     UnOp::Passthrough => Ok(value),
-                    UnOp::LogicalNegate => Ok(Object::from(!value.truthy())),
+                    UnOp::LogicalNegate => Ok(Object::bool(!value.truthy())),
                     UnOp::ArithmeticalNegate => value.neg(),
                 }.map_err(op.tag_error(Action::Evaluate))
             },
 
-            Operator::BinOp(op, node) => {
+            // Binary operators
+            Transform::BinOp(op, node) => {
+
+                // Short-circuiting operators
                 match op.as_ref() {
                     BinOp::And => return if value.truthy() { self.eval(node) } else { Ok(value) },
                     BinOp::Or => return if value.truthy() { Ok(value) } else { self.eval(node) },
                     _ => {},
                 }
 
+                // All others
                 let rhs = self.eval(node)?;
                 match op.as_ref() {
                     BinOp::Add => value.add(&rhs),
@@ -369,15 +426,15 @@ impl<'a> Namespace<'a> {
                     BinOp::Less | BinOp::GreaterEqual => {
                         value.cmp_bool(&rhs, Ordering::Less)
                         .ok_or_else(|| Error::new(TypeMismatch::BinOp(value.type_of(), rhs.type_of(), **op)))
-                        .map(|x| Object::from(if **op == BinOp::Less { x } else { !x }))
+                        .map(|x| Object::bool(if **op == BinOp::Less { x } else { !x }))
                     }
                     BinOp::Greater | BinOp::LessEqual => {
                         value.cmp_bool(&rhs, Ordering::Greater)
                         .ok_or_else(|| Error::new(TypeMismatch::BinOp(value.type_of(), rhs.type_of(), **op)))
-                        .map(|x| Object::from(if **op == BinOp::Greater { x } else { !x }))
+                        .map(|x| Object::bool(if **op == BinOp::Greater { x } else { !x }))
                     }
-                    BinOp::Equal => Ok(Object::from(value.user_eq(&rhs))),
-                    BinOp::NotEqual => Ok(Object::from(!value.user_eq(&rhs))),
+                    BinOp::Equal => Ok(Object::bool(value.user_eq(&rhs))),
+                    BinOp::NotEqual => Ok(Object::bool(!value.user_eq(&rhs))),
                     BinOp::Index => value.index(&self.eval(node)?),
 
                     // Unreachable
@@ -385,7 +442,8 @@ impl<'a> Namespace<'a> {
                 }.map_err(op.tag_error(Action::Evaluate))
             },
 
-            Operator::FunCall(elements) => {
+            // Function call
+            Transform::FunCall(elements) => {
                 let mut call_args: List = vec![];
                 let mut call_kwargs: Map = Map::new();
                 for element in elements.as_ref() {
@@ -396,7 +454,9 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    pub fn eval_file<T: ImportResolver>(&mut self, file: &File, importer: &T) -> Result<Object, Error> {
+    // Evaluate a file: a sequence of top-level statements followed by an
+    // expression.
+    fn eval_file(&mut self, file: &File, importer: &ImportConfig) -> Result<Object, Error> {
         let mut ns = self.subtend();
         for statement in &file.statements {
             match statement {
@@ -409,10 +469,15 @@ impl<'a> Namespace<'a> {
         ns.eval(&file.expression)
     }
 
+    // Evaluate an expression.
     pub fn eval(&self, node: &Tagged<Expr>) -> Result<Object, Error> {
         match node.as_ref() {
+
+            // Literal values: just clone and return.
             Expr::Literal(val) => Ok(val.clone()),
 
+            // A string is a sequence of string elements, either raw data or
+            // interpolated expressions.
             Expr::String(elements) => {
                 let mut rval = String::new();
                 for element in elements {
@@ -425,27 +490,32 @@ impl<'a> Namespace<'a> {
                         }
                     }
                 }
-                Ok(Object::nat_string(rval))
+                Ok(Object::str_natural(rval))
             },
 
+            // Look up an identifier by name.
             Expr::Identifier(name) => self.get(name).map_err(node.tag_error(Action::LookupName)),
 
+            // A list should be evaluated by accumulating all its list elements.
             Expr::List(elements) => {
                 let mut values: List = vec![];
                 for element in elements {
                     self.fill_list(element, &mut values)?;
                 }
-                Ok(Object::from(values))
+                Ok(Object::list(values))
             },
 
+            // A map should be evaluated by accumulating all its map elements.
             Expr::Map(elements) => {
                 let mut values: Map = Map::new();
                 for element in elements {
                     self.fill_map(element, &mut values)?;
                 }
-                Ok(Object::from(values))
+                Ok(Object::map(values))
             }
 
+            // Bindings in a let-block must be bound in a sub-namespace to avoid
+            // cluttering this one.
             Expr::Let { bindings, expression } => {
                 let mut sub = self.subtend();
                 for (binding, expr) in bindings {
@@ -455,11 +525,13 @@ impl<'a> Namespace<'a> {
                 sub.eval(expression)
             },
 
-            Expr::Operator { operand, operator } => {
+            // Transforms and operator expressions are forwarded to the `transform` method.
+            Expr::Transformed { operand, transform } => {
                 let x = self.eval(operand)?;
-                self.operate(operator, x)
+                self.transform(transform, x)
             },
 
+            // Conditional branches.
             Expr::Branch { condition, true_branch, false_branch } => {
                 let cond = self.eval(condition)?;
                 if cond.truthy() {
@@ -469,13 +541,15 @@ impl<'a> Namespace<'a> {
                 }
             },
 
+            // Function definitions: capture all free variables in the function
+            // in a closure.
             Expr::Function { positional, keywords, expression } => {
                 let mut closure: Map = Map::new();
                 for ident in node.free() {
                     let val = self.get(&ident)?;
                     closure.insert(ident, val);
                 }
-                Ok(Object::from(Function {
+                Ok(Object::func(Func {
                     args: positional.clone(),
                     kwargs: keywords.clone(),
                     closure,
@@ -487,26 +561,7 @@ impl<'a> Namespace<'a> {
 }
 
 
-pub fn eval_raw<T: ImportResolver>(file: &File, resolver: &T) -> Result<Object, Error> {
-    let resolver = SeqResolver {
-        resolvers: vec![
-            Box::new(&StdResolver {}),
-            Box::new(resolver),
-        ],
-    };
-    Namespace::Empty.eval_file(file, &resolver)
-}
-
-
-pub fn eval_path<T: ImportResolver>(file: &File, path: &Path, resolver: &T) -> Result<Object, Error> {
-    let parent = path.parent().ok_or_else(|| Error::new(FileSystem::NoParent(path.to_owned())))?;
-    let file_resolver = FileResolver { root: parent.to_owned() };
-    let resolver = SeqResolver {
-        resolvers: vec![
-            Box::new(&StdResolver {}),
-            Box::new(resolver),
-            Box::new(&file_resolver),
-        ],
-    };
-    Namespace::Empty.eval_file(file, &resolver)
+/// Evaluate a parsed file AST with given import behavior.
+pub fn eval(file: &File, importer: &ImportConfig) -> Result<Object, Error> {
+    Namespace::Empty.eval_file(file, importer)
 }

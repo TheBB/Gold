@@ -26,11 +26,13 @@ def test_callables():
 
 
 def test_importer():
-    def importer(path):
+    def resolver(path):
         return {
             'msg': f'you imported {path}',
         }
 
-    assert goldpy.eval('import "test" as {msg}\nmsg', None, importer) == 'you imported test'
-    assert goldpy.eval('import "manifold" as {msg}\nmsg', None, importer) == 'you imported manifold'
-    assert goldpy.eval('import "std" as {info}\ninfo.distribution', None, importer) == 'gold'
+    importer = goldpy.ImportConfig(custom=resolver)
+
+    assert goldpy.eval('import "test" as {msg}\nmsg', importer) == 'you imported test'
+    assert goldpy.eval('import "manifold" as {msg}\nmsg', importer) == 'you imported manifold'
+    assert goldpy.eval('import "std" as {info}\ninfo.distribution', importer) == 'gold'

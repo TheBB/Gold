@@ -9,6 +9,6 @@ name = "goldpy"
 crate-type = ["cdylib"]
 
 [dependencies]
-gold = { path = "../gold" }
+gold = { path = "../gold", features = ["python"] }
 num-bigint = "0.4.3"
 pyo3 = { version = "0.17.1", features = ["extension-module", "num-bigint"] }

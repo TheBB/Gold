@@ -26,7 +26,7 @@ trait LitAble {
 
 impl<U> LitAble for U where U: KeyAble {
     fn lit<T>(self, loc: T) -> Tagged<Expr> where Span: From<T> {
-        self.key(loc).map(Object::IntString).map(Expr::Literal)
+        self.key(loc).map(Object::from).map(Expr::Literal)
     }
 }
 
@@ -89,7 +89,7 @@ impl<U> ExprAble for U where Object: From<U> {
 fn booleans_and_null() {
     assert_eq!(parse("true"), Ok(true.expr(0..4)));
     assert_eq!(parse("false"), Ok(false.expr(0..5)));
-    assert_eq!(parse("null"), Ok(Object::Null.expr(0..4)));
+    assert_eq!(parse("null"), Ok(Object::null().expr(0..4)));
 }
 
 #[test]
@@ -167,71 +167,71 @@ fn lists() {
 
     assert_eq!(
         parse("[true]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             true.lel(1..5),
-        )).tag(0..6)),
+        ]).tag(0..6)),
     );
 
     assert_eq!(
         parse("[\"\"]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             "".lel(1..3),
-        )).tag(0..4)),
+        ]).tag(0..4)),
     );
 
     assert_eq!(
         parse("[1,]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             1.lel(1),
-        )).tag(0..4)),
+        ]).tag(0..4)),
     );
 
     assert_eq!(
         parse("[  1   ,  ]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             1.lel(3),
-        )).tag(0..11)),
+        ]).tag(0..11)),
     );
 
     assert_eq!(
         parse("[  1   ,2  ]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             1.lel(3),
             2.lel(8),
-        )).tag(0..12)),
+        ]).tag(0..12)),
     );
 
     assert_eq!(
         parse("[  1   ,2  ,]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             1.lel(3),
             2.lel(8),
-        )).tag(0..13)),
+        ]).tag(0..13)),
     );
 
     assert_eq!(
         parse("[1, false, 2.3, \"fable\", lel]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             1.lel(1),
             false.lel(4..9),
             2.3.lel(11..14),
             "fable".lel(16..23),
             ListElement::Singleton("lel".id(25..28)).tag(25..28),
-        )).tag(0..29)),
+        ]).tag(0..29)),
     );
 
     assert_eq!(
         parse("[1, ...x, y]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             1.lel(1),
             "x".id(7).wrap(ListElement::Splat).retag(4..8),
             "y".id(10).wrap(ListElement::Singleton),
-        )).tag(0..12)),
+        ]).tag(0..12)),
     );
 
     assert_eq!(
         parse("[1, for x in y: x, 2]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             1.lel(1),
             ListElement::Loop {
                 binding: "x".bid(8),
@@ -239,24 +239,24 @@ fn lists() {
                 element: "x".id(16).wrap(ListElement::Singleton).to_box(),
             }.tag(4..17),
             2.lel(19),
-        )).tag(0..21)),
+        ]).tag(0..21)),
     );
 
     assert_eq!(
         parse("[when f(x): x]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             ListElement::Cond {
-                condition: "f".id(6).funcall((
+                condition: "f".id(6).funcall(vec![
                     "x".id(8).wrap(ArgElement::Singleton),
-                ), 7..10).tag(6..10),
+                ], 7..10).tag(6..10),
                 element: "x".id(12).wrap(ListElement::Singleton).to_box(),
             }.tag(1..13),
-        )).tag(0..14)),
+        ]).tag(0..14)),
     );
 
     assert_eq!(
         parse("[ 1 , ... x , when x : y , for x in y : z , ]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             1.lel(2),
             "x".id(10).wrap(ListElement::Splat).retag(6..11),
             ListElement::Cond {
@@ -268,12 +268,12 @@ fn lists() {
                 iterable: "y".id(36),
                 element: "z".id(40).wrap(ListElement::Singleton).to_box(),
             }.tag(27..41),
-        )).tag(0..45)),
+        ]).tag(0..45)),
     );
 
     assert_eq!(
         parse("[ (1) , ... (x), when x: (y) , for x in y: (z) ]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             1.lel(3),
             "x".id(13).wrap(ListElement::Splat).retag(8..15),
             ListElement::Cond {
@@ -285,7 +285,7 @@ fn lists() {
                 iterable: "y".id(40),
                 element: "z".id(44).wrap(ListElement::Singleton).to_box(),
             }.tag(31..46),
-        )).tag(0..48)),
+        ]).tag(0..48)),
     );
 }
 
@@ -293,19 +293,19 @@ fn lists() {
 fn nested_lists() {
     assert_eq!(
         parse("[[]]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             Expr::list(()).tag(1..3).wrap(ListElement::Singleton),
-        )).tag(0..4)),
+        ]).tag(0..4)),
     );
 
     assert_eq!(
         parse("[1, [2]]"),
-        Ok(Expr::list((
+        Ok(Expr::list(vec![
             1.lel(1),
-            Expr::list((
+            Expr::list(vec![
                 2.lel(5),
-            )).tag(4..7).wrap(ListElement::Singleton),
-        )).tag(0..8)),
+            ]).tag(4..7).wrap(ListElement::Singleton),
+        ]).tag(0..8)),
     );
 }
 
@@ -323,97 +323,97 @@ fn maps() {
 
     assert_eq!(
         parse("{a: 1}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("a".lit(1), 1.expr(4)).mel(),
-        )).tag(0..6)),
+        ]).tag(0..6)),
     );
 
     assert_eq!(
         parse("{a: 1,}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("a".lit(1), 1.expr(4)).mel(),
-        )).tag(0..7)),
+        ]).tag(0..7)),
     );
 
     assert_eq!(
         parse("{  a :1,}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("a".lit(3), 1.expr(6)).mel(),
-        )).tag(0..9)),
+        ]).tag(0..9)),
     );
 
     assert_eq!(
         parse("{a: 1  ,b:2}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("a".lit(1), 1.expr(4)).mel(),
             ("b".lit(8), 2.expr(10)).mel(),
-        )).tag(0..12)),
+        ]).tag(0..12)),
     );
 
     assert_eq!(
         parse("{che9: false}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("che9".lit(1..5), false.expr(7..12)).mel(),
-        )).tag(0..13)),
+        ]).tag(0..13)),
     );
 
     assert_eq!(
         parse("{fable: \"fable\"}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("fable".lit(1..6), "fable".expr(8..15)).mel(),
-        )).tag(0..16)),
+        ]).tag(0..16)),
     );
 
     assert_eq!(
         parse("{format: 1}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("format".lit(1..7), 1.expr(9)).mel(),
-        )).tag(0..11)),
+        ]).tag(0..11)),
     );
 
     assert_eq!(
         parse("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("a".lit(1), 1.expr(4)).mel(),
             ("b".lit(7), true.expr(10..14)).mel(),
             ("c".lit(16), 20.0.expr(19..23)).mel(),
             ("d".lit(25), "hoho".expr(28..34)).mel(),
             ("e".lit(36), 10.0.expr(39..42)).mel(),
-        )).tag(0..43)),
+        ]).tag(0..43)),
     );
 
     assert_eq!(
         parse("{ident-with-hyphen: 1}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("ident-with-hyphen".lit(1..18), 1.expr(20)).mel(),
-        )).tag(0..22)),
+        ]).tag(0..22)),
     );
 
     assert_eq!(
         parse("{$z: y}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             MapElement::Singleton {
                 key: "z".id(2),
                 value: "y".id(5)
             }.tag(1..6),
-        )).tag(0..7)),
+        ]).tag(0..7)),
     );
 
     assert_eq!(
         parse("{$(z): y}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             MapElement::Singleton {
                 key: "z".id(3),
                 value: "y".id(7),
             }.tag(1..8),
-        )).tag(0..9)),
+        ]).tag(0..9)),
     );
 
     assert_eq!(
         parse("{\"z\": y}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("z".lit(1..4), "y".id(6)).mel(),
-        )).tag(0..8)),
+        ]).tag(0..8)),
     );
 
     assert_eq!(
@@ -422,9 +422,9 @@ fn maps() {
             "   z:: here's some text\n",
             "}\n",
         )),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("z".lit(5).with_coord(1,3), "here's some text".expr(8..26).with_coord(1,6)).mel(),
-        )).tag(0..27)),
+        ]).tag(0..27)),
     );
 
     assert_eq!(
@@ -434,9 +434,9 @@ fn maps() {
             "       text\n",
             "}\n",
         )),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("z".lit(5).with_coord(1,3), "here's some\ntext".expr(8..33).with_coord(1,6)).mel(),
-        )).tag(0..34)),
+        ]).tag(0..34)),
     );
 
     assert_eq!(
@@ -446,9 +446,9 @@ fn maps() {
             "     text\n",
             "}\n",
         )),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("z".lit(5).with_coord(1,3), "here's some\ntext".expr(8..31).with_coord(1,6)).mel(),
-        )).tag(0..32)),
+        ]).tag(0..32)),
     );
 
     assert_eq!(
@@ -459,9 +459,9 @@ fn maps() {
             "     text\n",
             "}\n",
         )),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("z".lit(5).with_coord(1,3), "here's some\ntext".expr(8..36).with_coord(1,6)).mel(),
-        )).tag(0..37)),
+        ]).tag(0..37)),
     );
 
     assert_eq!(
@@ -472,9 +472,9 @@ fn maps() {
             "       text\n",
             "}\n",
         )),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("z".lit(5).with_coord(1,3), "here's some\n  text".expr(8..38).with_coord(1,6)).mel(),
-        )).tag(0..39)),
+        ]).tag(0..39)),
     );
 
     assert_eq!(
@@ -485,9 +485,9 @@ fn maps() {
             "     text\n",
             "}\n",
         )),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("z".lit(5).with_coord(1,3), "  here's some\ntext".expr(8..38).with_coord(1,6)).mel(),
-        )).tag(0..39)),
+        ]).tag(0..39)),
     );
 
     assert_eq!(
@@ -497,23 +497,23 @@ fn maps() {
             "    b: y,\n",
             "}\n",
         )),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("a".lit(6).with_coord(1,4), "x".expr(9..12).with_coord(1,7)).mel(),
             ("b".lit(16).with_coord(2,4), "y".key(19).with_coord(2,7).wrap(Expr::Identifier)).mel(),
-        )).tag(0..23)),
+        ]).tag(0..23)),
     );
 
     assert_eq!(
         parse("{...y, x: 1}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             MapElement::Splat("y".id(4)).tag(1..5),
             ("x".lit(7), 1.expr(10)).mel(),
-        )).tag(0..12)),
+        ]).tag(0..12)),
     );
 
     assert_eq!(
         parse("{for [x,y] in z: x: y}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             MapElement::Loop {
                 binding: Binding::List(ListBinding(vec![
                     ListBindingElement::Binding {
@@ -528,24 +528,24 @@ fn maps() {
                 iterable: "z".id(14),
                 element: ("x".lit(17), "y".id(20)).mel().to_box(),
             }.tag(1..21),
-        )).tag(0..22)),
+        ]).tag(0..22)),
     );
 
     assert_eq!(
         parse("{when f(x): z: y}"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             MapElement::Cond {
-                condition: "f".id(6).funcall((
+                condition: "f".id(6).funcall(vec![
                     ArgElement::Singleton("x".id(8)).tag(8),
-                ), 7..10).tag(6..10),
+                ], 7..10).tag(6..10),
                 element: ("z".lit(12), "y".id(15)).mel().to_box(),
             }.tag(1..16),
-        )).tag(0..17)),
+        ]).tag(0..17)),
     );
 
     assert_eq!(
         parse("{ a : 1 , ... x , when x : b : y , for x in y : c : z , $ f : 2 , }"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             ("a".lit(2), 1.expr(6)).mel(),
             MapElement::Splat("x".id(14)).tag(10..15),
             MapElement::Cond {
@@ -561,12 +561,12 @@ fn maps() {
                 key: "f".id(58),
                 value: 2.expr(62)
             }.tag(56..63),
-        )).tag(0..67)),
+        ]).tag(0..67)),
     );
 
     assert_eq!(
         parse("{ a : (1), ... (x), when x : b : (y), for x in y : c : (z), $ f : (2) }"),
-        Ok(Expr::map((
+        Ok(Expr::map(vec![
             MapElement::Singleton {
                 key: "a".lit(2),
                 value: 1.expr(7)
@@ -591,7 +591,7 @@ fn maps() {
                 key: "f".id(62),
                 value: 2.expr(67)
             }.tag(60..69),
-        )).tag(0..71)),
+        ]).tag(0..71)),
     );
 }
 
@@ -637,10 +637,10 @@ fn let_blocks() {
                     "c".id(20),
                 ),
             ],
-            expression: Box::new(Expr::list((
+            expression: Box::new(Expr::list(vec![
                 "a".id(26).wrap(ListElement::Singleton),
                 "b".id(29).wrap(ListElement::Singleton),
-            )).tag(25..31)),
+            ]).tag(25..31)),
         }.tag(0..31)),
     );
 
@@ -878,28 +878,28 @@ fn indexing() {
 fn funcall() {
     assert_eq!(
         parse("func(1, 2, 3,)"),
-        Ok("func".id(0..4).funcall((
+        Ok("func".id(0..4).funcall(vec![
             1.expr(5).wrap(ArgElement::Singleton),
             2.expr(8).wrap(ArgElement::Singleton),
             3.expr(11).wrap(ArgElement::Singleton),
-        ), 4..14).tag(0..14)),
+        ], 4..14).tag(0..14)),
     );
 
     assert_eq!(
         parse("func(1, 2, a: 3)"),
-        Ok("func".id(0..4).funcall((
+        Ok("func".id(0..4).funcall(vec![
             1.expr(5).wrap(ArgElement::Singleton),
             2.expr(8).wrap(ArgElement::Singleton),
             ArgElement::Keyword(
                 "a".key(11),
                 3.expr(14),
             ).tag(11..15),
-        ), 4..16).tag(0..16)),
+        ], 4..16).tag(0..16)),
     );
 
     assert_eq!(
         parse("func(a: 2, b: 3)"),
-        Ok("func".id(0..4).funcall((
+        Ok("func".id(0..4).funcall(vec![
             ArgElement::Keyword(
                 "a".key(5),
                 2.expr(8),
@@ -908,7 +908,7 @@ fn funcall() {
                 "b".key(11),
                 3.expr(14),
             ).tag(11..15),
-        ), 4..16).tag(0..16)),
+        ], 4..16).tag(0..16)),
     );
 
     assert_eq!(
@@ -927,16 +927,16 @@ fn funcall() {
                 ]),
                 keywords: None,
                 expression: "x".id(7).add("y".id(9), 8).tag(7..10).to_box(),
-            }.tag(1..10).funcall((
+            }.tag(1..10).funcall(vec![
                 1.expr(12).wrap(ArgElement::Singleton),
                 2.expr(14).wrap(ArgElement::Singleton),
-            ), 11..16).tag(0..16)
+            ], 11..16).tag(0..16)
         ),
     );
 
     assert_eq!(
         parse("func(1, ...y, z: 2, ...q)"),
-        Ok("func".id(0..4).funcall((
+        Ok("func".id(0..4).funcall(vec![
             1.expr(5).wrap(ArgElement::Singleton),
             ArgElement::Splat("y".id(11)).tag(8..12),
             ArgElement::Keyword(
@@ -944,7 +944,7 @@ fn funcall() {
                 2.expr(17),
             ).tag(14..18),
             ArgElement::Splat("q".id(23)).tag(20..24),
-        ), 4..25).tag(0..25)),
+        ], 4..25).tag(0..25)),
     );
 }
 
@@ -1060,8 +1060,8 @@ fn operators() {
             .gt(2.expr(4), 2).tag(0..5)
             .lte(3.expr(9), 6..8).tag(0..10)
             .gte(4.expr(14), 11..13).tag(0..15)
-            .eql(5.expr(19), 16..18).tag(0..20)
-            .neql(6.expr(24), 21..23).tag(0..25)
+            .equal(5.expr(19), 16..18).tag(0..20)
+            .not_equal(6.expr(24), 21..23).tag(0..25)
         ),
     );
 

@@ -330,33 +330,69 @@ impl SyntaxError {
 /// including tokens as well as composite structures.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SyntaxElement {
-    // Keywords
+    /// The keyword 'as'
     As,
+
+    /// The keyword 'else'
     Else,
+
+    /// The keyword 'in'
     In,
+
+    /// The keyword 'then'
     Then,
 
-    // Grammatical elements
+    /// A function argument
     ArgElement,
+
+    /// A binding (otherwise known as a destructuring pattern)
     Binding,
+
+    /// End of input stream
     EndOfInput,
+
+    /// An expression
     Expression,
+
+    /// An identifier ('variable' name)
     Identifier,
+
+    /// Path of imported object
     ImportPath,
+
+    /// A named keyword function parameter
     KeywordParam,
+
+    /// An element of a list binding (any binding or a slurp)
     ListBindingElement,
+
+    /// An element of a list (expressions, splats, conditional or looped
+    /// elements)
     ListElement,
+
+    /// An element of a map binding (any binding or a slurp)
     MapBindingElement,
+
+    /// An element of a map (key-value expressions, splats, conditional or
+    /// looped elements)
     MapElement,
+
+    /// The value of a map item (after a key)
     MapValue,
+
+    /// A number
     Number,
+
+    /// An operand corresponding to an operator
     Operand,
+
+    /// A positional function parameter
     PosParam,
 
-    // Other
+    /// Arbitrary whitespace
     Whitespace,
 
-    // Tokens
+    /// A lexical token
     Token(TokenType),
 }
 
@@ -368,6 +404,12 @@ impl From<TokenType> for SyntaxElement {
 
 
 /// Enumerates all the possible reasons for a syntax error.
+///
+/// These reasons can be sourced from three different phases:
+/// - lexing: the lexer was unable to recognize a token
+/// - parsing: the token stream was illegal according to the grammar
+/// - validation: additional AST integrity checks which for various reasons are
+///   not desirable as part of the parser
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Syntax {
     /// Input ended too soon (thrown by the lexer)
@@ -417,6 +459,7 @@ impl<T,U,V> From<(T,U,V)> for Syntax where SyntaxElement: From<T> + From<U> + Fr
 /// Enumerates possible reasons for internal errors (which shouldn't happen).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Internal {
+    /// Gold attempted to bind a name in a frozen (immutable) namespace.
     SetInFrozenNamespace,
 }
 
@@ -424,8 +467,13 @@ pub enum Internal {
 /// Enumerates possible binding types.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BindingType {
+    /// Bind a value to an identifier.
     Identifier,
+
+    /// Bind a list of values to a list of patterns.
     List,
+
+    /// Bind a mapping of values to a list of named patterns.
     Map,
 }
 
@@ -433,9 +481,17 @@ pub enum BindingType {
 /// Enumerates different reasons why unpacking might fail.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Unpack {
+    /// The list was too short - expected more values.
     ListTooShort,
+
+    /// The list was too long - expected more binding patterns.
     ListTooLong,
+
+    /// The map was missing a key.
     KeyMissing(Key),
+
+    /// The binding type did not correspond to the object type (e.g. a list
+    /// binding with a map object).
     TypeMismatch(BindingType, Type)
 }
 
@@ -443,28 +499,87 @@ pub enum Unpack {
 /// Enumerates different type mismatch reasons.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeMismatch {
+    /// Attempted to iterate over a non-iterable.
     Iterate(Type),
+
+    /// Attempted to splat a non-list into a list.
     SplatList(Type),
+
+    /// Attempted to splat a non-map into a map.
     SplatMap(Type),
+
+    /// Attempted to splat a non-list or a non-map into a function call.
     SplatArg(Type),
+
+    /// Attempted to use a non-string as a map key.
     MapKey(Type),
+
+    /// Attempted to string interpolate an exotic type.
     Interpolate(Type),
+
+    /// Two types were incompatible with a binary operator.
     BinOp(Type, Type, BinOp),
+
+    /// A type was incompatible with a unary operator.
     UnOp(Type, UnOp),
+
+    /// Attempted to call a non-function.
     Call(Type),
+
+    /// Attempted to convert a non-JSON type to JSON.
     Json(Type),
 
-    ExpectedArg(usize, Vec<Type>, Type),
-    ArgCount(usize, usize, usize),
+    /// Expected a positional function parameter to have a certain type, but it didn't.
+    ExpectedPosArg {
+        /// The zero-based index of the parameter.
+        index: usize,
+
+        /// Allowed types.
+        allowed: Vec<Type>,
+
+        /// Actual type received in function call.
+        received: Type,
+    },
+
+    /// Expected a keyword function parameter to have a certain type, but it didn't.
+    ExpectedKwArg {
+        /// The name of the parameter.
+        name: String,
+
+        /// Allowed types.
+        allowed: Vec<Type>,
+
+        /// Actual type received in function call.
+        received: Type,
+    },
+
+    /// Expected the number of arguments to fall in a certain range, but it didn't.
+    ArgCount {
+        /// Lower bound on number of arguments.
+        low: usize,
+
+        /// Upper bound on number of arguments.
+        high: usize,
+
+        /// Number of arguments received.
+        received: usize,
+    },
 }
 
 
 /// Enumerates different value-based error reasons.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
+    /// Value was out of range.
     OutOfRange,
+
+    /// Value was too large.
     TooLarge,
+
+    /// Value was too long
     TooLong,
+
+    /// Unable to convert value to a given type.
     Convert(Type),
 }
 
@@ -472,7 +587,11 @@ pub enum Value {
 /// Enumerates different file system error reasons.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FileSystem {
+    /// The file path has no parent (that is, no directory - unclear if this one
+    /// will ever actully happen).
     NoParent(PathBuf),
+
+    /// Unable to read from file.
     Read(PathBuf),
 }
 
@@ -480,16 +599,38 @@ pub enum FileSystem {
 /// Grand enumeration of all possible error reasons.
 #[derive(Debug, PartialEq)]
 pub enum Reason {
+    /// Unknown reason - should never happen.
     None,
+
+    /// Syntax error.
     Syntax(Syntax),
+
+    /// A name was unbound.
     Unbound(Key),
+
+    /// A key was not assigned to a value.
     Unassigned(Key),
+
+    /// Unpacking (pattern matching) error.
     Unpack(Unpack),
+
+    /// Internal error - should never happen.
     Internal(Internal),
+
+    /// Error received from external source, e.g. function call into other
+    /// ecosystems.
     External(String),
+
+    /// Type mismatch errors.
     TypeMismatch(TypeMismatch),
+
+    /// Value-based errors (type was correct).
     Value(Value),
+
+    /// File system errors.
     FileSystem(FileSystem),
+
+    /// Import errors.
     UnknownImport(String),
 }
 
@@ -534,15 +675,34 @@ impl From<Value> for Reason {
 /// can cause an error.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Action {
+    /// Parsing phase.
     Parse,
+
+    /// Looking up an identifier in a namespace.
     LookupName,
+
+    /// Binding a value to a pattern.
     Bind,
+
+    /// Slurping a value into a collection.
     Slurp,
+
+    /// Splatting a value into a collection.
     Splat,
+
+    /// Iterate over a value.
     Iterate,
+
+    /// Assign a key to a value.
     Assign,
+
+    /// Importing an object.
     Import,
+
+    /// Evaluating an expression.
     Evaluate,
+
+    /// Interpolate a value into a string.
     Format,
 }
 
@@ -643,6 +803,19 @@ impl Display for BindingType {
     }
 }
 
+fn fmt_expected_arg(f: &mut std::fmt::Formatter, name: impl Display, allowed: &Vec<Type>, received: &Type) -> std::fmt::Result {
+    f.write_fmt(format_args!("unsuitable type for parameter {} - expected ", name))?;
+    match allowed[..] {
+        [] => {},
+        [t] => f.write_fmt(format_args!("{}", t))?,
+        _ => {
+            let s = allowed[0..allowed.len() - 1].iter().map(|t| format!("{}", t)).collect::<Vec<String>>().join(", ");
+            f.write_fmt(format_args!("{} or {}", s, allowed.last().unwrap()))?
+        }
+    }
+    f.write_fmt(format_args!(", got {}", received))
+}
+
 impl Display for Reason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -668,29 +841,19 @@ impl Display for Reason {
 
             Self::External(reason) => f.write_fmt(format_args!("external error: {}", reason)),
 
-            Self::TypeMismatch(TypeMismatch::ArgCount(min, max, actual)) => {
-                if min == max && *max == 1 {
-                    f.write_fmt(format_args!("expected 1 argument, got {}", actual))
-                } else if min == max {
-                    f.write_fmt(format_args!("expected {} arguments, got {}", min, actual))
+            Self::TypeMismatch(TypeMismatch::ArgCount{ low, high, received }) => {
+                if low == high && *high == 1 {
+                    f.write_fmt(format_args!("expected 1 argument, got {}", received))
+                } else if low == high {
+                    f.write_fmt(format_args!("expected {} arguments, got {}", low, received))
                 } else {
-                    f.write_fmt(format_args!("expected {} to {} arguments, got {}", min, max, actual))
+                    f.write_fmt(format_args!("expected {} to {} arguments, got {}", low, high, received))
                 }
             },
             Self::TypeMismatch(TypeMismatch::BinOp(l, r, op)) => f.write_fmt(format_args!("unsuitable types for '{}': {} and {}", op, l, r)),
             Self::TypeMismatch(TypeMismatch::Call(x)) => f.write_fmt(format_args!("unsuitable type for function call: {}", x)),
-            Self::TypeMismatch(TypeMismatch::ExpectedArg(i, types, actual)) => {
-                f.write_fmt(format_args!("unsuitable type for parameter {} - expected ", i + 1))?;
-                match types[..] {
-                    [] => {},
-                    [t] => f.write_fmt(format_args!("{}", t))?,
-                    _ => {
-                        let s = types[0..types.len() - 1].iter().map(|t| format!("{}", t)).collect::<Vec<String>>().join(", ");
-                        f.write_fmt(format_args!("{} or {}", s, types.last().unwrap()))?
-                    }
-                }
-                f.write_fmt(format_args!(", got {}", actual))
-            },
+            Self::TypeMismatch(TypeMismatch::ExpectedPosArg { index, allowed, received }) => fmt_expected_arg(f, index + 1, allowed, received),
+            Self::TypeMismatch(TypeMismatch::ExpectedKwArg { name, allowed, received }) => fmt_expected_arg(f, name, allowed, received),
             Self::TypeMismatch(TypeMismatch::Interpolate(x)) => f.write_fmt(format_args!("unsuitable type for string interpolation: {}", x)),
             Self::TypeMismatch(TypeMismatch::Iterate(x)) => f.write_fmt(format_args!("non-iterable type: {}", x)),
             Self::TypeMismatch(TypeMismatch::Json(x)) => f.write_fmt(format_args!("unsuitable type for JSON-like conversion: {}", x)),
@@ -744,9 +907,17 @@ impl<'a> Display for ErrorRenderer<'a> {
         f.write_fmt(format_args!("Error: {}", err.reason.as_ref().unwrap_or(&Reason::None)))?;
         if let Some(locs) = err.locations.as_ref() {
             for (loc, act) in locs.iter() {
+
+                // Offset of the beginning of the line
                 let bol = loc.offset() - loc.column() as usize;
+
+                // Offset of the end of the line
                 let eol = code[bol+1..].find('\n').map(|x| x + bol + 1).unwrap_or(code.len());
+
+                // Offset of the end of the span to be displayed: either the end
+                // of the line (if longer than a line), or the end of the span
                 let span_end = min(loc.offset() + loc.length(), eol) - loc.offset();
+
                 f.write_char('\n')?;
                 f.write_str(&code[bol..eol])?;
                 f.write_char('\n')?;

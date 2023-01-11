@@ -1,5 +1,5 @@
 use crate::ast::{BinOp, UnOp};
-use crate::error::{Error, Reason, Unpack, Span, Action, BindingType, TypeMismatch, Value};
+use crate::error::{Error, Reason, Unpack, Span, Action, BindingType, TypeMismatch};
 use crate::eval_raw;
 use crate::object::{Object, Key, Type};
 
@@ -33,52 +33,65 @@ macro_rules! assert_seq {
 
 #[test]
 fn booleans_and_null() {
-    assert_seq!(eval("true"), Object::from(true));
-    assert_seq!(eval("false"), Object::from(false));
-    assert_seq!(eval("null"), Object::Null);
+    assert_seq!(eval("true"), Object::bool(true));
+    assert_seq!(eval("false"), Object::bool(false));
+    assert_seq!(eval("null"), Object::null());
 }
 
 
 #[test]
 fn integers() {
-    assert_seq!(eval("1"), Object::from(1));
-    assert_seq!(eval("-1"), Object::from(-1));
-    assert_seq!(eval("+1"), Object::from(1));
+    assert_seq!(eval("1"), Object::int(1));
+    assert_seq!(eval("-1"), Object::int(-1));
+    assert_seq!(eval("+1"), Object::int(1));
 }
 
 
 #[test]
 fn floats() {
-    assert_seq!(eval("2."), Object::from(2.0));
-    assert_seq!(eval("1.2"), Object::from(1.2));
-    assert_seq!(eval("-3e1"), Object::from(-30.0));
-    assert_seq!(eval("+4e-1"), Object::from(0.4));
-    assert_seq!(eval("5e+1"), Object::from(50.0));
+    assert_seq!(eval("2."), Object::float(2.0));
+    assert_seq!(eval("1.2"), Object::float(1.2));
+    assert_seq!(eval("-3e1"), Object::float(-30.0));
+    assert_seq!(eval("+4e-1"), Object::float(0.4));
+    assert_seq!(eval("5e+1"), Object::float(50.0));
 }
 
 
 #[test]
 fn strings() {
-    assert_seq!(eval("\"\""), Object::int_string(""));
-    assert_seq!(eval("\"simsalabim\""), Object::int_string("simsalabim"));
-    assert_seq!(eval("\"simsalabim ${-1} abracadabra\""), Object::nat_string("simsalabim -1 abracadabra"));
-    assert_seq!(eval("\"simsalabim ${0} abracadabra\""), Object::nat_string("simsalabim 0 abracadabra"));
-    assert_seq!(eval("\"simsalabim ${1} abracadabra\""), Object::nat_string("simsalabim 1 abracadabra"));
-    assert_seq!(eval("\"simsalabim ${9223372036854775807} abracadabra\""), Object::nat_string("simsalabim 9223372036854775807 abracadabra"));
-    assert_seq!(eval("\"simsalabim ${9223372036854776000} abracadabra\""), Object::nat_string("simsalabim 9223372036854776000 abracadabra"));
+    assert_seq!(eval("\"\""), Object::str_interned(""));
+    assert_seq!(eval("\"simsalabim\""), Object::str_interned("simsalabim"));
+    assert_seq!(eval("\"simsalabim ${-1} abracadabra\""), Object::str_natural("simsalabim -1 abracadabra"));
+    assert_seq!(eval("\"simsalabim ${0} abracadabra\""), Object::str_natural("simsalabim 0 abracadabra"));
+    assert_seq!(eval("\"simsalabim ${1} abracadabra\""), Object::str_natural("simsalabim 1 abracadabra"));
+    assert_seq!(eval("\"simsalabim ${9223372036854775807} abracadabra\""), Object::str_natural("simsalabim 9223372036854775807 abracadabra"));
+    assert_seq!(eval("\"simsalabim ${9223372036854776000} abracadabra\""), Object::str_natural("simsalabim 9223372036854776000 abracadabra"));
 }
 
 
 #[test]
 fn lists() {
     assert_seq!(eval("[]"), Object::list(()));
-    assert_seq!(eval("[1]"), Object::list((1,)));
-    assert_seq!(eval("[1, 2, false]"), Object::list((1, 2, false)));
-    assert_seq!(eval("[1, 2, 3, 4, 5]"), Object::list((1, 2, 3, 4, 5)));
 
-    assert_seq!(eval("[1, false, \"dingbob\", 2.2, null]"), Object::list((
-        1, false, "dingbob", 2.2, Object::Null
-    )));
+    assert_seq!(eval("[1]"), Object::list(vec![
+        Object::int(1)
+    ]));
+
+    assert_seq!(eval("[1, 2, false]"), Object::list(vec![
+        Object::int(1),
+        Object::int(2),
+        Object::bool(false),
+    ]));
+
+    assert_seq!(eval("[1, 2, 3, 4, 5]"), (1..6).map(Object::int).collect());
+
+    assert_seq!(eval("[1, false, \"dingbob\", 2.2, null]"), Object::list(vec![
+        Object::int(1),
+        Object::bool(false),
+        Object::str_interned("dingbob"),
+        Object::float(2.2),
+        Object::null(),
+    ]));
 }
 
 
@@ -86,28 +99,41 @@ fn lists() {
 fn maps() {
     assert_seq!(eval("{}"), Object::map(()));
 
-    assert_seq!(eval("{a: -1, b: true, c: \"\", d: 3.14, e: null}"), Object::map((
-        ("a", -1),
-        ("b", true),
-        ("c", ""),
-        ("d", 3.14),
-        ("e", Object::Null),
-    )));
+    assert_seq!(eval("{a: -1, b: true, c: \"\", d: 3.14, e: null}"), Object::map(vec![
+        ("a", Object::int(-1)),
+        ("b", Object::bool(true)),
+        ("c", Object::str_interned("")),
+        ("d", Object::float(3.14)),
+        ("e", Object::null()),
+    ]));
 
-    assert_seq!(eval("{$\"a\": 1}"), Object::map((("a", 1),)));
-    assert_seq!(eval("{$\"abcdefghijklmnopqrstuvwxyz\": 1}"), Object::map((("abcdefghijklmnopqrstuvwxyz", 1),)));
+    assert_seq!(eval("{$\"a\": 1}"), Object::map(vec![
+        ("a", Object::int(1)),
+    ]));
+
+    assert_seq!(eval("{$\"abcdefghijklmnopqrstuvwxyz\": 1}"), Object::map(vec![
+        ("abcdefghijklmnopqrstuvwxyz", Object::int(1)),
+    ]));
 }
 
 
 #[test]
 fn let_bindings() {
-    assert_seq!(eval("let a = 1 in a"), Object::from(1));
-    assert_seq!(eval("let a = 1 let b = a in b"), Object::from(1));
-    assert_seq!(eval("let a = 1 let b = a in a"), Object::from(1));
+    assert_seq!(eval("let a = 1 in a"), Object::int(1));
+    assert_seq!(eval("let a = 1 let b = a in b"), Object::int(1));
+    assert_seq!(eval("let a = 1 let b = a in a"), Object::int(1));
 
-    assert_seq!(eval("let a = 1 let b = \"zomg\" in [a, b]"), Object::list((1, "zomg")));
-    assert_seq!(eval("let a = 1 let b = let a = 2 in a in [a, b]"), Object::list((1, 2)));
-    assert_seq!(eval("let a = 1 let b = a let a = 2 in [a, b]"), Object::list((2, 1)));
+    assert_seq!(eval("let a = 1 let b = \"zomg\" in [a, b]"), Object::list(vec![
+        Object::int(1),
+        Object::str_interned("zomg"),
+    ]));
+
+    assert_seq!(eval("let a = 1 let b = let a = 2 in a in [a, b]"), (1..3).map(Object::int).collect());
+
+    assert_seq!(eval("let a = 1 let b = a let a = 2 in [a, b]"), Object::list(vec![
+        Object::int(2),
+        Object::int(1),
+    ]));
 
     assert!(eval("let a = 1 let b = a in y").is_err());
 }
@@ -115,25 +141,25 @@ fn let_bindings() {
 
 #[test]
 fn list_bindings() {
-    assert_seq!(eval("let [a] = [1] in a"), Object::from(1));
-    assert_seq!(eval("let [a, ...] = [1] in a"), Object::from(1));
-    assert_seq!(eval("let [a, ...] = [1, 2, 3] in a"), Object::from(1));
-    assert_seq!(eval("let [_, a, ...] = [1, 2, 3] in a"), Object::from(2));
-    assert_seq!(eval("let [_, _, a, ...] = [1, 2, 3] in a"), Object::from(3));
-    assert_seq!(eval("let [_, _, a] = [1, 2, 3] in a"), Object::from(3));
+    assert_seq!(eval("let [a] = [1] in a"), Object::int(1));
+    assert_seq!(eval("let [a, ...] = [1] in a"), Object::int(1));
+    assert_seq!(eval("let [a, ...] = [1, 2, 3] in a"), Object::int(1));
+    assert_seq!(eval("let [_, a, ...] = [1, 2, 3] in a"), Object::int(2));
+    assert_seq!(eval("let [_, _, a, ...] = [1, 2, 3] in a"), Object::int(3));
+    assert_seq!(eval("let [_, _, a] = [1, 2, 3] in a"), Object::int(3));
 
-    assert_seq!(eval("let [...a] = [1, 2, 3] in a"), Object::list((1, 2, 3)));
-    assert_seq!(eval("let [...a, _] = [1, 2, 3] in a"), Object::list((1, 2)));
-    assert_seq!(eval("let [...a, _, _] = [1, 2, 3] in a"), Object::list((1,)));
-    assert_seq!(eval("let [_, ...a, _] = [1, 2, 3] in a"), Object::list((2,)));
+    assert_seq!(eval("let [...a] = [1, 2, 3] in a"), (1..4).map(Object::int).collect());
+    assert_seq!(eval("let [...a, _] = [1, 2, 3] in a"), (1..3).map(Object::int).collect());
+    assert_seq!(eval("let [...a, _, _] = [1, 2, 3] in a"), Object::list(vec![Object::int(1)]));
+    assert_seq!(eval("let [_, ...a, _] = [1, 2, 3] in a"), Object::list(vec![Object::int(2)]));
 
     assert_seq!(eval("let [_, ...a, _, _] = [1, 2, 3] in a"), Object::list(()));
 
-    assert_seq!(eval("let [a = 1] = [] in a"), Object::from(1));
-    assert_seq!(eval("let [b, a = 1] = [2] in b"), Object::from(2));
-    assert_seq!(eval("let [b, a = 1] = [2] in a"), Object::from(1));
-    assert_seq!(eval("let [b = 3, a = 1] = [2] in a"), Object::from(1));
-    assert_seq!(eval("let [b = 3, a = 1] = [2] in b"), Object::from(2));
+    assert_seq!(eval("let [a = 1] = [] in a"), Object::int(1));
+    assert_seq!(eval("let [b, a = 1] = [2] in b"), Object::int(2));
+    assert_seq!(eval("let [b, a = 1] = [2] in a"), Object::int(1));
+    assert_seq!(eval("let [b = 3, a = 1] = [2] in a"), Object::int(1));
+    assert_seq!(eval("let [b = 3, a = 1] = [2] in b"), Object::int(2));
 
     assert!(eval("let [x] = [1, 2, 3] in x").is_err());
     assert!(eval("let [x, y, z, a, ...] = [1, 2, 3] in x").is_err());
@@ -142,26 +168,38 @@ fn list_bindings() {
     assert!(eval("let [x, y = 1] = [] in x").is_err());
     assert!(eval("let [x = 1, y] = [] in x").is_err());
 
-    assert_seq!(eval("let [a,b] = [1,2] in {a: a, b: b}"), Object::map((("a", 1), ("b", 2))));
-    assert_seq!(eval("let [a,[b]] = [1,[2]] in {a: a, b: b}"), Object::map((("a", 1), ("b", 2))));
-    assert_seq!(eval("let [a, b = 1, ...c] = [2] in [a, b, c]"), Object::list((2, 1, Object::list(()))));
+    assert_seq!(eval("let [a,b] = [1,2] in {a: a, b: b}"), Object::map(vec![
+        ("a", Object::int(1)),
+        ("b", Object::int(2)),
+    ]));
+
+    assert_seq!(eval("let [a,[b]] = [1,[2]] in {a: a, b: b}"), Object::map(vec![
+        ("a", Object::int(1)),
+        ("b", Object::int(2)),
+    ]));
+
+    assert_seq!(eval("let [a, b = 1, ...c] = [2] in [a, b, c]"), Object::list(vec![
+        Object::int(2),
+        Object::int(1),
+        Object::list(()),
+    ]));
 }
 
 
 #[test]
 fn map_bindings() {
-    assert_seq!(eval("let {a} = {a: 1} in a"), Object::from(1));
-    assert_seq!(eval("let {a as b} = {a: 1} in b"), Object::from(1));
-    assert_seq!(eval("let {a as a} = {a: 1} in a"), Object::from(1));
+    assert_seq!(eval("let {a} = {a: 1} in a"), Object::int(1));
+    assert_seq!(eval("let {a as b} = {a: 1} in b"), Object::int(1));
+    assert_seq!(eval("let {a as a} = {a: 1} in a"), Object::int(1));
 
-    assert_seq!(eval("let {a, ...x} = {a: 1} in a"), Object::from(1));
+    assert_seq!(eval("let {a, ...x} = {a: 1} in a"), Object::int(1));
     assert_seq!(eval("let {a, ...x} = {a: 1} in x"), Object::map(()));
-    assert_seq!(eval("let {...x} = {a: 1} in x"), Object::map((("a", 1),)));
-    assert_seq!(eval("let {a, ...x} = {a: 1, b: 2} in x"), Object::map((("b", 2),)));
-    assert_seq!(eval("let {a, ...x} = {a: 1, b: 2} in a"), Object::from(1));
+    assert_seq!(eval("let {...x} = {a: 1} in x"), Object::map(vec![("a", Object::int(1))]));
+    assert_seq!(eval("let {a, ...x} = {a: 1, b: 2} in x"), Object::map(vec![("b", Object::int(2))]));
+    assert_seq!(eval("let {a, ...x} = {a: 1, b: 2} in a"), Object::int(1));
 
-    assert_seq!(eval("let {a = 1} = {} in a"), Object::from(1));
-    assert_seq!(eval("let {a as b = 1} = {} in b"), Object::from(1));
+    assert_seq!(eval("let {a = 1} = {} in a"), Object::int(1));
+    assert_seq!(eval("let {a as b = 1} = {} in b"), Object::int(1));
 
     assert!(eval("let {a} = {} in a").is_err());
     assert!(eval("let {a} = {b: 1} in a").is_err());
@@ -173,265 +211,283 @@ fn function_bindings() {
     assert_seq!(eval(concat!(
         "let a = |x, [y, z]| x + y + z\n",
         "in a(1, [2, 3])"
-    )), Object::from(6));
+    )), Object::int(6));
 
     assert_seq!(eval(concat!(
         "let f = |[y = 1]| y\n",
         "in f([])"
-    )), Object::from(1));
+    )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let q = 1\n",
         "let f = |[y = q]| y\n",
         "in f([])"
-    )), Object::from(1));
+    )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let f = |q| |[y = q]| y\n",
         "let q = 1\n",
         "in f(2)([])"
-    )), Object::from(2));
+    )), Object::int(2));
 
     assert_seq!(eval(concat!(
         "let f = |x; y, z| x + y + z\n",
         "in f(1, y: 2, z: 3)"
-    )), Object::from(6));
+    )), Object::int(6));
 
     assert_seq!(eval(concat!(
         "let f = |; y=1| y\n",
         "in f()"
-    )), Object::from(1));
+    )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let q = 1\n",
         "let f = |; y=q| y\n",
         "in f()"
-    )), Object::from(1));
+    )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let f = |q| |; y=q| y\n",
         "let q = 1\n",
         "in f(2)()"
-    )), Object::from(2));
+    )), Object::int(2));
 
     assert_seq!(eval(concat!(
         "let f = |x, y=15; z=200| [x,y,z]\n",
         "in [f(1), f(1,2), f(1,z:100), f(1,2,z:100)]"
-    )), Object::list((
-        Object::list((1, 15, 200)),
-        Object::list((1, 2, 200)),
-        Object::list((1, 15, 100)),
-        Object::list((1, 2, 100)),
-    )));
+    )), Object::list(vec![
+        Object::list(vec![Object::int(1), Object::int(15), Object::int(200)]),
+        Object::list(vec![Object::int(1), Object::int(2), Object::int(200)]),
+        Object::list(vec![Object::int(1), Object::int(15), Object::int(100)]),
+        Object::list(vec![Object::int(1), Object::int(2), Object::int(100)]),
+    ]));
 
     assert_seq!(eval(concat!(
         "let dest = |...args; ...kwargs| [args, kwargs]\n",
         "in dest()"
-    )), Object::list((
+    )), Object::list(vec![
         Object::list(()),
         Object::map(()),
-    )));
+    ]));
 
     assert_seq!(eval(concat!(
         "let dest = |...args; ...kwargs| [args, kwargs]\n",
         "in dest(1, 2)"
-    )), Object::list((
-        Object::list((1, 2)),
+    )), Object::list(vec![
+        (1..3).map(Object::int).collect(),
         Object::map(()),
-    )));
+    ]));
 
     assert_seq!(eval(concat!(
         "let dest = |...args; ...kwargs| [args, kwargs]\n",
         "in dest(x: 1, y: 2)"
-    )), Object::list((
+    )), Object::list(vec![
         Object::list(()),
-        Object::map((("x", 1), ("y", 2))),
-    )));
+        Object::map(vec![
+            ("x", Object::int(1)),
+            ("y", Object::int(2)),
+        ]),
+    ]));
 
     assert_seq!(eval(concat!(
         "let dest = |...args; ...kwargs| [args, kwargs]\n",
         "in dest(1, 2, x: 3, y: 4)"
-    )), Object::list((
-        Object::list((1, 2)),
-        Object::map((("x", 3), ("y", 4))),
-    )));
+    )), Object::list(vec![
+        (1..3).map(Object::int).collect(),
+        Object::map(vec![
+            ("x", Object::int(3)),
+            ("y", Object::int(4)),
+        ]),
+    ]));
 
     assert_seq!(eval(concat!(
         "let dest = |...args; ...kwargs| [args, kwargs]\n",
         "let args = [1, 2, 3]\n",
         "let kwargs = {x: 4, y: 5, z: 6}\n",
         "in dest(0, ...args, 5, a: 8, ...kwargs, c: 10, z: 12)"
-    )), Object::list((
-        Object::list((0, 1, 2, 3, 5)),
-        Object::map((("a", 8), ("x", 4), ("y", 5), ("z", 12), ("c", 10))),
-    )));
+    )), Object::list(vec![
+        Object::list(vec![
+            Object::int(0),
+            Object::int(1),
+            Object::int(2),
+            Object::int(3),
+            Object::int(5),
+        ]),
+        Object::map(vec![
+            ("a", Object::int(8)),
+            ("x", Object::int(4)),
+            ("y", Object::int(5)),
+            ("z", Object::int(12)),
+            ("c", Object::int(10)),
+        ]),
+    ]));
 
-    assert_seq!(eval("({||} 1)()"), Object::from(1));
-    assert_seq!(eval("({|a, b|} a + b)(a: 1, b: 2)"), Object::from(3));
-    assert_seq!(eval("({|a, b=2|} a + b)(a: 1, b: 3)"), Object::from(4));
-    assert_seq!(eval("({|a, b=2|} a + b)(a: 1)"), Object::from(3));
+    assert_seq!(eval("({||} 1)()"), Object::int(1));
+    assert_seq!(eval("({|a, b|} a + b)(a: 1, b: 2)"), Object::int(3));
+    assert_seq!(eval("({|a, b=2|} a + b)(a: 1, b: 3)"), Object::int(4));
+    assert_seq!(eval("({|a, b=2|} a + b)(a: 1)"), Object::int(3));
 }
 
 
 #[test]
 fn arithmetic() {
-    assert_seq!(eval("1 + 2"), Object::from(3));
-    assert_seq!(eval("3 + 2"), Object::from(5));
-    assert_seq!(eval("3 + 2 - 5"), Object::from(0));
-    assert_seq!(eval("3 - -5"), Object::from(8));
-    assert_seq!(eval("2 * 4"), Object::from(8));
-    assert_seq!(eval("2.0 * 4"), Object::from(8.0));
-    assert_seq!(eval("2 * 4.0"), Object::from(8.0));
-    assert_seq!(eval("2 * 4 + 1"), Object::from(9));
-    assert_seq!(eval("2 * (4 + 1)"), Object::from(10));
-    assert_seq!(eval("3 / 2"), Object::from(1.5));
-    assert_seq!(eval("3.0 / 2"), Object::from(1.5));
-    assert_seq!(eval("3 / 2.0"), Object::from(1.5));
-    assert_seq!(eval("3.0 / 2.0"), Object::from(1.5));
-    assert_seq!(eval("3 // 2"), Object::from(1));
-    assert_seq!(eval("1 + 2.0"), Object::from(3.0));
-    assert_seq!(eval("1.0 + 2"), Object::from(3.0));
-    assert_seq!(eval("1.0 + 2.0"), Object::from(3.0));
-    assert_seq!(eval("1.0 - 2.0"), Object::from(-1.0));
-    assert_seq!(eval("1.0 - 2"), Object::from(-1.0));
-    assert_seq!(eval("1 - 2.0"), Object::from(-1.0));
-    assert_seq!(eval("1 - 2 + 3"), Object::from(2));
-    assert_seq!(eval("2 // 2 * 2"), Object::from(2));
-    assert_seq!(eval("2 ^ 2"), Object::from(4));
-    assert_seq!(eval("-2 ^ 2"), Object::from(-4));
-    assert_seq!(eval("2 ^ 2 ^ 2"), Object::from(16));
-    assert_seq!(eval("-2 ^ 2 ^ 2"), Object::from(-16));
-    assert_seq!(eval("2 ^ 3 ^ 3"), Object::from(134217728));
-    assert_seq!(eval("(2 ^ 3) ^ 3"), Object::from(512));
-    assert_seq!(eval("-2 ^ 3 ^ 3"), Object::from(-134217728));
-    assert_seq!(eval("(-2 ^ 3) ^ 3"), Object::from(-512));
-    assert_seq!(eval("-(2 ^ 3) ^ 3"), Object::from(-512));
-    assert_seq!(eval("2 ^ -1"), Object::from(0.5));
+    assert_seq!(eval("1 + 2"), Object::int(3));
+    assert_seq!(eval("3 + 2"), Object::int(5));
+    assert_seq!(eval("3 + 2 - 5"), Object::int(0));
+    assert_seq!(eval("3 - -5"), Object::int(8));
+    assert_seq!(eval("2 * 4"), Object::int(8));
+    assert_seq!(eval("2.0 * 4"), Object::float(8.0));
+    assert_seq!(eval("2 * 4.0"), Object::float(8.0));
+    assert_seq!(eval("2 * 4 + 1"), Object::int(9));
+    assert_seq!(eval("2 * (4 + 1)"), Object::int(10));
+    assert_seq!(eval("3 / 2"), Object::float(1.5));
+    assert_seq!(eval("3.0 / 2"), Object::float(1.5));
+    assert_seq!(eval("3 / 2.0"), Object::float(1.5));
+    assert_seq!(eval("3.0 / 2.0"), Object::float(1.5));
+    assert_seq!(eval("3 // 2"), Object::int(1));
+    assert_seq!(eval("1 + 2.0"), Object::float(3.0));
+    assert_seq!(eval("1.0 + 2"), Object::float(3.0));
+    assert_seq!(eval("1.0 + 2.0"), Object::float(3.0));
+    assert_seq!(eval("1.0 - 2.0"), Object::float(-1.0));
+    assert_seq!(eval("1.0 - 2"), Object::float(-1.0));
+    assert_seq!(eval("1 - 2.0"), Object::float(-1.0));
+    assert_seq!(eval("1 - 2 + 3"), Object::int(2));
+    assert_seq!(eval("2 // 2 * 2"), Object::int(2));
+    assert_seq!(eval("2 ^ 2"), Object::int(4));
+    assert_seq!(eval("-2 ^ 2"), Object::int(-4));
+    assert_seq!(eval("2 ^ 2 ^ 2"), Object::int(16));
+    assert_seq!(eval("-2 ^ 2 ^ 2"), Object::int(-16));
+    assert_seq!(eval("2 ^ 3 ^ 3"), Object::int(134217728));
+    assert_seq!(eval("(2 ^ 3) ^ 3"), Object::int(512));
+    assert_seq!(eval("-2 ^ 3 ^ 3"), Object::int(-134217728));
+    assert_seq!(eval("(-2 ^ 3) ^ 3"), Object::int(-512));
+    assert_seq!(eval("-(2 ^ 3) ^ 3"), Object::int(-512));
+    assert_seq!(eval("2 ^ -1"), Object::float(0.5));
 
-    assert_seq!(eval("(9999999999999999999999999 + 1) - 9999999999999999999999999"), Object::from(1));
-    assert_seq!(eval("9223372036854775800 + 9223372036854775800 - 9223372036854775800"), Object::from(9223372036854775800_i64));
-    assert_seq!(eval("(-9999999999999999999999999 - 1) + 9999999999999999999999999"), Object::from(-1));
+    assert_seq!(eval("(9999999999999999999999999 + 1) - 9999999999999999999999999"), Object::int(1));
+    assert_seq!(eval("9223372036854775800 + 9223372036854775800 - 9223372036854775800"), Object::int(9223372036854775800_i64));
+    assert_seq!(eval("(-9999999999999999999999999 - 1) + 9999999999999999999999999"), Object::int(-1));
 }
 
 
 #[test]
 fn compare() {
-    assert_seq!(eval("1 < 2"), Object::from(true));
-    assert_seq!(eval("1 < 2.0"), Object::from(true));
-    assert_seq!(eval("1.0 < 2"), Object::from(true));
-    assert_seq!(eval("1.0 < 2.0"), Object::from(true));
-    assert_seq!(eval("\"a\" < \"b\""), Object::from(true));
+    assert_seq!(eval("1 < 2"), Object::bool(true));
+    assert_seq!(eval("1 < 2.0"), Object::bool(true));
+    assert_seq!(eval("1.0 < 2"), Object::bool(true));
+    assert_seq!(eval("1.0 < 2.0"), Object::bool(true));
+    assert_seq!(eval("\"a\" < \"b\""), Object::bool(true));
 
-    assert_seq!(eval("1 > 2"), Object::from(false));
-    assert_seq!(eval("1 > 2.0"), Object::from(false));
-    assert_seq!(eval("1.0 > 2"), Object::from(false));
-    assert_seq!(eval("1.0 > 2.0"), Object::from(false));
-    assert_seq!(eval("\"a\" > \"b\""), Object::from(false));
+    assert_seq!(eval("1 > 2"), Object::bool(false));
+    assert_seq!(eval("1 > 2.0"), Object::bool(false));
+    assert_seq!(eval("1.0 > 2"), Object::bool(false));
+    assert_seq!(eval("1.0 > 2.0"), Object::bool(false));
+    assert_seq!(eval("\"a\" > \"b\""), Object::bool(false));
 
-    assert_seq!(eval("2 <= 2"), Object::from(true));
-    assert_seq!(eval("2 <= 2.0"), Object::from(true));
-    assert_seq!(eval("2.0 <= 2"), Object::from(true));
-    assert_seq!(eval("2.0 <= 2.0"), Object::from(true));
-    assert_seq!(eval("\"a\" <= \"b\""), Object::from(true));
+    assert_seq!(eval("2 <= 2"), Object::bool(true));
+    assert_seq!(eval("2 <= 2.0"), Object::bool(true));
+    assert_seq!(eval("2.0 <= 2"), Object::bool(true));
+    assert_seq!(eval("2.0 <= 2.0"), Object::bool(true));
+    assert_seq!(eval("\"a\" <= \"b\""), Object::bool(true));
 
-    assert_seq!(eval("1 >= 2"), Object::from(false));
-    assert_seq!(eval("1 >= 2.0"), Object::from(false));
-    assert_seq!(eval("1.0 >= 2"), Object::from(false));
-    assert_seq!(eval("1.0 >= 2.0"), Object::from(false));
-    assert_seq!(eval("\"a\" >= \"b\""), Object::from(false));
+    assert_seq!(eval("1 >= 2"), Object::bool(false));
+    assert_seq!(eval("1 >= 2.0"), Object::bool(false));
+    assert_seq!(eval("1.0 >= 2"), Object::bool(false));
+    assert_seq!(eval("1.0 >= 2.0"), Object::bool(false));
+    assert_seq!(eval("\"a\" >= \"b\""), Object::bool(false));
 
-    assert_seq!(eval("1 == 2"), Object::from(false));
-    assert_seq!(eval("2 == 2"), Object::from(true));
-    assert_seq!(eval("2.0 == 2.0"), Object::from(true));
-    assert_seq!(eval("2 == 2.0"), Object::from(true));
-    assert_seq!(eval("2.0 == 2"), Object::from(true));
-    assert_seq!(eval("\"a\" == \"b\""), Object::from(false));
-    assert_seq!(eval("true == false"), Object::from(false));
-    assert_seq!(eval("null == null"), Object::from(true));
+    assert_seq!(eval("1 == 2"), Object::bool(false));
+    assert_seq!(eval("2 == 2"), Object::bool(true));
+    assert_seq!(eval("2.0 == 2.0"), Object::bool(true));
+    assert_seq!(eval("2 == 2.0"), Object::bool(true));
+    assert_seq!(eval("2.0 == 2"), Object::bool(true));
+    assert_seq!(eval("\"a\" == \"b\""), Object::bool(false));
+    assert_seq!(eval("true == false"), Object::bool(false));
+    assert_seq!(eval("null == null"), Object::bool(true));
 
-    assert_seq!(eval("[] == []"), Object::from(true));
-    assert_seq!(eval("[1] == []"), Object::from(false));
-    assert_seq!(eval("[1] == [2]"), Object::from(false));
-    assert_seq!(eval("[1] == [1]"), Object::from(true));
-    assert_seq!(eval("[1] == [1.0]"), Object::from(true));
+    assert_seq!(eval("[] == []"), Object::bool(true));
+    assert_seq!(eval("[1] == []"), Object::bool(false));
+    assert_seq!(eval("[1] == [2]"), Object::bool(false));
+    assert_seq!(eval("[1] == [1]"), Object::bool(true));
+    assert_seq!(eval("[1] == [1.0]"), Object::bool(true));
 
-    assert_seq!(eval("{} == {}"), Object::from(true));
-    assert_seq!(eval("{a: 1} == {}"), Object::from(false));
-    assert_seq!(eval("{a: 1} == {a: 1}"), Object::from(true));
-    assert_seq!(eval("{b: 1} == {a: 1}"), Object::from(false));
-    assert_seq!(eval("{a: 1.0} == {a: 1}"), Object::from(true));
-    assert_seq!(eval("{a: 2} == {a: 1}"), Object::from(false));
-    assert_seq!(eval("{a: 1} == {a: 1, b: 1}"), Object::from(false));
-    assert_seq!(eval("{a: 1} == {a: 1, a: 1}"), Object::from(true));
+    assert_seq!(eval("{} == {}"), Object::bool(true));
+    assert_seq!(eval("{a: 1} == {}"), Object::bool(false));
+    assert_seq!(eval("{a: 1} == {a: 1}"), Object::bool(true));
+    assert_seq!(eval("{b: 1} == {a: 1}"), Object::bool(false));
+    assert_seq!(eval("{a: 1.0} == {a: 1}"), Object::bool(true));
+    assert_seq!(eval("{a: 2} == {a: 1}"), Object::bool(false));
+    assert_seq!(eval("{a: 1} == {a: 1, b: 1}"), Object::bool(false));
+    assert_seq!(eval("{a: 1} == {a: 1, a: 1}"), Object::bool(true));
 
-    assert_seq!(eval("[] == {}"), Object::from(false));
+    assert_seq!(eval("[] == {}"), Object::bool(false));
 
-    assert_seq!(eval("1 != 2"), Object::from(true));
-    assert_seq!(eval("2 != 2"), Object::from(false));
-    assert_seq!(eval("2.0 != 2.0"), Object::from(false));
-    assert_seq!(eval("2 != 2.0"), Object::from(false));
-    assert_seq!(eval("2.0 != 2"), Object::from(false));
-    assert_seq!(eval("\"a\" != \"b\""), Object::from(true));
-    assert_seq!(eval("true != false"), Object::from(true));
-    assert_seq!(eval("null != null"), Object::from(false));
+    assert_seq!(eval("1 != 2"), Object::bool(true));
+    assert_seq!(eval("2 != 2"), Object::bool(false));
+    assert_seq!(eval("2.0 != 2.0"), Object::bool(false));
+    assert_seq!(eval("2 != 2.0"), Object::bool(false));
+    assert_seq!(eval("2.0 != 2"), Object::bool(false));
+    assert_seq!(eval("\"a\" != \"b\""), Object::bool(true));
+    assert_seq!(eval("true != false"), Object::bool(true));
+    assert_seq!(eval("null != null"), Object::bool(false));
 
-    assert_seq!(eval("[] != []"), Object::from(false));
-    assert_seq!(eval("[1] != []"), Object::from(true));
-    assert_seq!(eval("[1] != [2]"), Object::from(true));
-    assert_seq!(eval("[1] != [1]"), Object::from(false));
-    assert_seq!(eval("[1] != [1.0]"), Object::from(false));
+    assert_seq!(eval("[] != []"), Object::bool(false));
+    assert_seq!(eval("[1] != []"), Object::bool(true));
+    assert_seq!(eval("[1] != [2]"), Object::bool(true));
+    assert_seq!(eval("[1] != [1]"), Object::bool(false));
+    assert_seq!(eval("[1] != [1.0]"), Object::bool(false));
 
-    assert_seq!(eval("{} != {}"), Object::from(false));
-    assert_seq!(eval("{a: 1} != {}"), Object::from(true));
-    assert_seq!(eval("{a: 1} != {a: 1}"), Object::from(false));
-    assert_seq!(eval("{b: 1} != {a: 1}"), Object::from(true));
-    assert_seq!(eval("{a: 1.0} != {a: 1}"), Object::from(false));
-    assert_seq!(eval("{a: 2} != {a: 1}"), Object::from(true));
-    assert_seq!(eval("{a: 1} != {a: 1, b: 1}"), Object::from(true));
-    assert_seq!(eval("{a: 1} != {a: 1, a: 1}"), Object::from(false));
+    assert_seq!(eval("{} != {}"), Object::bool(false));
+    assert_seq!(eval("{a: 1} != {}"), Object::bool(true));
+    assert_seq!(eval("{a: 1} != {a: 1}"), Object::bool(false));
+    assert_seq!(eval("{b: 1} != {a: 1}"), Object::bool(true));
+    assert_seq!(eval("{a: 1.0} != {a: 1}"), Object::bool(false));
+    assert_seq!(eval("{a: 2} != {a: 1}"), Object::bool(true));
+    assert_seq!(eval("{a: 1} != {a: 1, b: 1}"), Object::bool(true));
+    assert_seq!(eval("{a: 1} != {a: 1, a: 1}"), Object::bool(false));
 
-    assert_seq!(eval("[] != {}"), Object::from(true));
+    assert_seq!(eval("[] != {}"), Object::bool(true));
 }
 
 
 #[test]
 fn logic() {
-    assert_seq!(eval("true and 1"), Object::from(1));
-    assert_seq!(eval("false and 1"), Object::from(false));
-    assert_seq!(eval("true or 1"), Object::from(true));
-    assert_seq!(eval("false or 1"), Object::from(1));
-    assert_seq!(eval("null or 1"), Object::from(1));
-    assert_seq!(eval("1 or 1"), Object::from(1));
+    assert_seq!(eval("true and 1"), Object::int(1));
+    assert_seq!(eval("false and 1"), Object::bool(false));
+    assert_seq!(eval("true or 1"), Object::bool(true));
+    assert_seq!(eval("false or 1"), Object::int(1));
+    assert_seq!(eval("null or 1"), Object::int(1));
+    assert_seq!(eval("1 or 1"), Object::int(1));
 }
 
 
 #[test]
 fn list_concat() {
-    assert_seq!(eval("[1, 2] + [3]"), Object::list((1, 2, 3)));
-    assert_seq!(eval("[1, 2] + []"), Object::list((1, 2)));
-    assert_seq!(eval("[] + [3]"), Object::list((3,)));
+    assert_seq!(eval("[1, 2] + [3]"), (1..4).map(Object::int).collect());
+    assert_seq!(eval("[1, 2] + []"), (1..3).map(Object::int).collect());
+    assert_seq!(eval("[] + [3]"), Object::list(vec![Object::int(3)]));
 
-    assert_seq!(eval("[...[1, 2], ...[3]]"), Object::list((1, 2, 3)));
-    assert_seq!(eval("[...[1, 2], ...[]]"), Object::list((1, 2)));
-    assert_seq!(eval("[...[1, 2]]"), Object::list((1, 2)));
-    assert_seq!(eval("[...[], ...[3]]"), Object::list((3,)));
-    assert_seq!(eval("[...[3]]"), Object::list((3,)));
+    assert_seq!(eval("[...[1, 2], ...[3]]"), (1..4).map(Object::int).collect());
+    assert_seq!(eval("[...[1, 2], ...[]]"), (1..3).map(Object::int).collect());
+    assert_seq!(eval("[...[1, 2]]"), (1..3).map(Object::int).collect());
+    assert_seq!(eval("[...[], ...[3]]"), Object::list(vec![Object::int(3)]));
+    assert_seq!(eval("[...[3]]"), Object::list(vec![Object::int(3)]));
 }
 
 
 #[test]
 fn map_concat() {
-    assert_seq!(eval("{a: 1, ...{b: 2, c: 3}, d: 4}"), Object::map((
-        ("a", 1),
-        ("b", 2),
-        ("c", 3),
-        ("d", 4),
-    )));
+    assert_seq!(eval("{a: 1, ...{b: 2, c: 3}, d: 4}"), Object::map(vec![
+        ("a", Object::int(1)),
+        ("b", Object::int(2)),
+        ("c", Object::int(3)),
+        ("d", Object::int(4)),
+    ]));
 
-    assert_seq!(eval("{a: 1, ...{a: 2, c: 3}, c: 4}"), Object::map((
-        ("a", 2),
-        ("c", 4),
-    )));
+    assert_seq!(eval("{a: 1, ...{a: 2, c: 3}, c: 4}"), Object::map(vec![
+        ("a", Object::int(2)),
+        ("c", Object::int(4)),
+    ]));
 }
 
 
@@ -441,102 +497,126 @@ fn functions() {
         "let double = |x| x + x\n",
         "let applytwice = |f,x| f(f(x))\n",
         "in applytwice(double, [1])"
-    )), Object::list((1, 1, 1, 1)));
+    )), Object::list(vec![
+        Object::int(1),
+        Object::int(1),
+        Object::int(1),
+        Object::int(1),
+    ]));
 
     assert_seq!(eval(concat!(
         "let a = 1\n",
         "let b = || a\n",
         "let a = 2\n",
         "in b()"
-    )), Object::from(1));
+    )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let a = 1\n",
         "let b = |q = a| q\n",
         "in b()"
-    )), Object::from(1));
+    )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let a = 1\n",
         "let b = |q = a| q\n",
         "let a = 2\n",
         "in b()"
-    )), Object::from(1));
+    )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let b = || let a = 1 in |q = a| q\n",
         "let c = b()\n",
         "in c()"
-    )), Object::from(1));
+    )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let a = |q, ...x| [q, ...x]\n",
         "in a(1, 2, 3)"
-    )), Object::list((1, 2, 3)));
+    )), (1..4).map(Object::int).collect());
 
     assert_seq!(eval(concat!(
         "let a = |q, p = q| p\n",
         "in a(1, 2)"
-    )), Object::from(2));
+    )), Object::int(2));
 
     assert_seq!(eval(concat!(
         "let a = |q, p = q| p\n",
         "in a(1)"
-    )), Object::from(1));
+    )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let a = |; k = 1| k\n",
         "in a()"
-    )), Object::from(1));
+    )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let a = |; k = 1| k\n",
         "in a(k: 2)"
-    )), Object::from(2));
+    )), Object::int(2));
 
     assert_seq!(eval(concat!(
         "let a = {|k = 1|} k\n",
         "in a()"
-    )), Object::from(1));
+    )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let a = {|k = 1|} k\n",
         "in a(k: 2)"
-    )), Object::from(2));
+    )), Object::int(2));
 }
 
 
 #[test]
 fn subscripting() {
-    assert_seq!(eval("[1, 2, 3][0]"), Object::from(1));
-    assert_seq!(eval("[1, 2, 3][1]"), Object::from(2));
-    assert_seq!(eval("[1, 2, 3][2]"), Object::from(3));
+    assert_seq!(eval("[1, 2, 3][0]"), Object::int(1));
+    assert_seq!(eval("[1, 2, 3][1]"), Object::int(2));
+    assert_seq!(eval("[1, 2, 3][2]"), Object::int(3));
 
-    assert_seq!(eval("{a: 1, b: 2}.a"), Object::from(1));
-    assert_seq!(eval("{a: 1, b: 2}.b"), Object::from(2));
-    assert_seq!(eval("{a: 1, b: 2}[\"a\"]"), Object::from(1));
-    assert_seq!(eval("{a: 1, b: 2}[\"b\"]"), Object::from(2));
+    assert_seq!(eval("{a: 1, b: 2}.a"), Object::int(1));
+    assert_seq!(eval("{a: 1, b: 2}.b"), Object::int(2));
+    assert_seq!(eval("{a: 1, b: 2}[\"a\"]"), Object::int(1));
+    assert_seq!(eval("{a: 1, b: 2}[\"b\"]"), Object::int(2));
 }
 
 
 #[test]
 fn branching_in_collections() {
-    assert_seq!(eval("[if true then 1 else 2, 3]"), Object::list((1, 3)));
-    assert_seq!(eval("[if false then 1 else 2, 3]"), Object::list((2, 3)));
+    assert_seq!(eval("[if true then 1 else 2, 3]"), Object::list(vec![
+        Object::int(1),
+        Object::int(3),
+    ]));
+
+    assert_seq!(eval("[if false then 1 else 2, 3]"), Object::list(vec![
+        Object::int(2),
+        Object::int(3),
+    ]));
 }
 
 
 #[test]
 fn conditional_collection_elements() {
-    assert_seq!(eval("[when true: 1, when false: 2, if true then 3 else 4, 5]"), Object::list((1, 3, 5)));
-    assert_seq!(eval("{a: if true then 1 else 2, when true: b: 3, when false: c: 4}"), Object::map((("a", 1), ("b", 3))));
+    assert_seq!(eval("[when true: 1, when false: 2, if true then 3 else 4, 5]"), Object::list(vec![
+        Object::int(1),
+        Object::int(3),
+        Object::int(5),
+    ]));
+
+    assert_seq!(eval("{a: if true then 1 else 2, when true: b: 3, when false: c: 4}"), Object::map(vec![
+        ("a", Object::int(1)),
+        ("b", Object::int(3)),
+    ]));
 }
 
 
 #[test]
 fn iterable_collection_elements() {
-    assert_seq!(eval("let a = [1, 2, 3] in [for x in a: x + 1]"), Object::list((2, 3, 4)));
-    assert_seq!(eval("{for [x,y] in [[\"a\", 1], [\"b\", 2]]: $x: y}"), Object::map((("a", 1), ("b", 2))));
+    assert_seq!(eval("let a = [1, 2, 3] in [for x in a: x + 1]"), (2..5).map(Object::int).collect());
+
+    assert_seq!(eval("{for [x,y] in [[\"a\", 1], [\"b\", 2]]: $x: y}"), Object::map(vec![
+        ("a", Object::int(1)),
+        ("b", Object::int(2))
+    ]));
 }
 
 
@@ -545,64 +625,67 @@ fn complex_collection_elements() {
     assert_seq!(eval(concat!(
         "let a = [1, 2, 3, 4, 5]\n",
         "in [for x in a: when x < 3: x]"
-    )), Object::list((1, 2)));
+    )), (1..3).map(Object::int).collect());
 
     assert_seq!(eval(concat!(
         "let a = [[1], [2, 3], [4, 5, 6]]\n",
         "in [for x in a: when len(x) > 1: ...x]"
-    )), Object::list((2, 3, 4, 5, 6)));
+    )), (2..7).map(Object::int).collect());
 
     assert_seq!(eval(concat!(
         "let a = [[\"x\",1], [\"y\",2], [\"z\",3]]\n",
         "in {for [x,y] in a: when y != 2: $x: y}"
-    )), Object::map((("x", 1), ("z", 3))));
+    )), Object::map(vec![
+        ("x", Object::int(1)),
+        ("z", Object::int(3)),
+    ]));
 }
 
 
 #[test]
 fn builtins() {
-    assert_seq!(eval("len([1, 2])"), Object::from(2));
-    assert_seq!(eval("len([])"), Object::from(0));
+    assert_seq!(eval("len([1, 2])"), Object::int(2));
+    assert_seq!(eval("len([])"), Object::int(0));
 
-    assert_seq!(eval("len({})"), Object::from(0));
-    assert_seq!(eval("len({a: 1})"), Object::from(1));
+    assert_seq!(eval("len({})"), Object::int(0));
+    assert_seq!(eval("len({a: 1})"), Object::int(1));
 
-    assert_seq!(eval("len(\"\")"), Object::from(0));
-    assert_seq!(eval("len(\"abc\")"), Object::from(3));
-    assert_seq!(eval("len(\"å\")"), Object::from(1));
+    assert_seq!(eval("len(\"\")"), Object::int(0));
+    assert_seq!(eval("len(\"abc\")"), Object::int(3));
+    assert_seq!(eval("len(\"å\")"), Object::int(1));
 
-    assert_seq!(eval("range(3)"), Object::list((0, 1, 2)));
-    assert_seq!(eval("range(1, 3)"), Object::list((1, 2)));
+    assert_seq!(eval("range(3)"), (0..3).map(Object::int).collect());
+    assert_seq!(eval("range(1, 3)"), (1..3).map(Object::int).collect());
 
-    assert_seq!(eval("int(1)"), Object::from(1));
-    assert_seq!(eval("int(true)"), Object::from(1));
-    assert_seq!(eval("int(false)"), Object::from(0));
-    assert_seq!(eval("int(1.2)"), Object::from(1));
-    assert_seq!(eval("int(-1.2)"), Object::from(-1));
-    assert_seq!(eval("int(\"-3\")"), Object::from(-3));
+    assert_seq!(eval("int(1)"), Object::int(1));
+    assert_seq!(eval("int(true)"), Object::int(1));
+    assert_seq!(eval("int(false)"), Object::int(0));
+    assert_seq!(eval("int(1.2)"), Object::int(1));
+    assert_seq!(eval("int(-1.2)"), Object::int(-1));
+    assert_seq!(eval("int(\"-3\")"), Object::int(-3));
 
-    assert_seq!(eval("bool(1)"), Object::from(true));
-    assert_seq!(eval("bool(0)"), Object::from(false));
-    assert_seq!(eval("bool(1.5)"), Object::from(true));
-    assert_seq!(eval("bool(0.0)"), Object::from(false));
-    assert_seq!(eval("bool(true)"), Object::from(true));
-    assert_seq!(eval("bool(false)"), Object::from(false));
-    assert_seq!(eval("bool(null)"), Object::from(false));
-    assert_seq!(eval("bool([])"), Object::from(true));
-    assert_seq!(eval("bool({})"), Object::from(true));
+    assert_seq!(eval("bool(1)"), Object::bool(true));
+    assert_seq!(eval("bool(0)"), Object::bool(false));
+    assert_seq!(eval("bool(1.5)"), Object::bool(true));
+    assert_seq!(eval("bool(0.0)"), Object::bool(false));
+    assert_seq!(eval("bool(true)"), Object::bool(true));
+    assert_seq!(eval("bool(false)"), Object::bool(false));
+    assert_seq!(eval("bool(null)"), Object::bool(false));
+    assert_seq!(eval("bool([])"), Object::bool(true));
+    assert_seq!(eval("bool({})"), Object::bool(true));
 
-    assert_seq!(eval("str(1)"), Object::from("1"));
-    assert_seq!(eval("str(1.2)"), Object::from("1.2"));
-    assert_seq!(eval("str(\"delta\")"), Object::from("delta"));
-    assert_seq!(eval("str(true)"), Object::from("true"));
-    assert_seq!(eval("str(false)"), Object::from("false"));
-    assert_seq!(eval("str(null)"), Object::from("null"));
+    assert_seq!(eval("str(1)"), Object::str("1"));
+    assert_seq!(eval("str(1.2)"), Object::str("1.2"));
+    assert_seq!(eval("str(\"delta\")"), Object::str("delta"));
+    assert_seq!(eval("str(true)"), Object::str("true"));
+    assert_seq!(eval("str(false)"), Object::str("false"));
+    assert_seq!(eval("str(null)"), Object::str("null"));
 
-    assert_seq!(eval("float(1)"), Object::from(1.0));
-    assert_seq!(eval("float(1.0)"), Object::from(1.0));
-    assert_seq!(eval("float(true)"), Object::from(1.0));
-    assert_seq!(eval("float(false)"), Object::from(0.0));
-    assert_seq!(eval("float(\"1.2\")"), Object::from(1.2));
+    assert_seq!(eval("float(1)"), Object::float(1.0));
+    assert_seq!(eval("float(1.0)"), Object::float(1.0));
+    assert_seq!(eval("float(true)"), Object::float(1.0));
+    assert_seq!(eval("float(false)"), Object::float(0.0));
+    assert_seq!(eval("float(\"1.2\")"), Object::float(1.2));
 }
 
 
@@ -643,8 +726,6 @@ fn errors() {
     assert_eq!(eval("[] * 9"), err!(TypeMismatch::BinOp(Type::List, Type::Integer, BinOp::Multiply), loc!(3, Evaluate)));
     assert_eq!(eval("9 / {}"), err!(TypeMismatch::BinOp(Type::Integer, Type::Map, BinOp::Divide), loc!(2, Evaluate)));
     assert_eq!(eval("null // {}"), err!(TypeMismatch::BinOp(Type::Null, Type::Map, BinOp::IntegerDivide), loc!(5..7, Evaluate)));
-    assert_eq!(eval("2 ^ 999999999999999999"), err!(Value::TooLarge, loc!(2, Evaluate)));
-    assert_eq!(eval("99999999999999999999999999999999999 ^ 999999999999999999"), err!(Value::TooLarge, loc!(36, Evaluate)));
     assert_eq!(eval("null < true"), err!(TypeMismatch::BinOp(Type::Null, Type::Boolean, BinOp::Less), loc!(5, Evaluate)));
     assert_eq!(eval("1 > \"\""), err!(TypeMismatch::BinOp(Type::Integer, Type::String, BinOp::Greater), loc!(2, Evaluate)));
     assert_eq!(eval("[] <= 2.1"), err!(TypeMismatch::BinOp(Type::List, Type::Float, BinOp::LessEqual), loc!(3..5, Evaluate)));
@@ -663,10 +744,20 @@ fn errors() {
     assert_eq!(eval("[]()"), err!(TypeMismatch::Call(Type::List), loc!(2..4, Evaluate)));
     assert_eq!(eval("true(1)"), err!(TypeMismatch::Call(Type::Boolean), loc!(4..7, Evaluate)));
 
-    assert_eq!(eval("range()"), err!(TypeMismatch::ArgCount(1, 2, 0), loc!(5..7, Evaluate)));
-    assert_eq!(eval("range(1, 2, 3)"), err!(TypeMismatch::ArgCount(1, 2, 3), loc!(5..14, Evaluate)));
-    assert_eq!(eval("len(1)"), err!(TypeMismatch::ExpectedArg(0, vec![Type::String, Type::List, Type::Map], Type::Integer), loc!(3..6, Evaluate)));
-    assert_eq!(eval("len(true)"), err!(TypeMismatch::ExpectedArg(0, vec![Type::String, Type::List, Type::Map], Type::Boolean), loc!(3..9, Evaluate)));
+    assert_eq!(eval("range()"), err!(TypeMismatch::ArgCount { low: 1, high: 2, received: 0 }, loc!(5..7, Evaluate)));
+    assert_eq!(eval("range(1, 2, 3)"), err!(TypeMismatch::ArgCount { low: 1, high: 2, received: 3 }, loc!(5..14, Evaluate)));
+
+    assert_eq!(eval("len(1)"), err!(TypeMismatch::ExpectedPosArg{
+        index: 0,
+        allowed: vec![Type::String, Type::List, Type::Map],
+        received: Type::Integer
+    }, loc!(3..6, Evaluate)));
+
+    assert_eq!(eval("len(true)"), err!(TypeMismatch::ExpectedPosArg{
+        index: 0,
+        allowed: vec![Type::String, Type::List, Type::Map],
+        received: Type::Boolean
+    }, loc!(3..9, Evaluate)));
 
     assert!(eval_errstr("a").is_some_and(|x| x.contains("\na\n^\n")));
     assert!(eval_errstr("\n\na\n").is_some_and(|x| x.contains("\na\n^\n")));

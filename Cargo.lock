@@ -123,6 +123,7 @@ dependencies = [
  "nom_locate",
  "num-bigint",
  "num-traits",
+ "pyo3",
  "regex",
  "rmp-serde",
  "serde",
