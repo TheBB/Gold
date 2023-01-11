@@ -1201,6 +1201,20 @@ macro_rules! extract {
 }
 
 
+macro_rules! extractkw {
+    ($kwargs:ident , $key:ident , any) => { $kwargs.and_then(|kws| kws.get(&Key::from(stringify!($key)))) };
+
+    ($kwargs:ident , $key:ident , tofloat) => {{
+        let key = Key::from(stringify!($key));
+        $kwargs.and_then(
+            |kws| kws.get(&key).and_then(|x| x.get_float()).or_else(
+                || kws.get(&key).and_then(|x| x.get_int().map(|x| x.to_f64()))
+            )
+        )
+    }};
+}
+
+
 /// Utility macro for capturing a certain calling convention. Used for writing
 /// Gold functions in Rust.
 ///
@@ -1218,24 +1232,41 @@ macro_rules! extract {
 #[macro_export]
 macro_rules! signature {
 
-    // Entry point pattern.
+    // Entry point pattern
+    ($args:ident = [ $($param:ident : $type:ident),* ] $kwargs:ident = { $($kw:ident : $kwtype:ident),* } $block:block) => {
+        signature!(0 ; $args [ $($param : $type),* ] , $kwargs [ $($kw : $kwtype),* ] , $block)
+    };
+
+    // Entry point pattern, no kwargs
     ($args:ident = [ $($param:ident : $type:ident),* ] $block:block) => {
-        signature!(0 ; $args [ $($param : $type),* ] , $block)
+        signature!(0 ; $args [ $($param : $type),* ] , missing [ ] , $block)
     };
 
-    ($index:expr ; $args:ident [ $param:ident : $type:ident , $($params:ident : $types:ident),+ ] , $block:block) => {
+    ($index:expr ; $args:ident [ $param:ident : $type:ident , $($params:ident : $types:ident),+ ] , $kwargs:ident [ $($kw:ident : $kwtype:ident),* ] , $block:block) => {
         if let Some($param) = extract!($index, $args, $type) {
-            signature!($index + 1 ; $args [ $($params : $types),* ] , $block)
+            signature!($index + 1 ; $args [ $($params : $types),* ] , $kwargs [ $($kw : $kwtype),* ] , $block)
         }
     };
 
-    ($index:expr ; $args:ident [ $param:ident : $type:ident ] , $block:block) => {
+    ($index:expr ; $args:ident [ $param:ident : $type:ident ] , $kwargs:ident [ $($kw:ident : $kwtype:ident),* ] , $block:block) => {
         if let Some($param) = extract!($index, $args, $type) {
-            signature!($index + 1 ; $args [ ] , $block)
+            signature!($index + 1 ; $args [ ] , $kwargs [ $($kw : $kwtype),* ] , $block)
         }
     };
 
-    ($index:expr ; $args:ident [ ] , $block:block) => {
+    ($index:expr ; $args:ident [ ] , $kwargs:ident [ $kw:ident : $kwtype:ident ($kws:ident : $kwtypes:ident),+ ] , $block:block) => {
+        if let Some($kw) = extractkw!($kwargs, $kw, $kwtype) {
+            signature!($index ; $args [ ] , $kwargs [ $($kws : $kwtypes),* ] , $block)
+        }
+    };
+
+    ($index:expr ; $args:ident [ ] , $kwargs:ident [ $kw:ident : $kwtype:ident ] , $block:block) => {
+        if let Some($kw) = extractkw!($kwargs, $kw, $kwtype) {
+            signature!($index ; $args [ ] , $kwargs [ ] , $block)
+        }
+    };
+
+    ($index:expr ; $args:ident [ ] , $kwargs:ident [ ] , $block:block) => {
         if $args.len() == $index $block
     };
 }

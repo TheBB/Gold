@@ -747,13 +747,13 @@ fn errors() {
     assert_eq!(eval("range()"), err!(TypeMismatch::ArgCount { low: 1, high: 2, received: 0 }, loc!(5..7, Evaluate)));
     assert_eq!(eval("range(1, 2, 3)"), err!(TypeMismatch::ArgCount { low: 1, high: 2, received: 3 }, loc!(5..14, Evaluate)));
 
-    assert_eq!(eval("len(1)"), err!(TypeMismatch::ExpectedArg{
+    assert_eq!(eval("len(1)"), err!(TypeMismatch::ExpectedPosArg{
         index: 0,
         allowed: vec![Type::String, Type::List, Type::Map],
         received: Type::Integer
     }, loc!(3..6, Evaluate)));
 
-    assert_eq!(eval("len(true)"), err!(TypeMismatch::ExpectedArg{
+    assert_eq!(eval("len(true)"), err!(TypeMismatch::ExpectedPosArg{
         index: 0,
         allowed: vec![Type::String, Type::List, Type::Map],
         received: Type::Boolean

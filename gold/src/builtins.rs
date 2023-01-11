@@ -61,19 +61,41 @@ lazy_static! {
 }
 
 
-/// Return an error indicating wrong type of argument.
+/// Return an error indicating wrong type of positional parameter.
 ///
 /// ```ignore
-/// expected!(
-///     index_of_argument,
+/// expected_pos!(
+///     index_of_parameter,
 ///     name_of_args_vector,
 ///     (allowed_types)...,
 /// )
 /// ```
-macro_rules! expected {
+macro_rules! expected_pos {
     ($index:expr, $name:ident, $($types:ident),*) => {
-        return Err(Error::new(TypeMismatch::ExpectedArg {
+        return Err(Error::new(TypeMismatch::ExpectedPosArg {
             index: $index,
+            allowed: vec![
+                $(Type::$types),*
+            ],
+            received: $name.type_of(),
+        }))
+    };
+}
+
+
+/// Return an error indicating wrong type of keyword parameter.
+///
+/// ```ignore
+/// expected_kw!(
+///     name_of_parameter,
+///     name_of_args_vector,
+///     (allowed_types)...,
+/// )
+/// ```
+macro_rules! expected_kw {
+    ($name:expr, $kwargs:ident, $($types:ident),*) => {
+        return Err(Error::new(TypeMismatch::ExpectedKwArg {
+            name: stringify!(name).to_string(),
             allowed: vec![
                 $(Type::$types),*
             ],
@@ -124,7 +146,7 @@ pub fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::int(x.len()))
     });
 
-    signature!(args = [x: any] { expected!(0, x, String, List, Map) });
+    signature!(args = [x: any] { expected_pos!(0, x, String, List, Map) });
 
     argcount!(1, args)
 }
@@ -136,14 +158,14 @@ pub fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok((start.clone()..stop.clone()).map(Object::int).collect())
     });
 
-    signature!(args = [x: any, _y: int] { expected!(0, x, Integer) });
-    signature!(args = [_x: any, y: any] { expected!(1, y, Integer) });
+    signature!(args = [x: any, _y: int] { expected_pos!(0, x, Integer) });
+    signature!(args = [_x: any, y: any] { expected_pos!(1, y, Integer) });
 
     signature!(args = [stop: int] {
         return Ok((IntVariant::from(0)..stop.clone()).map(Object::int).collect())
     });
 
-    signature!(args = [x: any] { expected!(0, x, Integer) });
+    signature!(args = [x: any] { expected_pos!(0, x, Integer) });
 
     argcount!(1, 2, args)
 }
@@ -169,7 +191,7 @@ pub fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         ).map(|x| x.numeric_normalize())
     });
 
-    signature!(args = [x: any] { expected!(0, x, Integer, Float, Boolean, String) });
+    signature!(args = [x: any] { expected_pos!(0, x, Integer, Float, Boolean, String) });
 
     argcount!(1, args)
 }
@@ -195,7 +217,7 @@ pub fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         ).map(Object::float)
     });
 
-    signature!(args = [x: any] { expected!(0, x, Integer, Float, Boolean, String) });
+    signature!(args = [x: any] { expected_pos!(0, x, Integer, Float, Boolean, String) });
 
     argcount!(1, args)
 }
@@ -240,8 +262,8 @@ pub fn map(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::list(ret))
     });
 
-    signature!(args = [f: any, _x: list] { expected!(0, f, Function) });
-    signature!(args = [_f: any, x: any] { expected!(1, x, List) });
+    signature!(args = [f: any, _x: list] { expected_pos!(0, f, Function) });
+    signature!(args = [_f: any, x: any] { expected_pos!(1, x, List) });
 
     argcount!(2, args)
 }
@@ -264,8 +286,8 @@ pub fn filter(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::list(ret))
     });
 
-    signature!(args = [f: any, _x: list] { expected!(0, f, Function) });
-    signature!(args = [_f: any, x: any] { expected!(1, x, List) });
+    signature!(args = [f: any, _x: list] { expected_pos!(0, f, Function) });
+    signature!(args = [_f: any, x: any] { expected_pos!(1, x, List) });
 
     argcount!(2, args)
 }
@@ -284,7 +306,7 @@ pub fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::list(ret))
     });
 
-    signature!(args = [x: any] { expected!(0, x, Map) });
+    signature!(args = [x: any] { expected_pos!(0, x, Map) });
 
     argcount!(1, args)
 }
@@ -292,47 +314,43 @@ pub fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 /// Compute the exponential function. This supports two signatures:
 ///
-/// `exp(x)` is equivalent to `exp(x, 2.71828...)` while `exp(x, y)` computes y
-/// to the power x (which is the same as `y^x`).
-pub fn exp(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+/// `exp(x)` is equivalent to `exp(x, base: 2.71828...)` while `exp(x, base: y)`
+/// computes y to the power x (which is the same as `y^x`).
+pub fn exp(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+    signature!(args = [exp: tofloat] kwargs = {base: tofloat} {
+        return Ok(Object::float(base.powf(exp)))
+    });
+
+    signature!(args = [_x: tofloat] kwargs = {base: any} { expected_kw!(base, kwargs, Integer, Float) });
+
     signature!(args = [x: tofloat] {
         return Ok(Object::float(x.exp()))
     });
 
-    signature!(args = [x: any] { expected!(0, x, Integer, Float) });
+    signature!(args = [x: any] { expected_pos!(0, x, Integer, Float) });
 
-    // TODO: We should make base a keyword argument, otherwise exp(x,y) is confusing.
-    signature!(args = [exp: tofloat, base: tofloat] {
-        return Ok(Object::float(base.powf(exp)))
-    });
-
-    signature!(args = [x: any, _y: tofloat] { expected!(0, x, Integer, Float) });
-    signature!(args = [_x: any, y: any] { expected!(1, y, Integer, Float) });
-
-    argcount!(1, 2, args)
+    argcount!(1, args)
 }
 
 
 /// Compute the logaritm. This supports two signatures:
 ///
-/// `log(x)` is equivalent to `log(x, 2.71828...)` (the natural logarithm),
-/// while `log(x, y)` computes the logarith of `x` to the base `y`.
-pub fn log(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+/// `log(x)` is equivalent to `log(x, base: 2.71828...)` (the natural logarithm),
+/// while `log(x, base: y)` computes the logarith of `x` to the base `y`.
+pub fn log(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+    signature!(args = [num: tofloat] kwargs = {base: tofloat} {
+        return Ok(Object::float(num.log(base)))
+    });
+
+    signature!(args = [_x: tofloat] kwargs = {base: any} { expected_kw!(base, kwargs, Integer, Float) });
+
     signature!(args = [x: tofloat] {
         return Ok(Object::float(x.ln()))
     });
 
-    signature!(args = [x: any] { expected!(0, x, Integer, Float) });
+    signature!(args = [x: any] { expected_pos!(0, x, Integer, Float) });
 
-    // TODO: We should make base a keyword argument, otherwise log(x,y) is confusing.
-    signature!(args = [num: tofloat, base: tofloat] {
-        return Ok(Object::float(num.log(base)))
-    });
-
-    signature!(args = [x: any, _y: tofloat] { expected!(0, x, Integer, Float) });
-    signature!(args = [_x: any, y: any] { expected!(1, y, Integer, Float) });
-
-    argcount!(1, 2, args)
+    argcount!(1, args)
 }
 
 
@@ -347,7 +365,7 @@ pub fn ord(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::int(c.unwrap() as i64))
     });
 
-    signature!(args = [x: any] { expected!(0, x, String) });
+    signature!(args = [x: any] { expected_pos!(0, x, String) });
 
     argcount!(1, args)
 }
@@ -362,7 +380,7 @@ pub fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         return Ok(Object::str(c.to_string()))
     });
 
-    signature!(args = [x: any] { expected!(0, x, Integer) });
+    signature!(args = [x: any] { expected_pos!(0, x, Integer) });
 
     argcount!(1, args)
 }

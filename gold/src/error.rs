@@ -529,10 +529,22 @@ pub enum TypeMismatch {
     /// Attempted to convert a non-JSON type to JSON.
     Json(Type),
 
-    /// Expected a function argument to have a certain type, but it didn't.
-    ExpectedArg {
-        /// The zero-based index of the argument.
+    /// Expected a positional function parameter to have a certain type, but it didn't.
+    ExpectedPosArg {
+        /// The zero-based index of the parameter.
         index: usize,
+
+        /// Allowed types.
+        allowed: Vec<Type>,
+
+        /// Actual type received in function call.
+        received: Type,
+    },
+
+    /// Expected a keyword function parameter to have a certain type, but it didn't.
+    ExpectedKwArg {
+        /// The name of the parameter.
+        name: String,
 
         /// Allowed types.
         allowed: Vec<Type>,
@@ -791,6 +803,19 @@ impl Display for BindingType {
     }
 }
 
+fn fmt_expected_arg(f: &mut std::fmt::Formatter, name: impl Display, allowed: &Vec<Type>, received: &Type) -> std::fmt::Result {
+    f.write_fmt(format_args!("unsuitable type for parameter {} - expected ", name))?;
+    match allowed[..] {
+        [] => {},
+        [t] => f.write_fmt(format_args!("{}", t))?,
+        _ => {
+            let s = allowed[0..allowed.len() - 1].iter().map(|t| format!("{}", t)).collect::<Vec<String>>().join(", ");
+            f.write_fmt(format_args!("{} or {}", s, allowed.last().unwrap()))?
+        }
+    }
+    f.write_fmt(format_args!(", got {}", received))
+}
+
 impl Display for Reason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -827,18 +852,8 @@ impl Display for Reason {
             },
             Self::TypeMismatch(TypeMismatch::BinOp(l, r, op)) => f.write_fmt(format_args!("unsuitable types for '{}': {} and {}", op, l, r)),
             Self::TypeMismatch(TypeMismatch::Call(x)) => f.write_fmt(format_args!("unsuitable type for function call: {}", x)),
-            Self::TypeMismatch(TypeMismatch::ExpectedArg { index, allowed, received }) => {
-                f.write_fmt(format_args!("unsuitable type for parameter {} - expected ", index + 1))?;
-                match allowed[..] {
-                    [] => {},
-                    [t] => f.write_fmt(format_args!("{}", t))?,
-                    _ => {
-                        let s = allowed[0..allowed.len() - 1].iter().map(|t| format!("{}", t)).collect::<Vec<String>>().join(", ");
-                        f.write_fmt(format_args!("{} or {}", s, allowed.last().unwrap()))?
-                    }
-                }
-                f.write_fmt(format_args!(", got {}", received))
-            },
+            Self::TypeMismatch(TypeMismatch::ExpectedPosArg { index, allowed, received }) => fmt_expected_arg(f, index + 1, allowed, received),
+            Self::TypeMismatch(TypeMismatch::ExpectedKwArg { name, allowed, received }) => fmt_expected_arg(f, name, allowed, received),
             Self::TypeMismatch(TypeMismatch::Interpolate(x)) => f.write_fmt(format_args!("unsuitable type for string interpolation: {}", x)),
             Self::TypeMismatch(TypeMismatch::Iterate(x)) => f.write_fmt(format_args!("non-iterable type: {}", x)),
             Self::TypeMismatch(TypeMismatch::Json(x)) => f.write_fmt(format_args!("unsuitable type for JSON-like conversion: {}", x)),
