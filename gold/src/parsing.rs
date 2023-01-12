@@ -2007,6 +2007,7 @@ fn typedef<'a>(input: In<'a>) -> Out<'a, TopLevel> {
             TopLevel::TypeDef {
                 name: name,
                 params: params,
+                // params: params.map(|(_, p, _)| p),
                 expr: expr.inner(),
             }
         }
@@ -2041,7 +2042,6 @@ fn file<'a>(input: In<'a>) -> Out<'a, File> {
 /// Matches a type expression.
 fn type_expr<'a>(input: In<'a>) -> Out<'a, PType> {
     alt((
-
         map(
             tuple((
                 identifier,
