@@ -965,11 +965,17 @@ pub enum Expr {
     /// A function definition.
     Function {
 
+        /// Optional type parameters.
+        type_params: Option<Vec<Tagged<Key>>>,
+
         /// Positional function parameters.
         positional: ListBinding,
 
         /// Optional keyword parameters.
         keywords: Option<MapBinding>,
+
+        /// Optional return type.
+        return_type: Option<Tagged<TypeExpr>>,
 
         /// The expression to evaluate when called.
         expression: Box<Tagged<Expr>>,
@@ -1201,7 +1207,7 @@ impl FreeImpl for Expr {
                 true_branch.free_impl(free);
                 false_branch.free_impl(free);
             },
-            Expr::Function { positional, keywords, expression } => {
+            Expr::Function { positional, keywords, expression, .. } => {
                 let mut bound: HashSet<Key> = HashSet::new();
                 positional.free_and_bound(free, &mut bound);
                 keywords.as_ref().map(|x| x.free_and_bound(free, &mut bound));
@@ -1244,10 +1250,11 @@ impl Validatable for Expr {
                 operand.validate()?;
                 operator.validate()?;
             },
-            Expr::Function { positional, keywords, expression } => {
+            Expr::Function { positional, keywords, expression, return_type, .. } => {
                 positional.validate()?;
                 keywords.as_ref().map(MapBinding::validate).transpose()?;
                 expression.validate()?;
+                return_type.as_ref().map(|x| x.validate()).transpose()?;
             },
             Expr::Branch { condition, true_branch, false_branch } => {
                 condition.validate()?;
