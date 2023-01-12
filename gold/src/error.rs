@@ -9,6 +9,7 @@ use serde::{Serialize, Deserialize};
 use crate::ast::{BinOp, UnOp};
 use crate::lexing::TokenType;
 use crate::object::{Key, Type};
+use crate::traits::{HasSpan, HasMaybeSpan};
 
 
 /// Marks a position in a text buffer.
@@ -88,6 +89,12 @@ impl Position {
     }
 }
 
+impl HasSpan for Position {
+    fn span(&self) -> Span {
+        self.with_length(0)
+    }
+}
+
 impl Sub<Position> for Position {
     type Output = Span;
 
@@ -131,6 +138,11 @@ impl Span {
         self.length
     }
 
+    /// Construct a new span pointing to the beginning of a buffer.
+    pub fn zero() -> Span {
+        Position::zero().with_length(0)
+    }
+
     /// Return a new span by changing the line number.
     pub(crate) fn with_line(self, line: u32) -> Self {
         Span {
@@ -151,27 +163,71 @@ impl Span {
     pub(crate) fn with_coord(self, line: u32, col: u32) -> Self {
         self.with_line(line).with_column(col)
     }
+
+    /// Extend a span.
+    pub fn join(self, other: &impl HasSpan) -> Span {
+        (self..other.span()).span()
+    }
+
+    /// Maybe extend a span.
+    pub fn maybe_join(self, other: &impl HasMaybeSpan) -> Span {
+        other.maybe_span().map(|x| self.join(&x)).unwrap_or(self)
+    }
 }
 
-impl From<Range<u32>> for Span {
-    /// Convert a range of offsets to a text span, assuming the interval begins
-    /// on the first line. Use `with_line` if not.
-    fn from(value: Range<u32>) -> Self {
+impl HasSpan for Span {
+    fn span(&self) -> Span {
+        *self
+    }
+}
+
+impl HasSpan for Range<Span> {
+    fn span(&self) -> Span {
+        let Range { start, end } = self;
         Span {
-            start: Position::new(value.start as usize, 0, value.start),
-            length: (value.end - value.start) as usize,
+            start: start.start(),
+            length: end.offset() + end.length() - start.offset(),
         }
     }
 }
 
-impl From<usize> for Span {
+impl HasSpan for Range<u32> {
+    /// Convert a range of offsets to a text span, assuming the interval begins
+    /// on the first line. Use `with_line` if not.
+    fn span(&self) -> Span {
+        let Range { start, end } = *self;
+        Span {
+            start: Position::new(start as usize, 0, start),
+            length: (end - start) as usize,
+        }
+    }
+}
+
+impl HasSpan for usize {
     /// Convert an offset to a text span with length one, assuming the interval
     /// begins on the first line. Use `with_line` if not.
-    fn from(value: usize) -> Self {
+    fn span(&self) -> Span {
         Span {
-            start: Position::new(value, 0, value as u32),
+            start: Position::new(*self, 0, *self as u32),
             length: 1,
         }
+    }
+}
+
+impl<T> HasMaybeSpan for Vec<T> where T: HasSpan {
+    /// Return the span from the first to the last element. Returns None if the
+    /// vector is empty.
+    fn maybe_span(&self) -> Option<Span> {
+        let span = self.first().map(|x| x.span())?;
+        Some(self.last().map(
+            |x| (span..x.span()).span()
+        ).unwrap_or(span))
+    }
+}
+
+impl<T> HasMaybeSpan for Option<T> where T: HasSpan {
+    fn maybe_span(&self) -> Option<Span> {
+        self.as_ref().map(|x| x.span())
     }
 }
 
@@ -194,11 +250,6 @@ impl<T> Tagged<T> {
             span: location,
             contents,
         }
-    }
-
-    /// Return the text span.
-    pub fn span(&self) -> Span {
-        self.span
     }
 
     /// Destroy the wrapper and return its contents.
@@ -245,12 +296,10 @@ impl<T> Tagged<T> {
     }
 
     /// Substitute the text span with a new one.
-    pub fn retag<U>(self, loc: U) -> Tagged<T>
-    where
-        Span: From<U>,
+    pub fn retag(self, loc: impl HasSpan) -> Tagged<T>
     {
         Tagged::<T> {
-            span: Span::from(loc),
+            span: loc.span(),
             contents: self.contents,
         }
     }
@@ -261,6 +310,12 @@ impl<T> Tagged<T> {
     pub fn tag_error(&self, action: Action) -> impl Fn(Error) -> Error {
         let span = self.span();
         move |err: Error| err.tag(span, action)
+    }
+}
+
+impl<T> HasSpan for Tagged<T> {
+    fn span(&self) -> Span {
+        self.span
     }
 }
 
@@ -288,15 +343,6 @@ impl<T> AsRef<T> for Tagged<T> {
 impl<T> From<&Tagged<T>> for Span {
     fn from(value: &Tagged<T>) -> Self {
         value.span()
-    }
-}
-
-impl From<Range<Span>> for Span {
-    fn from(Range { start, end }: Range<Span>) -> Self {
-        Span {
-            start: start.start(),
-            length: end.offset() + end.length() - start.offset(),
-        }
     }
 }
 

@@ -1,9 +1,9 @@
 use crate::ast::*;
-use crate::error::{Span, Tagged, Error, Reason, Syntax, SyntaxElement as S, Action};
+use crate::error::{Tagged, Error, Reason, Syntax, SyntaxElement as S, Action};
 use crate::lexing::{TokenType as T};
 use crate::object::{Object, Key};
 use crate::parsing::{parse as parse_file};
-use crate::traits::{Boxable, Taggable};
+use crate::traits::{Boxable, Taggable, HasSpan};
 
 
 fn parse(input: &str) -> Result<Tagged<Expr>, Error> {
@@ -11,35 +11,36 @@ fn parse(input: &str) -> Result<Tagged<Expr>, Error> {
 }
 
 trait IdAble {
-    fn id<T>(self, loc: T) -> Tagged<Expr> where Span: From<T>;
+    fn id(self, loc: impl HasSpan) -> Tagged<Expr>;
 }
 
 impl<U> IdAble for U where U: KeyAble {
-    fn id<T>(self, loc: T) -> Tagged<Expr> where Span: From<T> {
+    fn id(self, loc: impl HasSpan) -> Tagged<Expr> {
         self.key(loc).wrap(Expr::Identifier)
     }
 }
 
 trait LitAble {
-    fn lit<T>(self, loc: T) -> Tagged<Expr> where Span: From<T>;
+    fn lit(self, loc: impl HasSpan) -> Tagged<Expr>;
 }
 
 impl<U> LitAble for U where U: KeyAble {
-    fn lit<T>(self, loc: T) -> Tagged<Expr> where Span: From<T> {
+    fn lit(self, loc: impl HasSpan) -> Tagged<Expr> {
         self.key(loc).map(Object::from).map(Expr::Literal)
     }
 }
 
 trait BindingIdAble {
-    fn bid<T>(self, loc: T) -> Tagged<Binding> where Span: From<T>, T: Copy;
+    fn bid(self, loc: impl HasSpan) -> Tagged<Binding>;
 }
 
 impl<U> BindingIdAble for U where U: KeyAble {
-    fn bid<T>(self, loc: T) -> Tagged<Binding> where Span: From<T>, T: Copy {
+    fn bid(self, loc: impl HasSpan) -> Tagged<Binding> {
+        let span = loc.span();
         Binding {
-            pattern: Pattern::Identifier(self.key(loc)).tag(loc),
+            pattern: Pattern::Identifier(self.key(span)).tag(span),
             tp: None,
-        }.tag(loc)
+        }.tag(span)
     }
 }
 
@@ -58,21 +59,21 @@ impl BindingAble for Tagged<Pattern> {
 }
 
 trait KeyAble {
-    fn key<T>(self, loc: T) -> Tagged<Key> where Span: From<T>;
+    fn key(self, loc: impl HasSpan) -> Tagged<Key>;
 }
 
 impl<U> KeyAble for U where U: AsRef<str> {
-    fn key<T>(self, loc: T) -> Tagged<Key> where Span: From<T> {
+    fn key(self, loc: impl HasSpan) -> Tagged<Key> {
         Key::new(self).tag(loc)
     }
 }
 
 trait ListElementAble {
-    fn lel<T>(self, loc: T) -> Tagged<ListElement> where Span: From<T>;
+    fn lel(self, loc: impl HasSpan) -> Tagged<ListElement>;
 }
 
 impl<U> ListElementAble for U where Object: From<U> {
-    fn lel<T>(self, loc: T) -> Tagged<ListElement> where Span: From<T> {
+    fn lel(self, loc: impl HasSpan) -> Tagged<ListElement> {
         Expr::Literal(Object::from(self)).tag(loc).wrap(ListElement::Singleton)
     }
 }
@@ -83,7 +84,7 @@ trait MapElementAble {
 
 impl MapElementAble for (Tagged<Expr>, Tagged<Expr>) {
     fn mel(self) -> Tagged<MapElement> {
-        let loc = Span::from(self.0.span()..self.1.span());
+        let loc = self.0.span()..self.1.span();
         MapElement::Singleton {
             key: self.0,
             value: self.1
@@ -92,11 +93,11 @@ impl MapElementAble for (Tagged<Expr>, Tagged<Expr>) {
 }
 
 trait ExprAble {
-    fn expr<T>(self, loc: T) -> Tagged<Expr> where Span: From<T>;
+    fn expr(self, loc: impl HasSpan) -> Tagged<Expr>;
 }
 
 impl<U> ExprAble for U where Object: From<U> {
-    fn expr<T>(self, loc: T) -> Tagged<Expr> where Span: From<T> {
+    fn expr(self, loc: impl HasSpan) -> Tagged<Expr> {
         Expr::Literal(Object::from(self)).tag(loc)
     }
 }
@@ -1213,7 +1214,7 @@ macro_rules! err {
         assert_eq!(
             parse($code),
             Err(Error {
-                locations: Some(vec![(Span::from($offset..$offset), Action::Parse)]),
+                locations: Some(vec![(($offset..$offset).span(), Action::Parse)]),
                 reason: Some(Reason::Syntax(Syntax::from(($elt $(,$elts)*)))),
                 rendered: None,
             })
@@ -1227,7 +1228,7 @@ macro_rules! errl {
         assert_eq!(
             parse($code),
             Err(Error {
-                locations: Some(vec![(Span::from($offset), Action::Parse)]),
+                locations: Some(vec![($offset.span(), Action::Parse)]),
                 reason: Some(Reason::Syntax($elt)),
                 rendered: None,
             })

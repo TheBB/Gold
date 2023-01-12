@@ -1,5 +1,6 @@
 use crate::ast::{BinOp, UnOp};
-use crate::error::{Error, Reason, Unpack, Span, Action, PatternType, TypeMismatch};
+use crate::error::{Error, Reason, Unpack, Action, PatternType, TypeMismatch};
+use crate::traits::HasSpan;
 use crate::eval_raw;
 use crate::object::{Object, Key, Type};
 
@@ -691,7 +692,7 @@ fn builtins() {
 
 macro_rules! loc {
     ($loc:expr, $act:ident) => {
-        (Span::from($loc), Action::$act)
+        (($loc).span(), Action::$act)
     };
 }
 
