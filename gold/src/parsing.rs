@@ -2007,7 +2007,6 @@ fn typedef<'a>(input: In<'a>) -> Out<'a, TopLevel> {
             TopLevel::TypeDef {
                 name: name,
                 params: params,
-                // params: params.map(|(_, p, _)| p),
                 expr: expr.inner(),
             }
         }
