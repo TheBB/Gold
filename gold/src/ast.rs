@@ -1270,12 +1270,20 @@ pub enum TopLevel {
 
     /// Import an object by loading another file and binding it to a pattern.
     Import(Tagged<String>, Tagged<Pattern>),
+
+    /// Define a type
+    TypeDef {
+        name: Tagged<Key>,
+        params: Option<Vec<Tagged<Key>>>,
+        expr: Tagged<TypeExpr>,
+    }
 }
 
 impl Validatable for TopLevel {
     fn validate(&self) -> Result<(), Error> {
         match self {
             Self::Import(_, binding) => { binding.validate()?; },
+            Self::TypeDef { expr, .. } => { expr.validate()?; },
         }
         Ok(())
     }
@@ -1318,7 +1326,7 @@ pub enum TypeExpr {
     /// Parametrized type
     Parametrized {
         name: Tagged<Key>,
-        parameters: Option<Vec<Tagged<TypeExpr>>>,
+        params: Option<Vec<Tagged<TypeExpr>>>,
     },
 }
 

@@ -465,6 +465,8 @@ impl<'a> Namespace<'a> {
                     let object = importer.resolve(path.as_ref()).map_err(path.tag_error(Action::Import))?;
                     ns.bind(binding, object)?;
                 }
+
+                TopLevel::TypeDef { .. } => {}
             }
         }
         ns.eval(&file.expression)
