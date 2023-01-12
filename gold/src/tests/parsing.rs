@@ -933,6 +933,7 @@ fn funcall() {
         parse("(|x,y| x+y)(1,2)"),
         Ok(
             Expr::Function {
+                type_params: None,
                 positional: ListBinding(vec![
                     ListPatternElement::Binding {
                         binding: "x".bid(2),
@@ -944,6 +945,7 @@ fn funcall() {
                     }.tag(4),
                 ]),
                 keywords: None,
+                return_type: None,
                 expression: "x".id(7).add("y".id(9), 8).tag(7..10).to_box(),
             }.tag(1..10).funcall(vec![
                 1.expr(12).wrap(ArgElement::Singleton),
@@ -1141,8 +1143,10 @@ fn functions() {
     assert_eq!(
         parse("|| 1"),
         Ok(Expr::Function {
+            type_params: None,
             positional: ListBinding(vec![]),
             keywords: None,
+            return_type: None,
             expression: 1.expr(3).to_box(),
         }.tag(0..4)),
     );
@@ -1150,8 +1154,10 @@ fn functions() {
     assert_eq!(
         parse("|;| 1"),
         Ok(Expr::Function {
+            type_params: None,
             positional: ListBinding(vec![]),
             keywords: Some(MapBinding(vec![])),
+            return_type: None,
             expression: 1.expr(4).to_box(),
         }.tag(0..5)),
     );
@@ -1159,8 +1165,10 @@ fn functions() {
     assert_eq!(
         parse("{||} 1"),
         Ok(Expr::Function {
+            type_params: None,
             positional: ListBinding(vec![]),
             keywords: Some(MapBinding(vec![])),
+            return_type: None,
             expression: 1.expr(5).to_box(),
         }.tag(0..6)),
     );
@@ -1168,6 +1176,7 @@ fn functions() {
     assert_eq!(
         parse("|a| let b = a in b"),
         Ok(Expr::Function {
+            type_params: None,
             positional: ListBinding(vec![
                 ListPatternElement::Binding {
                     binding: "a".bid(1),
@@ -1175,6 +1184,7 @@ fn functions() {
                 }.tag(1),
             ]),
             keywords: None,
+            return_type: None,
             expression: Box::new(Expr::Let {
                 bindings: vec![
                     (
@@ -1190,6 +1200,7 @@ fn functions() {
     assert_eq!(
         parse("{|x=1, y=2|} x + y"),
         Ok(Expr::Function {
+            type_params: None,
             positional: ListBinding(vec![]),
             keywords: Some(MapBinding(vec![
                 MapPatternElement::Binding {
@@ -1203,6 +1214,7 @@ fn functions() {
                     default: Some(2.expr(9)),
                 }.tag(7..10),
             ])),
+            return_type: None,
             expression: "x".id(13).add("y".id(17), 15).tag(13..18).to_box(),
         }.tag(0..18)),
     );

@@ -16,10 +16,10 @@ let carlo = {
     admin: false,
 }
 
-let isAdmin = (person) => person.admin
+let isAdmin = |person| person.admin
 
-let filter = (pred, list) => [
-    for x in list: if pred(x): x
+let filter = |pred, list| [
+    for x in list: when pred(x): x
 ]
 
 in filter(isAdmin, [alice, bob, carlo])

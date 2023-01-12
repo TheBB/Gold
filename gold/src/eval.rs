@@ -545,7 +545,7 @@ impl<'a> Namespace<'a> {
 
             // Function definitions: capture all free variables in the function
             // in a closure.
-            Expr::Function { positional, keywords, expression } => {
+            Expr::Function { positional, keywords, expression, .. } => {
                 let mut closure: Map = Map::new();
                 for ident in node.free() {
                     let val = self.get(&ident)?;

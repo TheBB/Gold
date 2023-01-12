@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::cmp::{max, min};
 use std::ops::{Deref, Range, Sub};
 
 use std::fmt::{Debug, Display, Write};
@@ -966,7 +966,7 @@ impl<'a> Display for ErrorRenderer<'a> {
 
                 // Offset of the end of the span to be displayed: either the end
                 // of the line (if longer than a line), or the end of the span
-                let span_end = min(loc.offset() + loc.length(), eol) - loc.offset();
+                let span_length = max(1, min(loc.offset() + loc.length(), eol) - loc.offset());
 
                 f.write_char('\n')?;
                 f.write_str(&code[bol..eol])?;
@@ -974,7 +974,7 @@ impl<'a> Display for ErrorRenderer<'a> {
                 for _ in 0..loc.column() {
                     f.write_char(' ')?;
                 }
-                for _ in 0..span_end {
+                for _ in 0..span_length {
                     f.write_char('^')?;
                 }
                 f.write_fmt(format_args!("\nwhile {} at {}:{}", act, loc.line() + 1, loc.column() + 1))?;

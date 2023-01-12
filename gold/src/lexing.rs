@@ -21,6 +21,7 @@ type LexCache<'a> = UnsafeCell<Option<(Ctx, usize, LexResult<'a>)>>;
 /// Complete list of all token types in the Gold grammar.
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum TokenType {
+    Arrow,              // ->
     Asterisk,           // *
     Caret,              // ^
     CloseAngle,         // >
@@ -84,6 +85,7 @@ pub(crate) enum Ctx {
 impl Display for TokenType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
+            Self::Arrow => "'->'",
             Self::Asterisk => "'*'",
             Self::Caret => "'^'",
             Self::CloseBrace => "'}'",
@@ -330,6 +332,7 @@ impl<'a> Lexer<'a> {
             Some(')') => self.skip_tag(1, 0, TokenType::CloseParen),
             Some(',') => self.skip_tag(1, 0, TokenType::Comma),
             Some('+') => self.skip_tag(1, 0, TokenType::Plus),
+            Some('-') if self.satisfies_at(1, |x| x == '>') => self.skip_tag(2, 0, TokenType::Arrow),
             Some('-') => self.skip_tag(1, 0, TokenType::Minus),
             Some('/') if self.satisfies_at(1, |x| x == '/') => self.skip_tag(2, 0, TokenType::DoubleSlash),
             Some('/') => self.skip_tag(1, 0, TokenType::Slash),

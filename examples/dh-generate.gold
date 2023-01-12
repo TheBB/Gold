@@ -1,4 +1,4 @@
-let makeUser = (user) => (
+let makeUser = |user: str| (
     let home = "/home/${user}"
     let privateKey = "${home}/.ssh/id_ed25519"
     let publicKey = "${privateKey}.pub"
@@ -9,6 +9,6 @@ let makeUser = (user) => (
     }
 )
 
-let buildUser = (index) => makeUser("build${index}")
+let buildUser = |index: int| makeUser("build${index}")
 
 in [for x in range(10): buildUser(x)]

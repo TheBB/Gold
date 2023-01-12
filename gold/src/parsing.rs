@@ -419,6 +419,7 @@ tok!{name, Name}
 tok!{float, Float}
 tok!{integer, Integer}
 
+tok!{arrow, Arrow}
 tok!{asterisk, Asterisk}
 tok!{caret, Caret}
 tok!{close_angle, CloseAngle}
@@ -1547,6 +1548,31 @@ fn binding<'a>(pattern: impl Parser<'a, Tagged<Pattern>> + Copy) -> impl Parser<
 }
 
 
+/// Matches a list of type parameters.
+fn type_parameters<'a>(input: In<'a>) -> Out<'a, Vec<Tagged<Key>>> {
+    map(
+        seplist(
+            open_angle,
+            identifier,
+            comma,
+            close_angle,
+            (TokenType::CloseAngle, SyntaxElement::Identifier),
+            (TokenType::CloseAngle, TokenType::Comma),
+        ),
+        |(_, params, _)| params,
+    )(input)
+}
+
+
+/// Matches a function return type annotation.
+fn return_type<'a>(input: In<'a>) -> Out<'a, PType> {
+    preceded(
+        arrow,
+        type_expr,
+    )(input)
+}
+
+
 /// Matches a standard function definition.
 ///
 /// This is the 'fn' keyword followed by a list binding and an optional map
@@ -1554,38 +1580,41 @@ fn binding<'a>(pattern: impl Parser<'a, Tagged<Pattern>> + Copy) -> impl Parser<
 /// let-binding syntax. It is concluded by a double arrow (=>) and an
 /// expression.
 fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    let (i, params) = opt(type_parameters)(input)?;
+
     let (i, (args, end)) = list_pattern(
         |i| pipe(i),
         |i| alt((pipe, semicolon))(i),
         (TokenType::Pipe, TokenType::SemiColon, SyntaxElement::PosParam),
         (TokenType::Pipe, TokenType::SemiColon, TokenType::Comma),
-    ).parse(input)?;
+    ).parse(i)?;
 
-    // println!("parsing normal function, end is {:?}", end);
-
-    let (j, kwargs) = if end == ";" {
-        // println!("keyword args");
-        let (j, kwargs) = map_pattern(
+    let (i, kwargs) = if end == ";" {
+        let (i, kwargs) = map_pattern(
             |i: In<'a>| { let loc = i.position(); Ok((i, "".tag(loc.with_length(0)))) },
             |i| pipe(i),
             (TokenType::Pipe, SyntaxElement::KeywordParam),
             (TokenType::Pipe, TokenType::Comma),
         )(i)?;
-        (j, Some(kwargs))
+        (i, Some(kwargs))
     } else {
         (i, None)
     };
 
-    let (l, expr) = fail(expression, SyntaxElement::Expression).parse(j)?;
+    let (i, rtype) = opt(return_type)(i)?;
+
+    let (i, expr) = fail(expression, SyntaxElement::Expression).parse(i)?;
     let span = args.span().join(&expr);
 
     let result = PExpr::Naked(Expr::Function {
+        type_params: params,
         positional: args.unwrap(),
         keywords: kwargs.map(Tagged::unwrap),
         expression: expr.inner().to_box(),
+        return_type: rtype.map(PType::inner),
     }.tag(span));
 
-    Ok((l, result))
+    Ok((i, result))
 }
 
 
@@ -1596,21 +1625,25 @@ fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn keyword_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
     map(
         tuple((
+            opt(type_parameters),
             map_pattern(
                 |i| open_brace_pipe(i),
                 |i| close_brace_pipe(i),
                 (TokenType::CloseBracePipe, SyntaxElement::KeywordParam),
                 (TokenType::CloseBracePipe, TokenType::Comma),
             ),
+            opt(return_type),
             fail(expression, SyntaxElement::Expression),
         )),
 
-        |(kwargs, expr)| {
+        |(params, kwargs, rtype, expr)| {
             let span = kwargs.span().join(&expr);
             PExpr::Naked(Expr::Function {
+                type_params: params,
                 positional: ListBinding(vec![]),
                 keywords: Some(kwargs.unwrap()),
                 expression: Box::new(expr.inner()),
+                return_type: rtype.map(PType::inner),
             }.tag(span))
         },
     )(input)
@@ -1749,21 +1782,14 @@ fn typedef<'a>(input: In<'a>) -> Out<'a, TopLevel> {
     map(
         tuple((
             preceded(keyword("type"), identifier),
-            opt(seplist(
-                open_angle,
-                identifier,
-                comma,
-                close_angle,
-                (TokenType::CloseAngle, SyntaxElement::Identifier),
-                (TokenType::CloseAngle, TokenType::Comma),
-            )),
+            opt(type_parameters),
             preceded(eq, type_expr),
         )),
 
         |(name, params, expr)| {
             TopLevel::TypeDef {
                 name: name,
-                params: params.map(|(_, p, _)| p),
+                params: params,
                 expr: expr.inner(),
             }
         }
@@ -1809,7 +1835,7 @@ fn type_expr<'a>(input: In<'a>) -> Out<'a, PType> {
                     close_angle,
                     (TokenType::CloseAngle, SyntaxElement::Type),
                     (TokenType::CloseAngle, TokenType::Comma),
-                ))
+                )),
             )),
 
             |(name, params)| {
