@@ -492,7 +492,7 @@ fn map_keyword<'a>(value: &'a str) -> impl Parser<'a, Tagged<&'a str>> {
 
 
 /// List of keywords that must be avoided by the [`identifier`] parser.
-static KEYWORDS: [&'static str; 16] = [
+static KEYWORDS: [&'static str; 17] = [
     "for",
     "when",
     "if",
@@ -1287,7 +1287,7 @@ fn equality<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn contains<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(keyword("has"), |x| (Transform::contains as OpCons).tag(&x)),
+            map(keyword("has"), |x| (Transform::contains as OpCons).tag(x)),
         )),
         equality,
     ).parse(input)
