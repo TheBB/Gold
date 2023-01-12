@@ -17,7 +17,7 @@ use crate::ast::*;
 use crate::error::{Error, Span, Tagged, Syntax, SyntaxError, SyntaxElement};
 use crate::lexing::{Lexer, TokenType, CachedLexer, CachedLexResult};
 use crate::object::{Object, Key};
-use crate::traits::{Boxable, Taggable, Validatable};
+use crate::traits::{Boxable, Taggable, Validatable, HasSpan, HasMaybeSpan};
 
 
 trait ExplainError {
@@ -168,6 +168,13 @@ impl<T> Paren<T> {
             Self::Naked(x) => Paren::<U>::Naked(x.wrap(f)),
             Self::Parenthesized(x) => Paren::<U>::Parenthesized(x.map(|y| y.wrap(f))),
         }
+    }
+}
+
+
+impl<T> HasSpan for Paren<T> {
+    fn span(&self) -> Span {
+        self.outer()
     }
 }
 
@@ -382,7 +389,7 @@ fn token<'a>(
     move |lex: In<'a>| {
         let (lex, tok) = getter(lex).map_err(NomError::Error)?;
         if tok.as_ref().kind == kind {
-            Ok((lex, tok.as_ref().text.tag(&tok)))
+            Ok((lex, tok.as_ref().text.tag(tok)))
         } else {
             Err(NomError::Error(SyntaxError::error(lex, kind)))
         }
@@ -455,7 +462,7 @@ tok!{fmtspec_number_raw, Integer, next_fmtspec}
 /// Match a single multiline string starting at a column.
 fn multistring<'a>(col: u32) -> impl Parser<'a, Tagged<&'a str>> {
     move |lex: In<'a>| lex.next_multistring(col)
-        .map(|(lex, tok)| (lex, tok.as_ref().text.tag(&tok)))
+        .map(|(lex, tok)| (lex, tok.as_ref().text.tag(tok)))
         .map_err(NomError::Error)
 }
 
@@ -529,15 +536,15 @@ fn map_identifier<'a>(input: In<'a>) -> Out<'a, Tagged<Key>> {
 fn number<'a>(input: In<'a>) -> Out<'a, PExpr> {
     naked(
         alt((
-            map_res(float, |span| span.as_ref().replace('_', "").parse::<f64>().map(|x| Expr::Literal(Object::float(x)).tag(&span))),
+            map_res(float, |span| span.as_ref().replace('_', "").parse::<f64>().map(|x| Expr::Literal(Object::float(x)).tag(span))),
             map_res(
                 integer,
-                |span| {
-                    let text = span.as_ref().replace('_', "");
+                |str| {
+                    let text = str.as_ref().replace('_', "");
                     let y = text.parse::<i64>().map(Object::int).or_else(
                         |_| text.parse::<BigInt>().map(Object::int)
                     ).map(Expr::Literal);
-                    y.map(|x| x.tag(&span))
+                    y.map(|x| x.tag(str))
                 },
             ),
         ))
@@ -554,9 +561,9 @@ fn number<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn raw_string<'a>(input: In<'a>) -> Out<'a, String> {
     map(
         string_lit,
-        |span| {
+        |str| {
             let mut out = "".to_string();
-            let mut chars = span.as_ref().char_indices();
+            let mut chars = str.as_ref().char_indices();
             loop {
                 match chars.next() {
                     Some((_, '\\')) => match chars.next() {
@@ -755,7 +762,7 @@ fn string_part<'a>(input: In<'a>) -> Out<'a, Tagged<Vec<StringElement>>> {
             fail(string_double_quote, TokenType::DoubleQuote),
         )),
 
-        |(a, x, b)| x.tag(a.span()..b.span())
+        |(a, x, b)| x.tag(a.span().join(&b))
     )(input)
 }
 
@@ -768,10 +775,9 @@ fn string<'a>(input: In<'a>) -> Out<'a, PExpr> {
     naked(map(
         many1(string_part),
         |x| {
-            let start = x.first().unwrap().span();
-            let end = x.last().unwrap().span();
+            let span = x.maybe_span().unwrap();
             let elements: Vec<StringElement> = x.into_iter().map(Tagged::unwrap).flatten().collect();
-            Expr::string(elements).tag(start..end)
+            Expr::string(elements).tag(span)
         }
     )).parse(input)
 }
@@ -780,15 +786,15 @@ fn string<'a>(input: In<'a>) -> Out<'a, PExpr> {
 /// Matches a boolean literal.
 fn boolean<'a>(input: In<'a>) -> Out<'a, PExpr> {
     naked(alt((
-        map(keyword("false"), |tok| Expr::Literal(Object::bool(false)).tag(&tok)),
-        map(keyword("true"), |tok| Expr::Literal(Object::bool(true)).tag(&tok)),
+        map(keyword("false"), |tok| Expr::Literal(Object::bool(false)).tag(tok)),
+        map(keyword("true"), |tok| Expr::Literal(Object::bool(true)).tag(tok)),
     ))).parse(input)
 }
 
 
 /// Matches a null literal.
 fn null<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    naked(map(keyword("null"), |tok| Expr::Literal(Object::null()).tag(&tok))).parse(input)
+    naked(map(keyword("null"), |tok| Expr::Literal(Object::null()).tag(tok))).parse(input)
 }
 
 
@@ -824,7 +830,7 @@ fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
                 fail(expression, SyntaxElement::Expression),
             )),
             |(start, expr)| {
-                let span = start.span()..expr.outer();
+                let span = start.span().join(&expr);
                 ListElement::Splat(expr.inner()).tag(span)
             },
         )),
@@ -844,7 +850,7 @@ fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
                 ),
             )),
             |(start, binding, iterable, expr)| {
-                let span = start.span()..expr.outer();
+                let span = start.span().join(&expr);
                 ListElement::Loop {
                     binding,
                     iterable: iterable.inner(),
@@ -864,7 +870,7 @@ fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
                 ),
             )),
             |(start, condition, expr)| {
-                let span = start.span()..expr.outer();
+                let span = start.span().join(&expr);
                 ListElement::Cond {
                     condition: condition.inner(),
                     element: Box::new(expr.inner()),
@@ -895,7 +901,7 @@ fn list<'a>(input: In<'a>) -> Out<'a, PExpr> {
             (TokenType::CloseBracket, TokenType::Comma),
         ),
 
-        |(a, x, b)| Expr::List(x.into_iter().map(|y| y.inner()).collect()).tag(a.span()..b.span()),
+        |(a, x, b)| Expr::List(x.into_iter().map(|y| y.inner()).collect()).tag(a.span().join(&b)),
     )).parse(input)
 }
 
@@ -915,7 +921,7 @@ fn map_key_singleton<'a>(input: In<'a>) -> Out<'a, (u32, PExpr)> {
                     fail(expression, SyntaxElement::Expression),
                 )),
                 |(d, ex)| {
-                    let span = d.span()..ex.outer();
+                    let span = d.span().join(&ex);
                     PExpr::Parenthesized(ex.inner().tag(span))
                 }
             ),
@@ -960,7 +966,7 @@ fn map_element_singleton<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
     let (input, (col, key)) = map_key_singleton(input)?;
     let (input, (value, skip_sep)) = map_value_singleton(col, input)?;
 
-    let span = key.outer()..value.outer();
+    let span = key.outer().join(&value);
     let ret = MapElement::Singleton { key: key.inner(), value: value.inner() }.tag(span);
 
     Ok((input, (PMap::Naked(ret), skip_sep)))
@@ -984,7 +990,7 @@ fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
                 fail(expression, SyntaxElement::Expression),
             )),
             |(start, expr)| {
-                let span = start.span()..expr.outer();
+                let span = start.span().join(&expr);
                 MapElement::Splat(expr.inner()).tag(span)
             },
         ))),
@@ -1004,7 +1010,7 @@ fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
                 ),
             )),
             |(start, binding, iterable, (expr, skip))| {
-                let span = start.span()..expr.outer();
+                let span = start.span().join(&expr);
                 let ret = MapElement::Loop {
                     binding,
                     iterable: iterable.inner(),
@@ -1025,7 +1031,7 @@ fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
                 ),
             )),
             |(start, condition, (expr, skip))| {
-                let span = start.span()..expr.outer();
+                let span = start.span().join(&expr);
                 let ret = MapElement::Cond {
                     condition: condition.inner(),
                     element: Box::new(expr.inner())
@@ -1057,7 +1063,7 @@ fn mapping<'a>(input: In<'a>) -> Out<'a, PExpr> {
             (TokenType::CloseBrace, TokenType::Comma),
         ),
 
-        |(a, x, b)| Expr::Map(x.into_iter().map(|y| y.inner()).collect()).tag(a.span()..b.span()),
+        |(a, x, b)| Expr::Map(x.into_iter().map(|y| y.inner()).collect()).tag(a.span().join(&b)),
     )).parse(input)
 }
 
@@ -1074,7 +1080,7 @@ fn paren<'a>(input: In<'a>) -> Out<'a, PExpr> {
             fail(close_paren, TokenType::CloseParen),
         )),
 
-        |(start, expr, end)| PExpr::Parenthesized(expr.inner().tag(start.span()..end.span()))
+        |(start, expr, end)| PExpr::Parenthesized(expr.inner().tag(start.span().join(&end)))
     )(input)
 }
 
@@ -1089,7 +1095,7 @@ fn postfixable<'a>(input: In<'a>) -> Out<'a, PExpr> {
     alt((
         paren,
         atomic,
-        naked(map(identifier, |x| Expr::Identifier(x).tag(&x))),
+        naked(map(identifier, |x| Expr::Identifier(x).tag(x))),
         list,
         mapping,
     ))(input)
@@ -1103,9 +1109,9 @@ fn object_access<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
     map(
         tuple((dot, fail(identifier, SyntaxElement::Identifier))),
         |(dot, out)| Transform::BinOp(
-            BinOp::Index.tag(&dot),
+            BinOp::Index.tag(dot),
             out.map(Object::key).map(Expr::Literal).to_box(),
-        ).tag(dot.span()..out.span()),
+        ).tag(dot.span().join(&out)),
     )(input)
 }
 
@@ -1121,7 +1127,7 @@ fn object_index<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
             fail(close_bracket, TokenType::CloseBracket),
         )),
         |(a, expr, b)| {
-            let span = Span::from(a.span()..b.span());
+            let span = a.span().join(&b);
             Transform::BinOp(BinOp::Index.tag(span), expr.inner().to_box()).tag(span)
         },
     )(input)
@@ -1144,7 +1150,7 @@ fn function_arg<'a>(input: In<'a>) -> Out<'a, Tagged<ArgElement>> {
                 fail(expression, SyntaxElement::Expression),
             )),
             |(x, y)| {
-                let span = x.span()..y.outer();
+                let span = x.span().join(&y);
                 ArgElement::Splat(y.inner()).tag(span)
             }
         ),
@@ -1159,7 +1165,7 @@ fn function_arg<'a>(input: In<'a>) -> Out<'a, Tagged<ArgElement>> {
                 ),
             )),
             |(name, expr)| {
-                let span = name.span()..expr.outer();
+                let span = name.span().join(&expr);
                 ArgElement::Keyword(name, expr.inner()).tag(span)
             },
         ),
@@ -1193,7 +1199,7 @@ fn function_call<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
             (TokenType::CloseParen, TokenType::Comma),
         ),
         |(a, expr, b)| {
-            let span = Span::from(a.span()..b.span());
+            let span = a.span().join(&b);
             Transform::FunCall(expr.tag(span)).tag(span)
         },
     )(input)
@@ -1219,7 +1225,7 @@ fn postfixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
             ops.into_iter().fold(
                 expr,
                 |expr, operator| {
-                    let span = expr.outer()..operator.span();
+                    let span = expr.outer().join(&operator);
                     PExpr::Naked(Expr::Transformed {
                         operand: Box::new(expr.inner()),
                         transform: operator.unwrap()
@@ -1253,7 +1259,7 @@ fn prefixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
                 ops.into_iter().rev().fold(
                     expr,
                     |expr, operator| {
-                        let span = operator.span()..expr.outer();
+                        let span = operator.span().join(&expr);
                         PExpr::Naked(Expr::Transformed {
                             operand: Box::new(expr.inner()),
                             transform: Transform::UnOp(operator)
@@ -1285,7 +1291,7 @@ fn binop<'a>(
             fail(operand, SyntaxElement::Operand),
         )),
         |(func, expr)| {
-            let span = func.span()..expr.outer();
+            let span = func.span().join(&expr);
             func.as_ref()(expr.inner(), func.span()).tag(span)
         },
     )
@@ -1312,7 +1318,7 @@ fn binops<'a>(
         )),
         move |(expr, ops)| {
             let acc = |expr: PExpr, operator: Tagged<Transform>| {
-                let span = expr.outer()..operator.span();
+                let span = expr.outer().join(&operator);
                 PExpr::Naked(Expr::Transformed {
                     operand: Box::new(expr.inner()),
                     transform: operator.unwrap(),
@@ -1337,7 +1343,7 @@ fn power<'a>(input: In<'a>) -> Out<'a, PExpr> {
     binops(
         binop(
             alt((
-                map(caret, |x| (Transform::power as OpCons).tag(&x)),
+                map(caret, |x| (Transform::power as OpCons).tag(x)),
             )),
             prefixed,
         ),
@@ -1361,9 +1367,9 @@ fn lbinop<'a>(
 fn product<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(asterisk, |x| (Transform::multiply as OpCons).tag(&x)),
-            map(double_slash, |x| (Transform::integer_divide as OpCons).tag(&x)),
-            map(slash, |x| (Transform::divide as OpCons).tag(&x)),
+            map(asterisk, |x| (Transform::multiply as OpCons).tag(x)),
+            map(double_slash, |x| (Transform::integer_divide as OpCons).tag(x)),
+            map(slash, |x| (Transform::divide as OpCons).tag(x)),
         )),
         prefixed,
     ).parse(input)
@@ -1374,8 +1380,8 @@ fn product<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn sum<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(plus, |x| (Transform::add as OpCons).tag(&x)),
-            map(minus, |x| (Transform::subtract as OpCons).tag(&x)),
+            map(plus, |x| (Transform::add as OpCons).tag(x)),
+            map(minus, |x| (Transform::subtract as OpCons).tag(x)),
         )),
         product,
     ).parse(input)
@@ -1386,10 +1392,10 @@ fn sum<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn inequality<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(less_eq, |x| (Transform::less_equal as OpCons).tag(&x)),
-            map(open_angle, |x| (Transform::less as OpCons).tag(&x)),
-            map(greater_eq, |x| (Transform::greater_equal as OpCons).tag(&x)),
-            map(close_angle, |x| (Transform::greater as OpCons).tag(&x)),
+            map(less_eq, |x| (Transform::less_equal as OpCons).tag(x)),
+            map(open_angle, |x| (Transform::less as OpCons).tag(x)),
+            map(greater_eq, |x| (Transform::greater_equal as OpCons).tag(x)),
+            map(close_angle, |x| (Transform::greater as OpCons).tag(x)),
         )),
         sum,
     ).parse(input)
@@ -1400,8 +1406,8 @@ fn inequality<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn equality<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(double_eq, |x| (Transform::equal as OpCons).tag(&x)),
-            map(exclam_eq, |x| (Transform::not_equal as OpCons).tag(&x)),
+            map(double_eq, |x| (Transform::equal as OpCons).tag(x)),
+            map(exclam_eq, |x| (Transform::not_equal as OpCons).tag(x)),
         )),
         inequality,
     ).parse(input)
@@ -1412,7 +1418,7 @@ fn equality<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn contains<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(keyword("has"), |x| (Transform::contains as OpCons).tag(&x)),
+            map(keyword("has"), |x| (Transform::contains as OpCons).tag(x)),
         )),
         equality,
     ).parse(input)
@@ -1423,7 +1429,7 @@ fn contains<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn conjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(keyword("and"), |x| (Transform::and as OpCons).tag(&x)),
+            map(keyword("and"), |x| (Transform::and as OpCons).tag(x)),
         )),
         contains,
     ).parse(input)
@@ -1434,7 +1440,7 @@ fn conjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn disjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
-            map(keyword("or"), |x| (Transform::or as OpCons).tag(&x)),
+            map(keyword("or"), |x| (Transform::or as OpCons).tag(x)),
         )),
         conjunction,
     ).parse(input)
@@ -1447,7 +1453,7 @@ fn ident_pattern<'a>(input: In<'a>) -> Out<'a, Tagged<Pattern>> {
     alt((
         map(
             identifier,
-            |out| Pattern::Identifier(out).tag(&out),
+            |out| Pattern::Identifier(out).tag(out),
         ),
     ))(input)
 }
@@ -1469,12 +1475,8 @@ fn list_pattern_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListPatternElement>
                 ellipsis,
                 opt(identifier)
             )),
-            |(e, ident)| {
-                let loc = if let Some(i) = ident {
-                    Span::from(e.span()..i.span())
-                } else {
-                    e.span()
-                };
+            |(ellipsis, ident)| {
+                let loc = ellipsis.span().maybe_join(&ident);
                 ident.map(ListPatternElement::SlurpTo).unwrap_or(ListPatternElement::Slurp).tag(loc)
             },
         ),
@@ -1489,16 +1491,11 @@ fn list_pattern_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListPatternElement>
                 )),
             )),
 
-            |(b, e)| {
-                let span = if let Some(d) = &e {
-                    Span::from(b.span()..d.outer())
-                } else {
-                    b.span()
-                };
-
+            |(binding, default)| {
+                let span = binding.span().maybe_join(&default);
                 ListPatternElement::Binding {
-                    binding: b,
-                    default: e.map(PExpr::inner)
+                    binding,
+                    default: default.map(PExpr::inner)
                 }.tag(span)
             },
         ),
@@ -1530,7 +1527,7 @@ where
             err_terminator_or_item,
             err_terminator_or_separator,
         ),
-        |(a, x, b)| (ListBinding(x).tag(a.span()..b.span()), b.unwrap()),
+        |(a, x, b)| (ListBinding(x).tag(a.span().join(&b)), b.unwrap()),
     )(input)
 }
 
@@ -1552,7 +1549,7 @@ fn map_pattern_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapPatternElement>> 
                 ellipsis,
                 fail(identifier, SyntaxElement::Identifier),
             )),
-            |(e, i)| MapPatternElement::SlurpTo(i).tag(e.span()..i.span()),
+            |(e, i)| MapPatternElement::SlurpTo(i).tag(e.span().join(&i)),
         ),
 
         // All variants of singleton bindings
@@ -1590,27 +1587,12 @@ fn map_pattern_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapPatternElement>> 
             )),
 
             |((name, binding), default)| {
-                let mut loc = Span::from(name.span()..binding.span());
-                // if let Some(b) = &binding { loc = Span::from(loc..b.span()); };
-                if let Some(d) = &default { loc = Span::from(loc..d.outer()); };
+                let loc = name.span().join(&binding).maybe_join(&default);
                 MapPatternElement::Binding {
                     key: name,
                     binding: binding,
                     default: default.map(PExpr::inner),
                 }.tag(loc)
-                // let rval = match binding {
-                //     None => MapPatternElement::Binding {
-                //         key: name,
-                //         binding: Pattern::Identifier(name).tag(&name),
-                //         default: default.map(PExpr::inner),
-                //     },
-                //     Some(binding) => MapPatternElement::Binding {
-                //         key: name,
-                //         binding,
-                //         default: default.map(PExpr::inner),
-                //     },
-                // };
-                // rval.tag(loc)
             },
         ),
 
@@ -1642,7 +1624,7 @@ where
             err_terminator_or_item,
             err_terminator_or_separator,
         ),
-        |(a, x, b)| MapBinding(x).tag(a.span()..b.span()),
+        |(a, x, b)| MapBinding(x).tag(a.span().join(&b)),
     )(input)
 }
 
@@ -1762,9 +1744,7 @@ fn binding<'a>(pattern: impl Parser<'a, Tagged<Pattern>> + Copy) -> impl Parser<
             )),
 
             |(pattern, tp)| {
-                let mut span = pattern.span();
-                if let Some(tp) = &tp { span = Span::from(span..tp.outer()); }
-
+                let span = pattern.span().maybe_join(&tp);
                 Binding { pattern, tp: tp.map(PType::inner) }.tag(span)
             },
         )(input)
@@ -1799,7 +1779,7 @@ fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
     };
 
     let (l, expr) = fail(expression, SyntaxElement::Expression).parse(j)?;
-    let span = args.span()..expr.outer();
+    let span = args.span().join(&expr);
 
     let result = PExpr::Naked(Expr::Function {
         positional: args.unwrap(),
@@ -1829,7 +1809,7 @@ fn keyword_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         )),
 
         |(kwargs, expr)| {
-            let span = kwargs.span()..expr.outer();
+            let span = kwargs.span().join(&expr);
             eprintln!("gold: {{|...|}} syntax is deprecated, use fn {{...}} instead");
             PExpr::Naked(Expr::Function {
                 positional: ListBinding(vec![]),
@@ -1881,7 +1861,7 @@ fn let_block<'a>(input: In<'a>) -> Out<'a, PExpr> {
             ),
         )),
         |(bindings, expr)| {
-            let span = bindings.first().unwrap().0.span()..expr.outer();
+            let span = bindings.first().unwrap().0.span().join(&expr);
             PExpr::Naked(Expr::Let {
                 bindings: bindings.into_iter().map(|(_,x,y)| (x,y.inner())).collect(),
                 expression: Box::new(expr.inner())
@@ -1911,7 +1891,7 @@ fn branch<'a>(input: In<'a>) -> Out<'a, PExpr> {
         )),
 
         |(start, condition, true_branch, false_branch)| {
-            let span = start.span()..false_branch.outer();
+            let span = start.span().join(&false_branch);
             PExpr::Naked(Expr::Branch {
                 condition: Box::new(condition.inner()),
                 true_branch: Box::new(true_branch.inner()),
@@ -1964,7 +1944,7 @@ fn import<'a>(input: In<'a>) -> Out<'a, TopLevel> {
                 fail(pattern, SyntaxElement::Binding),
             )
         )),
-        |((a, path, b), binding)| TopLevel::Import(path.tag(a.span()..b.span()), binding),
+        |((a, path, b), binding)| TopLevel::Import(path.tag(a.span().join(&b)), binding),
     )(input)
 }
 
@@ -2004,9 +1984,7 @@ fn type_expr<'a>(input: In<'a>) -> Out<'a, PType> {
             |(name, params)| {
                 let mut span = name.span();
                 if let Some((_, params, _)) = &params {
-                    if let Some(elt) = params.last() {
-                        span = Span::from(span..elt.outer());
-                    }
+                    span = span.maybe_join(params);
                 }
 
                 let parameters = params.map(|(_, params, _)| params.into_iter().map(PType::inner).collect());

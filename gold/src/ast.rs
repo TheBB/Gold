@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Error, Tagged, Action, PatternType, Span, Syntax};
+use crate::error::{Error, Tagged, Action, PatternType, Syntax};
 use crate::object::{StringFormatSpec, IntegerFormatSpec, FloatFormatSpec, Object, Key};
-use crate::traits::{Boxable, Free, FreeImpl, FreeAndBound, Validatable, Taggable, ToVec};
+use crate::traits::{Boxable, Free, FreeImpl, FreeAndBound, Validatable, Taggable, ToVec, HasSpan};
 
 
 /// Utility function for collecting free and bound names from a binding element
@@ -756,112 +756,112 @@ impl Transform {
     /// Construct an index/subscripting transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn index<U>(subscript: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn index(subscript: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Index.tag(loc), subscript.to_box())
     }
 
     /// Construct an exponentiation transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn power<U>(exponent: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn power(exponent: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Power.tag(loc), exponent.to_box())
     }
 
     /// Construct a multiplication transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn multiply<U>(multiplicand: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn multiply(multiplicand: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Multiply.tag(loc), multiplicand.to_box())
     }
 
     /// Construct an integer division transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn integer_divide<U>(divisor: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn integer_divide(divisor: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::IntegerDivide.tag(loc), divisor.to_box())
     }
 
     /// Construct a mathematical division transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn divide<U>(divisor: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn divide(divisor: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Divide.tag(loc), divisor.to_box())
     }
 
     /// Construct an addition transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn add<U>(addend: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn add(addend: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Add.tag(loc), addend.to_box())
     }
 
     /// Construct a subtraction transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn subtract<U>(subtrahend: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn subtract(subtrahend: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Subtract.tag(loc), subtrahend.to_box())
     }
 
     /// Construct a less-than transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn less<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn less(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Less.tag(loc), rhs.to_box())
     }
 
     /// Construct a greater-than transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn greater<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn greater(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Greater.tag(loc), rhs.to_box())
     }
 
     /// Construct a less-than-or-equal transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn less_equal<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn less_equal(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::LessEqual.tag(loc), rhs.to_box())
     }
 
     /// Construct a greater-than-or-equal transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn greater_equal<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn greater_equal(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::GreaterEqual.tag(loc), rhs.to_box())
     }
 
     /// Construct an equality check transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn equal<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn equal(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Equal.tag(loc), rhs.to_box())
     }
 
     /// Construct an inequality check transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn not_equal<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn not_equal(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::NotEqual.tag(loc), rhs.to_box())
     }
 
     /// Construct a containment check transform.
     ///
     /// * `loc` - the location of the 'in' operator in the buffer.
-    pub fn contains<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn contains(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Contains.tag(loc), rhs.to_box())
     }
 
     /// Construct a logical conjunction transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn and<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn and(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::And.tag(loc), rhs.to_box())
     }
 
     /// Construct a logical disjunction transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn or<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn or(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Or.tag(loc), rhs.to_box())
     }
 }
@@ -987,119 +987,119 @@ impl Tagged<Expr> {
     /// Form a sum expression from two terms.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn add<U>(self, addend: Tagged<Expr>, loc: U) -> Expr where Span: From<U> {
+    pub fn add(self, addend: Tagged<Expr>, loc: impl HasSpan) -> Expr {
         self.transform(Transform::add(addend, loc))
     }
 
     /// Form a subtraction expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn sub<U>(self, subtrahend: Tagged<Expr>, loc: U) -> Expr where Span: From<U> {
+    pub fn sub(self, subtrahend: Tagged<Expr>, loc: impl HasSpan) -> Expr {
         self.transform(Transform::subtract(subtrahend, loc))
     }
 
     /// Form a multiplication expression from two factors.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn mul<U>(self, multiplicand: Tagged<Expr>, loc: U) -> Expr where Span: From<U> {
+    pub fn mul(self, multiplicand: Tagged<Expr>, loc: impl HasSpan) -> Expr {
         self.transform(Transform::multiply(multiplicand, loc))
     }
 
     /// Form a division expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn div<U>(self, divisor: Tagged<Expr>, loc: U) -> Expr where Span: From<U> {
+    pub fn div(self, divisor: Tagged<Expr>, loc: impl HasSpan) -> Expr {
         self.transform(Transform::divide(divisor, loc))
     }
 
     /// Form an integer division expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn idiv<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
-        self.transform(Transform::integer_divide(rhs, l))
+    pub fn idiv(self, rhs: Tagged<Expr>, loc: impl HasSpan) -> Expr {
+        self.transform(Transform::integer_divide(rhs, loc))
     }
 
     /// Form a less-than expression from operandsterms.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn lt<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
-        self.transform(Transform::less(rhs, l))
+    pub fn lt(self, rhs: Tagged<Expr>, loc: impl HasSpan) -> Expr {
+        self.transform(Transform::less(rhs, loc))
     }
 
     /// Form a greater-than expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn gt<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
-        self.transform(Transform::greater(rhs, l))
+    pub fn gt(self, rhs: Tagged<Expr>, loc: impl HasSpan) -> Expr {
+        self.transform(Transform::greater(rhs, loc))
     }
 
     /// Form a less-than-or-equal expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn lte<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
-        self.transform(Transform::less_equal(rhs, l))
+    pub fn lte(self, rhs: Tagged<Expr>, loc: impl HasSpan) -> Expr {
+        self.transform(Transform::less_equal(rhs, loc))
     }
 
     /// Form a greater-than-or-equal expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn gte<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
-        self.transform(Transform::greater_equal(rhs, l))
+    pub fn gte(self, rhs: Tagged<Expr>, loc: impl HasSpan) -> Expr {
+        self.transform(Transform::greater_equal(rhs, loc))
     }
 
     /// Form an equality check expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn equal<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
-        self.transform(Transform::equal(rhs, l))
+    pub fn equal(self, rhs: Tagged<Expr>, loc: impl HasSpan) -> Expr {
+        self.transform(Transform::equal(rhs, loc))
     }
 
     /// Form an inequality check expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn not_equal<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
-        self.transform(Transform::not_equal(rhs, l))
+    pub fn not_equal(self, rhs: Tagged<Expr>, loc: impl HasSpan) -> Expr {
+        self.transform(Transform::not_equal(rhs, loc))
     }
 
     /// Form a logical conjunction expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn and<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
-        self.transform(Transform::and(rhs, l))
+    pub fn and(self, rhs: Tagged<Expr>, loc: impl HasSpan) -> Expr {
+        self.transform(Transform::and(rhs, loc))
     }
 
     /// Form a logical disjunction expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn or<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
-        self.transform(Transform::or(rhs, l))
+    pub fn or(self, rhs: Tagged<Expr>, loc: impl HasSpan) -> Expr {
+        self.transform(Transform::or(rhs, loc))
     }
 
     /// Form an exponentiation expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn pow<U>(self, exponent: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
-        self.transform(Transform::power(exponent, l))
+    pub fn pow(self, exponent: Tagged<Expr>, loc: impl HasSpan) -> Expr {
+        self.transform(Transform::power(exponent, loc))
     }
 
     /// Form a subscripting/indexing expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn index<U>(self, subscript: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
-        self.transform(Transform::index(subscript, l))
+    pub fn index(self, subscript: Tagged<Expr>, loc: impl HasSpan) -> Expr {
+        self.transform(Transform::index(subscript, loc))
     }
 
     /// Arithmetically negate this expression.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn neg<U>(self, loc: U) -> Expr where Span: From<U> {
+    pub fn neg(self, loc: impl HasSpan) -> Expr {
         self.transform(Transform::UnOp(UnOp::ArithmeticalNegate.tag(loc)))
     }
 
     /// Logically negate this expression.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn not<U>(self, loc: U) -> Expr where Span: From<U> {
+    pub fn not(self, loc: impl HasSpan) -> Expr {
         self.transform(Transform::UnOp(UnOp::LogicalNegate.tag(loc)))
     }
 
@@ -1115,7 +1115,7 @@ impl Tagged<Expr> {
     /// list of arguments.
     ///
     /// * `loc` - the location of the function call operator in the buffer.
-    pub fn funcall<U>(self, args: impl ToVec<Tagged<ArgElement>>, loc: U) -> Expr where Span: From<U> {
+    pub fn funcall(self, args: impl ToVec<Tagged<ArgElement>>, loc: impl HasSpan) -> Expr {
         self.transform(Transform::FunCall(args.to_vec().tag(loc)))
     }
 }

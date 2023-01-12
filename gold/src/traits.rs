@@ -95,6 +95,22 @@ impl<T: FreeAndBound> FreeAndBound for Tagged<T> {
 }
 
 
+// HasSpan and HasMaybeSpan
+// ------------------------------------------------------------------------------------------------
+
+/// Implemented by all types that have a span (sourced by a range of text in a buffer.)
+pub trait HasSpan {
+    /// Return the span.
+    fn span(&self) -> Span;
+}
+
+/// Implemented by all types that may habe a span (sourced by a range of text in a buffer.)
+pub trait HasMaybeSpan {
+    /// Return the span, if applicable.
+    fn maybe_span(&self) -> Option<Span>;
+}
+
+
 // Taggable
 // ------------------------------------------------------------------------------------------------
 
@@ -106,12 +122,12 @@ impl<T: FreeAndBound> FreeAndBound for Tagged<T> {
 pub trait Taggable: Sized {
 
     /// Wrap this object in a tagged wrapper.
-    fn tag<T>(self, loc: T) -> Tagged<Self> where Span: From<T>;
+    fn tag(self, loc: impl HasSpan) -> Tagged<Self>;
 }
 
 impl<T> Taggable for T where T: Sized {
-    fn tag<U>(self, loc: U) -> Tagged<Self> where Span: From<U> {
-        Tagged::new(Span::from(loc), self)
+    fn tag(self, loc: impl HasSpan) -> Tagged<Self> {
+        Tagged::new(loc.span(), self)
     }
 }
 
