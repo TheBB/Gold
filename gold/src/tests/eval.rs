@@ -1,5 +1,5 @@
 use crate::ast::{BinOp, UnOp};
-use crate::error::{Error, Reason, Unpack, Span, Action, BindingType, TypeMismatch};
+use crate::error::{Error, Reason, Unpack, Span, Action, PatternType, TypeMismatch};
 use crate::eval_raw;
 use crate::object::{Object, Key, Type};
 
@@ -724,8 +724,8 @@ fn errors() {
     assert_eq!(eval("let [a] = [] in a"), err!(Unpack::ListTooShort, loc!(5, Bind), loc!(4..7, Bind)));
     assert_eq!(eval("let [a] = [1, 2] in a"), err!(Unpack::ListTooLong, loc!(4..7, Bind)));
     assert_eq!(eval("let {a} = {} in a"), err!(Unpack::KeyMissing("a".key()), loc!(5, Bind), loc!(4..7, Bind)));
-    assert_eq!(eval("let [a] = 1 in a"), err!(Unpack::TypeMismatch(BindingType::List, Type::Integer), loc!(4..7, Bind)));
-    assert_eq!(eval("let {a} = true in a"), err!(Unpack::TypeMismatch(BindingType::Map, Type::Boolean), loc!(4..7, Bind)));
+    assert_eq!(eval("let [a] = 1 in a"), err!(Unpack::TypeMismatch(PatternType::List, Type::Integer), loc!(4..7, Bind)));
+    assert_eq!(eval("let {a} = true in a"), err!(Unpack::TypeMismatch(PatternType::Map, Type::Boolean), loc!(4..7, Bind)));
     assert_eq!(eval("[...1]"), err!(TypeMismatch::SplatList(Type::Integer), loc!(4, Splat)));
     assert_eq!(eval("[for x in 1: x]"), err!(TypeMismatch::Iterate(Type::Integer), loc!(10, Iterate)));
     assert_eq!(eval("{$null: 1}"), err!(TypeMismatch::MapKey(Type::Null), loc!(2..6, Assign)));

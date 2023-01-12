@@ -173,6 +173,7 @@ impl<T> Paren<T> {
 
 
 type PExpr = Paren<Expr>;
+type PType = Paren<TypeExpr>;
 type PList = Paren<ListElement>;
 type PMap = Paren<MapElement>;
 
@@ -410,6 +411,7 @@ tok!{integer, Integer}
 
 tok!{asterisk, Asterisk}
 tok!{caret, Caret}
+tok!{close_angle, CloseAngle}
 tok!{close_brace, CloseBrace}
 tok!{close_brace_pipe, CloseBracePipe}
 tok!{close_bracket, CloseBracket}
@@ -424,10 +426,9 @@ tok!{ellipsis, Ellipsis}
 tok!{eq, Eq}
 tok!{exclam_eq, ExclamEq}
 tok!{greater_eq, GreaterEq}
-tok!{greater, CloseAngle}
 tok!{less_eq, LessEq}
-tok!{less, OpenAngle}
 tok!{minus, Minus}
+tok!{open_angle, OpenAngle}
 tok!{open_brace, OpenBrace}
 tok!{open_brace_pipe, OpenBracePipe}
 tok!{open_bracket, OpenBracket}
@@ -832,7 +833,7 @@ fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
         naked(map(
             tuple((
                 keyword("for"),
-                fail(binding, SyntaxElement::Binding),
+                fail(binding(pattern), SyntaxElement::Binding),
                 preceded(
                     fail(keyword("in"), SyntaxElement::In),
                     fail(expression, SyntaxElement::Expression),
@@ -992,7 +993,7 @@ fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
         map(
             tuple((
                 map_keyword("for"),
-                fail(binding, SyntaxElement::Binding),
+                fail(binding(pattern), SyntaxElement::Binding),
                 preceded(
                     fail(keyword("in"), SyntaxElement::In),
                     fail(expression, SyntaxElement::Expression),
@@ -1386,9 +1387,9 @@ fn inequality<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
             map(less_eq, |x| (Transform::less_equal as OpCons).tag(&x)),
-            map(less, |x| (Transform::less as OpCons).tag(&x)),
+            map(open_angle, |x| (Transform::less as OpCons).tag(&x)),
             map(greater_eq, |x| (Transform::greater_equal as OpCons).tag(&x)),
-            map(greater, |x| (Transform::greater as OpCons).tag(&x)),
+            map(close_angle, |x| (Transform::greater as OpCons).tag(&x)),
         )),
         sum,
     ).parse(input)
@@ -1440,19 +1441,19 @@ fn disjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
 }
 
 
-/// Matches an identifier binding. This is essentially the same as a normal
+/// Matches an identifier pattern. This is essentially the same as a normal
 /// identifier.
-fn ident_binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
+fn ident_pattern<'a>(input: In<'a>) -> Out<'a, Tagged<Pattern>> {
     alt((
         map(
             identifier,
-            |out| Binding::Identifier(out).tag(&out),
+            |out| Pattern::Identifier(out).tag(&out),
         ),
     ))(input)
 }
 
 
-/// Matches a list binding element: anything that's legal in a list unpacking
+/// Matches a list pattern element: anything that's legal in a list unpacking
 /// environment.
 ///
 /// There are four cases:
@@ -1460,7 +1461,7 @@ fn ident_binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
 /// - named slurp: `let [...y] = x`
 /// - singleton binding: `let [y] = x`
 /// - singleton binding with default: `let [y = z] = x`
-fn list_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListBindingElement>> {
+fn list_pattern_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListPatternElement>> {
     alt((
         // Named and anonymous slurps
         map(
@@ -1474,14 +1475,14 @@ fn list_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListBindingElement>
                 } else {
                     e.span()
                 };
-                ident.map(ListBindingElement::SlurpTo).unwrap_or(ListBindingElement::Slurp).tag(loc)
+                ident.map(ListPatternElement::SlurpTo).unwrap_or(ListPatternElement::Slurp).tag(loc)
             },
         ),
 
         // Singleton bindings with or without defaults
         map(
             tuple((
-                binding,
+                binding(pattern),
                 opt(preceded(
                     eq,
                     fail(expression, SyntaxElement::Expression),
@@ -1495,7 +1496,7 @@ fn list_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListBindingElement>
                     b.span()
                 };
 
-                ListBindingElement::Binding {
+                ListPatternElement::Binding {
                     binding: b,
                     default: e.map(PExpr::inner)
                 }.tag(span)
@@ -1505,11 +1506,11 @@ fn list_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListBindingElement>
 }
 
 
-/// Matches a list binding.
+/// Matches a list pattern.
 ///
 /// This is a comma-separated list of list binding elements, optionally
 /// terminated by a comma.
-fn list_binding<'a, T, U, V>(
+fn list_pattern<'a, T, U, V>(
     initializer: impl Parser<'a, Tagged<V>> + Copy,
     terminator: impl Parser<'a, Tagged<V>> + Copy,
     err_terminator_or_item: T,
@@ -1523,7 +1524,7 @@ where
     move |input| map(
         seplist(
             initializer,
-            list_binding_element,
+            list_pattern_element,
             comma,
             terminator,
             err_terminator_or_item,
@@ -1534,7 +1535,7 @@ where
 }
 
 
-/// Matches a map binding element: anything that's legal in a map unpacking environment.
+/// Matches a map pattern element: anything that's legal in a map unpacking environment.
 ///
 /// There are five cases:
 /// - named slurp: `let {...y} = x`
@@ -1542,7 +1543,7 @@ where
 /// - singleton binding with unpacking: `let {y as z} = x`
 /// - singleton binding with default: `let {y = z} = x`
 /// - singleton binding with unpacking and default: `let {y as z = q} = x`
-fn map_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapBindingElement>> {
+fn map_pattern_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapPatternElement>> {
     alt((
 
         // Slurp
@@ -1551,7 +1552,7 @@ fn map_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapBindingElement>> 
                 ellipsis,
                 fail(identifier, SyntaxElement::Identifier),
             )),
-            |(e, i)| MapBindingElement::SlurpTo(i).tag(e.span()..i.span()),
+            |(e, i)| MapPatternElement::SlurpTo(i).tag(e.span()..i.span()),
         ),
 
         // All variants of singleton bindings
@@ -1565,16 +1566,16 @@ fn map_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapBindingElement>> 
                             map_identifier,
                             preceded(
                                 keyword("as"),
-                                fail(binding, SyntaxElement::Binding),
+                                fail(binding(pattern), SyntaxElement::Binding),
                             ),
                         )),
-                        |(name, binding)| (name, Some(binding)),
+                        |(name, binding)| (name, binding),
                     ),
 
                     // Without unpacking
                     map(
-                        identifier,
-                        |name| (name, None),
+                        binding(ident_pattern),
+                        |binding| (binding.identifier().unwrap(), binding),
                     ),
 
                 )),
@@ -1589,22 +1590,27 @@ fn map_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapBindingElement>> 
             )),
 
             |((name, binding), default)| {
-                let mut loc = name.span();
-                if let Some(b) = &binding { loc = Span::from(loc..b.span()); };
+                let mut loc = Span::from(name.span()..binding.span());
+                // if let Some(b) = &binding { loc = Span::from(loc..b.span()); };
                 if let Some(d) = &default { loc = Span::from(loc..d.outer()); };
-                let rval = match binding {
-                    None => MapBindingElement::Binding {
-                        key: name,
-                        binding: Binding::Identifier(name).tag(&name),
-                        default: default.map(PExpr::inner),
-                    },
-                    Some(binding) => MapBindingElement::Binding {
-                        key: name,
-                        binding,
-                        default: default.map(PExpr::inner),
-                    },
-                };
-                rval.tag(loc)
+                MapPatternElement::Binding {
+                    key: name,
+                    binding: binding,
+                    default: default.map(PExpr::inner),
+                }.tag(loc)
+                // let rval = match binding {
+                //     None => MapPatternElement::Binding {
+                //         key: name,
+                //         binding: Pattern::Identifier(name).tag(&name),
+                //         default: default.map(PExpr::inner),
+                //     },
+                //     Some(binding) => MapPatternElement::Binding {
+                //         key: name,
+                //         binding,
+                //         default: default.map(PExpr::inner),
+                //     },
+                // };
+                // rval.tag(loc)
             },
         ),
 
@@ -1612,11 +1618,11 @@ fn map_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapBindingElement>> 
 }
 
 
-/// Matches a map binding.
+/// Matches a map pattern.
 ///
 /// This is a comma-separated list of list binding elements, optionally
 /// terminated by a comma.
-fn map_binding<'a, T, U, V>(
+fn map_pattern<'a, T, U, V>(
     initializer: impl Parser<'a, Tagged<V>> + Copy,
     terminator: impl Parser<'a, Tagged<V>> + Copy,
     err_terminator_or_item: T,
@@ -1630,7 +1636,7 @@ where
     move |input: In<'a>| map(
         seplist(
             initializer,
-            map_binding_element,
+            map_pattern_element,
             comma,
             terminator,
             err_terminator_or_item,
@@ -1641,38 +1647,36 @@ where
 }
 
 
-/// Matches a binding.
+/// Matches a pattern.
 ///
 /// There are three cases:
 /// - An identifier binding (leaf node)
 /// - A list binding
 /// - A map binding
-fn binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
+fn pattern<'a>(input: In<'a>) -> Out<'a, Tagged<Pattern>> {
     alt((
-        ident_binding,
+        ident_pattern,
 
         // TODO: Do we need double up location tagging here?
         map(
-            list_binding(
+            list_pattern(
                 |i| open_bracket(i),
                 |i| close_bracket(i),
                 (TokenType::CloseBracket, SyntaxElement::ListBindingElement),
                 (TokenType::CloseBracket, TokenType::Comma),
             ),
-            |(x,_)| {
-                x.wrap(Binding::List)
-            },
+            |(x,_)| x.wrap(Pattern::List),
         ),
 
         // TODO: Do we need double up location tagging here?
         map(
-            map_binding(
+            map_pattern(
                 |i| open_brace(i),
                 |i| close_brace(i),
                 (TokenType::CloseBrace, SyntaxElement::MapBindingElement),
                 (TokenType::CloseBrace, TokenType::Comma),
             ),
-            |x| x.wrap(Binding::Map),
+            |x| x.wrap(Pattern::Map),
         )
     ))(input)
 }
@@ -1696,7 +1700,7 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
 
     let (i, args, kwargs, expr) = if opener.unwrap() == "(" {
         // Parse a normal function
-        let (i, (args, end)) = list_binding(
+        let (i, (args, end)) = list_pattern(
             success,
             |i| alt((close_paren, semicolon))(i),
             (TokenType::CloseParen, TokenType::SemiColon, SyntaxElement::PosParam),
@@ -1704,7 +1708,7 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         ).parse(i)?;
 
         let (i, kwargs) = if end == ";" {
-            let (i, kwargs) = map_binding(
+            let (i, kwargs) = map_pattern(
                 success,
                 |i| close_paren(i),
                 (TokenType::CloseParen, SyntaxElement::KeywordParam),
@@ -1720,7 +1724,7 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         (i, args.unwrap(), kwargs, expr)
     } else {
         // Parse a keyword function
-        let (i, kwargs) = map_binding(
+        let (i, kwargs) = map_pattern(
             success,
             |i| close_brace(i),
             (TokenType::CloseBrace, SyntaxElement::KeywordParam),
@@ -1742,6 +1746,32 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
 }
 
 
+/// Matches a binding.
+/// A binding is a pattern followed by a potential type annotation.
+///
+/// This parser is parametrized on the type of pattern it matches.
+fn binding<'a>(pattern: impl Parser<'a, Tagged<Pattern>> + Copy) -> impl Parser<'a, Tagged<Binding>> {
+    move |input: In<'a>| {
+        map(
+            tuple((
+                pattern,
+                opt(preceded(
+                    colon,
+                    type_expr,
+                )),
+            )),
+
+            |(pattern, tp)| {
+                let mut span = pattern.span();
+                if let Some(tp) = &tp { span = Span::from(span..tp.outer()); }
+
+                Binding { pattern, tp: tp.map(PType::inner) }.tag(span)
+            },
+        )(input)
+    }
+}
+
+
 /// Matches a standard function definition.
 ///
 /// This is the 'fn' keyword followed by a list binding and an optional map
@@ -1749,7 +1779,7 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
 /// let-binding syntax. It is concluded by a double arrow (=>) and an
 /// expression.
 fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    let (i, (args, end)) = list_binding(
+    let (i, (args, end)) = list_pattern(
         |i| pipe(i),
         |i| alt((pipe, semicolon))(i),
         (TokenType::Pipe, TokenType::SemiColon, SyntaxElement::PosParam),
@@ -1757,9 +1787,8 @@ fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
     ).parse(input)?;
 
     let (j, kwargs) = if end == ";" {
-        let (j, kwargs) = map_binding(
+        let (j, kwargs) = map_pattern(
             success,
-            // |i: In<'a>| { let loc = i.position(); Ok((i, "".tag(loc.with_length(0)))) },
             |i| pipe(i),
             (TokenType::Pipe, SyntaxElement::KeywordParam),
             (TokenType::Pipe, TokenType::Comma),
@@ -1790,7 +1819,7 @@ fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn keyword_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
     map(
         tuple((
-            map_binding(
+            map_pattern(
                 |i| open_brace_pipe(i),
                 |i| close_brace_pipe(i),
                 (TokenType::CloseBracePipe, SyntaxElement::KeywordParam),
@@ -1839,7 +1868,7 @@ fn let_block<'a>(input: In<'a>) -> Out<'a, PExpr> {
             many1(
                 tuple((
                     keyword("let"),
-                    fail(binding, SyntaxElement::Binding),
+                    fail(binding(pattern), SyntaxElement::Binding),
                     preceded(
                         fail(eq, TokenType::Eq),
                         fail(expression, SyntaxElement::Expression),
@@ -1932,7 +1961,7 @@ fn import<'a>(input: In<'a>) -> Out<'a, TopLevel> {
             ),
             preceded(
                 fail(keyword("as"), SyntaxElement::As),
-                fail(binding, SyntaxElement::Binding),
+                fail(pattern, SyntaxElement::Binding),
             )
         )),
         |((a, path, b), binding)| TopLevel::Import(path.tag(a.span()..b.span()), binding),
@@ -1952,6 +1981,40 @@ fn file<'a>(input: In<'a>) -> Out<'a, File> {
         )),
         |(statements, expression)| File { statements, expression: expression.inner() },
     )(input)
+}
+
+
+/// Matches a type expression.
+fn type_expr<'a>(input: In<'a>) -> Out<'a, PType> {
+    alt((
+
+        map(
+            tuple((
+                identifier,
+                opt(seplist(
+                    open_angle,
+                    type_expr,
+                    comma,
+                    close_angle,
+                    (TokenType::CloseAngle, SyntaxElement::Type),
+                    (TokenType::CloseAngle, TokenType::Comma),
+                ))
+            )),
+
+            |(name, params)| {
+                let mut span = name.span();
+                if let Some((_, params, _)) = &params {
+                    if let Some(elt) = params.last() {
+                        span = Span::from(span..elt.outer());
+                    }
+                }
+
+                let parameters = params.map(|(_, params, _)| params.into_iter().map(PType::inner).collect());
+                PType::Naked(TypeExpr::Parametrized { name, parameters }.tag(span))
+            }
+        ),
+
+    ))(input)
 }
 
 

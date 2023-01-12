@@ -389,6 +389,9 @@ pub enum SyntaxElement {
     /// A positional function parameter
     PosParam,
 
+    /// A type expression
+    Type,
+
     /// Arbitrary whitespace
     Whitespace,
 
@@ -464,9 +467,9 @@ pub enum Internal {
 }
 
 
-/// Enumerates possible binding types.
+/// Enumerates possible pattern types.
 #[derive(Debug, Clone, PartialEq)]
-pub enum BindingType {
+pub enum PatternType {
     /// Bind a value to an identifier.
     Identifier,
 
@@ -478,7 +481,7 @@ pub enum BindingType {
 }
 
 
-/// Enumerates different reasons why unpacking might fail.
+/// Enumerates different reasons why pattern matching might fail.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Unpack {
     /// The list was too short - expected more values.
@@ -492,7 +495,7 @@ pub enum Unpack {
 
     /// The binding type did not correspond to the object type (e.g. a list
     /// binding with a map object).
-    TypeMismatch(BindingType, Type)
+    TypeMismatch(PatternType, Type)
 }
 
 
@@ -790,13 +793,14 @@ impl Display for SyntaxElement {
             Self::Operand => f.write_str("operand"),
             Self::PosParam => f.write_str("positional parameter"),
             Self::Then => f.write_str("'then'"),
+            Self::Type => f.write_str("type expression"),
             Self::Whitespace => f.write_str("whitespace"),
             Self::Token(t) => f.write_fmt(format_args!("{}", t)),
         }
     }
 }
 
-impl Display for BindingType {
+impl Display for PatternType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Identifier => f.write_str("identifier"),
