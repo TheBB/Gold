@@ -492,7 +492,7 @@ fn map_keyword<'a>(value: &'a str) -> impl Parser<'a, Tagged<&'a str>> {
 
 
 /// List of keywords that must be avoided by the [`identifier`] parser.
-static KEYWORDS: [&'static str; 15] = [
+static KEYWORDS: [&'static str; 16] = [
     "for",
     "when",
     "if",
@@ -508,6 +508,7 @@ static KEYWORDS: [&'static str; 15] = [
     "not",
     "as",
     "import",
+    "type",
 ];
 
 
@@ -1743,6 +1744,42 @@ fn import<'a>(input: In<'a>) -> Out<'a, TopLevel> {
 }
 
 
+/// Matches a type definition statement.
+fn typedef<'a>(input: In<'a>) -> Out<'a, TopLevel> {
+    map(
+        tuple((
+            preceded(keyword("type"), identifier),
+            opt(seplist(
+                open_angle,
+                identifier,
+                comma,
+                close_angle,
+                (TokenType::CloseAngle, SyntaxElement::Identifier),
+                (TokenType::CloseAngle, TokenType::Comma),
+            )),
+            preceded(eq, type_expr),
+        )),
+
+        |(name, params, expr)| {
+            TopLevel::TypeDef {
+                name: name,
+                params: params.map(|(_, p, _)| p),
+                expr: expr.inner(),
+            }
+        }
+    )(input)
+}
+
+
+/// Matches any top level statement.
+fn toplevel<'a>(input: In<'a>) -> Out<'a, TopLevel> {
+    alt((
+        import,
+        typedef,
+    ))(input)
+}
+
+
 /// Matches a file.
 ///
 /// A file consists of an arbitrary number of top-level statements followed by a
@@ -1750,7 +1787,7 @@ fn import<'a>(input: In<'a>) -> Out<'a, TopLevel> {
 fn file<'a>(input: In<'a>) -> Out<'a, File> {
     map(
         tuple((
-            many0(import),
+            many0(toplevel),
             fail(expression, SyntaxElement::Expression),
         )),
         |(statements, expression)| File { statements, expression: expression.inner() },
@@ -1781,8 +1818,8 @@ fn type_expr<'a>(input: In<'a>) -> Out<'a, PType> {
                     span = span.maybe_join(params);
                 }
 
-                let parameters = params.map(|(_, params, _)| params.into_iter().map(PType::inner).collect());
-                PType::Naked(TypeExpr::Parametrized { name, parameters }.tag(span))
+                let params = params.map(|(_, params, _)| params.into_iter().map(PType::inner).collect());
+                PType::Naked(TypeExpr::Parametrized { name, params }.tag(span))
             }
         ),
 
