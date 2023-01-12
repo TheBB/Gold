@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{BindingType, Span, Syntax};
+use crate::error::{PatternType, Span, Syntax};
 
 use super::error::{Error, Tagged, Action};
 use super::object::{Object, Key};
@@ -35,7 +35,7 @@ fn binding_element_free_and_bound(
 
 /// A list binding element is anything that is legal inside a list pattern.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum ListBindingElement {
+pub enum ListPatternElement {
 
     /// An ordinary binding with potential default value
     Binding {
@@ -50,10 +50,10 @@ pub enum ListBindingElement {
     Slurp,
 }
 
-impl Validatable for ListBindingElement {
+impl Validatable for ListPatternElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            ListBindingElement::Binding { binding, default } => {
+            ListPatternElement::Binding { binding, default } => {
                 binding.validate()?;
                 if let Some(node) = default {
                     node.validate()?;
@@ -65,13 +65,13 @@ impl Validatable for ListBindingElement {
     }
 }
 
-impl FreeAndBound for ListBindingElement {
+impl FreeAndBound for ListPatternElement {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
-            ListBindingElement::Binding { binding, default } => {
+            ListPatternElement::Binding { binding, default } => {
                 binding_element_free_and_bound(binding, default.as_ref(), free, bound);
             },
-            ListBindingElement::SlurpTo(name) => { bound.insert(**name); },
+            ListPatternElement::SlurpTo(name) => { bound.insert(**name); },
             _ => {},
         }
     }
@@ -86,7 +86,7 @@ impl FreeAndBound for ListBindingElement {
 /// Since map bindings discard superfluous values by default, there's no need
 /// for an anonymous slurp.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum MapBindingElement {
+pub enum MapPatternElement {
 
     /// An ordinary binding with potential default value.
     Binding {
@@ -99,21 +99,21 @@ pub enum MapBindingElement {
     SlurpTo(Tagged<Key>),
 }
 
-impl FreeAndBound for MapBindingElement {
+impl FreeAndBound for MapPatternElement {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
-            MapBindingElement::Binding { key: _, binding, default } => {
+            MapPatternElement::Binding { key: _, binding, default } => {
                 binding_element_free_and_bound(binding, default.as_ref(), free, bound);
             },
-            MapBindingElement::SlurpTo(name) => { bound.insert(**name); },
+            MapPatternElement::SlurpTo(name) => { bound.insert(**name); },
         }
     }
 }
 
-impl Validatable for MapBindingElement {
+impl Validatable for MapPatternElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            MapBindingElement::Binding { binding, default, .. } => {
+            MapPatternElement::Binding { binding, default, .. } => {
                 binding.validate()?;
                 if let Some(node) = default {
                     node.validate()?;
@@ -131,7 +131,7 @@ impl Validatable for MapBindingElement {
 
 /// A list binding destructures a list into a list of patterns.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ListBinding(pub Vec<Tagged<ListBindingElement>>);
+pub struct ListBinding(pub Vec<Tagged<ListPatternElement>>);
 
 impl FreeAndBound for ListBinding {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
@@ -148,7 +148,7 @@ impl Validatable for ListBinding {
             element.validate()?;
 
             // It's illegal to have more than one slurp in a list binding.
-            if let ListBindingElement::Binding { .. } = **element { }
+            if let ListPatternElement::Binding { .. } = **element { }
             else {
                 if found_slurp {
                     return Err(Error::new(Syntax::MultiSlurp).tag(element, Action::Parse))
@@ -167,7 +167,7 @@ impl Validatable for ListBinding {
 /// A map binding destructres a map into a list of patterns associated with
 /// keys.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct MapBinding(pub Vec<Tagged<MapBindingElement>>);
+pub struct MapBinding(pub Vec<Tagged<MapPatternElement>>);
 
 impl FreeAndBound for MapBinding {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
@@ -184,7 +184,7 @@ impl Validatable for MapBinding {
             element.validate()?;
 
             // It's illegal to have more than one slurp in a map binding.
-            if let MapBindingElement::SlurpTo(_) = **element {
+            if let MapPatternElement::SlurpTo(_) = **element {
                 if found_slurp {
                     return Err(Error::new(Syntax::MultiSlurp).tag(element, Action::Parse))
                 }
@@ -196,47 +196,89 @@ impl Validatable for MapBinding {
 }
 
 
-// Binding
+// Pattern
 // ----------------------------------------------------------------
 
-/// A binding comes in three flavors: identifiers (which don't do any
+/// A pattern comes in three flavors: identifiers (which don't do any
 /// destructuring), and list and map bindings, which destructures lists and maps
 /// respectively.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum Binding {
+pub enum Pattern {
     Identifier(Tagged<Key>),
     List(Tagged<ListBinding>),
     Map(Tagged<MapBinding>),
 }
 
-impl Binding {
+impl Pattern {
     /// Return the type of the binding.
-    pub fn type_of(&self) -> BindingType {
+    pub fn type_of(&self) -> PatternType {
         match self {
-            Self::Identifier(_) => BindingType::Identifier,
-            Self::List(_) => BindingType::List,
-            Self::Map(_) => BindingType::Map,
+            Self::Identifier(_) => PatternType::Identifier,
+            Self::List(_) => PatternType::List,
+            Self::Map(_) => PatternType::Map,
+        }
+    }
+
+    /// Return the identifier, if applicable.
+    pub fn identifier(&self) -> Option<Tagged<Key>> {
+        match self {
+            Self::Identifier(x) => Some(*x),
+            _ => None,
         }
     }
 }
 
-impl FreeAndBound for Binding {
+impl FreeAndBound for Pattern {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
-            Binding::Identifier(name) => { bound.insert(**name); },
-            Binding::List(elements) => elements.free_and_bound(free, bound),
-            Binding::Map(elements) => elements.free_and_bound(free, bound),
+            Pattern::Identifier(name) => { bound.insert(**name); },
+            Pattern::List(elements) => elements.free_and_bound(free, bound),
+            Pattern::Map(elements) => elements.free_and_bound(free, bound),
         }
+    }
+}
+
+impl Validatable for Pattern {
+    fn validate(&self) -> Result<(), Error> {
+        match self {
+            Pattern::List(elements) => elements.validate(),
+            Pattern::Map(elements) => elements.validate(),
+            _ => Ok(()),
+        }
+    }
+}
+
+
+// Binding
+// ----------------------------------------------------------------
+
+/// A binding is a pattern associated with an optional type expression.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Binding {
+    pub pattern: Tagged<Pattern>,
+    pub tp: Option<Tagged<TypeExpr>>,
+}
+
+impl Binding {
+    /// Return the identifier, if applicable.
+    pub fn identifier(&self) -> Option<Tagged<Key>> {
+        self.pattern.identifier()
     }
 }
 
 impl Validatable for Binding {
     fn validate(&self) -> Result<(), Error> {
-        match self {
-            Binding::List(elements) => elements.validate(),
-            Binding::Map(elements) => elements.validate(),
-            _ => Ok(()),
+        self.pattern.validate()?;
+        if let Some(tp) = &self.tp {
+            tp.validate()?;
         }
+        Ok(())
+    }
+}
+
+impl FreeAndBound for Binding {
+    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+        self.pattern.free_and_bound(free, bound)
     }
 }
 
@@ -690,6 +732,7 @@ impl Display for BinOp {
 }
 
 
+
 // Expr
 // ----------------------------------------------------------------
 
@@ -1043,7 +1086,7 @@ impl Validatable for Expr {
 pub enum TopLevel {
 
     /// Import an object by loading another file and binding it to a pattern.
-    Import(Tagged<String>, Tagged<Binding>),
+    Import(Tagged<String>, Tagged<Pattern>),
 }
 
 impl Validatable for TopLevel {
@@ -1077,6 +1120,27 @@ impl Validatable for File {
             statement.validate()?;
         }
         self.expression.validate()?;
+        Ok(())
+    }
+}
+
+
+
+// TypeExpr
+// ----------------------------------------------------------------
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum TypeExpr {
+
+    /// Parametrized type
+    Parametrized {
+        name: Tagged<Key>,
+        parameters: Option<Vec<Tagged<TypeExpr>>>,
+    },
+}
+
+impl Validatable for TypeExpr {
+    fn validate(&self) -> Result<(), Error> {
         Ok(())
     }
 }

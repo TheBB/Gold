@@ -115,20 +115,20 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    /// Match a list of values to a list of list binding elements. This binds
+    /// Match a list of values to a list of list pattern elements. This binds
     /// new names to the namespace.
-    pub fn bind_list(&mut self, bindings: &Vec<Tagged<ListBindingElement>>, values: &List) -> Result<(), Error> {
+    pub fn bind_list(&mut self, patterns: &Vec<Tagged<ListPatternElement>>, values: &List) -> Result<(), Error> {
         let mut value_iter = values.iter();
 
         // In advance, calculate how many values a slurp should capture, in case
         // we encounter one.
-        let nslurp = values.len() as i64 - bindings.len() as i64 + 1;
+        let nslurp = values.len() as i64 - patterns.len() as i64 + 1;
 
-        for binding_element in bindings {
-            match binding_element.as_ref() {
+        for pattern_element in patterns {
+            match pattern_element.as_ref() {
 
                 // Standard binding
-                ListBindingElement::Binding { binding, default } => {
+                ListPatternElement::Binding { binding, default } => {
 
                     // Calculate the next value in the list
                     let val = value_iter.next()
@@ -138,30 +138,30 @@ impl<'a> Namespace<'a> {
                             // If none, get the default, or produce the
                             // [`Unpack::ListTooShort`] error.
                             default.as_ref()
-                                .ok_or_else(|| Error::new(Unpack::ListTooShort).tag(binding_element, Action::Bind))
+                                .ok_or_else(|| Error::new(Unpack::ListTooShort).tag(pattern_element, Action::Bind))
                                 .and_then(|node| self.eval(node))
                         })?;
 
-                    // Apply the binding.
-                    self.bind(&binding, val)?;
+                    // Apply the pattern.
+                    self.bind(&binding.pattern, val)?;
                 },
 
                 // Anonymous slurp: consume the required number of values, or
                 // throw an error if we can't.
-                ListBindingElement::Slurp => {
+                ListPatternElement::Slurp => {
                     for _ in 0..nslurp {
                         if let None = value_iter.next() {
-                            return Err(Error::new(Unpack::ListTooShort).tag(binding_element, Action::Slurp))
+                            return Err(Error::new(Unpack::ListTooShort).tag(pattern_element, Action::Slurp))
                         }
                     }
                 },
 
                 // Named slurp: same as above, but assign to a name.
-                ListBindingElement::SlurpTo(name) => {
+                ListPatternElement::SlurpTo(name) => {
                     let mut values: List = vec![];
                     for _ in 0..nslurp {
                         match value_iter.next() {
-                            None => return Err(Error::new(Unpack::ListTooShort).tag(binding_element, Action::Slurp)),
+                            None => return Err(Error::new(Unpack::ListTooShort).tag(pattern_element, Action::Slurp)),
                             Some(val) => values.push(val.clone()),
                         }
                     }
@@ -170,8 +170,8 @@ impl<'a> Namespace<'a> {
             }
         }
 
-        // At this point, we should have consumed all values. List bindings
-        // (unlike map bindings) don't suffer extraneous values.
+        // At this point, we should have consumed all values. List patterns
+        // (unlike map patterns) don't suffer extraneous values.
         if let Some(_) = value_iter.next() {
             Err(Error::new(Unpack::ListTooLong))
         } else {
@@ -179,18 +179,18 @@ impl<'a> Namespace<'a> {
         }
     }
 
-    /// Match a map of values to a list of map binding elements. This binds new
+    /// Match a map of values to a list of map pattern elements. This binds new
     /// names to the namespace.
-    pub fn bind_map(&mut self, bindings: &Vec<Tagged<MapBindingElement>>, values: &Map) -> Result<(), Error> {
+    pub fn bind_map(&mut self, patterns: &Vec<Tagged<MapPatternElement>>, values: &Map) -> Result<(), Error> {
 
         // If we encounter a slurp, change this. The slurp will happen at the end.
         let mut slurp_target: Option<&Key> = None;
 
-        for binding_element in bindings {
-            match binding_element.as_ref() {
+        for pattern_element in patterns {
+            match pattern_element.as_ref() {
 
                 // Standard binding.
-                MapBindingElement::Binding { key, binding, default } => {
+                MapPatternElement::Binding { key, binding, default } => {
 
                     // Get the value from the map.
                     let val = values.get(key.as_ref())
@@ -200,16 +200,16 @@ impl<'a> Namespace<'a> {
                             // If none, get the default, or produce the
                             // [`Unpack::KeyMissing`] error.
                             default.as_ref()
-                                .ok_or_else(|| Error::new(Unpack::KeyMissing(key.unwrap())).tag(binding_element, Action::Bind))
+                                .ok_or_else(|| Error::new(Unpack::KeyMissing(key.unwrap())).tag(pattern_element, Action::Bind))
                                 .and_then(|node| self.eval(node))
                         })?;
 
                     // Apply the binding.
-                    self.bind(&binding, val)?;
+                    self.bind(&binding.pattern, val)?;
                 },
 
                 // Slurp: remember the target name.
-                MapBindingElement::SlurpTo(target) => {
+                MapPatternElement::SlurpTo(target) => {
                     slurp_target = Some(target);
                 },
             }
@@ -221,8 +221,8 @@ impl<'a> Namespace<'a> {
         if let Some(target) = slurp_target {
             let mut values: Map = values.clone();
 
-            for binding_element in bindings {
-                if let MapBindingElement::Binding { key, .. } = **binding_element {
+            for binding_element in patterns {
+                if let MapPatternElement::Binding { key, .. } = **binding_element {
                     values.remove(&*key);
                 }
             }
@@ -234,16 +234,16 @@ impl<'a> Namespace<'a> {
     }
 
     /// Bind a pattern to a value.
-    pub fn bind(&mut self, binding: &Tagged<Binding>, value: Object) -> Result<(), Error> {
+    pub fn bind(&mut self, binding: &Tagged<Pattern>, value: Object) -> Result<(), Error> {
         match binding.as_ref() {
-            Binding::Identifier(key) => self.set(&*key, value),
-            Binding::List(bindings) => {
+            Pattern::Identifier(key) => self.set(&*key, value),
+            Pattern::List(bindings) => {
                 let list = value.get_list().ok_or_else(
                     || Error::new(Unpack::TypeMismatch(binding.type_of(), value.type_of())).tag(binding, Action::Bind)
                 )?;
                 self.bind_list(&bindings.0, list).map_err(bindings.tag_error(Action::Bind))
             }
-            Binding::Map(bindings) => {
+            Pattern::Map(bindings) => {
                 let obj = value.get_map().ok_or_else(
                     || Error::new(Unpack::TypeMismatch(binding.type_of(), value.type_of())).tag(binding, Action::Bind)
                 )?;
@@ -290,7 +290,7 @@ impl<'a> Namespace<'a> {
                 if let Some(from_values) = val.get_list() {
                     let mut sub = self.subtend();
                     for entry in &*from_values {
-                        sub.bind(binding, entry.clone())?;
+                        sub.bind(&binding.pattern, entry.clone())?;
                         sub.fill_list(element, values)?;
                     }
                     Ok(())
@@ -346,7 +346,7 @@ impl<'a> Namespace<'a> {
                 if let Some(from_values) = val.get_list() {
                     let mut sub = self.subtend();
                     for entry in from_values {
-                        sub.bind(&binding, entry.clone())?;
+                        sub.bind(&binding.pattern, entry.clone())?;
                         sub.fill_map(element, values)?;
                     }
                     Ok(())
@@ -520,7 +520,7 @@ impl<'a> Namespace<'a> {
                 let mut sub = self.subtend();
                 for (binding, expr) in bindings {
                     let val = sub.eval(expr)?;
-                    sub.bind(binding, val)?;
+                    sub.bind(&binding.pattern, val)?;
                 }
                 sub.eval(expression)
             },

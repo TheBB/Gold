@@ -145,7 +145,7 @@ lazy_static! {
     static ref WHITESPACE: Regex = Regex::new(r"^[^\S\n]*").unwrap();
 
     // Regex for matching a valid identifier
-    static ref NAME: Regex = Regex::new("^[[:alpha:]_][^\\s'\"{}()\\[\\]/+*\\-;:,.=#\\|^]*").unwrap();
+    static ref NAME: Regex = Regex::new("^[[:alpha:]_][^\\s'\"{}()\\[\\]/+*\\-;:,.=#\\|^<>]*").unwrap();
 
     // Regex for matching a valid map key
     static ref KEY: Regex = Regex::new("^[^\\s'\"{}()\\[\\]:]+").unwrap();

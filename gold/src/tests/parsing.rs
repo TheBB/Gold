@@ -36,7 +36,24 @@ trait BindingIdAble {
 
 impl<U> BindingIdAble for U where U: KeyAble {
     fn bid<T>(self, loc: T) -> Tagged<Binding> where Span: From<T>, T: Copy {
-        Binding::Identifier(self.key(loc)).tag(loc)
+        Binding {
+            pattern: Pattern::Identifier(self.key(loc)).tag(loc),
+            tp: None,
+        }.tag(loc)
+    }
+}
+
+trait BindingAble {
+    fn bind(self) -> Tagged<Binding>;
+}
+
+impl BindingAble for Tagged<Pattern> {
+    fn bind(self) -> Tagged<Binding> {
+        let span = self.span();
+        Binding {
+            pattern: self,
+            tp: None,
+        }.tag(span)
     }
 }
 
@@ -515,16 +532,16 @@ fn maps() {
         parse("{for [x,y] in z: x: y}"),
         Ok(Expr::map(vec![
             MapElement::Loop {
-                binding: Binding::List(ListBinding(vec![
-                    ListBindingElement::Binding {
+                binding: Pattern::List(ListBinding(vec![
+                    ListPatternElement::Binding {
                         binding: "x".bid(6),
                         default: None
                     }.tag(6),
-                    ListBindingElement::Binding {
+                    ListPatternElement::Binding {
                         binding: "y".bid(8),
                         default: None
                     }.tag(8),
-                ]).tag(5..10)).tag(5..10),
+                ]).tag(5..10)).tag(5..10).bind(),
                 iterable: "z".id(14),
                 element: ("x".lit(17), "y".id(20)).mel().to_box(),
             }.tag(1..21),
@@ -623,17 +640,17 @@ fn let_blocks() {
         Ok(Expr::Let {
             bindings: vec![
                 (
-                    Binding::List(ListBinding(vec![
-                        ListBindingElement::Binding {
+                    Pattern::List(ListBinding(vec![
+                        ListPatternElement::Binding {
                             binding: "a".bid(5),
                             default: None
                         }.tag(5),
-                        ListBindingElement::Binding {
+                        ListPatternElement::Binding {
                             binding: "b".bid(8),
                             default: Some(1.expr(10))
                         }.tag(8..11),
-                        ListBindingElement::Slurp.tag(13..16),
-                    ]).tag(4..17)).tag(4..17),
+                        ListPatternElement::Slurp.tag(13..16),
+                    ]).tag(4..17)).tag(4..17).bind(),
                     "c".id(20),
                 ),
             ],
@@ -649,13 +666,13 @@ fn let_blocks() {
         Ok(Expr::Let {
             bindings: vec![
                 (
-                    Binding::List(ListBinding(vec![
-                        ListBindingElement::Binding {
+                    Pattern::List(ListBinding(vec![
+                        ListPatternElement::Binding {
                             binding: "_".bid(5),
                             default: None
                         }.tag(5),
-                        ListBindingElement::SlurpTo("rest".key(11..15)).tag(8..15),
-                    ]).tag(4..16)).tag(4..16),
+                        ListPatternElement::SlurpTo("rest".key(11..15)).tag(8..15),
+                    ]).tag(4..16)).tag(4..16).bind(),
                     "list".id(19..23),
                 ),
             ],
@@ -668,9 +685,9 @@ fn let_blocks() {
         Ok(Expr::Let {
             bindings: vec![
                 (
-                    Binding::List(ListBinding(vec![
-                        ListBindingElement::SlurpTo("a".key(8)).tag(5..9),
-                    ]).tag(4..10)).tag(4..10),
+                    Pattern::List(ListBinding(vec![
+                        ListPatternElement::SlurpTo("a".key(8)).tag(5..9),
+                    ]).tag(4..10)).tag(4..10).bind(),
                     "b".id(13),
                 ),
             ],
@@ -683,9 +700,9 @@ fn let_blocks() {
         Ok(Expr::Let {
             bindings: vec![
                 (
-                    Binding::List(ListBinding(vec![
-                        ListBindingElement::SlurpTo("a".key(8)).tag(5..9),
-                    ]).tag(4..11)).tag(4..11),
+                    Pattern::List(ListBinding(vec![
+                        ListPatternElement::SlurpTo("a".key(8)).tag(5..9),
+                    ]).tag(4..11)).tag(4..11).bind(),
                     "b".id(14),
                 ),
             ],
@@ -698,13 +715,13 @@ fn let_blocks() {
         Ok(Expr::Let {
             bindings: vec![
                 (
-                    Binding::Map(MapBinding(vec![
-                        MapBindingElement::Binding {
+                    Pattern::Map(MapBinding(vec![
+                        MapPatternElement::Binding {
                             key: "a".key(5),
                             binding: "a".bid(5),
                             default: None,
                         }.tag(5),
-                    ]).tag(4..7)).tag(4..7),
+                    ]).tag(4..7)).tag(4..7).bind(),
                     "x".id(10),
                 ),
             ],
@@ -717,13 +734,13 @@ fn let_blocks() {
         Ok(Expr::Let {
             bindings: vec![
                 (
-                    Binding::Map(MapBinding(vec![
-                        MapBindingElement::Binding {
+                    Pattern::Map(MapBinding(vec![
+                        MapPatternElement::Binding {
                             key: "a".key(5),
                             binding: "b".bid(10),
                             default: None,
                         }.tag(5..11),
-                    ]).tag(4..12)).tag(4..12),
+                    ]).tag(4..12)).tag(4..12).bind(),
                     "x".id(15),
                 ),
             ],
@@ -736,13 +753,13 @@ fn let_blocks() {
         Ok(Expr::Let {
             bindings: vec![
                 (
-                    Binding::Map(MapBinding(vec![
-                        MapBindingElement::Binding {
+                    Pattern::Map(MapBinding(vec![
+                        MapPatternElement::Binding {
                             key: "a".key(5),
                             binding: "a".bid(5),
                             default: Some("y".id(9)),
                         }.tag(5..10),
-                    ]).tag(4..11)).tag(4..11),
+                    ]).tag(4..11)).tag(4..11).bind(),
                     "x".id(14),
                 ),
             ],
@@ -755,13 +772,13 @@ fn let_blocks() {
         Ok(Expr::Let {
             bindings: vec![
                 (
-                    Binding::Map(MapBinding(vec![
-                        MapBindingElement::Binding {
+                    Pattern::Map(MapBinding(vec![
+                        MapPatternElement::Binding {
                             key: "a".key(5),
                             binding: "b".bid(10),
                             default: Some("y".id(14)),
                         }.tag(5..15),
-                    ]).tag(4..16)).tag(4..16),
+                    ]).tag(4..16)).tag(4..16).bind(),
                     "x".id(19),
                 ),
             ],
@@ -774,12 +791,12 @@ fn let_blocks() {
         Ok(Expr::Let {
             bindings: vec![
                 (
-                    Binding::List(ListBinding(vec![
-                        ListBindingElement::Binding {
+                    Pattern::List(ListBinding(vec![
+                        ListPatternElement::Binding {
                             binding: "y".bid(6),
                             default: Some(1.expr(11)),
                         }.tag(6..13),
-                    ]).tag(4..15)).tag(4..15),
+                    ]).tag(4..15)).tag(4..15).bind(),
                     "x".id(18),
                 ),
             ],
@@ -792,13 +809,13 @@ fn let_blocks() {
         Ok(Expr::Let {
             bindings: vec![
                 (
-                    Binding::Map(MapBinding(vec![
-                        MapBindingElement::Binding {
+                    Pattern::Map(MapBinding(vec![
+                        MapPatternElement::Binding {
                             key: "y".key(6),
                             binding: "y".bid(6),
                             default: Some(1.expr(11)),
                         }.tag(6..13),
-                    ]).tag(4..15)).tag(4..15),
+                    ]).tag(4..15)).tag(4..15).bind(),
                     "x".id(18),
                 ),
             ],
@@ -916,11 +933,11 @@ fn funcall() {
         Ok(
             Expr::Function {
                 positional: ListBinding(vec![
-                    ListBindingElement::Binding {
+                    ListPatternElement::Binding {
                         binding: "x".bid(2),
                         default: None
                     }.tag(2),
-                    ListBindingElement::Binding {
+                    ListPatternElement::Binding {
                         binding: "y".bid(4),
                         default: None
                     }.tag(4),
@@ -1151,7 +1168,7 @@ fn functions() {
         parse("|a| let b = a in b"),
         Ok(Expr::Function {
             positional: ListBinding(vec![
-                ListBindingElement::Binding {
+                ListPatternElement::Binding {
                     binding: "a".bid(1),
                     default: None
                 }.tag(1),
@@ -1174,12 +1191,12 @@ fn functions() {
         Ok(Expr::Function {
             positional: ListBinding(vec![]),
             keywords: Some(MapBinding(vec![
-                MapBindingElement::Binding {
+                MapPatternElement::Binding {
                     key: "x".key(2),
                     binding: "x".bid(2),
                     default: Some(1.expr(4)),
                 }.tag(2..5),
-                MapBindingElement::Binding {
+                MapPatternElement::Binding {
                     key: "y".key(7),
                     binding: "y".bid(7),
                     default: Some(2.expr(9)),
