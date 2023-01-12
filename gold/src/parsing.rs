@@ -424,9 +424,9 @@ tok!{ellipsis, Ellipsis}
 tok!{eq, Eq}
 tok!{exclam_eq, ExclamEq}
 tok!{greater_eq, GreaterEq}
-tok!{greater, Greater}
+tok!{greater, CloseAngle}
 tok!{less_eq, LessEq}
-tok!{less, Less}
+tok!{less, OpenAngle}
 tok!{minus, Minus}
 tok!{open_brace, OpenBrace}
 tok!{open_brace_pipe, OpenBracePipe}

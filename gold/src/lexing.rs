@@ -23,6 +23,7 @@ type LexCache<'a> = UnsafeCell<Option<(Ctx, usize, LexResult<'a>)>>;
 pub enum TokenType {
     Asterisk,           // *
     Caret,              // ^
+    CloseAngle,         // >
     CloseBrace,         // }
     CloseBracePipe,     // |}
     CloseBracket,       // ]
@@ -38,11 +39,10 @@ pub enum TokenType {
     Ellipsis,           // ...
     Eq,                 // =
     ExclamEq,           // !=
-    Greater,            // >
     GreaterEq,          // >=
-    Less,               // <
     LessEq,             // <=
     Minus,              // -
+    OpenAngle,          // <
     OpenBrace,          // {
     OpenBracePipe,      // {|
     OpenBracket,        // [
@@ -106,9 +106,9 @@ impl Display for TokenType {
             Self::Ellipsis => "'...'",
             Self::Eq => "'='",
             Self::ExclamEq => "'!='",
-            Self::Greater => "'>'",
+            Self::CloseAngle => "'>'",
             Self::GreaterEq => "'>='",
-            Self::Less => "'<'",
+            Self::OpenAngle => "'<'",
             Self::LessEq => "'<='",
             Self::Minus => "'-'",
             Self::OpenBrace => "'{'",
@@ -351,9 +351,9 @@ impl<'a> Lexer<'a> {
             Some('*') => self.skip_tag(1, 0, TokenType::Asterisk),
             Some('^') => self.skip_tag(1, 0, TokenType::Caret),
             Some('<') if self.satisfies_at(1, |x| x == '=') => self.skip_tag(2, 0, TokenType::LessEq),
-            Some('<') => self.skip_tag(1, 0, TokenType::Less),
+            Some('<') => self.skip_tag(1, 0, TokenType::OpenAngle),
             Some('>') if self.satisfies_at(1, |x| x == '=') => self.skip_tag(2, 0, TokenType::GreaterEq),
-            Some('>') => self.skip_tag(1, 0, TokenType::Greater),
+            Some('>') => self.skip_tag(1, 0, TokenType::CloseAngle),
             Some('=') if self.satisfies_at(1, |x| x == '=') => self.skip_tag(2, 0, TokenType::DoubleEq),
             Some('=') => self.skip_tag(1, 0, TokenType::Eq),
             Some('!') if self.satisfies_at(1, |x| x == '=') => self.skip_tag(2, 0, TokenType::ExclamEq),
