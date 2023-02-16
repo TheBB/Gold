@@ -106,6 +106,36 @@ Or use literal string syntax for keys which cause syntax problems::
     {"key:with:colons": 1}
 
 
+Multiline strings
+-----------------
+
+For constructing objects with long strings, or even just short strings for which
+you don't want to type quotation marks all the time, Gold offers multiline
+string support::
+
+    {
+        name:: Bob the Builder
+        weapon:: Hammer
+    }
+
+The double colon initiates a multiline string. The actual string contents start
+from the next non-whitespace character, and runs until the next line whose
+indentation is not greater than the line that started the string::
+
+    {
+        description:: Here starts some long text
+            it continues here
+        comment:: But this is a new one
+    }
+
+Note commas are not needed at the end of these strings to separate object items,
+and indeed they will be counted as part of the string if present.
+
+Indentation for lines after the first one is removed. If the lines have variable
+indentation, the indentation corresponding to the least-indented line is
+removed.
+
+
 Let-bindings
 ------------
 
@@ -397,7 +427,7 @@ be provided::
 
 You can use the built-in *items* function to produce an object like this::
 
-    let buildobj = |list| => {for [key, val] in list: key: val}
+    let buildobj = |list| {for [key, val] in list: key: val}
     in buildobj([["a", 1], ["b", 2]])
 
 However, this example will not work properly, because the ``key: val`` structure
@@ -472,7 +502,7 @@ Of course, there is no requirement that a file must evaluate to an object. For
 the single function *add*, this would work just as well::
 
     # mylib.gold
-    |x, y| => x + y
+    |x, y| x + y
 
     # other file
     import "mylib.gold" as add
@@ -488,7 +518,7 @@ Gold functions form a closure over non-local names when they are defined, and
 they do so before they themselves are bound to a name.  It is therefore
 impossible to define a recursive function like you would normally do it, e.g.::
 
-    let factorial = |n| => if n > 0 then n * factorial(n-1) else 1
+    let factorial = |n| if n > 0 then n * factorial(n-1) else 1
     in factorial(4)
 
 Indeed, this closure would be self-referential, and Gold is unable to define
@@ -505,7 +535,7 @@ argument::
 This slightly unwieldy interface can be fixed using a helper function::
 
     let factorial = |n| (
-        let inner = |f, n| => if n > 0 then n * f(f, n-1) else 1
+        let inner = |f, n| if n > 0 then n * f(f, n-1) else 1
         in inner(inner, n)
     )
 
