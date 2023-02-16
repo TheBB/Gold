@@ -193,8 +193,8 @@ Gold has an if-then-else structure::
 Because this must produce a value in all cases (it is an expression, not a
 statement), it is not possible to omit the *else* branch.
 
-In Gold, only *false* and *null* are treated as falsy values. Everything
-else is truthy, including zero!
+In Gold, only *false*, *null* and zeros are treated as falsy values. Everything
+else is truthy, including empty lists and objects!
 
 
 Indexing
