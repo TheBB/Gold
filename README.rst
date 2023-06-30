@@ -278,6 +278,7 @@ of precedence:
 - ``+``, ``-`` for addition and subtraction
 - ``<``, ``>`` ``<=``, ``>=`` for inequality comparison
 - ``==``, ``!=`` for equality comparison
+- ``has`` for containment check (works with lists and strings)
 - ``and`` for logical conjunction
 - ``or`` for logical disjunction
 

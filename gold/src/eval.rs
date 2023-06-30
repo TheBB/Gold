@@ -435,6 +435,7 @@ impl<'a> Namespace<'a> {
                     }
                     BinOp::Equal => Ok(Object::bool(value.user_eq(&rhs))),
                     BinOp::NotEqual => Ok(Object::bool(!value.user_eq(&rhs))),
+                    BinOp::Contains => Ok(Object::bool(value.contains(&rhs)?)),
                     BinOp::Index => value.index(&self.eval(node)?),
 
                     // Unreachable

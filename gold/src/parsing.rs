@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 use std::num::{ParseFloatError, ParseIntError};
-use std::ops::Deref;
 
 use num_bigint::ParseBigIntError;
 use num_bigint::BigInt;
@@ -82,11 +81,11 @@ fn multiline(s: &str) -> String {
 
     let first = lines.next().unwrap().trim_start();
 
-    let rest: Vec<&str> = lines.filter(|s: &&str| !s.deref().trim().is_empty()).collect();
+    let rest: Vec<&str> = lines.filter(|s: &&str| !(*s).trim().is_empty()).collect();
     let indent =
         rest.iter()
             .filter(|s: &&&str| !s.trim().is_empty())
-            .map(|s: &&str| s.deref().chars().take_while(|c| c.is_whitespace()).map(|_| 1).sum())
+            .map(|s: &&str| (*s).chars().take_while(|c| c.is_whitespace()).map(|_| 1).sum())
             .min().unwrap_or(0);
 
     let mut ret = first.to_string();
@@ -489,7 +488,7 @@ fn map_keyword<'a>(value: &'a str) -> impl Parser<'a, Tagged<&'a str>> {
 
 
 /// List of keywords that must be avoided by the [`identifier`] parser.
-static KEYWORDS: [&'static str; 15] = [
+static KEYWORDS: [&'static str; 16] = [
     "for",
     "when",
     "if",
@@ -497,6 +496,7 @@ static KEYWORDS: [&'static str; 15] = [
     "else",
     "let",
     "in",
+    "has",
     "true",
     "false",
     "null",
@@ -1279,13 +1279,24 @@ fn equality<'a>(input: In<'a>) -> Out<'a, PExpr> {
 }
 
 
+/// Matches the contains precedence level.
+fn contains<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    lbinop(
+        alt((
+            map(keyword("has"), |x| (Transform::contains as OpCons).tag(&x)),
+        )),
+        equality,
+    ).parse(input)
+}
+
+
 /// Matches the conjunction ('and') precedence level.
 fn conjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
             map(keyword("and"), |x| (Transform::and as OpCons).tag(&x)),
         )),
-        equality,
+        contains,
     ).parse(input)
 }
 
