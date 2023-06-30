@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 use std::num::{ParseFloatError, ParseIntError};
-use std::ops::Deref;
 
 use num_bigint::ParseBigIntError;
 use num_bigint::BigInt;
@@ -77,11 +76,11 @@ fn multiline(s: &str) -> String {
 
     let first = lines.next().unwrap().trim_start();
 
-    let rest: Vec<&str> = lines.filter(|s: &&str| !s.deref().trim().is_empty()).collect();
+    let rest: Vec<&str> = lines.filter(|s: &&str| !(*s).trim().is_empty()).collect();
     let indent =
         rest.iter()
             .filter(|s: &&&str| !s.trim().is_empty())
-            .map(|s: &&str| s.deref().chars().take_while(|c| c.is_whitespace()).map(|_| 1).sum())
+            .map(|s: &&str| (*s).chars().take_while(|c| c.is_whitespace()).map(|_| 1).sum())
             .min().unwrap_or(0);
 
     let mut ret = first.to_string();

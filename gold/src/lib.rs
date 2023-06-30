@@ -1,6 +1,5 @@
 //! The Gold language - a programmable configuration language inspired by Dhall.
 
-#![feature(is_some_and)]
 #![feature(step_trait)]
 
 #![warn(missing_docs)]
