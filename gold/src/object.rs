@@ -951,6 +951,19 @@ impl ObjectVariant {
         Ok(Self::from(xx.powf(yy)))
     }
 
+    /// The containment operator.
+    pub fn contains(&self, other: &Object) -> Result<bool, Error> {
+        if let Self::List(x) = self {
+            return Ok(x.contains(other));
+        }
+
+        if let (Self::Str(haystack), Self::Str(needle)) = (self, &other.0) {
+            return Ok(haystack.as_str().contains(needle.as_str()));
+        }
+
+        Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Contains)))
+    }
+
     /// Returns `Some(true)` if `self` and `other` are comparable and that the
     /// comparison is equal to `ordering`. Returns `Some(false)` if it is not.
     /// Returns `None` if they are not comparable.
@@ -1400,6 +1413,11 @@ impl Object {
     /// Wrap [`ObjectVariant::numeric_normalize`].
     pub fn numeric_normalize(self) -> Self {
         Self(self.0.numeric_normalize())
+    }
+
+    /// Wrap [`ObjectVariant::contains`].
+    pub fn contains(self, other: &Self) -> Result<bool, Error> {
+        self.0.contains(other)
     }
 
     // Auto-wrap some unary and binary operators.

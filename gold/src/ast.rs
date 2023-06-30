@@ -552,6 +552,9 @@ pub enum BinOp {
     /// Inequality
     NotEqual,
 
+    /// Containment
+    Contains,
+
     /// Logical conjunction
     And,
 
@@ -669,6 +672,13 @@ impl Transform {
         Transform::BinOp(BinOp::NotEqual.tag(loc), rhs.to_box())
     }
 
+    /// Construct a containment check transform.
+    ///
+    /// * `loc` - the location of the 'in' operator in the buffer.
+    pub fn contains<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+        Transform::BinOp(BinOp::Contains.tag(loc), rhs.to_box())
+    }
+
     /// Construct a logical conjunction transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
@@ -725,6 +735,7 @@ impl Display for BinOp {
             Self::GreaterEqual => f.write_str(">="),
             Self::Equal => f.write_str("=="),
             Self::NotEqual => f.write_str("!="),
+            Self::Contains => f.write_str("in"),
             Self::And => f.write_str("and"),
             Self::Or => f.write_str("or"),
         }

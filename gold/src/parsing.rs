@@ -501,6 +501,7 @@ static KEYWORDS: [&'static str; 16] = [
     "else",
     "let",
     "in",
+    "has",
     "true",
     "false",
     "null",
@@ -1283,13 +1284,24 @@ fn equality<'a>(input: In<'a>) -> Out<'a, PExpr> {
 }
 
 
+/// Matches the contains precedence level.
+fn contains<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    lbinop(
+        alt((
+            map(keyword("has"), |x| (Transform::contains as OpCons).tag(&x)),
+        )),
+        equality,
+    ).parse(input)
+}
+
+
 /// Matches the conjunction ('and') precedence level.
 fn conjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
             map(keyword("and"), |x| (Transform::and as OpCons).tag(x)),
         )),
-        equality,
+        contains,
     ).parse(input)
 }
 
