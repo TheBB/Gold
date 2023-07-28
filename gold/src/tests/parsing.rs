@@ -10,6 +10,11 @@ fn parse(input: &str) -> Result<Tagged<Expr>, Error> {
     parse_file(input).map(|x| x.expression).map_err(Error::unrender)
 }
 
+
+fn file(input: &str) -> Result<File, Error> {
+    parse_file(input).map_err(Error::unrender)
+}
+
 trait IdAble {
     fn id(self, loc: impl HasSpan) -> Tagged<Expr>;
 }
@@ -1284,6 +1289,102 @@ fn functions() {
             return_type: None,
             expression: "x".id(14).add("y".id(18), 16).tag(14..19).to_box(),
         }.tag(0..19)),
+    );
+}
+
+
+#[test]
+fn types() {
+    assert_eq!(
+        file(concat!(
+            "type a = int\n",
+            "1",
+        )),
+        Ok(File {
+            statements: vec![
+                TopLevel::TypeDef {
+                    name: "a".key(5),
+                    params: None,
+                    expr: TypeExpr::Parametrized {
+                        name: "int".key(9..12),
+                        params: None,
+                    }.tag(9..12),
+                }
+            ],
+            expression: 1.expr(13).with_coord(1, 0),
+        }),
+    );
+
+    assert_eq!(
+        file(concat!(
+            "type list_of_int = list<int>\n",
+            "1"
+        )),
+        Ok(File {
+            statements: vec![
+                TopLevel::TypeDef {
+                    name: "list_of_int".key(5..16),
+                    params: None,
+                    expr: TypeExpr::Parametrized {
+                        name: "list".key(19..23),
+                        params: Some(vec![
+                            TypeExpr::Parametrized { name: "int".key(24..27), params: None }.tag(24..27),
+                        ]),
+                    }.tag(19..28),
+                },
+            ],
+            expression: 1.expr(29).with_coord(1, 0),
+        }),
+    );
+
+    assert_eq!(
+        file(concat!(
+            "type list_of_dict = list<dict<int>>\n",
+            "1"
+        )),
+        Ok(File {
+            statements: vec![
+                TopLevel::TypeDef {
+                    name: "list_of_dict".key(5..17),
+                    params: None,
+                    expr: TypeExpr::Parametrized {
+                        name: "list".key(20..24),
+                        params: Some(vec![
+                            TypeExpr::Parametrized {
+                                name: "dict".key(25..29),
+                                params: Some(vec![
+                                    TypeExpr::Parametrized { name: "int".key(30..33), params: None }.tag(30..33)
+                                ]),
+                            }.tag(25..34),
+                        ]),
+                    }.tag(20..35),
+                },
+            ],
+            expression: 1.expr(36).with_coord(1, 0),
+        }),
+    );
+
+    assert_eq!(
+        file(concat!(
+            "type func_from_int<r> = func<int, r>\n",
+            "1",
+        )),
+        Ok(File {
+            statements: vec![
+                TopLevel::TypeDef {
+                    name: "func_from_int".key(5..18),
+                    params: Some(vec!["r".key(19)]),
+                    expr: TypeExpr::Parametrized {
+                        name: "func".key(24..28),
+                        params: Some(vec![
+                            TypeExpr::Parametrized { name: "int".key(29..32), params: None }.tag(29..32),
+                            TypeExpr::Parametrized { name: "r".key(34), params: None }.tag(34),
+                        ]),
+                    }.tag(24..36),
+                },
+            ],
+            expression: 1.expr(37).with_coord(1, 0),
+        }),
     );
 }
 

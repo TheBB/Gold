@@ -114,6 +114,7 @@ macro_rules! expected_kw {
 ///     max_num_of_args,
 ///     name_of_args_vector,
 /// )
+/// ```
 macro_rules! argcount {
     ($fixed:expr, $args:ident) => {
         return Err(Error::new(TypeMismatch::ArgCount {

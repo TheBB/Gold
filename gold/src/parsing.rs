@@ -2056,8 +2056,8 @@ fn type_expr<'a>(input: In<'a>) -> Out<'a, PType> {
 
             |(name, params)| {
                 let mut span = name.span();
-                if let Some((_, params, _)) = &params {
-                    span = span.maybe_join(params);
+                if let Some((_, _, right)) = &params {
+                    span = span.join(right);
                 }
 
                 let params = params.map(|(_, params, _)| params.into_iter().map(PType::inner).collect());
