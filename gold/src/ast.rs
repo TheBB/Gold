@@ -675,7 +675,7 @@ impl Transform {
     /// Construct a containment check transform.
     ///
     /// * `loc` - the location of the 'in' operator in the buffer.
-    pub fn contains<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
+    pub fn contains(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Contains.tag(loc), rhs.to_box())
     }
 
@@ -1100,7 +1100,7 @@ impl Validatable for Expr {
 // ----------------------------------------------------------------
 
 /// A top-level AST node, only legal at the top level of a file.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TopLevel {
 
     /// Import an object by loading another file and binding it to a pattern.
@@ -1130,7 +1130,7 @@ impl Validatable for TopLevel {
 
 /// The complete AST node of a file, consisting of a number of top-level
 /// statements followed by an expression.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct File {
 
     /// Top-level statements.
