@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
-use crate::builtins::BUILTINS;
+use crate::builtins::{BUILTINS, TOPLEVEL};
 use crate::error::{Error, Internal, Tagged, Unpack, TypeMismatch, Action, Reason};
 use crate::object::{Object, Func, Key, Map, List};
 use crate::traits::Free;
@@ -108,8 +108,10 @@ impl<'a> Namespace<'a> {
         match self {
             // The top level namespace should always be empty, in which case we
             // pass the ball to the builtins.
-            Namespace::Empty => BUILTINS.get(key.as_str()).cloned().map(Object::func).ok_or_else(|| Error::unbound(key.clone())),
-
+            Namespace::Empty =>
+                TOPLEVEL.get(key).cloned()
+                    .or_else(|| BUILTINS.get(key.as_str()).cloned().map(Object::func))
+                    .ok_or_else(|| Error::unbound(key.clone())),
             Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| Error::unbound(key.clone())),
             Namespace::Mutable { names, prev } => names.get(key).map(Object::clone).ok_or(()).or_else(|_| prev.get(key))
         }

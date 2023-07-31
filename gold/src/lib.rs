@@ -2,7 +2,7 @@
 
 #![feature(step_trait)]
 
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 
 #[macro_use]
 extern crate lazy_static;
