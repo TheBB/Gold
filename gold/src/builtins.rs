@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::collections::HashMap;
 
 use crate::error::Value;
-use crate::object::{Object, List, Map, Builtin, Type, signature, IntVariant};
+use crate::object::{Object, List, Map, Builtin, Type, signature, IntVariant, BuiltinType, Key};
 use crate::error::{Error, TypeMismatch};
 
 
@@ -31,15 +31,26 @@ macro_rules! builtin {
 
 
 lazy_static! {
+    /// Table of all top-level globally available objects.
+    ///
+    /// Builtins should be listed separately in the [`BUILTINS`] table.
+    pub static ref TOPLEVEL: HashMap<Key, Object> = {
+        let mut m = HashMap::new();
+        m.insert(Key::new("int"), Object::typeobj(BuiltinType::Int));
+        m.insert(Key::new("float"), Object::typeobj(BuiltinType::Float));
+        m.insert(Key::new("bool"), Object::typeobj(BuiltinType::Bool));
+        m.insert(Key::new("str"), Object::typeobj(BuiltinType::Str));
+        m
+    };
+}
+
+
+lazy_static! {
     /// Table of all builtin functions.
     pub static ref BUILTINS: HashMap<&'static str, Builtin> = {
         let mut m = HashMap::new();
         builtin!(m, len);
         builtin!(m, range);
-        builtin!(m, int);
-        builtin!(m, float);
-        builtin!(m, bool);
-        builtin!(m, str);
         builtin!(m, map);
         builtin!(m, filter);
         builtin!(m, items);
@@ -56,6 +67,7 @@ lazy_static! {
         builtin!(m, isobject);
         builtin!(m, islist);
         builtin!(m, isfunc);
+        builtin!(m, istype);
         m
     };
 }
@@ -173,7 +185,7 @@ fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Convert the argument to an integer
-fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+pub fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
         return Ok(Object::int(x.clone()))
     });
@@ -199,7 +211,7 @@ fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Convert the argument to a float
-fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+pub fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
         return Ok(Object::float(x.to_f64()))
     });
@@ -225,7 +237,7 @@ fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Convert the argument to a bool (this never fails, see Gold's truthiness rules)
-fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+pub fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: any] {
         return Ok(Object::bool(x.truthy()))
     });
@@ -235,7 +247,7 @@ fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 
 /// Convert the argument to a string
-fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+pub fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
         return Ok(Object::str(x))
     });
@@ -455,6 +467,14 @@ fn islist(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// Check whether the argument is a function.
 fn isfunc(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: func] { return Ok(Object::bool(true)); });
+    signature!(args = [_x: any] { return Ok(Object::bool(false)); });
+    argcount!(1, args)
+}
+
+
+/// Check whether the argument is a type.
+fn istype(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+    signature!(args = [_x: typeobj] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
 }

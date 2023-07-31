@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError, PyException, PySyntaxError, PyNameError, PyKeyError, PyOSError, PyImportError};
 
 use crate::eval::{ImportConfig as GoldImportConfig};
-use crate::object::{Object, FuncVariant, List, Map, Key, Closure, ObjectVariant, IntVariant};
+use crate::object::{Object, FuncVariant, List, Map, Key, Closure, ObjectVariant, IntVariant, TypeVariant};
 use crate::error::{Error, Reason};
 
 
@@ -68,12 +68,23 @@ impl Function {
 }
 
 
+/// Thin wrapper around [`object::Type`] so that it can be converted to an
+/// opaque Python type.
+///
+/// This represents all kinds of types.
+#[pyclass]
+#[derive(Clone)]
+pub struct Type(TypeVariant);
+
+
 /// Convert Python objects to Gold
 impl<'s> FromPyObject<'s> for Object {
     fn extract(obj: &'s PyAny) -> PyResult<Self> {
         // Nothing magical here, just a prioritized list of possible Python types and their Gold equivalents
         if let Ok(Function(x)) = obj.extract::<Function>() {
             Ok(Object::func(x))
+        } else if let Ok(Type(x)) = obj.extract::<Type>() {
+            Ok(Object::typeobj(x))
         } else if let Ok(x) = obj.extract::<i64>() {
             Ok(Object::int(x))
         } else if let Ok(x) = obj.extract::<BigInt>() {
@@ -141,6 +152,7 @@ impl pyo3::IntoPy<PyObject> for Object {
             },
             ObjectVariant::Null => (None as Option<bool>).into_py(py),
             ObjectVariant::Func(x) => Function(x.clone()).into_py(py),
+            ObjectVariant::Type(x) => Type(x.clone()).into_py(py),
         }
     }
 }

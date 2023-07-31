@@ -30,6 +30,7 @@ use serde::de::Visitor;
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use symbol_table::GlobalSymbol;
 
+use crate::builtins;
 use crate::builtins::BUILTINS;
 use crate::traits::{ToVec, ToMap};
 
@@ -78,6 +79,9 @@ pub enum Type {
 
     /// The empty variant
     Null,
+
+    /// Types
+    Type,
 }
 
 // It's desirable that these names correspond to the built-in conversion
@@ -94,6 +98,7 @@ impl Display for Type {
             Self::Map => f.write_str("map"),
             Self::Function => f.write_str("function"),
             Self::Null => f.write_str("null"),
+            Self::Type => f.write_str("type"),
         }
     }
 }
@@ -678,6 +683,47 @@ impl FuncVariant {
 
 
 
+// Type variant
+// ------------------------------------------------------------------------------------------------
+
+
+#[derive(Clone,Debug, Serialize, Deserialize)]
+pub enum TypeVariant {
+    Builtin(BuiltinType),
+}
+
+impl From<BuiltinType> for TypeVariant {
+    fn from(value: BuiltinType) -> Self {
+        TypeVariant::Builtin(value)
+    }
+}
+
+impl TypeVariant {
+    /// The function call operator.
+    pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+        match self {
+            Self::Builtin(BuiltinType::Int) => builtins::int(args, kwargs),
+            Self::Builtin(BuiltinType::Float) => builtins::float(args, kwargs),
+            Self::Builtin(BuiltinType::Bool) => builtins::bool(args, kwargs),
+            Self::Builtin(BuiltinType::Str) => builtins::str(args, kwargs),
+            _ => Err(Error::new(TypeMismatch::Call(Type::Type))),
+        }
+    }
+}
+
+
+#[derive(Clone,Debug, Serialize, Deserialize)]
+pub enum BuiltinType {
+    Int,
+    Float,
+    Bool,
+    Str,
+    Null,
+    Any,
+}
+
+
+
 // Object variant
 // ------------------------------------------------------------------------------------------------
 
@@ -711,6 +757,9 @@ pub enum ObjectVariant {
 
     /// Null
     Null,
+
+    /// Types
+    Type(TypeVariant),
 }
 
 // FuncVariant doesn't implement PartialEq, so this has to be done manually.
@@ -760,6 +809,7 @@ impl ObjectVariant {
             Self::Map(_) => Type::Map,
             Self::Func(_) => Type::Function,
             Self::Null => Type::Null,
+            Self::Type(_) => Type::Type,
         }
     }
 
@@ -994,6 +1044,7 @@ impl ObjectVariant {
     pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
         match self {
             Self::Func(func) => func.call(args, kwargs),
+            Self::Type(tp) => tp.call(args, kwargs),
             _ => Err(Error::new(TypeMismatch::Call(self.type_of()))),
         }
     }
@@ -1058,6 +1109,14 @@ impl ObjectVariant {
     pub fn get_func(&self) -> Option<&FuncVariant> {
         match self {
             Self::Func(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    /// Extract the type variant if applicable.
+    pub fn get_type(&self) -> Option<&TypeVariant> {
+        match self {
+            Self::Type(x) => Some(x),
             _ => None,
         }
     }
@@ -1202,6 +1261,7 @@ macro_rules! extract {
     ($index:expr , $args:ident , list) => { $args.get($index).and_then(|x| x.get_list()) };
     ($index:expr , $args:ident , map) => { $args.get($index).and_then(|x| x.get_map()) };
     ($index:expr , $args:ident , func) => { $args.get($index).and_then(|x| x.get_func()) };
+    ($index:expr , $args:ident , typeobj) => { $args.get($index).and_then(|x| x.get_type()) };
     ($index:expr , $args:ident , null) => { $args.get($index).and_then(|x| x.get_null()) };
 
     ($index:expr , $args:ident , any) => { $args.get($index) };
@@ -1363,6 +1423,14 @@ impl Object {
         Self(ObjectVariant::Func(FuncVariant::from(val)))
     }
 
+    /// Construct a type.
+    pub fn typeobj<T>(val: T) -> Self
+    where
+        TypeVariant: From<T>
+    {
+        Self(ObjectVariant::Type(TypeVariant::from(val)))
+    }
+
     /// Construct a list.
     pub fn list(x: impl ToVec<Object>) -> Self {
         Self(ObjectVariant::list(x))
@@ -1493,5 +1561,3 @@ impl From<Key> for Object {
         Object::key(value)
     }
 }
-
-
