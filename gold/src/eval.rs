@@ -1,10 +1,11 @@
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
-use crate::builtins::{BUILTINS, TOPLEVEL};
+use crate::builtins::{BUILTINS, TYPES};
 use crate::error::{Error, Internal, Tagged, Unpack, TypeMismatch, Action, Reason};
 use crate::object::{Object, Func, Key, Map, List};
 use crate::traits::Free;
@@ -27,7 +28,7 @@ pub struct ImportConfig {
     /// case, the importer will attempt to resolve the import to a path if
     /// possible. If the function returns an error, import resolution will be
     /// aborted.
-    pub custom: Option<Arc<dyn Fn(&str) -> Result<Option<Object>, Error> + Send + Sync>>,
+    pub custom: Option<Rc<dyn Fn(&str) -> Result<Option<Object>, Error>>>,
 }
 
 impl ImportConfig {
@@ -109,7 +110,7 @@ impl<'a> Namespace<'a> {
             // The top level namespace should always be empty, in which case we
             // pass the ball to the builtins.
             Namespace::Empty =>
-                TOPLEVEL.get(key).cloned()
+                TYPES.get(key).map(|x| Object::typeobj(*x))
                     .or_else(|| BUILTINS.get(key.as_str()).cloned().map(Object::func))
                     .ok_or_else(|| Error::unbound(key.clone())),
             Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| Error::unbound(key.clone())),
@@ -217,19 +218,25 @@ impl<'a> Namespace<'a> {
             }
         }
 
-        // In case of slurp, we clone the original mapping, then remove all the
-        // keys that are explicitly referenced by the other bindings.
-        // TODO: Find a more efficient way to do this?
+        // In case of slurp, we create a new mapping with all the keys that aren't
+        // explicitly referenced by other bindings.
         if let Some(target) = slurp_target {
-            let mut values: Map = values.clone();
+            let mut seen_keys: HashSet<Key> = HashSet::new();
 
             for binding_element in patterns {
                 if let MapPatternElement::Binding { key, .. } = **binding_element {
-                    values.remove(&*key);
+                    seen_keys.insert(*key);
                 }
             }
 
-            self.set(target, Object::map(values))?;
+            let mut unseen_values = Map::new();
+            for (k, v) in values {
+                if !seen_keys.contains(k) {
+                    unseen_values.insert(*k, v.clone());
+                }
+            }
+
+            self.set(target, Object::map(unseen_values))?;
         }
 
         Ok(())

@@ -35,6 +35,9 @@ mod traits;
 /// Utility functions.
 mod util;
 
+/// Wrappers for various types.
+mod wrappers;
+
 #[cfg(test)]
 mod tests;
 

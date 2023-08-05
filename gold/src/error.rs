@@ -4,6 +4,7 @@ use std::ops::{Deref, Range, Sub};
 use std::fmt::{Debug, Display, Write};
 use std::path::PathBuf;
 
+use gc::{Trace, Finalize, custom_trace};
 use serde::{Serialize, Deserialize};
 
 use crate::ast::{BinOp, UnOp};
@@ -241,6 +242,16 @@ impl<T> HasMaybeSpan for Option<T> where T: HasSpan {
 pub struct Tagged<T> {
     span: Span,
     contents: T,
+}
+
+unsafe impl<T: Trace> Trace for Tagged<T> {
+    custom_trace!(this, { mark(&this.contents); });
+}
+
+impl<T: Finalize> Finalize for Tagged<T> {
+    fn finalize(&self) {
+        self.contents.finalize()
+    }
 }
 
 impl<T> Tagged<T> {

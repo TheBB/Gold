@@ -28,7 +28,7 @@ fn main() {
         exit(1);
     };
 
-    match obj.and_then(JsonValue::try_from) {
+    match obj.and_then(|obj| JsonValue::try_from(&obj)) {
         Ok(val) => println!("{}", stringify_pretty(val, 4)),
         Err(Error { rendered: Some(e), .. }) => {
             eprintln!("{}", e);

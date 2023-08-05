@@ -18,11 +18,11 @@ use std::io::{Read, Write};
 use std::iter::Step;
 use std::ops::Deref;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::rc::Rc;
 use std::time::SystemTime;
 
-use indexmap::IndexMap;
 use json::JsonValue;
+use gc::{Gc, Trace, Finalize};
 use num_bigint::{BigInt, BigUint};
 use num_traits::{ToPrimitive, checked_pow};
 use rmp_serde::{decode, encode};
@@ -38,6 +38,7 @@ use crate::ast::{ListBinding, MapBinding, Expr, BinOp, UnOp};
 use crate::error::{Error, Tagged, TypeMismatch, Value, Reason};
 use crate::eval::Namespace;
 use crate::util;
+use crate::wrappers::{OrderedMap, WBigInt};
 
 
 /// This type is used for all interned strings, map keys, variable names, etc.
@@ -47,7 +48,7 @@ pub type Key = GlobalSymbol;
 pub type List = Vec<Object>;
 
 /// The basic type for a mapping of objects indexed by strings (in actuality, [`Key`]).
-pub type Map = IndexMap<Key, Object>;
+pub type Map = OrderedMap<Key, Object>;
 
 /// The current serialization format version.
 const SERIALIZE_VERSION: i32 = 1;
@@ -124,21 +125,20 @@ fn escape(s: &str) -> String {
 
 
 /// The string variant represents all possible Gold strings.
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Trace, Finalize)]
 pub enum StrVariant {
-
     /// Interned string. All strings that fall in the following categories are interned:
     /// - identifiers
     /// - map keys
     /// - strings no more than 20 characters long
     ///
     /// Note that Gold does not garbage-collect interned strings.
-    Interned(Key),
+    Interned(#[unsafe_ignore_trace] Key),
 
     /// Natural (non-interned) string. If a string is not interned, or if it
     /// requires runtime evaluation (e.g. it is interpolated, or is the result
     /// of concatenation), then it is not interned.
-    Natural(Arc<String>),
+    Natural(Gc<String>),
 }
 
 impl PartialOrd<StrVariant> for StrVariant {
@@ -170,7 +170,7 @@ impl StrVariant {
 
     /// Construct a new natural (non-interned string).
     pub fn natural<T: AsRef<str>>(x: T) -> Self {
-        Self::Natural(Arc::new(x.as_ref().to_string()))
+        Self::Natural(Gc::new(x.as_ref().to_string()))
     }
 
     /// Access the internal string slice.
@@ -203,22 +203,21 @@ impl StrVariant {
 
 
 /// The integer variant represents all possible Gold integers.
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Trace, Finalize)]
 pub enum IntVariant {
-
     /// Machine integers.
     Small(i64),
 
     /// Bignums.
-    Big(Arc<BigInt>),
+    Big(Gc<WBigInt>),
 }
 
 impl PartialOrd<IntVariant> for IntVariant {
     fn partial_cmp(&self, other: &IntVariant) -> Option<Ordering> {
         match (self, other) {
             (Self::Small(x), Self::Small(y)) => x.partial_cmp(y),
-            (Self::Small(x), Self::Big(y)) => BigInt::from(*x).partial_cmp(y),
-            (Self::Big(x), Self::Small(y)) => x.as_ref().partial_cmp(&BigInt::from(*y)),
+            (Self::Small(x), Self::Big(y)) => BigInt::from(*x).partial_cmp(&***y),
+            (Self::Big(x), Self::Small(y)) => (***x).partial_cmp(&BigInt::from(*y)),
             (Self::Big(x), Self::Big(y)) => x.as_ref().partial_cmp(y.as_ref()),
         }
     }
@@ -241,9 +240,9 @@ impl PartialOrd<f64> for IntVariant {
 
                 // A bignum is equal to a float if the floor, ceil and bignum
                 // are all equal to each other.
-                if x.as_ref() < &lo || x.as_ref() == &lo && lo != hi {
+                if &***x < &lo || &***x == &lo && lo != hi {
                     Some(Ordering::Less)
-                } else if x.as_ref() > &hi || x.as_ref() == &hi && lo != hi {
+                } else if &***x > &hi || &***x == &hi && lo != hi {
                     Some(Ordering::Greater)
                 } else {
                     Some(Ordering::Equal)
@@ -255,7 +254,7 @@ impl PartialOrd<f64> for IntVariant {
 
 impl From<BigInt> for IntVariant {
     fn from(value: BigInt) -> Self {
-        Self::Big(Arc::new(value))
+        Self::Big(Gc::new(WBigInt(value)))
     }
 }
 
@@ -285,7 +284,7 @@ impl TryFrom<&IntVariant> for u32 {
     fn try_from(value: &IntVariant) -> Result<Self, Self::Error> {
         match value {
             IntVariant::Small(x) => Self::try_from(*x).map_err(|_| ()),
-            IntVariant::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
+            IntVariant::Big(x) => Self::try_from(&***x).map_err(|_| ()),
         }
     }
 }
@@ -296,7 +295,7 @@ impl TryFrom<&IntVariant> for i64 {
     fn try_from(value: &IntVariant) -> Result<Self, Self::Error> {
         match value {
             IntVariant::Small(x) => Ok(*x),
-            IntVariant::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
+            IntVariant::Big(x) => Self::try_from(&***x).map_err(|_| ()),
         }
     }
 }
@@ -307,7 +306,7 @@ impl TryFrom<&IntVariant> for usize {
     fn try_from(value: &IntVariant) -> Result<Self, Self::Error> {
         match value {
             IntVariant::Small(x) => Self::try_from(*x).map_err(|_| ()),
-            IntVariant::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
+            IntVariant::Big(x) => Self::try_from(&***x).map_err(|_| ()),
         }
     }
 }
@@ -316,7 +315,7 @@ impl Display for IntVariant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Small(r) => f.write_fmt(format_args!("{}", r)),
-            Self::Big(r) => f.write_fmt(format_args!("{}", r)),
+            Self::Big(r) => f.write_fmt(format_args!("{}", &***r)),
         }
     }
 }
@@ -336,20 +335,19 @@ impl Step for IntVariant {
 }
 
 impl IntVariant {
-
     /// Sum of two integers. This implements the addition operator.
     fn add(&self, other: &IntVariant) -> IntVariant {
-        IntVariant::normalize(self.operate(other, i64::checked_add, |x,y| x + y))
+        IntVariant::normalize(&self.operate(other, i64::checked_add, |x,y| x + y))
     }
 
     /// Difference of two integers. This implements the subtraaction operator.
     fn sub(&self, other: &IntVariant) -> IntVariant {
-        IntVariant::normalize(self.operate(other, i64::checked_sub, |x,y| x - y))
+        IntVariant::normalize(&self.operate(other, i64::checked_sub, |x,y| x - y))
     }
 
     /// Product of two integers. This implements the multiplication operator.
     fn mul(&self, other: &IntVariant) -> IntVariant {
-        IntVariant::normalize(self.operate(other, i64::checked_mul, |x,y| x * y))
+        IntVariant::normalize(&self.operate(other, i64::checked_mul, |x,y| x * y))
     }
 
     /// Mathematical ratio of two integers. This implements the division operator.
@@ -363,7 +361,7 @@ impl IntVariant {
 
     /// Integer division.
     fn idiv(&self, other: &IntVariant) -> IntVariant {
-        IntVariant::normalize(self.operate(other, i64::checked_div, |x,y| x / y))
+        IntVariant::normalize(&self.operate(other, i64::checked_div, |x,y| x / y))
     }
 
     /// Universal utility method for implementing operators.
@@ -403,7 +401,7 @@ impl IntVariant {
                     Self::from(-BigInt::from(*x)).normalize()
                 }
             },
-            Self::Big(x) => Self::from(-x.as_ref()).normalize(),
+            Self::Big(x) => Self::from(-&***x).normalize(),
         }
     }
 
@@ -424,7 +422,7 @@ impl IntVariant {
         let yy: u32 = other.try_into().ok()?;
 
         match self {
-            Self::Big(x) => Some(Self::from(x.pow(yy))),
+            Self::Big(x) => Some(Self::from(x.as_ref().pow(yy))),
             Self::Small(x) => Some(Self::from(BigInt::from(*x).pow(yy))),
         }
     }
@@ -439,12 +437,12 @@ impl IntVariant {
 
         let mut exp = match other {
             Self::Small(x) => BigUint::try_from(*x).ok()?,
-            Self::Big(x) => BigUint::try_from(x.as_ref().clone()).ok()?,
+            Self::Big(x) => BigUint::try_from(&***x).ok()?,
         };
 
         let mut base = match self {
             Self::Small(x) => BigInt::from(*x),
-            Self::Big(x) => x.as_ref().clone(),
+            Self::Big(x) => (***x).clone(),
         };
 
         let one = BigUint::from(1u8);
@@ -478,16 +476,16 @@ impl IntVariant {
         self.small_pow(other)
             .or_else(|| self.medium_pow(other))
             .or_else(|| self.big_pow(other))
-            .map(IntVariant::normalize)
+            .map(|x| x.normalize())
     }
 
     /// Normalize self by converting bignums to machine integers when possible.
     /// Used as a postprocesssing step for most arithmetic operations.
-    fn normalize(self) -> IntVariant {
+    fn normalize(&self) -> IntVariant {
         if let Self::Big(x) = &self {
-            x.to_i64().map(IntVariant::Small).unwrap_or(self)
+            x.as_ref().to_i64().map(IntVariant::Small).unwrap_or(self.clone())
         } else {
-            self
+            self.clone()
         }
     }
 
@@ -503,7 +501,7 @@ impl IntVariant {
     fn nonzero(&self) -> bool {
         match self {
             Self::Small(x) => *x != 0,
-            Self::Big(x) => x.as_ref() != &BigInt::from(0),
+            Self::Big(x) => &***x != &BigInt::from(0),
         }
     }
 
@@ -514,8 +512,8 @@ impl IntVariant {
     fn user_eq(&self, other: &IntVariant) -> bool {
         match (self, other) {
             (Self::Small(x), Self::Small(y)) => x.eq(y),
-            (Self::Small(x), Self::Big(y)) => y.as_ref().eq(&BigInt::from(*x)),
-            (Self::Big(x), Self::Small(y)) => x.as_ref().eq(&BigInt::from(*y)),
+            (Self::Small(x), Self::Big(y)) => (***y).eq(&BigInt::from(*x)),
+            (Self::Big(x), Self::Small(y)) => (***x).eq(&BigInt::from(*y)),
             (Self::Big(x), Self::Big(y)) => x.eq(y),
         }
     }
@@ -532,7 +530,6 @@ impl IntVariant {
 /// looked up in the [`BUILTINS`] mapping.
 #[derive(Clone)]
 pub struct Builtin {
-
     /// The rust callable for evaluating the function.
     pub func: fn(&List, Option<&Map>) -> Result<Object, Error>,
 
@@ -570,9 +567,8 @@ impl<'a> Deserialize<'a> for Builtin {
 
 
 /// A function implemented in Gold.
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub struct Func {
-
     /// A pattern for destructuring a list of positional arguments.
     pub args: ListBinding,
 
@@ -594,23 +590,22 @@ pub struct Func {
 /// necessary for implementing Gold-callable functions in other languages like
 /// Python. This also makes them inherently non-serializable.
 #[derive(Clone)]
-pub struct Closure(pub Arc<dyn Fn(&List, Option<&Map>) -> Result<Object, Error> + Send + Sync>);
+pub struct Closure(pub Rc<dyn Fn(&List, Option<&Map>) -> Result<Object, Error>>);
 
 
 /// The function variant represents all possible forms of callable objects in
 /// Gold.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
 pub enum FuncVariant {
-
     /// Function implemented in Gold.
-    Func(Arc<Func>),
+    Func(Gc<Func>),
 
     /// Static (serializable) function implemented in Rust.
-    Builtin(Builtin),
+    Builtin(#[unsafe_ignore_trace] Builtin),
 
     /// Dynamic (unserializable) function implemented in Rust.
     #[serde(skip)]
-    Closure(Closure),
+    Closure(#[unsafe_ignore_trace] Closure),
 }
 
 impl Debug for FuncVariant {
@@ -625,7 +620,7 @@ impl Debug for FuncVariant {
 
 impl From<Func> for FuncVariant {
     fn from(value: Func) -> Self {
-        FuncVariant::Func(Arc::new(value))
+        FuncVariant::Func(Gc::new(value))
     }
 }
 
@@ -712,7 +707,7 @@ impl TypeVariant {
 }
 
 
-#[derive(Clone,Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone,Debug, Serialize, Deserialize)]
 pub enum BuiltinType {
     Int,
     Float,
@@ -731,9 +726,8 @@ pub enum BuiltinType {
 /// The object variant implements all possible variants of Gold objects,
 /// although it's not the user-facing type, which is [`Object`], an opaque
 /// struct enclosing an `ObjectVariant`.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
 pub enum ObjectVariant {
-
     /// Integers
     Int(IntVariant),
 
@@ -747,10 +741,10 @@ pub enum ObjectVariant {
     Boolean(bool),
 
     /// Lists
-    List(Arc<List>),
+    List(Gc<List>),
 
     /// Mappings
-    Map(Arc<Map>),
+    Map(Gc<Map>),
 
     /// Functions
     Func(FuncVariant),
@@ -759,7 +753,7 @@ pub enum ObjectVariant {
     Null,
 
     /// Types
-    Type(TypeVariant),
+    Type(#[unsafe_ignore_trace] TypeVariant),
 }
 
 // FuncVariant doesn't implement PartialEq, so this has to be done manually.
@@ -792,7 +786,6 @@ impl PartialOrd<ObjectVariant> for ObjectVariant {
 }
 
 impl ObjectVariant {
-
     /// Convert back into an object.
     pub fn object(self) -> Object {
         Object(self)
@@ -815,12 +808,12 @@ impl ObjectVariant {
 
     /// Construct a list.
     pub fn list<T>(x: T) -> Self where T: ToVec<Object> {
-        Self::List(Arc::new(x.to_vec()))
+        Self::List(Gc::new(x.to_vec()))
     }
 
     /// Construct a map.
     pub fn map<T>(x: T) -> Self where T: ToMap<Key, Object> {
-        Self::Map(Arc::new(x.to_map()))
+        Self::Map(Gc::new(x.to_map()))
     }
 
     /// Construct a function.
@@ -830,11 +823,11 @@ impl ObjectVariant {
 
     /// Normalize an integer variant, converting bignums to machine integers if
     /// they fit.
-    pub fn numeric_normalize(self) -> Self {
+    pub fn numeric_normalize(&self) -> Self {
         if let Self::Int(x) = self {
             Self::Int(x.normalize())
         } else {
-            self
+            self.clone()
         }
     }
 
@@ -1198,26 +1191,26 @@ impl Display for ObjectVariant {
     }
 }
 
-impl TryFrom<ObjectVariant> for JsonValue {
+impl TryFrom<&ObjectVariant> for JsonValue {
     type Error = Error;
 
-    fn try_from(value: ObjectVariant) -> Result<Self, Self::Error> {
+    fn try_from(value: &ObjectVariant) -> Result<Self, Self::Error> {
         match value {
-            ObjectVariant::Int(x) => i64::try_from(&x).map_err(|_| Error::new(Value::TooLarge)).map(JsonValue::from),
-            ObjectVariant::Float(x) => Ok(JsonValue::from(x)),
+            ObjectVariant::Int(x) => i64::try_from(x).map_err(|_| Error::new(Value::TooLarge)).map(JsonValue::from),
+            ObjectVariant::Float(x) => Ok(JsonValue::from(*x)),
             ObjectVariant::Str(x) => Ok(JsonValue::from(x.as_str())),
-            ObjectVariant::Boolean(x) => Ok(JsonValue::from(x)),
+            ObjectVariant::Boolean(x) => Ok(JsonValue::from(*x)),
             ObjectVariant::List(x) => {
                 let mut val = JsonValue::new_array();
                 for element in x.as_ref() {
-                    val.push(JsonValue::try_from(element.clone())?).unwrap();
+                    val.push(JsonValue::try_from(element)?).unwrap();
                 }
                 Ok(val)
             },
             ObjectVariant::Map(x) => {
                 let mut val = JsonValue::new_object();
                 for (key, element) in x.as_ref() {
-                    val[key.as_str()] = JsonValue::try_from(element.clone())?;
+                    val[key.as_str()] = JsonValue::try_from(element)?;
                 }
                 Ok(val)
             },
@@ -1304,7 +1297,6 @@ macro_rules! extractkw {
 /// calling conventions.
 #[macro_export]
 macro_rules! signature {
-
     // Entry point pattern
     ($args:ident = [ $($param:ident : $type:ident),* ] $kwargs:ident = { $($kw:ident : $kwtype:ident),* } $block:block) => {
         signature!(0 ; $args [ $($param : $type),* ] , $kwargs [ $($kw : $kwtype),* ] , $block)
@@ -1359,7 +1351,7 @@ pub use signature;
 /// detail.
 ///
 /// `Object` is `Deref<ObjectVariant>`, so supports all methods defined there.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub struct Object(ObjectVariant);
 
 impl Object {
@@ -1379,6 +1371,15 @@ impl Object {
             Self::str_interned(val)
         } else {
             Self::str_natural(val)
+        }
+    }
+
+    /// Construct a string from an existing GC'd string object.
+    pub fn gc_str(val: Gc<String>) -> Self {
+        if val.as_ref().len() < 20 {
+            Self::str_interned(val.as_ref())
+        } else {
+            Self(ObjectVariant::Str(StrVariant::Natural(val)))
         }
     }
 
@@ -1479,7 +1480,7 @@ impl Object {
     }
 
     /// Wrap [`ObjectVariant::numeric_normalize`].
-    pub fn numeric_normalize(self) -> Self {
+    pub fn numeric_normalize(&self) -> Self {
         Self(self.0.numeric_normalize())
     }
 
@@ -1508,7 +1509,7 @@ impl Deref for Object {
 
 impl FromIterator<Object> for Object {
     fn from_iter<T: IntoIterator<Item = Object>>(iter: T) -> Self {
-        Object(ObjectVariant::List(Arc::new(iter.into_iter().collect())))
+        Object(ObjectVariant::List(Gc::new(iter.into_iter().collect())))
     }
 }
 
@@ -1518,11 +1519,11 @@ impl Display for Object {
     }
 }
 
-impl TryFrom<Object> for JsonValue {
+impl TryFrom<&Object> for JsonValue {
     type Error = Error;
 
-    fn try_from(value: Object) -> Result<Self, Self::Error> {
-        Self::try_from(value.0)
+    fn try_from(value: &Object) -> Result<Self, Self::Error> {
+        Self::try_from(&value.0)
     }
 }
 

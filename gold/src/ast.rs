@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::Display;
-use std::sync::Arc;
 
+use gc::{Gc, Trace, Finalize};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{PatternType, Syntax};
@@ -30,13 +30,12 @@ fn binding_element_free_and_bound(
 }
 
 
-// ListBindingElement
+// ListPatternElement
 // ----------------------------------------------------------------
 
 /// A list binding element is anything that is legal inside a list pattern.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub enum ListPatternElement {
-
     /// An ordinary binding with potential default value
     Binding {
         binding: Tagged<Binding>,
@@ -44,7 +43,7 @@ pub enum ListPatternElement {
     },
 
     /// Slurp into a named list
-    SlurpTo(Tagged<Key>),
+    SlurpTo(#[unsafe_ignore_trace] Tagged<Key>),
 
     /// Slurp but discard values
     Slurp,
@@ -78,25 +77,25 @@ impl FreeAndBound for ListPatternElement {
 }
 
 
-// MapBindingElement
+// MapPatternElement
 // ----------------------------------------------------------------
 
 /// A map binding element is anything that is legan inside a map pattern.
 ///
 /// Since map bindings discard superfluous values by default, there's no need
 /// for an anonymous slurp.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub enum MapPatternElement {
-
     /// An ordinary binding with potential default value.
     Binding {
+        #[unsafe_ignore_trace]
         key: Tagged<Key>,
         binding: Tagged<Binding>,
         default: Option<Tagged<Expr>>,
     },
 
     /// Slurp into a named map.
-    SlurpTo(Tagged<Key>),
+    SlurpTo(#[unsafe_ignore_trace] Tagged<Key>),
 }
 
 impl FreeAndBound for MapPatternElement {
@@ -130,7 +129,7 @@ impl Validatable for MapPatternElement {
 // ----------------------------------------------------------------
 
 /// A list binding destructures a list into a list of patterns.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub struct ListBinding(pub Vec<Tagged<ListPatternElement>>);
 
 impl FreeAndBound for ListBinding {
@@ -166,7 +165,7 @@ impl Validatable for ListBinding {
 
 /// A map binding destructres a map into a list of patterns associated with
 /// keys.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub struct MapBinding(pub Vec<Tagged<MapPatternElement>>);
 
 impl FreeAndBound for MapBinding {
@@ -202,9 +201,9 @@ impl Validatable for MapBinding {
 /// A pattern comes in three flavors: identifiers (which don't do any
 /// destructuring), and list and map bindings, which destructures lists and maps
 /// respectively.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub enum Pattern {
-    Identifier(Tagged<Key>),
+    Identifier(#[unsafe_ignore_trace] Tagged<Key>),
     List(Tagged<ListBinding>),
     Map(Tagged<MapBinding>),
 }
@@ -253,7 +252,7 @@ impl Validatable for Pattern {
 // ----------------------------------------------------------------
 
 /// A binding is a pattern associated with an optional type expression.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub struct Binding {
     pub pattern: Tagged<Pattern>,
     pub tp: Option<Tagged<TypeExpr>>,
@@ -289,16 +288,16 @@ impl FreeAndBound for Binding {
 /// A string element is anything that is legal in a string: either raw string
 /// data or an interpolated expression. A string is represented as a li of
 /// string elements.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub enum StringElement {
-    Raw(Arc<str>),
+    Raw(Gc<String>),
     Interpolate(Tagged<Expr>),
 }
 
 impl StringElement {
     /// Construct a raw string element.
     pub fn raw<T: AsRef<str>>(val: T) -> StringElement {
-        StringElement::Raw(Arc::from(val.as_ref()))
+        StringElement::Raw(Gc::new(val.as_ref().to_string()))
     }
 }
 
@@ -321,7 +320,7 @@ impl Validatable for StringElement {
 /// - splatted expressions
 /// - iterated elements
 /// - conditional elements
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub enum ListElement {
     Singleton(Tagged<Expr>),
     Splat(Tagged<Expr>),
@@ -387,7 +386,7 @@ impl Validatable for ListElement {
 /// - splatted expressions
 /// - iterated elements
 /// - conditional elements
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub enum MapElement {
     Singleton {
         key: Tagged<Expr>,
@@ -463,10 +462,10 @@ impl Validatable for MapElement {
 /// - splatted expressions
 ///
 /// Currently, Gold does not support conditional or iterated arguments.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub enum ArgElement {
     Singleton(Tagged<Expr>),
-    Keyword(Tagged<Key>, Tagged<Expr>),
+    Keyword(#[unsafe_ignore_trace] Tagged<Key>, Tagged<Expr>),
     Splat(Tagged<Expr>),
 }
 
@@ -498,7 +497,6 @@ impl Validatable for ArgElement {
 /// Enumerates all the unary operators in the Gold language.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum UnOp {
-
     /// Passthrough (do-nothing) operator, e.g. the unary plus
     Passthrough,
 
@@ -512,7 +510,6 @@ pub enum UnOp {
 /// Enumerates all the binary operators in the Gold language.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum BinOp {
-
     /// Index or subscripting operator
     Index,
 
@@ -567,14 +564,13 @@ pub enum BinOp {
 ///
 /// All unary and binary operators are realized as transforms. In an expression
 /// such as x + y, the transform (+ y) acts on the 'operand' x.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub enum Transform {
-
     /// Unary operator
-    UnOp(Tagged<UnOp>),
+    UnOp(#[unsafe_ignore_trace] Tagged<UnOp>),
 
     /// Binary operator with right operand
-    BinOp(Tagged<BinOp>, Box<Tagged<Expr>>),
+    BinOp(#[unsafe_ignore_trace] Tagged<BinOp>, Box<Tagged<Expr>>),
 
     /// Function call operator with arguments
     FunCall(Tagged<Vec<Tagged<ArgElement>>>),
@@ -748,9 +744,8 @@ impl Display for BinOp {
 // ----------------------------------------------------------------
 
 /// The most important AST node: an evaluatable expression.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub enum Expr {
-
     /// A literal object (usually numbers, booleans, null and strings).
     Literal(Object),
 
@@ -760,7 +755,7 @@ pub enum Expr {
     String(Vec<StringElement>),
 
     /// An identifier to be looked up by name.
-    Identifier(Tagged<Key>),
+    Identifier(#[unsafe_ignore_trace] Tagged<Key>),
 
     /// A list of list elements, see [`ListElement`].
     List(Vec<Tagged<ListElement>>),
@@ -770,7 +765,6 @@ pub enum Expr {
 
     /// A let-binding block
     Let {
-
         /// List expressions to be bound to patterns.
         bindings: Vec<(Tagged<Binding>, Tagged<Expr>)>,
 
@@ -782,7 +776,6 @@ pub enum Expr {
     /// operands, where the left operand is the input, and the operator and the
     /// right operand together form the transform.
     Transformed {
-
         /// The expression to act on.
         operand: Box<Tagged<Expr>>,
 
@@ -792,8 +785,8 @@ pub enum Expr {
 
     /// A function definition.
     Function {
-
         /// Optional type parameters.
+        #[unsafe_ignore_trace]
         type_params: Option<Vec<Tagged<Key>>>,
 
         /// Positional function parameters.
@@ -973,7 +966,7 @@ impl Expr {
         if value.len() == 0 {
             Expr::Literal(Object::str_interned(""))
         } else if let [StringElement::Raw(val)] = &value[..] {
-            Expr::Literal(Object::str(val))
+            Expr::Literal(Object::gc_str(val.clone()))
         } else {
             Expr::String(value)
         }
@@ -1100,7 +1093,7 @@ impl Validatable for Expr {
 // ----------------------------------------------------------------
 
 /// A top-level AST node, only legal at the top level of a file.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Trace, Finalize)]
 pub enum TopLevel {
 
     /// Import an object by loading another file and binding it to a pattern.
@@ -1108,8 +1101,12 @@ pub enum TopLevel {
 
     /// Define a type
     TypeDef {
+        #[unsafe_ignore_trace]
         name: Tagged<Key>,
+
+        #[unsafe_ignore_trace]
         params: Option<Vec<Tagged<Key>>>,
+
         expr: Tagged<TypeExpr>,
     }
 }
@@ -1130,9 +1127,8 @@ impl Validatable for TopLevel {
 
 /// The complete AST node of a file, consisting of a number of top-level
 /// statements followed by an expression.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Trace, Finalize)]
 pub struct File {
-
     /// Top-level statements.
     pub statements: Vec<TopLevel>,
 
@@ -1155,12 +1151,13 @@ impl Validatable for File {
 // TypeExpr
 // ----------------------------------------------------------------
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Trace, Finalize)]
 pub enum TypeExpr {
-
     /// Parametrized type
     Parametrized {
+        #[unsafe_ignore_trace]
         name: Tagged<Key>,
+
         params: Option<Vec<Tagged<TypeExpr>>>,
     },
 }

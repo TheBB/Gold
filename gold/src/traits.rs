@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 
-use indexmap::IndexMap;
 use symbol_table::GlobalSymbol;
 
 use crate::error::{Error, Span, Tagged};
 use crate::object::Key;
+use crate::wrappers::OrderedMap;
 
 
 // Boxable
@@ -178,18 +178,18 @@ impl<T> ToVec<T> for Vec<T> {
 
 /// Utility trait for converting things to maps. This is used by the Object::map constructor.
 pub trait ToMap<K,V> {
-    fn to_map(self) -> IndexMap<K,V>;
+    fn to_map(self) -> OrderedMap<K,V>;
 }
 
-impl<K,V> ToMap<K,V> for IndexMap<K,V> {
-    fn to_map(self) -> IndexMap<K,V> {
+impl<K,V> ToMap<K,V> for OrderedMap<K,V> {
+    fn to_map(self) -> OrderedMap<K,V> {
         self
     }
 }
 
 impl<K,V> ToMap<K,V> for () {
-    fn to_map(self) -> IndexMap<K,V> {
-        IndexMap::new()
+    fn to_map(self) -> OrderedMap<K,V> {
+        OrderedMap::new()
     }
 }
 
@@ -198,8 +198,8 @@ where
     A: AsRef<str>,
     V: From<B>,
 {
-    fn to_map(self) -> IndexMap<GlobalSymbol,V> {
-        let mut ret = IndexMap::new();
+    fn to_map(self) -> OrderedMap<GlobalSymbol,V> {
+        let mut ret = OrderedMap::new();
         for (k, v) in self {
             ret.insert(GlobalSymbol::new(k.as_ref()), V::from(v));
         }

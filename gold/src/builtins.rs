@@ -34,12 +34,12 @@ lazy_static! {
     /// Table of all top-level globally available objects.
     ///
     /// Builtins should be listed separately in the [`BUILTINS`] table.
-    pub static ref TOPLEVEL: HashMap<Key, Object> = {
+    pub static ref TYPES: HashMap<Key, BuiltinType> = {
         let mut m = HashMap::new();
-        m.insert(Key::new("int"), Object::typeobj(BuiltinType::Int));
-        m.insert(Key::new("float"), Object::typeobj(BuiltinType::Float));
-        m.insert(Key::new("bool"), Object::typeobj(BuiltinType::Bool));
-        m.insert(Key::new("str"), Object::typeobj(BuiltinType::Str));
+        m.insert(Key::new("int"), BuiltinType::Int);
+        m.insert(Key::new("float"), BuiltinType::Float);
+        m.insert(Key::new("bool"), BuiltinType::Bool);
+        m.insert(Key::new("str"), BuiltinType::Str);
         m
     };
 }

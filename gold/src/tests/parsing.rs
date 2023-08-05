@@ -7,7 +7,7 @@ use crate::traits::{Boxable, Taggable, HasSpan};
 
 
 fn parse(input: &str) -> Result<Tagged<Expr>, Error> {
-    parse_file(input).map(|x| x.expression).map_err(Error::unrender)
+    parse_file(input).map(|x| x.expression.clone()).map_err(Error::unrender)
 }
 
 
