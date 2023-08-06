@@ -1,10 +1,12 @@
 use std::hash::Hash;
 use std::ops::Deref;
 
-use gc::{Trace, Finalize, custom_trace};
-use indexmap::{IndexMap, map::Iter};
+use gc::{Trace, Finalize, custom_trace, GcCell, GcCellRef, GcCellRefMut, BorrowMutError};
+use indexmap::{IndexMap, map::Iter, map::IterMut};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use num_bigint::BigInt;
+
+use crate::object::Map;
 
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, PartialOrd, Debug, Trace, Finalize)]
@@ -39,6 +41,10 @@ impl<K, V> OrderedMap<K, V> {
 
     pub fn iter(&self) -> Iter<'_, K, V> {
         self.0.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> IterMut<'_, K, V> {
+        self.0.iter_mut()
     }
 }
 
@@ -97,5 +103,39 @@ impl<'a, K, V> IntoIterator for &'a OrderedMap<K, V> {
 impl<K: Eq + Hash, V> OrderedMap<K, V> {
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
         self.0.insert(key, value)
+    }
+}
+
+
+#[derive(Clone, Trace, Finalize, Debug, PartialEq)]
+pub struct MapCell(GcCell<Map>);
+
+impl MapCell {
+    pub fn new(map: Map) -> MapCell {
+        MapCell(GcCell::new(map))
+    }
+
+    pub fn borrow(&self) -> GcCellRef<'_, Map> {
+        self.0.borrow()
+    }
+
+    pub fn borrow_mut(&self) -> GcCellRefMut<'_, Map> {
+        self.0.borrow_mut()
+    }
+
+    pub fn try_borrow_mut(&self) -> Result<GcCellRefMut<'_, Map>, BorrowMutError> {
+        self.0.try_borrow_mut()
+    }
+}
+
+impl Serialize for MapCell {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.borrow().serialize(serializer)
+    }
+}
+
+impl<'a> Deserialize<'a> for MapCell {
+    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(MapCell(GcCell::new(Map::deserialize(deserializer)?)))
     }
 }

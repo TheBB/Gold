@@ -13,6 +13,7 @@
 
 
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::io::{Read, Write};
 use std::iter::Step;
@@ -38,7 +39,7 @@ use crate::ast::{ListBinding, MapBinding, Expr, BinOp, UnOp};
 use crate::error::{Error, Tagged, TypeMismatch, Value, Reason};
 use crate::eval::Namespace;
 use crate::util;
-use crate::wrappers::{OrderedMap, WBigInt};
+use crate::wrappers::{OrderedMap, WBigInt, MapCell};
 
 
 /// This type is used for all interned strings, map keys, variable names, etc.
@@ -577,7 +578,7 @@ pub struct Func {
 
     /// A mapping of captured bindings from the point-of-definition of the
     /// closure.
-    pub closure: Map,
+    pub closure: MapCell,
 
     /// The expression to evaluate.
     pub expr: Tagged<Expr>,
@@ -598,7 +599,7 @@ pub struct Closure(pub Rc<dyn Fn(&List, Option<&Map>) -> Result<Object, Error>>)
 #[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
 pub enum FuncVariant {
     /// Function implemented in Gold.
-    Func(Gc<Func>),
+    Func(Gc<Func>, #[unsafe_ignore_trace] Option<HashSet<Key>>),
 
     /// Static (serializable) function implemented in Rust.
     Builtin(#[unsafe_ignore_trace] Builtin),
@@ -611,7 +612,7 @@ pub enum FuncVariant {
 impl Debug for FuncVariant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Func(x) => f.debug_tuple("FuncVariant::Function").field(x).finish(),
+            Self::Func(x, d) => f.debug_tuple("FuncVariant::Function").field(x).field(d).finish(),
             Self::Builtin(_) => f.debug_tuple("FuncVariant::Builtin").finish(),
             Self::Closure(_) => f.debug_tuple("FuncVariant::Closure").finish(),
         }
@@ -620,7 +621,19 @@ impl Debug for FuncVariant {
 
 impl From<Func> for FuncVariant {
     fn from(value: Func) -> Self {
-        FuncVariant::Func(Gc::new(value))
+        FuncVariant::Func(Gc::new(value), None)
+    }
+}
+
+impl From<(Func, HashSet<Key>)> for FuncVariant {
+    fn from((func, deferred): (Func, HashSet<Key>)) -> Self {
+        FuncVariant::Func(Gc::new(func), Some(deferred))
+    }
+}
+
+impl From<(Func, Option<HashSet<Key>>)> for FuncVariant {
+    fn from((func, deferred): (Func, Option<HashSet<Key>>)) -> Self {
+        FuncVariant::Func(Gc::new(func), deferred)
     }
 }
 
@@ -650,11 +663,13 @@ impl FuncVariant {
         match self {
             Self::Builtin(Builtin { func, .. }) => func(args, kwargs),
             Self::Closure(Closure(func)) => func(args, kwargs),
-            Self::Func(func) => {
-                let Func { args: fargs, kwargs: fkwargs, closure, expr } = func.as_ref();
+            Self::Func(func, _) => {
+                let Func { args: fargs, kwargs: fkwargs, closure, expr, .. } = func.as_ref();
+
+                let cl = closure.borrow();
 
                 // Create a new namespace from the enclosed-over bindings.
-                let ns = Namespace::Frozen(closure);
+                let ns = Namespace::Frozen(&*cl);
 
                 // Create a mutable sub-namespace for function parameters.
                 let mut sub = ns.subtend();
@@ -672,6 +687,36 @@ impl FuncVariant {
                 // Evaluate the function.
                 sub.eval(expr)
             }
+        }
+    }
+
+    /// Check whether this is a closure with unresolved deferred bindings.
+    pub(crate) fn has_deferred(&self) -> bool {
+        match self {
+            Self::Func(_, deferred) => deferred.is_some(),
+            _ => false,
+        }
+    }
+
+    /// Resolve deferred bindings in closures.
+    pub(crate) fn resolve_deferred(&mut self, ns: &Namespace) -> Result<(), Error> {
+        match self {
+            Self::Func(func, deferred) => {
+                match deferred {
+                    None => {},
+                    Some(d) => {
+                        let Func { closure, .. } = func.as_ref();
+                        let mut cl = closure.borrow_mut();
+                        for name in d.iter() {
+                            cl.insert(*name, ns.get(name).to_result_immediate()?);
+                        }
+                    }
+                }
+
+                *deferred = None;
+                Ok(())
+            }
+            _ => Ok(()),
         }
     }
 }
@@ -865,7 +910,6 @@ impl ObjectVariant {
     /// method implements equality under Gold semantics.
     pub fn user_eq(&self, other: &Self) -> bool {
         match (self, other) {
-
             // Equality between disparate types
             (Self::Float(x), Self::Int(y)) => y.eq(x),
             (Self::Int(x), Self::Float(y)) => x.eq(y),
@@ -1138,6 +1182,22 @@ impl ObjectVariant {
             Self::Int(x) => Some(x.to_f64()),
             Self::Float(x) => Some(*x),
             _ => None,
+        }
+    }
+
+    /// Check whether this is a closure with unresolved deferred bindings.
+    pub(crate) fn has_deferred(&self) -> bool {
+        match self {
+            Self::Func(func) => func.has_deferred(),
+            _ => false,
+        }
+    }
+
+    /// Resolve deferred bindings in a closure.
+    pub(crate) fn resolve_deferred(&mut self, ns: &Namespace) -> Result<(), Error> {
+        match self {
+            Self::Func(func) => func.resolve_deferred(ns),
+            _ => Ok(()),
         }
     }
 }
@@ -1487,6 +1547,16 @@ impl Object {
     /// Wrap [`ObjectVariant::contains`].
     pub fn contains(self, other: &Self) -> Result<bool, Error> {
         self.0.contains(other)
+    }
+
+    /// Wrap [`ObjectVariant::has_deferred`].
+    pub(crate) fn has_deferred(&self) -> bool {
+        self.0.has_deferred()
+    }
+
+    /// Wrap [`ObjectVariant::resolve_deferred`].
+    pub(crate) fn resolve_deferred(&mut self, ns: &Namespace) -> Result<(), Error> {
+        self.0.resolve_deferred(ns)
     }
 
     // Auto-wrap some unary and binary operators.

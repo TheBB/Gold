@@ -580,6 +580,16 @@ fn functions() {
 
 
 #[test]
+fn deferred_bindings() {
+    assert_seq!(eval(concat!(
+        "let f = || a\n",
+        "let a = 1\n",
+        "in f()"
+    )), Object::int(1));
+}
+
+
+#[test]
 fn subscripting() {
     assert_seq!(eval("[1, 2, 3][0]"), Object::int(1));
     assert_seq!(eval("[1, 2, 3][1]"), Object::int(2));

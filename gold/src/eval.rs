@@ -9,6 +9,7 @@ use crate::builtins::{BUILTINS, TYPES};
 use crate::error::{Error, Internal, Tagged, Unpack, TypeMismatch, Action, Reason};
 use crate::object::{Object, Func, Key, Map, List};
 use crate::traits::Free;
+use crate::wrappers::MapCell;
 
 
 /// Source code of the standard library (imported under the name 'std')
@@ -18,7 +19,6 @@ const STDLIB: &str = include_str!("std.gold");
 /// Configure the import behavior when evaluating Gold code.
 #[derive(Clone, Default)]
 pub struct ImportConfig {
-
     /// If set, unresolved imports will be loaded relative to this path.
     pub root_path: Option<PathBuf>,
 
@@ -69,9 +69,9 @@ impl ImportConfig {
 }
 
 
+#[derive(Clone)]
 /// The Namespace object is the core type for AST evaluation.
 pub enum Namespace<'a> {
-
     /// Empty namespace - no names bound
     Empty,
 
@@ -81,16 +81,56 @@ pub enum Namespace<'a> {
     /// Mutable namespace with a reference to a higher level namespace
     Mutable {
         names: Map,
+        expected: HashSet<Key>,
         prev: &'a Namespace<'a>,
     },
 }
 
 
-impl<'a> Namespace<'a> {
+/// Status of a name binding.
+pub enum BindingResult {
+    /// Name is not bound
+    Unbound(Error),
 
-    /// Create a new sub-namespace with no bound names.
+    /// Name is bound
+    Bound(Object),
+
+    /// Name is not bound yet, but will be in the future
+    Expected(Error),
+}
+
+impl From<Result<Object, Error>> for BindingResult {
+    fn from(value: Result<Object, Error>) -> Self {
+        match value {
+            Ok(obj) => BindingResult::Bound(obj),
+            Err(err) => BindingResult::Unbound(err),
+        }
+    }
+}
+
+impl BindingResult {
+    pub fn to_result_immediate(self) -> Result<Object, Error> {
+        match self {
+            Self::Bound(obj) => Ok(obj),
+            Self::Unbound(err) => Err(err),
+            Self::Expected(err) => Err(err),
+        }
+    }
+
+    pub fn to_result_deferred(self) -> Result<Option<Object>, Error> {
+        match self {
+            Self::Bound(obj) => Ok(Some(obj)),
+            Self::Unbound(_) => Ok(None),
+            Self::Expected(err) => Err(err),
+        }
+    }
+}
+
+
+impl<'a> Namespace<'a> {
+    /// Create a new sub-namespace with no bound names and no expected-to-be-bound names.
     pub fn subtend(&'a self) -> Namespace<'a> {
-        Namespace::Mutable { names: Map::new(), prev: self }
+        Namespace::Mutable { names: Map::new(), expected: HashSet::new(), prev: self }
     }
 
     /// Bind a name to an object.
@@ -105,17 +145,55 @@ impl<'a> Namespace<'a> {
     }
 
     /// Look up a name in the namespace.
-    fn get(&self, key: &Key) -> Result<Object, Error> {
+    pub fn get(&self, key: &Key) -> BindingResult {
         match self {
             // The top level namespace should always be empty, in which case we
             // pass the ball to the builtins.
             Namespace::Empty =>
                 TYPES.get(key).map(|x| Object::typeobj(*x))
                     .or_else(|| BUILTINS.get(key.as_str()).cloned().map(Object::func))
-                    .ok_or_else(|| Error::unbound(key.clone())),
-            Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| Error::unbound(key.clone())),
-            Namespace::Mutable { names, prev } => names.get(key).map(Object::clone).ok_or(()).or_else(|_| prev.get(key))
+                    .ok_or_else(|| Error::unbound(key.clone())).into(),
+            Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| Error::unbound(key.clone())).into(),
+            Namespace::Mutable { names, expected, prev } => {
+                if let Some(obj) = names.get(key) {
+                    BindingResult::Bound(obj.clone())
+                } else if expected.contains(key) {
+                    BindingResult::Expected(Error::unbound(key.clone()))
+                } else {
+                    prev.get(key)
+                }
+            }
         }
+    }
+
+    /// Check if any unresolved deferred bindings exist.
+    fn has_deferred(&self) -> bool {
+        if let Namespace::Mutable { names, .. } = self {
+            for (_, obj) in names.iter() {
+                if obj.has_deferred() {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Resolve all deferred bindings in closures.
+    fn resolve_deferred(&mut self) -> Result<(), Error> {
+        if !self.has_deferred() {
+            return Ok(());
+        }
+
+        // TODO: Find a way to avoid cloning.
+        let lookup_self = self.clone();
+        if let Namespace::Mutable { names, .. } = self {
+            for (_, obj) in names.iter_mut() {
+                obj.resolve_deferred(&lookup_self)?;
+            }
+        }
+
+        Ok(())
     }
 
     /// Match a list of values to a list of list pattern elements. This binds
@@ -185,7 +263,6 @@ impl<'a> Namespace<'a> {
     /// Match a map of values to a list of map pattern elements. This binds new
     /// names to the namespace.
     pub fn bind_map(&mut self, patterns: &Vec<Tagged<MapPatternElement>>, values: &Map) -> Result<(), Error> {
-
         // If we encounter a slurp, change this. The slurp will happen at the end.
         let mut slurp_target: Option<&Key> = None;
 
@@ -264,7 +341,6 @@ impl<'a> Namespace<'a> {
     /// Evaluate a list element and accumulate values in a list.
     fn fill_list(&self, element: &ListElement, values: &mut List) -> Result<(), Error> {
         match element {
-
             // Singleton element: just evaluate it and add.
             ListElement::Singleton(node) => {
                 let val = self.eval(node)?;
@@ -313,8 +389,7 @@ impl<'a> Namespace<'a> {
     /// Evaluate a map element and accumulate values in a map.
     fn fill_map(&self, element: &Tagged<MapElement>, values: &mut Map) -> Result<(), Error> {
         match element.as_ref() {
-
-            // Siengleton element: just evaluate it and insert.
+            // Singleton element: just evaluate it and insert.
             MapElement::Singleton { key, value } => {
                 let k = self.eval(key)?;
                 if let Some(k) = k.get_key() {
@@ -369,7 +444,6 @@ impl<'a> Namespace<'a> {
     /// Evaluate a function argument element and accumulate values in a list or a map.
     fn fill_args(&self, element: &Tagged<ArgElement>, args: &mut List, kwargs: &mut Map) -> Result<(), Error> {
         match element.as_ref() {
-
             // Singletons are positional arguments.
             ArgElement::Singleton(node) => {
                 let val = self.eval(node)?;
@@ -403,7 +477,6 @@ impl<'a> Namespace<'a> {
     /// Evaluate a transform (an operator, typically) applied to a value.
     fn transform(&self, transform: &Transform, value: Object) -> Result<Object, Error> {
         match transform {
-
             // Unary operators
             Transform::UnOp(op) => {
                 match op.as_ref() {
@@ -484,7 +557,6 @@ impl<'a> Namespace<'a> {
     // Evaluate an expression.
     pub fn eval(&self, node: &Tagged<Expr>) -> Result<Object, Error> {
         match node.as_ref() {
-
             // Literal values: just clone and return.
             Expr::Literal(val) => Ok(val.clone()),
 
@@ -506,7 +578,7 @@ impl<'a> Namespace<'a> {
             },
 
             // Look up an identifier by name.
-            Expr::Identifier(name) => self.get(name).map_err(node.tag_error(Action::LookupName)),
+            Expr::Identifier(name) => self.get(name).to_result_immediate().map_err(node.tag_error(Action::LookupName)),
 
             // A list should be evaluated by accumulating all its list elements.
             Expr::List(elements) => {
@@ -534,6 +606,10 @@ impl<'a> Namespace<'a> {
                     let val = sub.eval(expr)?;
                     sub.bind(&binding.pattern, val)?;
                 }
+
+                // Evaluate deferred bindings
+                sub.resolve_deferred()?;
+
                 sub.eval(expression)
             },
 
@@ -557,16 +633,29 @@ impl<'a> Namespace<'a> {
             // in a closure.
             Expr::Function { positional, keywords, expression, .. } => {
                 let mut closure: Map = Map::new();
+                let mut deferred: Option<HashSet<Key>> = None;
+
                 for ident in node.free() {
-                    let val = self.get(&ident)?;
-                    closure.insert(ident, val);
+                    let val = self.get(&ident).to_result_deferred()?;
+                    if let Some(obj) = val {
+                        closure.insert(ident, obj);
+                    } else {
+                        deferred = deferred.map_or_else(
+                            || { let mut d = HashSet::new(); d.insert(ident); Some(d) },
+                            |mut d| { d.insert(ident); Some(d) }
+                        );
+                    }
                 }
-                Ok(Object::func(Func {
-                    args: positional.clone(),
-                    kwargs: keywords.clone(),
-                    closure,
-                    expr: expression.as_ref().clone(),
-                }))
+
+                Ok(Object::func((
+                    Func {
+                        args: positional.clone(),
+                        kwargs: keywords.clone(),
+                        closure: MapCell::new(closure),
+                        expr: expression.as_ref().clone(),
+                    },
+                    deferred,
+                )))
             },
         }
     }
