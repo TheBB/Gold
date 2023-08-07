@@ -1,7 +1,7 @@
 use std::hash::Hash;
 use std::ops::Deref;
 
-use gc::{Trace, Finalize, custom_trace, GcCell, GcCellRef, GcCellRefMut, BorrowMutError};
+use gc::{Trace, Finalize, custom_trace, GcCell, GcCellRef, GcCellRefMut};
 use indexmap::{IndexMap, map::Iter, map::IterMut};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use num_bigint::BigInt;
@@ -121,10 +121,6 @@ impl MapCell {
 
     pub fn borrow_mut(&self) -> GcCellRefMut<'_, Map> {
         self.0.borrow_mut()
-    }
-
-    pub fn try_borrow_mut(&self) -> Result<GcCellRefMut<'_, Map>, BorrowMutError> {
-        self.0.try_borrow_mut()
     }
 }
 

@@ -489,6 +489,9 @@ pub enum Syntax {
 
     /// Multiple slurps in one collection (thrown by the validator)
     MultiSlurp,
+
+    /// Duplicate bindings (thrown by the validator)
+    DuplicateBindings(Key),
 }
 
 impl<T> From<T> for Syntax where SyntaxElement: From<T> {
@@ -888,6 +891,7 @@ impl Display for Reason {
             Self::Syntax(Syntax::ExpectedTwo(x, y)) => f.write_fmt(format_args!("expected {} or {}", x, y)),
             Self::Syntax(Syntax::ExpectedThree(x, y, z)) => f.write_fmt(format_args!("expected {}, {} or {}", x, y, z)),
             Self::Syntax(Syntax::MultiSlurp) => f.write_str("only one slurp allowed in this context"),
+            Self::Syntax(Syntax::DuplicateBindings(key)) => f.write_fmt(format_args!("duplicated binding for {}", key)),
 
             Self::Unbound(key) => f.write_fmt(format_args!("unbound name '{}'", key)),
 

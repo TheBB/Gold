@@ -1,32 +1,27 @@
-use std::collections::HashSet;
 use std::fmt::Display;
 
 use gc::{Gc, Trace, Finalize};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{PatternType, Syntax};
+use crate::traits::BoundNameCollector;
 
 use super::error::{Error, Tagged, Action};
 use super::object::{Object, Key};
-use super::traits::{Boxable, Free, FreeImpl, FreeAndBound, Validatable, Taggable, ToVec, HasSpan};
+use super::traits::{Boxable, FreeNames, FreeAndBoundNames, Validatable, Taggable, ToVec, HasSpan, NameReceiver, NameBinder};
 
 
-/// Utility function for collecting free and bound names from a binding element
+/// Utility function for traversing free and bound names from a binding element
 /// with a potential default value.
-fn binding_element_free_and_bound(
-    binding: &impl FreeAndBound,
-    default: Option<&impl Free>,
-    free: &mut HashSet<Key>,
-    bound: &mut HashSet<Key>,
+fn binding_element_traverse_free_bound(
+    binding: &impl FreeAndBoundNames,
+    default: Option<&impl FreeNames>,
+    receiver: &mut impl NameReceiver,
 ) {
     if let Some(expr) = default {
-        for ident in expr.free() {
-            if !bound.contains(&ident) {
-                free.insert(ident);
-            }
-        }
+        expr.traverse_free(receiver);
     }
-    binding.free_and_bound(free, bound)
+    binding.traverse_free_bound(receiver);
 }
 
 
@@ -64,13 +59,13 @@ impl Validatable for ListPatternElement {
     }
 }
 
-impl FreeAndBound for ListPatternElement {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+impl FreeAndBoundNames for ListPatternElement {
+    fn traverse_free_bound(&self, receiver: &mut impl NameReceiver) {
         match self {
             ListPatternElement::Binding { binding, default } => {
-                binding_element_free_and_bound(binding, default.as_ref(), free, bound);
+                binding_element_traverse_free_bound(binding, default.as_ref(), receiver);
             },
-            ListPatternElement::SlurpTo(name) => { bound.insert(**name); },
+            ListPatternElement::SlurpTo(name) => receiver.bound(name),
             _ => {},
         }
     }
@@ -80,7 +75,7 @@ impl FreeAndBound for ListPatternElement {
 // MapPatternElement
 // ----------------------------------------------------------------
 
-/// A map binding element is anything that is legan inside a map pattern.
+/// A map binding element is anything that is legal inside a map pattern.
 ///
 /// Since map bindings discard superfluous values by default, there's no need
 /// for an anonymous slurp.
@@ -98,13 +93,13 @@ pub enum MapPatternElement {
     SlurpTo(#[unsafe_ignore_trace] Tagged<Key>),
 }
 
-impl FreeAndBound for MapPatternElement {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+impl FreeAndBoundNames for MapPatternElement {
+    fn traverse_free_bound(&self, receiver: &mut impl NameReceiver) {
         match self {
-            MapPatternElement::Binding { key: _, binding, default } => {
-                binding_element_free_and_bound(binding, default.as_ref(), free, bound);
+            MapPatternElement::Binding { binding, default, .. } => {
+                binding_element_traverse_free_bound(binding, default.as_ref(), receiver);
             },
-            MapPatternElement::SlurpTo(name) => { bound.insert(**name); },
+            MapPatternElement::SlurpTo(name) => receiver.bound(name),
         }
     }
 }
@@ -132,10 +127,10 @@ impl Validatable for MapPatternElement {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub struct ListBinding(pub Vec<Tagged<ListPatternElement>>);
 
-impl FreeAndBound for ListBinding {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+impl FreeAndBoundNames for ListBinding {
+    fn traverse_free_bound(&self, receiver: &mut impl NameReceiver) {
         for element in &self.0 {
-            element.free_and_bound(free, bound);
+            element.traverse_free_bound(receiver);
         }
     }
 }
@@ -168,10 +163,10 @@ impl Validatable for ListBinding {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub struct MapBinding(pub Vec<Tagged<MapPatternElement>>);
 
-impl FreeAndBound for MapBinding {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+impl FreeAndBoundNames for MapBinding {
+    fn traverse_free_bound(&self, receiver: &mut impl NameReceiver) {
         for element in &self.0 {
-            element.free_and_bound(free, bound);
+            element.traverse_free_bound(receiver);
         }
     }
 }
@@ -203,6 +198,7 @@ impl Validatable for MapBinding {
 /// respectively.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub enum Pattern {
+    Void,
     Identifier(#[unsafe_ignore_trace] Tagged<Key>),
     List(Tagged<ListBinding>),
     Map(Tagged<MapBinding>),
@@ -212,6 +208,7 @@ impl Pattern {
     /// Return the type of the binding.
     pub fn type_of(&self) -> PatternType {
         match self {
+            Self::Void => PatternType::Identifier,
             Self::Identifier(_) => PatternType::Identifier,
             Self::List(_) => PatternType::List,
             Self::Map(_) => PatternType::Map,
@@ -227,12 +224,13 @@ impl Pattern {
     }
 }
 
-impl FreeAndBound for Pattern {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+impl FreeAndBoundNames for Pattern {
+    fn traverse_free_bound(&self, receiver: &mut impl NameReceiver) {
         match self {
-            Pattern::Identifier(name) => { bound.insert(**name); },
-            Pattern::List(elements) => elements.free_and_bound(free, bound),
-            Pattern::Map(elements) => elements.free_and_bound(free, bound),
+            Self::Void => {},
+            Self::Identifier(name) => receiver.bound(name),
+            Self::List(elements) => elements.traverse_free_bound(receiver),
+            Self::Map(elements) => elements.traverse_free_bound(receiver),
         }
     }
 }
@@ -240,10 +238,14 @@ impl FreeAndBound for Pattern {
 impl Validatable for Pattern {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            Pattern::List(elements) => elements.validate(),
-            Pattern::Map(elements) => elements.validate(),
-            _ => Ok(()),
+            Pattern::List(elements) => { elements.validate()?; },
+            Pattern::Map(elements) => { elements.validate()?; },
+            _ => {},
         }
+
+        let mut v = BoundNameCollector::new();
+        self.traverse_free_bound(&mut v);
+        v.finish()
     }
 }
 
@@ -275,9 +277,9 @@ impl Validatable for Binding {
     }
 }
 
-impl FreeAndBound for Binding {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
-        self.pattern.free_and_bound(free, bound)
+impl FreeAndBoundNames for Binding {
+    fn traverse_free_bound(&self, receiver: &mut impl NameReceiver) {
+        self.pattern.traverse_free_bound(receiver);
     }
 }
 
@@ -335,24 +337,20 @@ pub enum ListElement {
     },
 }
 
-impl FreeImpl for ListElement {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
+impl FreeNames for ListElement {
+    fn traverse_free(&self, receiver: &mut impl NameReceiver) {
         match self {
-            ListElement::Singleton(expr) => expr.free_impl(free),
-            ListElement::Splat(expr) => expr.free_impl(free),
-            ListElement::Cond { condition, element } => {
-                condition.free_impl(free);
-                element.free_impl(free);
+            Self::Singleton(expr) => expr.traverse_free(receiver),
+            Self::Splat(expr) => expr.traverse_free(receiver),
+            Self::Cond { condition, element } => {
+                condition.traverse_free(receiver);
+                element.traverse_free(receiver);
             },
-            ListElement::Loop { binding, iterable, element } => {
-                iterable.free_impl(free);
-                let mut bound: HashSet<Key> = HashSet::new();
-                binding.free_and_bound(free, &mut bound);
-                for ident in element.free() {
-                    if !bound.contains(&ident) {
-                        free.insert(ident);
-                    }
-                }
+            Self::Loop { binding, iterable, element } => {
+                iterable.traverse_free(receiver);
+                let mut binder = NameBinder::new(receiver);
+                binding.traverse_free_bound(&mut binder);
+                element.traverse_free(&mut binder);
             }
         }
     }
@@ -404,27 +402,23 @@ pub enum MapElement {
     },
 }
 
-impl FreeImpl for MapElement {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
+impl FreeNames for MapElement {
+    fn traverse_free(&self, receiver: &mut impl NameReceiver) {
         match self {
-            MapElement::Singleton { key, value } => {
-                key.free_impl(free);
-                value.free_impl(free);
+            Self::Singleton { key, value } => {
+                key.traverse_free(receiver);
+                value.traverse_free(receiver);
             },
-            MapElement::Splat(expr) => expr.free_impl(free),
-            MapElement::Cond { condition, element } => {
-                condition.free_impl(free);
-                element.free_impl(free);
+            Self::Splat(expr) => expr.traverse_free(receiver),
+            Self::Cond { condition, element } => {
+                condition.traverse_free(receiver);
+                element.traverse_free(receiver);
             },
-            MapElement::Loop { binding, iterable, element } => {
-                iterable.free_impl(free);
-                let mut bound: HashSet<Key> = HashSet::new();
-                binding.free_and_bound(free, &mut bound);
-                for ident in element.free() {
-                    if !bound.contains(&ident) {
-                        free.insert(ident);
-                    }
-                }
+            Self::Loop { binding, iterable, element } => {
+                iterable.traverse_free(receiver);
+                let mut binder = NameBinder::new(receiver);
+                binding.traverse_free_bound(&mut binder);
+                element.traverse_free(&mut binder);
             }
         }
     }
@@ -469,12 +463,12 @@ pub enum ArgElement {
     Splat(Tagged<Expr>),
 }
 
-impl FreeImpl for ArgElement {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
+impl FreeNames for ArgElement {
+    fn traverse_free(&self, receiver: &mut impl NameReceiver) {
         match self {
-            ArgElement::Singleton(expr) => { expr.free_impl(free); },
-            ArgElement::Splat(expr) => { expr.free_impl(free); },
-            ArgElement::Keyword(_, expr) => { expr.free_impl(free); },
+            Self::Singleton(expr) => expr.traverse_free(receiver),
+            Self::Splat(expr) => expr.traverse_free(receiver),
+            Self::Keyword(_, expr) => expr.traverse_free(receiver),
         }
     }
 }
@@ -973,71 +967,59 @@ impl Expr {
     }
 }
 
-impl FreeImpl for Expr {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
+impl FreeNames for Expr {
+    fn traverse_free(&self, receiver: &mut impl NameReceiver) {
         match self {
-            Expr::Literal(_) => {},
-            Expr::String(elements) => {
+            Self::Literal(_) => {},
+            Self::String(elements) => {
                 for element in elements {
                     if let StringElement::Interpolate(expr) = element {
-                        expr.free_impl(free);
+                        expr.traverse_free(receiver);
                     }
                 }
             },
-            Expr::Identifier(name) => { free.insert(**name); },
-            Expr::List(elements) => {
+            Self::Identifier(name) => receiver.free(name),
+            Self::List(elements) => {
                 for element in elements {
-                    element.free_impl(free);
+                    element.traverse_free(receiver);
                 }
             },
-            Expr::Map(elements) => {
+            Self::Map(elements) => {
                 for element in elements {
-                    element.free_impl(free);
+                    element.traverse_free(receiver);
                 }
             },
-            Expr::Let { bindings, expression } => {
-                let mut bound: HashSet<Key> = HashSet::new();
+            Self::Let { bindings, expression } => {
+                let mut binder = NameBinder::new(receiver);
                 for (binding, expr) in bindings {
-                    for id in expr.free() {
-                        if !bound.contains(&id) {
-                            free.insert(id);
-                        }
-                    }
-                    binding.free_and_bound(free, &mut bound);
+                    expr.traverse_free(&mut binder);
+                    binding.traverse_free_bound(&mut binder);
                 }
-                for id in expression.free() {
-                    if !bound.contains(&id) {
-                        free.insert(id);
-                    }
-                }
+                expression.traverse_free(&mut binder);
             },
-            Expr::Transformed { operand, transform: operator } => {
-                operand.free_impl(free);
+            Self::Transformed { operand, transform: operator } => {
+                operand.traverse_free(receiver);
                 match operator {
-                    Transform::BinOp(_, expr) => expr.free_impl(free),
+                    Transform::BinOp(_, expr) => expr.traverse_free(receiver),
                     Transform::FunCall(elements) => {
                         for element in elements.as_ref() {
-                            element.free_impl(free);
+                            element.traverse_free(receiver);
                         }
-                    }
-                    _ => {},
+                    },
+                    Transform::UnOp(_) => {},
                 }
             },
-            Expr::Branch { condition, true_branch, false_branch } => {
-                condition.free_impl(free);
-                true_branch.free_impl(free);
-                false_branch.free_impl(free);
+            Self::Branch { condition, true_branch, false_branch } => {
+                condition.traverse_free(receiver);
+                true_branch.traverse_free(receiver);
+                false_branch.traverse_free(receiver);
             },
-            Expr::Function { positional, keywords, expression, .. } => {
-                let mut bound: HashSet<Key> = HashSet::new();
-                positional.free_and_bound(free, &mut bound);
-                keywords.as_ref().map(|x| x.free_and_bound(free, &mut bound));
-                for id in expression.free() {
-                    if !bound.contains(&id) {
-                        free.insert(id);
-                    }
-                }
-            }
+            Self::Function { positional, keywords, expression, .. } => {
+                let mut binder = NameBinder::new(receiver);
+                positional.traverse_free_bound(&mut binder);
+                keywords.as_ref().map(|x| x.traverse_free_bound(&mut binder));
+                expression.traverse_free(&mut binder);
+            },
         }
     }
 }
@@ -1066,6 +1048,12 @@ impl Validatable for Expr {
                     node.validate()?;
                 }
                 expression.validate()?;
+
+                let mut v = BoundNameCollector::new();
+                for (binding, _) in bindings {
+                    binding.traverse_free_bound(&mut v);
+                }
+                v.finish()?;
             },
             Expr::Transformed { operand, transform: operator } => {
                 operand.validate()?;
@@ -1076,6 +1064,11 @@ impl Validatable for Expr {
                 keywords.as_ref().map(MapBinding::validate).transpose()?;
                 expression.validate()?;
                 return_type.as_ref().map(|x| x.validate()).transpose()?;
+
+                let mut v = BoundNameCollector::new();
+                positional.traverse_free_bound(&mut v);
+                keywords.as_ref().map(|x| x.traverse_free_bound(&mut v));
+                v.finish()?;
             },
             Expr::Branch { condition, true_branch, false_branch } => {
                 condition.validate()?;
@@ -1145,7 +1138,6 @@ impl Validatable for File {
         Ok(())
     }
 }
-
 
 
 // TypeExpr

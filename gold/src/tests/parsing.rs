@@ -674,7 +674,7 @@ fn let_blocks() {
                 (
                     Pattern::List(ListBinding(vec![
                         ListPatternElement::Binding {
-                            binding: "_".bid(5),
+                            binding: Binding { pattern: Pattern::Void.tag(5), tp: None }.tag(5),
                             default: None
                         }.tag(5),
                         ListPatternElement::SlurpTo("rest".key(11..15)).tag(8..15),

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use symbol_table::GlobalSymbol;
 
-use crate::error::{Error, Span, Tagged};
+use crate::error::{Error, Span, Tagged, Syntax, Action};
 use crate::object::Key;
 use crate::wrappers::OrderedMap;
 
@@ -22,7 +22,8 @@ impl<T> Boxable<T> for T {
 }
 
 
-// Free
+
+// Free and bound name traversal traits
 // ------------------------------------------------------------------------------------------------
 
 /// Utility trait for traversing the AST to find free names.
@@ -35,43 +36,27 @@ impl<T> Boxable<T> for T {
 /// the surrounding environment into a closure.
 ///
 /// A well-formed top level expression has no free names except those imported.
-///
-/// Most nodes should implement [`FreeImpl`] instead of [`Free`], relying on the
-/// default implementation of [`Free`].
-pub trait Free {
+pub trait FreeNames {
+    /// Traverse the AST tree and call [`NameReceiver::free`] for every free
+    /// name.
+    fn traverse_free(&self, receiver: &mut impl NameReceiver);
 
-    /// Return a set of all free names in this AST node.
-    fn free(&self) -> HashSet<Key>;
-}
-
-/// Utility trait for implementing [`Free`] by mutating an existing set instead
-/// of creating new ones at each AST node.
-pub trait FreeImpl {
-
-    /// Add all free names in this AST node to the set `free`.
-    fn free_impl(&self, free: &mut HashSet<Key>);
+    /// Return a HashSet containing all the free names.
+    fn free(&self) -> HashSet<Key> {
+        let mut receiver = FreeNameCollector::new();
+        self.traverse_free(&mut receiver);
+        receiver.finish()
+    }
 }
 
 /// Since almost all AST nodes occur only as tagged objects, provide a
 /// pass-through implementation.
-impl<T: FreeImpl> FreeImpl for Tagged<T> {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
-        self.as_ref().free_impl(free)
+impl<T: FreeNames> FreeNames for Tagged<T> {
+    fn traverse_free(&self, new_free: &mut impl NameReceiver) {
+        self.as_ref().traverse_free(new_free)
     }
 }
 
-/// Default implementation of [`Free`] for anything that implements [`FreeImpl`].
-impl<T: FreeImpl> Free for T {
-    fn free(&self) -> HashSet<Key> {
-        let mut free = HashSet::new();
-        self.free_impl(&mut free);
-        free
-    }
-}
-
-
-// FreeAndBound
-// ------------------------------------------------------------------------------------------------
 
 /// Utility trait for traversing the AST to find free and bound names.
 ///
@@ -79,20 +64,113 @@ impl<T: FreeImpl> Free for T {
 /// existing names, such as binding patterns with default values. Such defaults
 /// may rely on previously-bound names in the same pattern, thus necessitating
 /// computing both free and bound names in the same traversal.
-pub trait FreeAndBound {
-
-    /// Add all free names in this AST node to the set `free`, and all bound
-    /// names to the set `bound`.
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>);
+pub trait FreeAndBoundNames {
+    /// Traverse the AST tree and call [`NameReceiver::free`] for all free
+    /// names, and [`NameReceiver::bound`] for all bound names.
+    fn traverse_free_bound(&self, receiver: &mut impl NameReceiver);
 }
 
 /// Since almost all AST nodes occur only as tagged objects, provide a
 /// pass-through implementation.
-impl<T: FreeAndBound> FreeAndBound for Tagged<T> {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
-        self.as_ref().free_and_bound(free, bound)
+impl<T: FreeAndBoundNames> FreeAndBoundNames for Tagged<T> {
+    fn traverse_free_bound(&self, receiver: &mut impl NameReceiver) {
+        self.as_ref().traverse_free_bound(receiver);
     }
 }
+
+
+/// Callback trait for traversing the AST for free and bound names.
+pub trait NameReceiver {
+    /// Called when a new free name is found.
+    fn free(&mut self, name: &Tagged<Key>);
+
+    /// Called when a new bound name is found.
+    fn bound(&mut self, name: &Tagged<Key>);
+}
+
+
+/// Implementation of [`NameReceiver`] for collecting free names.
+pub struct FreeNameCollector(HashSet<Key>);
+
+impl FreeNameCollector {
+    fn new() -> Self {
+        Self(HashSet::new())
+    }
+
+    fn finish(self) -> HashSet<Key> {
+        self.0
+    }
+}
+
+impl NameReceiver for FreeNameCollector {
+    fn free(&mut self, name: &Tagged<Key>) {
+        self.0.insert(**name);
+    }
+
+    fn bound(&mut self, _: &Tagged<Key>) { }
+}
+
+
+/// Implementation of [`NameReceiver`] for introducing additional bindings,
+/// passing through only unknown free names to the underlying [`NameReceiver`].
+pub struct NameBinder<'a>(&'a mut dyn NameReceiver, HashSet<Key>);
+
+impl<'a> NameBinder<'a> {
+    pub fn new(receiver: &'a mut dyn NameReceiver) -> Self {
+        Self(receiver, HashSet::new())
+    }
+}
+
+impl<'a> NameReceiver for NameBinder<'a> {
+    fn free(&mut self, name: &Tagged<Key>) {
+        let Self(receiver, bound) = self;
+        if !bound.contains(&**name) {
+            (*receiver).free(name);
+        }
+    }
+
+    fn bound(&mut self, name: &Tagged<Key>) {
+        let Self(_, bound) = self;
+        bound.insert(**name);
+    }
+}
+
+
+
+/// Implementation of [`NameReceiver`] for collecting bound names, creating
+/// an error in case of duplicates.
+pub struct BoundNameCollector(HashSet<Key>, Option<Error>);
+
+impl BoundNameCollector {
+    pub fn new() -> Self {
+        Self(HashSet::new(), None)
+    }
+
+    pub fn finish(self) -> Result<(), Error> {
+        if let Some(err) = self.1 {
+            Err(err)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl NameReceiver for BoundNameCollector {
+    fn free(&mut self, _: &Tagged<Key>) { }
+
+    fn bound(&mut self, name: &Tagged<Key>) {
+        let Self(bound, error) = self;
+        if error.is_some() {
+            return;
+        }
+        if bound.contains(&**name) {
+            *error = Some(Error::new(Syntax::DuplicateBindings(**name)).tag(name, Action::Parse))
+        }
+        self.0.insert(**name);
+     }
+}
+
+
 
 
 // HasSpan and HasMaybeSpan
@@ -111,6 +189,7 @@ pub trait HasMaybeSpan {
 }
 
 
+
 // Taggable
 // ------------------------------------------------------------------------------------------------
 
@@ -120,7 +199,6 @@ pub trait HasMaybeSpan {
 ///
 /// There's no need to implement this trait beyond the blanket implementation.
 pub trait Taggable: Sized {
-
     /// Wrap this object in a tagged wrapper.
     fn tag(self, loc: impl HasSpan) -> Tagged<Self>;
 }
@@ -138,7 +216,6 @@ impl<T> Taggable for T where T: Sized {
 /// This trait is implemented by all AST nodes that require a validation step,
 /// to catch integrity errors which the parser either can't or won't catch.
 pub trait Validatable {
-
     /// Validate this node and return a suitable error if necessary.
     ///
     /// By the Anna Karenina rule, there's no distinction on success.

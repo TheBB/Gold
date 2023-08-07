@@ -131,7 +131,7 @@ fn let_bindings() {
 
     assert_seq!(eval("let a = 1 let b = let a = 2 in a in [a, b]"), (1..3).map(Object::int).collect());
 
-    assert_seq!(eval("let a = 1 let b = a let a = 2 in [a, b]"), Object::list(vec![
+    assert_seq!(eval("let a = 1 let b = a let c = 2 in [c, b]"), Object::list(vec![
         Object::int(2),
         Object::int(1),
     ]));
@@ -517,11 +517,10 @@ fn functions() {
     ]));
 
     assert_seq!(eval(concat!(
-        "let a = 1\n",
         "let b = || a\n",
         "let a = 2\n",
         "in b()"
-    )), Object::int(1));
+    )), Object::int(2));
 
     assert_seq!(eval(concat!(
         "let a = 1\n",
@@ -530,11 +529,10 @@ fn functions() {
     )), Object::int(1));
 
     assert_seq!(eval(concat!(
-        "let a = 1\n",
         "let b = |q = a| q\n",
         "let a = 2\n",
         "in b()"
-    )), Object::int(1));
+    )), Object::int(2));
 
     assert_seq!(eval(concat!(
         "let b = || let a = 1 in |q = a| q\n",
@@ -575,6 +573,18 @@ fn functions() {
     assert_seq!(eval(concat!(
         "let a = {|k = 1|} k\n",
         "in a(k: 2)"
+    )), Object::int(2));
+
+    assert_seq!(eval(concat!(
+        "let f = |x, y = x| x + y\n",
+        "in f(1)"
+    )), Object::int(2));
+
+    assert_seq!(eval(concat!(
+        "let a = 1\n",
+        "in let f = || a\n",
+        "   let a = 2\n",
+        "   in f()"
     )), Object::int(2));
 }
 

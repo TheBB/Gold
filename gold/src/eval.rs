@@ -8,7 +8,7 @@ use crate::ast::*;
 use crate::builtins::{BUILTINS, TYPES};
 use crate::error::{Error, Internal, Tagged, Unpack, TypeMismatch, Action, Reason};
 use crate::object::{Object, Func, Key, Map, List};
-use crate::traits::Free;
+use crate::traits::FreeNames;
 use crate::wrappers::MapCell;
 
 
@@ -69,7 +69,7 @@ impl ImportConfig {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 /// The Namespace object is the core type for AST evaluation.
 pub enum Namespace<'a> {
     /// Empty namespace - no names bound
@@ -88,6 +88,7 @@ pub enum Namespace<'a> {
 
 
 /// Status of a name binding.
+#[derive(Debug)]
 pub enum BindingResult {
     /// Name is not bound
     Unbound(Error),
@@ -120,8 +121,8 @@ impl BindingResult {
     pub fn to_result_deferred(self) -> Result<Option<Object>, Error> {
         match self {
             Self::Bound(obj) => Ok(Some(obj)),
-            Self::Unbound(_) => Ok(None),
-            Self::Expected(err) => Err(err),
+            Self::Unbound(err) => Err(err),
+            Self::Expected(_) => Ok(None),
         }
     }
 }
@@ -163,6 +164,13 @@ impl<'a> Namespace<'a> {
                     prev.get(key)
                 }
             }
+        }
+    }
+
+    /// Mark a name as expected to be bound in the future.
+    pub fn expect(&mut self, key: &Key) {
+        if let Namespace::Mutable { expected, .. } = self {
+            expected.insert(*key);
         }
     }
 
@@ -322,6 +330,7 @@ impl<'a> Namespace<'a> {
     /// Bind a pattern to a value.
     pub fn bind(&mut self, binding: &Tagged<Pattern>, value: Object) -> Result<(), Error> {
         match binding.as_ref() {
+            Pattern::Void => Ok(()),
             Pattern::Identifier(key) => self.set(&*key, value),
             Pattern::List(bindings) => {
                 let list = value.get_list().ok_or_else(
@@ -334,6 +343,39 @@ impl<'a> Namespace<'a> {
                     || Error::new(Unpack::TypeMismatch(binding.type_of(), value.type_of())).tag(binding, Action::Bind)
                 )?;
                 self.bind_map(&bindings.0, obj).map_err(bindings.tag_error(Action::Bind))
+            }
+        }
+    }
+
+    /// Set all bound names as expected.
+    pub fn bind_expected(&mut self, binding: &Tagged<Pattern>) {
+        match binding.as_ref() {
+            Pattern::Void => {},
+            Pattern::Identifier(key) => self.expect(key),
+            Pattern::List(bindings) => self.bind_list_expected(&bindings.0),
+            Pattern::Map(bindings) => self.bind_map_expected(&bindings.0),
+        }
+    }
+
+    /// Set all bound names as expected.
+    pub fn bind_list_expected(&mut self, patterns: &Vec<Tagged<ListPatternElement>>) {
+        for pattern_element in patterns {
+            match pattern_element.as_ref() {
+                // Standard binding.
+                ListPatternElement::Binding { binding, .. } => self.bind_expected(&binding.pattern),
+                ListPatternElement::SlurpTo(name) => self.expect(&**name),
+                _ => {},
+            }
+        }
+    }
+
+    /// Set all bound names as expected.
+    pub fn bind_map_expected(&mut self, patterns: &Vec<Tagged<MapPatternElement>>) {
+        for pattern_element in patterns {
+            match pattern_element.as_ref() {
+                // Standard binding.
+                MapPatternElement::Binding { binding, .. } => self.bind_expected(&binding.pattern),
+                MapPatternElement::SlurpTo(name) => self.expect(&**name),
             }
         }
     }
@@ -602,6 +644,11 @@ impl<'a> Namespace<'a> {
             // cluttering this one.
             Expr::Let { bindings, expression } => {
                 let mut sub = self.subtend();
+
+                for (binding, _) in bindings {
+                    sub.bind_expected(&binding.pattern);
+                }
+
                 for (binding, expr) in bindings {
                     let val = sub.eval(expr)?;
                     sub.bind(&binding.pattern, val)?;

@@ -1322,7 +1322,13 @@ fn ident_pattern<'a>(input: In<'a>) -> Out<'a, Tagged<Pattern>> {
     alt((
         map(
             identifier,
-            |out| Pattern::Identifier(out).tag(out),
+            |out| {
+                if out.as_str() == "_" {
+                    Pattern::Void.tag(out)
+                 } else {
+                    Pattern::Identifier(out).tag(out)
+                 }
+            },
         ),
     ))(input)
 }
@@ -1338,7 +1344,6 @@ fn ident_pattern<'a>(input: In<'a>) -> Out<'a, Tagged<Pattern>> {
 /// - singleton binding with default: `let [y = z] = x`
 fn list_pattern_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListPatternElement>> {
     alt((
-
         // Named and anonymous slurps
         map(
             tuple((

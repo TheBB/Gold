@@ -512,35 +512,72 @@ the single function *add*, this would work just as well::
 In spite of this, libraries of functions should generally be written as objects.
 
 
-Recursion
----------
+Binding scope
+-------------
 
-Gold functions form a closure over non-local names when they are defined, and
-they do so before they themselves are bound to a name.  It is therefore
-impossible to define a recursive function like you would normally do it, e.g.::
+In contexts that may bind one or more names, the rule of thumb is that names are
+bound in the order that they appear in code, and that expressions in later
+bindings may refer to earlier bound names. For example::
 
-    let factorial = |n| if n > 0 then n * factorial(n-1) else 1
-    in factorial(4)
+    let a = 1
+    let b = a
+    in b
 
-Indeed, this closure would be self-referential, and Gold is unable to define
-self-referential structures.
+This means that the following function definition is valid, since the default
+value of the second parameter refers back on the already-bound value of the
+first parameter::
 
-This would cause an error indicating that the name *factorial* is unbound.
+    let f = |x, y = x| x + y
+    in f(1)         # => 2
 
-It is possible to do recursion by providing a function with itself as an
-argument::
+Functions capture unbound names from the surrounding environment at the time of
+their definition::
 
-    let factorial = |f, n| if n > 0 then n * f(f, n-1) else 1
-    in factorial(factorial, 4)              # => 24
+    let a = 1
+    let f = || a
+    in f()          # => 1
 
-This slightly unwieldy interface can be fixed using a helper function::
+To facilitate recursivity, such captures may be deferred until after definition::
 
-    let factorial = |n| (
-        let inner = |f, n| if n > 0 then n * f(f, n-1) else 1
-        in inner(inner, n)
-    )
+    let f = || a
+    let a = 1
+    in f()          # => 1
 
-    in factorial(4)                         # => 24
+Such deferral only works within a single let-block. In other words, this is not
+valid::
+
+    let f = || a
+    in let a = 1
+       in f()       # error
+
+And this captures the second binding of ``a``, not the first one::
+
+    let a = 1
+    in let f = || a
+       let a = 2
+       in f()       # => 2
+
+To avoid potentially confusing situations, it is currently illegal to bind the
+same name twice, e.g::
+
+    let a = 1
+    let f = || a
+    let a = 2       # error
+    in f()          # => ?
+
+    let [a, a] = [1, 2]     # error
+    in above                # => ?
+
+This does not restrict multiple use of the ``_`` throwaway binding. This is
+still OK::
+
+    let [_, _, third] = [1, 2, 3]
+    in third        # => 3
+
+Note that ``_`` is not accessible as an actual identifier though::
+
+    let [_] = [1]
+    in _            # error
 
 
 .. _Dhall: https://dhall-lang.org/

@@ -42,10 +42,7 @@ lazy_static! {
         m.insert(Key::new("str"), BuiltinType::Str);
         m
     };
-}
 
-
-lazy_static! {
     /// Table of all builtin functions.
     pub static ref BUILTINS: HashMap<&'static str, Builtin> = {
         let mut m = HashMap::new();
