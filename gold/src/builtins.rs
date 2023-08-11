@@ -40,6 +40,8 @@ lazy_static! {
         m.insert(Key::new("float"), BuiltinType::Float);
         m.insert(Key::new("bool"), BuiltinType::Bool);
         m.insert(Key::new("str"), BuiltinType::Str);
+        m.insert(Key::new("list"), BuiltinType::List);
+        m.insert(Key::new("object"), BuiltinType::Object);
         m
     };
 

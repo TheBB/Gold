@@ -525,6 +525,12 @@ pub enum BinOp {
     /// Subtraction
     Subtract,
 
+    /// Type intersection
+    Intersect,
+
+    /// Type union
+    Union,
+
     /// Less-than
     Less,
 
@@ -573,112 +579,126 @@ pub enum Transform {
 impl Transform {
     /// Construct an index/subscripting transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn index(subscript: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Index.tag(loc), subscript.to_box())
     }
 
     /// Construct an exponentiation transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn power(exponent: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Power.tag(loc), exponent.to_box())
     }
 
     /// Construct a multiplication transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn multiply(multiplicand: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Multiply.tag(loc), multiplicand.to_box())
     }
 
     /// Construct an integer division transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn integer_divide(divisor: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::IntegerDivide.tag(loc), divisor.to_box())
     }
 
     /// Construct a mathematical division transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn divide(divisor: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Divide.tag(loc), divisor.to_box())
     }
 
     /// Construct an addition transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn add(addend: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Add.tag(loc), addend.to_box())
     }
 
     /// Construct a subtraction transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn subtract(subtrahend: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Subtract.tag(loc), subtrahend.to_box())
     }
 
+    /// Construct an intersection transform.
+    ///
+    /// * `loc` - the location of the operator in the buffer.
+    pub fn intersect(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
+        Transform::BinOp(BinOp::Intersect.tag(loc), rhs.to_box())
+    }
+
+    /// Construct a union transform.
+    ///
+    /// * `loc` - the location of the operator in the buffer.
+    pub fn unite(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
+        Transform::BinOp(BinOp::Union.tag(loc), rhs.to_box())
+    }
+
     /// Construct a less-than transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn less(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Less.tag(loc), rhs.to_box())
     }
 
     /// Construct a greater-than transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn greater(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Greater.tag(loc), rhs.to_box())
     }
 
     /// Construct a less-than-or-equal transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn less_equal(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::LessEqual.tag(loc), rhs.to_box())
     }
 
     /// Construct a greater-than-or-equal transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn greater_equal(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::GreaterEqual.tag(loc), rhs.to_box())
     }
 
     /// Construct an equality check transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn equal(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Equal.tag(loc), rhs.to_box())
     }
 
     /// Construct an inequality check transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn not_equal(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::NotEqual.tag(loc), rhs.to_box())
     }
 
     /// Construct a containment check transform.
     ///
-    /// * `loc` - the location of the 'in' operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn contains(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Contains.tag(loc), rhs.to_box())
     }
 
     /// Construct a logical conjunction transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn and(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::And.tag(loc), rhs.to_box())
     }
 
     /// Construct a logical disjunction transform.
     ///
-    /// * `loc` - the location of the indexing operator in the buffer.
+    /// * `loc` - the location of the operator in the buffer.
     pub fn or(rhs: Tagged<Expr>, loc: impl HasSpan) -> Transform {
         Transform::BinOp(BinOp::Or.tag(loc), rhs.to_box())
     }
@@ -719,6 +739,8 @@ impl Display for BinOp {
             Self::Divide => f.write_str("/"),
             Self::Add => f.write_str("+"),
             Self::Subtract => f.write_str("-"),
+            Self::Intersect => f.write_str("&"),
+            Self::Union => f.write_str("|"),
             Self::Less => f.write_str("<"),
             Self::Greater => f.write_str(">"),
             Self::LessEqual => f.write_str("<="),

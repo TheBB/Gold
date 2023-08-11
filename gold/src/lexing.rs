@@ -41,6 +41,7 @@ pub enum TokenType {
     Eq,                 // =
     ExclamEq,           // !=
     GreaterEq,          // >=
+    Ampersand,          // &
     LessEq,             // <=
     Minus,              // -
     OpenAngle,          // <
@@ -116,6 +117,7 @@ impl Display for TokenType {
             Self::Plus => "'+'",
             Self::SemiColon => "';'",
             Self::Slash => "'/'",
+            Self::Ampersand => "'&'",
             Self::Name => "name",
             Self::Float => "float",
             Self::Integer => "int",
@@ -347,6 +349,7 @@ impl<'a> Lexer<'a> {
             Some('!') if self.satisfies_at(1, |x| x == '=') => self.skip_tag(2, 0, TokenType::ExclamEq),
             Some('|') => self.skip_tag(1, 0, TokenType::Pipe),
             Some(';') => self.skip_tag(1, 0, TokenType::SemiColon),
+            Some('&') => self.skip_tag(1, 0, TokenType::Ampersand),
 
             // Error conditions
             Some(c) => Err(self.error(Syntax::UnexpectedChar(c))),

@@ -72,7 +72,7 @@ impl Function {
 /// opaque Python type.
 ///
 /// This represents all kinds of types.
-#[pyclass]
+#[pyclass(unsendable)]
 #[derive(Clone)]
 pub struct Type(TypeVariant);
 

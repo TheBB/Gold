@@ -436,6 +436,7 @@ tok!{ellipsis, Ellipsis}
 tok!{eq, Eq}
 tok!{exclam_eq, ExclamEq}
 tok!{greater_eq, GreaterEq}
+tok!{ampersand, Ampersand}
 tok!{less_eq, LessEq}
 tok!{minus, Minus}
 tok!{open_angle, OpenAngle}
@@ -1245,7 +1246,7 @@ fn product<'a>(input: In<'a>) -> Out<'a, PExpr> {
 }
 
 
-/// Matches the addition predecence level.
+/// Matches the addition precedence level.
 fn sum<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
@@ -1253,6 +1254,28 @@ fn sum<'a>(input: In<'a>) -> Out<'a, PExpr> {
             map(minus, |x| (Transform::subtract as OpCons).tag(x)),
         )),
         product,
+    ).parse(input)
+}
+
+
+/// Matches the intersection precedence level.
+fn intersection<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    lbinop(
+        alt((
+            map(ampersand, |x| (Transform::intersect as OpCons).tag(x)),
+        )),
+        sum,
+    ).parse(input)
+}
+
+
+/// Matches the union precedence level.
+fn union<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    lbinop(
+        alt((
+            map(pipe, |x| (Transform::unite as OpCons).tag(x)),
+        )),
+        intersection,
     ).parse(input)
 }
 
@@ -1266,7 +1289,7 @@ fn inequality<'a>(input: In<'a>) -> Out<'a, PExpr> {
             map(greater_eq, |x| (Transform::greater_equal as OpCons).tag(x)),
             map(close_angle, |x| (Transform::greater as OpCons).tag(x)),
         )),
-        sum,
+        union,
     ).parse(input)
 }
 

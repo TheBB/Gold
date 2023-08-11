@@ -16,7 +16,7 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::io::{Read, Write};
-use std::iter::Step;
+use std::iter::{once, Step};
 use std::ops::Deref;
 use std::str::FromStr;
 use std::rc::Rc;
@@ -726,10 +726,44 @@ impl FuncVariant {
 // Type variant
 // ------------------------------------------------------------------------------------------------
 
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum BuiltinType {
+    Int,
+    Float,
+    Bool,
+    Str,
+    List,
+    Object,
+    Null,
+    Any,
+}
 
-#[derive(Clone,Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize, PartialEq)]
+pub struct ListType {
+    head: Gc<Vec<TypeVariant>>,
+    tail: Option<TypeVariant>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize, PartialEq)]
+pub struct MapTypeSpec {
+    optional: bool,
+    tp: TypeVariant,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize, PartialEq)]
+pub struct MapType {
+    explicit: Gc<OrderedMap<Key, MapTypeSpec>>,
+    variable: Option<TypeVariant>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize, PartialEq)]
 pub enum TypeVariant {
-    Builtin(BuiltinType),
+    Builtin(#[unsafe_ignore_trace] BuiltinType),
+    List(Box<ListType>),
+    Map(Box<MapType>),
+    Union(Gc<Vec<TypeVariant>>),
+    Intersection(Gc<Vec<TypeVariant>>),
+    // Callable(Gc<Vec<FunctionType>>),
 }
 
 impl From<BuiltinType> for TypeVariant {
@@ -749,17 +783,32 @@ impl TypeVariant {
             _ => Err(Error::new(TypeMismatch::Call(Type::Type))),
         }
     }
-}
 
+    /// The type intersection operator.
+    pub fn intersect(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Intersection(x), Self::Intersection(y)) =>
+                Self::Intersection(Gc::new(x.iter().chain(y.iter()).cloned().collect())),
+            (Self::Intersection(x), y) =>
+                Self::Intersection(Gc::new(x.iter().chain(once(y)).cloned().collect())),
+            (x, Self::Intersection(y)) =>
+                Self::Intersection(Gc::new(once(x).chain(y.iter()).cloned().collect())),
+            (x, y) => Self::Intersection(Gc::new(vec![x.clone(), y.clone()])),
+        }
+    }
 
-#[derive(Copy, Clone,Debug, Serialize, Deserialize)]
-pub enum BuiltinType {
-    Int,
-    Float,
-    Bool,
-    Str,
-    Null,
-    Any,
+    /// The type union operator.
+    pub fn union(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Union(x), Self::Intersection(y)) =>
+                Self::Union(Gc::new(x.iter().chain(y.iter()).cloned().collect())),
+            (Self::Union(x), y) =>
+                Self::Union(Gc::new(x.iter().chain(once(y)).cloned().collect())),
+            (x, Self::Union(y)) =>
+                Self::Union(Gc::new(once(x).chain(y.iter()).cloned().collect())),
+            (x, y) => Self::Union(Gc::new(vec![x.clone(), y.clone()])),
+        }
+    }
 }
 
 
@@ -811,6 +860,9 @@ impl PartialEq<ObjectVariant> for ObjectVariant {
             (Self::Boolean(x), Self::Boolean(y)) => x.eq(y),
             (Self::List(x), Self::List(y)) => x.eq(y),
             (Self::Map(x), Self::Map(y)) => x.eq(y),
+            (Self::Type(x), Self::Type(y)) => x.eq(y),
+            (Self::Type(TypeVariant::Builtin(BuiltinType::Null)), Self::Null) => true,
+            (Self::Null, Self::Type(TypeVariant::Builtin(BuiltinType::Null))) => true,
             (Self::Null, Self::Null) => true,
             _ => false,
         }
@@ -1038,6 +1090,24 @@ impl ObjectVariant {
         Ok(Self::from(xx.powf(yy)))
     }
 
+
+    /// The type intersection operator.
+    pub fn intersect(&self, other: &Self) -> Result<Self, Error> {
+        if let (Self::Type(x), Self::Type(y)) = (self, other) {
+            Ok(Self::from(x.intersect(y)))
+        } else {
+            Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Intersect)))
+        }
+    }
+
+    /// The type union operator.
+    pub fn union(&self, other: &Self) -> Result<Self, Error> {
+        if let (Self::Type(x), Self::Type(y)) = (self, other) {
+            Ok(Self::from(x.union(y)))
+        } else {
+            Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Intersect)))
+        }
+    }
     /// The containment operator.
     pub fn contains(&self, other: &Object) -> Result<bool, Error> {
         if let Self::List(x) = self {
@@ -1209,7 +1279,15 @@ impl<T> From<T> for ObjectVariant where IntVariant: From<T> {
 }
 
 impl From<f64> for ObjectVariant {
-    fn from(x: f64) -> Self { Self::Float(x) }
+    fn from(x: f64) -> Self {
+        Self::Float(x)
+    }
+}
+
+impl From<TypeVariant> for ObjectVariant {
+    fn from(value: TypeVariant) -> Self {
+        Self::Type(value)
+    }
 }
 
 impl Display for ObjectVariant {
@@ -1567,6 +1645,8 @@ impl Object {
     wrap2!{div}
     wrap2!{idiv}
     wrap2!{pow}
+    wrap2!{intersect}
+    wrap2!{union}
 }
 
 impl Deref for Object {
