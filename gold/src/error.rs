@@ -399,6 +399,9 @@ pub enum SyntaxElement {
     /// The keyword 'then'
     Then,
 
+    /// A function argument list
+    ArgList,
+
     /// A function argument
     ArgElement,
 
@@ -832,6 +835,7 @@ impl Display for SyntaxElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ArgElement => f.write_str("function argument"),
+            Self::ArgList => f.write_str("function argument list"),
             Self::As => f.write_str("'as'"),
             Self::Binding => f.write_str("binding pattern"),
             Self::Else => f.write_str("'else'"),

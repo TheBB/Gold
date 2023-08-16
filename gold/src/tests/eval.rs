@@ -210,51 +210,51 @@ fn map_bindings() {
 #[test]
 fn function_bindings() {
     assert_seq!(eval(concat!(
-        "let a = |x, [y, z]| x + y + z\n",
+        "let a = fn (x, [y, z]) x + y + z\n",
         "in a(1, [2, 3])"
     )), Object::int(6));
 
     assert_seq!(eval(concat!(
-        "let f = |[y = 1]| y\n",
+        "let f = fn ([y = 1]) y\n",
         "in f([])"
     )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let q = 1\n",
-        "let f = |[y = q]| y\n",
+        "let f = fn ([y = q]) y\n",
         "in f([])"
     )), Object::int(1));
 
     assert_seq!(eval(concat!(
-        "let f = |q| |[y = q]| y\n",
+        "let f = fn (q) fn ([y = q]) y\n",
         "let q = 1\n",
         "in f(2)([])"
     )), Object::int(2));
 
     assert_seq!(eval(concat!(
-        "let f = |x; y, z| x + y + z\n",
+        "let f = fn (x; y, z) x + y + z\n",
         "in f(1, y: 2, z: 3)"
     )), Object::int(6));
 
     assert_seq!(eval(concat!(
-        "let f = |; y=1| y\n",
+        "let f = fn (; y=1) y\n",
         "in f()"
     )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let q = 1\n",
-        "let f = |; y=q| y\n",
+        "let f = fn (; y=q) y\n",
         "in f()"
     )), Object::int(1));
 
     assert_seq!(eval(concat!(
-        "let f = |q| |; y=q| y\n",
+        "let f = fn (q) fn (; y=q) y\n",
         "let q = 1\n",
         "in f(2)()"
     )), Object::int(2));
 
     assert_seq!(eval(concat!(
-        "let f = |x, y=15; z=200| [x,y,z]\n",
+        "let f = fn (x, y=15; z=200) [x,y,z]\n",
         "in [f(1), f(1,2), f(1,z:100), f(1,2,z:100)]"
     )), Object::list(vec![
         Object::list(vec![Object::int(1), Object::int(15), Object::int(200)]),
@@ -264,7 +264,7 @@ fn function_bindings() {
     ]));
 
     assert_seq!(eval(concat!(
-        "let dest = |...args; ...kwargs| [args, kwargs]\n",
+        "let dest = fn (...args; ...kwargs) [args, kwargs]\n",
         "in dest()"
     )), Object::list(vec![
         Object::list(()),
@@ -272,7 +272,7 @@ fn function_bindings() {
     ]));
 
     assert_seq!(eval(concat!(
-        "let dest = |...args; ...kwargs| [args, kwargs]\n",
+        "let dest = fn (...args; ...kwargs) [args, kwargs]\n",
         "in dest(1, 2)"
     )), Object::list(vec![
         (1..3).map(Object::int).collect(),
@@ -280,7 +280,7 @@ fn function_bindings() {
     ]));
 
     assert_seq!(eval(concat!(
-        "let dest = |...args; ...kwargs| [args, kwargs]\n",
+        "let dest = fn (...args; ...kwargs) [args, kwargs]\n",
         "in dest(x: 1, y: 2)"
     )), Object::list(vec![
         Object::list(()),
@@ -291,7 +291,7 @@ fn function_bindings() {
     ]));
 
     assert_seq!(eval(concat!(
-        "let dest = |...args; ...kwargs| [args, kwargs]\n",
+        "let dest = fn (...args; ...kwargs) [args, kwargs]\n",
         "in dest(1, 2, x: 3, y: 4)"
     )), Object::list(vec![
         (1..3).map(Object::int).collect(),
@@ -302,7 +302,7 @@ fn function_bindings() {
     ]));
 
     assert_seq!(eval(concat!(
-        "let dest = |...args; ...kwargs| [args, kwargs]\n",
+        "let dest = fn (...args; ...kwargs) [args, kwargs]\n",
         "let args = [1, 2, 3]\n",
         "let kwargs = {x: 4, y: 5, z: 6}\n",
         "in dest(0, ...args, 5, a: 8, ...kwargs, c: 10, z: 12)"
@@ -323,10 +323,10 @@ fn function_bindings() {
         ]),
     ]));
 
-    assert_seq!(eval("({||} 1)()"), Object::int(1));
-    assert_seq!(eval("({|a, b|} a + b)(a: 1, b: 2)"), Object::int(3));
-    assert_seq!(eval("({|a, b=2|} a + b)(a: 1, b: 3)"), Object::int(4));
-    assert_seq!(eval("({|a, b=2|} a + b)(a: 1)"), Object::int(3));
+    assert_seq!(eval("(fn {} 1)()"), Object::int(1));
+    assert_seq!(eval("(fn {a, b} a + b)(a: 1, b: 2)"), Object::int(3));
+    assert_seq!(eval("(fn {a, b=2} a + b)(a: 1, b: 3)"), Object::int(4));
+    assert_seq!(eval("(fn {a, b=2} a + b)(a: 1)"), Object::int(3));
 }
 
 
@@ -506,8 +506,8 @@ fn map_concat() {
 #[test]
 fn functions() {
     assert_seq!(eval(concat!(
-        "let double = |x| x + x\n",
-        "let applytwice = |f,x| f(f(x))\n",
+        "let double = fn (x) x + x\n",
+        "let applytwice = fn (f,x) f(f(x))\n",
         "in applytwice(double, [1])"
     )), Object::list(vec![
         Object::int(1),
@@ -517,72 +517,72 @@ fn functions() {
     ]));
 
     assert_seq!(eval(concat!(
-        "let b = || a\n",
+        "let b = fn () a\n",
         "let a = 2\n",
         "in b()"
     )), Object::int(2));
 
     assert_seq!(eval(concat!(
         "let a = 1\n",
-        "let b = |q = a| q\n",
+        "let b = fn (q = a) q\n",
         "in b()"
     )), Object::int(1));
 
     assert_seq!(eval(concat!(
-        "let b = |q = a| q\n",
+        "let b = fn (q = a) q\n",
         "let a = 2\n",
         "in b()"
     )), Object::int(2));
 
     assert_seq!(eval(concat!(
-        "let b = || let a = 1 in |q = a| q\n",
+        "let b = fn () let a = 1 in fn (q = a) q\n",
         "let c = b()\n",
         "in c()"
     )), Object::int(1));
 
     assert_seq!(eval(concat!(
-        "let a = |q, ...x| [q, ...x]\n",
+        "let a = fn (q, ...x) [q, ...x]\n",
         "in a(1, 2, 3)"
     )), (1..4).map(Object::int).collect());
 
     assert_seq!(eval(concat!(
-        "let a = |q, p = q| p\n",
+        "let a = fn (q, p = q) p\n",
         "in a(1, 2)"
     )), Object::int(2));
 
     assert_seq!(eval(concat!(
-        "let a = |q, p = q| p\n",
+        "let a = fn (q, p = q) p\n",
         "in a(1)"
     )), Object::int(1));
 
     assert_seq!(eval(concat!(
-        "let a = |; k = 1| k\n",
+        "let a = fn (; k = 1) k\n",
         "in a()"
     )), Object::int(1));
 
     assert_seq!(eval(concat!(
-        "let a = |; k = 1| k\n",
+        "let a = fn (; k = 1) k\n",
         "in a(k: 2)"
     )), Object::int(2));
 
     assert_seq!(eval(concat!(
-        "let a = {|k = 1|} k\n",
+        "let a = fn {k = 1} k\n",
         "in a()"
     )), Object::int(1));
 
     assert_seq!(eval(concat!(
-        "let a = {|k = 1|} k\n",
+        "let a = fn {k = 1} k\n",
         "in a(k: 2)"
     )), Object::int(2));
 
     assert_seq!(eval(concat!(
-        "let f = |x, y = x| x + y\n",
+        "let f = fn (x, y = x) x + y\n",
         "in f(1)"
     )), Object::int(2));
 
     assert_seq!(eval(concat!(
         "let a = 1\n",
-        "in let f = || a\n",
+        "in let f = fn () a\n",
         "   let a = 2\n",
         "   in f()"
     )), Object::int(2));
@@ -592,7 +592,7 @@ fn functions() {
 #[test]
 fn deferred_bindings() {
     assert_seq!(eval(concat!(
-        "let f = || a\n",
+        "let f = fn () a\n",
         "let a = 1\n",
         "in f()"
     )), Object::int(1));
@@ -752,7 +752,7 @@ fn errors() {
     assert_eq!(eval("{$null: 1}"), err!(TypeMismatch::MapKey(Type::Null), loc!(2..6, Assign)));
     assert_eq!(eval("{...[]}"), err!(TypeMismatch::SplatMap(Type::List), loc!(4..6, Splat)));
     assert_eq!(eval("{for x in 2.2: a: x}"), err!(TypeMismatch::Iterate(Type::Float), loc!(10..13, Iterate)));
-    assert_eq!(eval("(|...x| 1)(...true)"), err!(TypeMismatch::SplatArg(Type::Boolean), loc!(14..18, Splat)));
+    assert_eq!(eval("(fn (...x) 1)(...true)"), err!(TypeMismatch::SplatArg(Type::Boolean), loc!(17..21, Splat)));
     assert_eq!(eval("1 + true"), err!(TypeMismatch::BinOp(Type::Integer, Type::Boolean, BinOp::Add), loc!(2, Evaluate)));
     assert_eq!(eval("\"t\" - 9"), err!(TypeMismatch::BinOp(Type::String, Type::Integer, BinOp::Subtract), loc!(4, Evaluate)));
     assert_eq!(eval("[] * 9"), err!(TypeMismatch::BinOp(Type::List, Type::Integer, BinOp::Multiply), loc!(3, Evaluate)));
@@ -798,20 +798,20 @@ fn errors() {
     assert!(eval_errstr("\n  bingbong  \n").is_some_and(|x| x.contains("\n  bingbong  \n  ^^^^^^^^\n")));
 
     assert!(eval_errstr(concat!(
-        "let f = |x| x + 1\n",
-        "let g = |x| f(x)\n",
-        "let h = |x| g(x)\n",
+        "let f = fn (x) x + 1\n",
+        "let g = fn (x) f(x)\n",
+        "let h = fn (x) g(x)\n",
         "in h(null)",
     )).is_some_and(|x|
         x.contains(concat!(
-            "let f = |x| x + 1\n",
-            "              ^",
+            "let f = fn (x) x + 1\n",
+            "                 ^",
         )) && x.contains(concat!(
-            "let g = |x| f(x)\n",
-            "             ^^^",
+            "let g = fn (x) f(x)\n",
+            "                ^^^",
         )) && x.contains(concat!(
-            "let h = |x| g(x)\n",
-            "             ^^^",
+            "let h = fn (x) g(x)\n",
+            "                ^^^",
         )) && x.contains(concat!(
             "in h(null)\n",
             "    ^^^^^",

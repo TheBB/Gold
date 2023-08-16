@@ -46,7 +46,6 @@ pub enum TokenType {
     Minus,              // -
     OpenAngle,          // <
     OpenBrace,          // {
-    OpenBracePipe,      // {|
     OpenBracket,        // [
     OpenParen,          // (
     Pipe,               // |
@@ -110,7 +109,6 @@ impl Display for TokenType {
             Self::LessEq => "'<='",
             Self::Minus => "'-'",
             Self::OpenBrace => "'{'",
-            Self::OpenBracePipe => "'{|'",
             Self::OpenBracket => "'['",
             Self::OpenParen => "'('",
             Self::Pipe => "'|'",
@@ -324,7 +322,6 @@ impl<'a> Lexer<'a> {
             Some(':') if self.satisfies_at(1, |x| x == ':') => self.skip_tag(2, 0, TokenType::DoubleColon),
             Some(':') => self.skip_tag(1, 0, TokenType::Colon),
             Some('"') => self.skip_tag(1, 0, TokenType::DoubleQuote),
-            Some('{') if self.satisfies_at(1, |x| x == '|') => self.skip_tag(2, 0, TokenType::OpenBracePipe),
             Some('{') => self.skip_tag(1, 0, TokenType::OpenBrace),
             Some('|') if self.satisfies_at(1, |x| x == '}') => self.skip_tag(2, 0, TokenType::CloseBracePipe),
             Some('}') => self.skip_tag(1, 0, TokenType::CloseBrace),

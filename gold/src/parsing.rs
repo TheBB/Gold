@@ -423,7 +423,6 @@ tok!{asterisk, Asterisk}
 tok!{caret, Caret}
 tok!{close_angle, CloseAngle}
 tok!{close_brace, CloseBrace}
-tok!{close_brace_pipe, CloseBracePipe}
 tok!{close_bracket, CloseBracket}
 tok!{close_paren, CloseParen}
 tok!{colon, Colon}
@@ -441,7 +440,6 @@ tok!{less_eq, LessEq}
 tok!{minus, Minus}
 tok!{open_angle, OpenAngle}
 tok!{open_brace, OpenBrace}
-tok!{open_brace_pipe, OpenBracePipe}
 tok!{open_bracket, OpenBracket}
 tok!{open_paren, OpenParen}
 tok!{pipe, Pipe}
@@ -493,7 +491,7 @@ fn map_keyword<'a>(value: &'a str) -> impl Parser<'a, Tagged<&'a str>> {
 
 
 /// List of keywords that must be avoided by the [`identifier`] parser.
-static KEYWORDS: [&'static str; 17] = [
+static KEYWORDS: [&'static str; 18] = [
     "for",
     "when",
     "if",
@@ -511,6 +509,7 @@ static KEYWORDS: [&'static str; 17] = [
     "as",
     "import",
     "type",
+    "fn",
 ];
 
 
@@ -1619,21 +1618,25 @@ fn return_type<'a>(input: In<'a>) -> Out<'a, PType> {
 /// let-binding syntax. It is concluded by a double arrow (=>) and an
 /// expression.
 fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    let (i, params) = opt(type_parameters)(input)?;
+    let (i, kwfn) = keyword("fn").parse(input)?;
+    let (i, params) = opt(type_parameters)(i)?;
 
-    let (i, (args, end)) = list_pattern(
-        |i| pipe(i),
-        |i| alt((pipe, semicolon))(i),
-        (TokenType::Pipe, TokenType::SemiColon, SyntaxElement::PosParam),
-        (TokenType::Pipe, TokenType::SemiColon, TokenType::Comma),
+    let (i, (args, end)) = fail(
+        list_pattern(
+            |i| open_paren(i),
+            |i| alt((close_paren, semicolon))(i),
+            (TokenType::CloseParen, TokenType::SemiColon, SyntaxElement::PosParam),
+            (TokenType::CloseParen, TokenType::SemiColon, TokenType::Comma),
+        ),
+        SyntaxElement::ArgList,
     ).parse(i)?;
 
     let (i, kwargs) = if end == ";" {
         let (i, kwargs) = map_pattern(
             |i: In<'a>| { let loc = i.position(); Ok((i, "".tag(loc.with_length(0)))) },
-            |i| pipe(i),
-            (TokenType::Pipe, SyntaxElement::KeywordParam),
-            (TokenType::Pipe, TokenType::Comma),
+            |i| close_paren(i),
+            (TokenType::CloseParen, SyntaxElement::KeywordParam),
+            (TokenType::CloseParen, TokenType::Comma),
         )(i)?;
         (i, Some(kwargs))
     } else {
@@ -1643,7 +1646,7 @@ fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
     let (i, rtype) = opt(return_type)(i)?;
 
     let (i, expr) = fail(expression, SyntaxElement::Expression).parse(i)?;
-    let span = args.span().join(&expr);
+    let span = kwfn.span().join(&expr);
 
     let result = PExpr::Naked(Expr::Function {
         type_params: params,
@@ -1664,19 +1667,20 @@ fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn keyword_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
     map(
         tuple((
+            keyword("fn"),
             opt(type_parameters),
             map_pattern(
-                |i| open_brace_pipe(i),
-                |i| close_brace_pipe(i),
-                (TokenType::CloseBracePipe, SyntaxElement::KeywordParam),
-                (TokenType::CloseBracePipe, TokenType::Comma),
+                |i| open_brace(i),
+                |i| close_brace(i),
+                (TokenType::CloseBrace, SyntaxElement::KeywordParam),
+                (TokenType::CloseBrace, TokenType::Comma),
             ),
             opt(return_type),
             fail(expression, SyntaxElement::Expression),
         )),
 
-        |(params, kwargs, rtype, expr)| {
-            let span = kwargs.span().join(&expr);
+        |(kwfn, params, kwargs, rtype, expr)| {
+            let span = kwfn.span().join(&expr);
             PExpr::Naked(Expr::Function {
                 type_params: params,
                 positional: ListBinding(vec![]),
