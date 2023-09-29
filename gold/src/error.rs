@@ -755,7 +755,7 @@ impl Error {
     }
 
     /// Add a human-friendly string representation.
-    pub fn render(self, code: &str) -> Self {
+    pub fn render(self, code: Option<&str>) -> Self {
         let rendered = format!("{}", ErrorRenderer(&self, code));
         Self {
             locations: self.locations,
@@ -898,7 +898,7 @@ impl Display for Action {
 ///
 /// Has access to both the error and the code, so that it can just implement the
 /// Display trait.
-struct ErrorRenderer<'a>(&'a Error, &'a str);
+struct ErrorRenderer<'a>(&'a Error, Option<&'a str>);
 
 impl<'a> Display for ErrorRenderer<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -907,25 +907,26 @@ impl<'a> Display for ErrorRenderer<'a> {
         f.write_fmt(format_args!("Error: {}", err.reason.as_ref().unwrap_or(&Reason::None)))?;
         if let Some(locs) = err.locations.as_ref() {
             for (loc, act) in locs.iter() {
+                if let Some(code) = code {
+                    // Offset of the beginning of the line
+                    let bol = loc.offset() - loc.column() as usize;
 
-                // Offset of the beginning of the line
-                let bol = loc.offset() - loc.column() as usize;
+                    // Offset of the end of the line
+                    let eol = code[bol+1..].find('\n').map(|x| x + bol + 1).unwrap_or(code.len());
 
-                // Offset of the end of the line
-                let eol = code[bol+1..].find('\n').map(|x| x + bol + 1).unwrap_or(code.len());
+                    // Offset of the end of the span to be displayed: either the end
+                    // of the line (if longer than a line), or the end of the span
+                    let span_end = min(loc.offset() + loc.length(), eol) - loc.offset();
 
-                // Offset of the end of the span to be displayed: either the end
-                // of the line (if longer than a line), or the end of the span
-                let span_end = min(loc.offset() + loc.length(), eol) - loc.offset();
-
-                f.write_char('\n')?;
-                f.write_str(&code[bol..eol])?;
-                f.write_char('\n')?;
-                for _ in 0..loc.column() {
-                    f.write_char(' ')?;
-                }
-                for _ in 0..span_end {
-                    f.write_char('^')?;
+                    f.write_char('\n')?;
+                    f.write_str(&code[bol..eol])?;
+                    f.write_char('\n')?;
+                    for _ in 0..loc.column() {
+                        f.write_char(' ')?;
+                    }
+                    for _ in 0..span_end {
+                        f.write_char('^')?;
+                    }
                 }
                 f.write_fmt(format_args!("\nwhile {} at {}:{}", act, loc.line() + 1, loc.column() + 1))?;
             }

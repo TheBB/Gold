@@ -15,19 +15,21 @@ use crate::error::{Error, Reason};
 
 /// Convert a Gold error to a Python error.
 pub fn err_to_py(err: Error) -> PyErr {
+    let err = err.render(None);
+    let pystr = format!("From Gold: {}", err.rendered.unwrap());
     match err.reason {
-        None => PyException::new_err(err.rendered),
-        Some(Reason::None) => PyException::new_err(err.rendered),
-        Some(Reason::Syntax(_)) => PySyntaxError::new_err(err.rendered),
-        Some(Reason::Unbound(_)) => PyNameError::new_err(err.rendered),
-        Some(Reason::Unassigned(_)) => PyKeyError::new_err(err.rendered),
-        Some(Reason::Unpack(_)) => PyTypeError::new_err(err.rendered),
-        Some(Reason::Internal(_)) => PyException::new_err(err.rendered),
-        Some(Reason::External(_)) => PyException::new_err(err.rendered),
-        Some(Reason::TypeMismatch(_)) => PyTypeError::new_err(err.rendered),
-        Some(Reason::Value(_)) => PyValueError::new_err(err.rendered),
-        Some(Reason::FileSystem(_)) => PyOSError::new_err(err.rendered),
-        Some(Reason::UnknownImport(_)) => PyImportError::new_err(err.rendered),
+        None => PyException::new_err(pystr),
+        Some(Reason::None) => PyException::new_err(pystr),
+        Some(Reason::Syntax(_)) => PySyntaxError::new_err(pystr),
+        Some(Reason::Unbound(_)) => PyNameError::new_err(pystr),
+        Some(Reason::Unassigned(_)) => PyKeyError::new_err(pystr),
+        Some(Reason::Unpack(_)) => PyTypeError::new_err(pystr),
+        Some(Reason::Internal(_)) => PyException::new_err(pystr),
+        Some(Reason::External(_)) => PyException::new_err(pystr),
+        Some(Reason::TypeMismatch(_)) => PyTypeError::new_err(pystr),
+        Some(Reason::Value(_)) => PyValueError::new_err(pystr),
+        Some(Reason::FileSystem(_)) => PyOSError::new_err(pystr),
+        Some(Reason::UnknownImport(_)) => PyImportError::new_err(pystr),
     }
 }
 

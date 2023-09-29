@@ -61,7 +61,7 @@ pub use eval::ImportConfig;
 /// control over imports.
 pub fn eval(input: &str, importer: &ImportConfig) -> Result<Object, Error> {
     let ret = parsing::parse(input).and_then(|file| evaluate(&file, importer));
-    ret.map_err(|err| err.render(input))
+    ret.map_err(|err| err.render(Some(input)))
 }
 
 
