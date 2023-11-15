@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "gold"
-version = "2.2.2"
+version = "2.2.3"
 dependencies = [
  "clap",
  "indexmap",
@@ -213,7 +213,7 @@ dependencies = [
 
 [[package]]
 name = "goldpy"
-version = "2.2.2"
+version = "2.2.3"
 dependencies = [
  "gold",
  "num-bigint",
