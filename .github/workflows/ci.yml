@@ -75,7 +75,7 @@ jobs:
 
   build-wheels:
     name: Build wheels
-    if: "startsWith(github.ref, 'refs/tags/')"
+    if: "startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'"
     needs: pytest
     strategy:
       matrix:
@@ -101,6 +101,10 @@ jobs:
           command: build
           args: --release -o dist --find-interpreter -m goldpy/Cargo.toml
 
+      - uses: actions/setup-python@v4
+        if: ${{ matrix.os == 'macos-latest' }}
+        with:
+          python-version: '3.12'
       - uses: messense/maturin-action@v1
         if: ${{ matrix.os == 'macos-latest' }}
         with:
