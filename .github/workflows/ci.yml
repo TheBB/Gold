@@ -105,6 +105,17 @@ jobs:
         if: ${{ matrix.os == 'macos-latest' }}
         with:
           python-version: '3.12'
+
+      - uses: actions/setup-python@v4
+        if: ${{ matrix.os == 'macos-latest' }}
+        with:
+          python-version: '3.9'
+
+      - uses: actions/setup-python@v4
+        if: ${{ matrix.os == 'macos-latest' }}
+        with:
+          python-version: '3.8'
+
       - uses: messense/maturin-action@v1
         if: ${{ matrix.os == 'macos-latest' }}
         with:
