@@ -1,0 +1,27 @@
+site_name: Gold language
+site_url: https://thebb.github.io/Gold
+nav:
+  - Introduction: 'index.md'
+  - 'whirlwind.md'
+markdown_extensions:
+  - attr_list
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+copyright: Copyright &copy; 2023 SINTEF AS
+extra:
+  generator: false
+theme:
+  name: material
+  logo: assets/logo-640.png
+  favicon: assets/logo-640.png
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
