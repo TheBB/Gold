@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="https://raw.githubusercontent.com/TheBB/Gold/docs/docs/assets/logo-640.png" width="250" alt="Logo">
+    <img src="https://raw.githubusercontent.com/TheBB/Gold/master/docs/assets/logo-640.png" width="250" alt="Logo">
     <br> <br>
 
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/TheBB/Gold/ci.yml?logo=github&label=CI)](https://github.com/TheBB/Gold/actions/workflows/ci.yml)
