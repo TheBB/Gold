@@ -69,11 +69,6 @@ impl<'a> FromExternalError<In<'a>, ParseFloatError> for SyntaxError {
 }
 
 
-// fn literal<T>(x: T) -> Expr where Object: From<T> {
-//     Object::from(x).literal()
-// }
-
-
 /// Convert a multiline string from source code to string by removing leading
 /// whitespace from each line according to the rules for such strings.
 fn multiline(s: &str) -> String {
@@ -488,7 +483,7 @@ fn map_keyword<'a>(value: &'a str) -> impl Parser<'a, Tagged<&'a str>> {
 
 
 /// List of keywords that must be avoided by the [`identifier`] parser.
-static KEYWORDS: [&'static str; 16] = [
+static KEYWORDS: [&'static str; 17] = [
     "for",
     "when",
     "if",
@@ -505,6 +500,7 @@ static KEYWORDS: [&'static str; 16] = [
     "not",
     "as",
     "import",
+    "fn",
 ];
 
 
@@ -1548,11 +1544,7 @@ fn binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
                 (TokenType::CloseBrace, SyntaxElement::MapBindingElement),
                 (TokenType::CloseBrace, TokenType::Comma),
             ),
-            |x| {
-                x.wrap(Binding::Map)
-                // let loc = x.span();
-                // x.wrap(Binding::Map, loc)
-            },
+            |x| x.wrap(Binding::Map),
         )
     ))(input)
 }
@@ -1565,6 +1557,48 @@ fn binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
 /// let-binding syntax. It is concluded by a double arrow (=>) and an
 /// expression.
 fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    let (i, init) = keyword("fn").parse(input)?;
+
+    let (i, (args, end)) = list_binding(
+        |i| open_paren(i),
+        |i| alt((close_paren, semicolon))(i),
+        (TokenType::CloseParen, TokenType::SemiColon, SyntaxElement::PosParam),
+        (TokenType::CloseParen, TokenType::SemiColon, TokenType::Comma),
+    ).parse(i)?;
+
+    let (i, kwargs) = if end == ";" {
+        let (i, kwargs) = map_binding(
+            // Initializer always suceeds because the semicolon is already parsed
+            |i: In<'a>| { let loc = i.position(); Ok((i, "".tag(loc.with_length(0)))) },
+            |i| close_paren(i),
+            (TokenType::CloseParen, SyntaxElement::KeywordParam),
+            (TokenType::CloseParen, TokenType::Comma),
+        ).parse(i)?;
+        (i, Some(kwargs ))
+    } else {
+        (i, None)
+    };
+
+    let (i, expr) = fail(expression, SyntaxElement::Expression).parse(i)?;
+
+    let span = init.span()..expr.outer();
+    let result = PExpr::Naked(Expr::Function {
+        positional: args.unwrap(),
+        keywords: kwargs.map(Tagged::unwrap),
+        expression: expr.inner().to_box(),
+    }.tag(span));
+
+    Ok((i, result))
+}
+
+
+/// Matches a standard function definition.
+///
+/// This is the 'fn' keyword followed by a list binding and an optional map
+/// binding, each with slightly different delimiters from conventional
+/// let-binding syntax. It is concluded by a double arrow (=>) and an
+/// expression.
+fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
     let (i, (args, end)) = list_binding(
         |i| pipe(i),
         |i| alt((pipe, semicolon))(i),
@@ -1572,10 +1606,7 @@ fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
         (TokenType::Pipe, TokenType::SemiColon, TokenType::Comma),
     ).parse(input)?;
 
-    // println!("parsing normal function, end is {:?}", end);
-
     let (j, kwargs) = if end == ";" {
-        // println!("keyword args");
         let (j, kwargs) = map_binding(
             |i: In<'a>| { let loc = i.position(); Ok((i, "".tag(loc.with_length(0)))) },
             |i| pipe(i),
@@ -1596,6 +1627,7 @@ fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
         expression: expr.inner().to_box(),
     }.tag(span));
 
+    eprintln!("gold: |...| syntax is deprecated, use fn (...) instead");
     Ok((l, result))
 }
 
@@ -1605,6 +1637,35 @@ fn normal_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
 /// This is a conventional map binding followed by a double arrow (=>) and an
 /// expression.
 fn keyword_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    map(
+        tuple((
+            keyword("fn"),
+            map_binding(
+                |i| open_brace(i),
+                |i| close_brace(i),
+                (TokenType::CloseBrace, SyntaxElement::KeywordParam),
+                (TokenType::CloseBrace, TokenType::Comma),
+            ),
+            fail(expression, SyntaxElement::Expression),
+        )),
+
+        |(init, kwargs, expr)| {
+            let span = init.span()..expr.outer();
+            PExpr::Naked(Expr::Function {
+                positional: ListBinding(vec![]),
+                keywords: Some(kwargs.unwrap()),
+                expression: Box::new(expr.inner()),
+            }.tag(span))
+        }
+    )(input)
+}
+
+
+/// Matches a keyword-only function.
+///
+/// This is a conventional map binding followed by a double arrow (=>) and an
+/// expression.
+fn keyword_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
     map(
         tuple((
             map_binding(
@@ -1618,6 +1679,7 @@ fn keyword_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
 
         |(kwargs, expr)| {
             let span = kwargs.span()..expr.outer();
+            eprintln!("gold: {{|...|}} syntax is deprecated, use fn {{...}} instead");
             PExpr::Naked(Expr::Function {
                 positional: ListBinding(vec![]),
                 keywords: Some(kwargs.unwrap()),
@@ -1634,8 +1696,10 @@ fn keyword_function<'a>(input: In<'a>) -> Out<'a, PExpr> {
 /// [`keyword_function`].
 fn function<'a>(input: In<'a>) -> Out<'a, PExpr> {
     alt((
-        keyword_function,
         normal_function,
+        keyword_function,
+        keyword_function_old_style,
+        normal_function_old_style,
     ))(input)
 }
 
