@@ -1573,7 +1573,7 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         (TokenType::OpenParen, TokenType::OpenBrace),
     ).parse(i)?;
 
-    if opener.unwrap() == "(" {
+    let (i, args, kwargs, expr) = if opener.unwrap() == "(" {
         // Parse a normal function
         let (i, (args, end)) = list_binding(
             success,
@@ -1584,27 +1584,19 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
 
         let (i, kwargs) = if end == ";" {
             let (i, kwargs) = map_binding(
-                // Initializer always suceeds because the semicolon is already parsed
                 success,
                 |i| close_paren(i),
                 (TokenType::CloseParen, SyntaxElement::KeywordParam),
                 (TokenType::CloseParen, TokenType::Comma),
             ).parse(i)?;
-            (i, Some(kwargs ))
+            (i, Some(kwargs))
         } else {
             (i, None)
         };
 
         let (i, expr) = fail(expression, SyntaxElement::Expression).parse(i)?;
 
-        let span = init.span()..expr.outer();
-        let result = PExpr::Naked(Expr::Function {
-            positional: args.unwrap(),
-            keywords: kwargs.map(Tagged::unwrap),
-            expression: expr.inner().to_box(),
-        }.tag(span));
-
-        Ok((i, result))
+        (i, args.unwrap(), kwargs, expr)
     } else {
         // Parse a keyword function
         let (i, kwargs) = map_binding(
@@ -1615,15 +1607,17 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         ).parse(i)?;
         let (i, expr) = fail(expression, SyntaxElement::Expression).parse(i)?;
 
-        let span = init.span()..expr.outer();
-        let result = PExpr::Naked(Expr::Function {
-            positional: ListBinding(vec![]),
-            keywords: Some(kwargs.unwrap()),
-            expression: Box::new(expr.inner()),
-        }.tag(span));
+        (i, ListBinding(vec![]), Some(kwargs), expr)
+    };
 
-        Ok((i, result))
-    }
+    let span = init.span()..expr.outer();
+    let result = PExpr::Naked(Expr::Function {
+        positional: args,
+        keywords: kwargs.map(Tagged::unwrap),
+        expression: Box::new(expr.inner()),
+    }.tag(span));
+
+    Ok((i, result))
 }
 
 
