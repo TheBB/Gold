@@ -7,7 +7,7 @@ use num_bigint::BigInt;
 use nom::{
     IResult, Parser as NomParser, Err as NomError,
     branch::alt,
-    combinator::{map, map_res, opt, verify},
+    combinator::{map, map_res, opt, verify, value},
     error::{ErrorKind, ParseError, FromExternalError, ContextError},
     multi::{many0, many1},
     sequence::{delimited, preceded, terminated, tuple},
@@ -272,18 +272,13 @@ where
         let mut expect_separator: bool;
 
         loop {
-
-            // println!("at {:?}", i.code);
-
             let u = item.parse(i.clone());
-            // println!("u = {:?}", u);
 
             // Try to parse an item
             match u {
 
                 // Parsing item failed: we expect a terminator
                 Err(NomError::Error(_)) => {
-                    // println!("fail :-(");
                     match terminator.parse(i.clone()) {
                         Err(NomError::Error(_)) => return Err(NomError::Failure(
                             SyntaxError::error(i, err_terminator_or_item)
@@ -298,7 +293,6 @@ where
 
                 // Parsing item succeeded
                 Ok((j, (it, skip_separator))) => {
-                    // println!("yay? :-s");
                     i = j;
                     expect_separator = !skip_separator;
                     items.push(it);
@@ -318,7 +312,6 @@ where
 
             // Try to parse a separator
             match separator.parse(i.clone()) {
-
                 // Parsing separator failed: we expect a terminator
                 Err(NomError::Error(_)) => {
                     match terminator.parse(i.clone()) {
@@ -336,9 +329,7 @@ where
                 // Parsing separator succeeded
                 Ok((j, _)) => { i = j; }
             }
-
         }
-
     }
 }
 
@@ -455,6 +446,9 @@ tok!{map_ellipsis, Ellipsis, next_key}
 tok!{string_lit, StringLit, next_string}
 tok!{string_dollar, Dollar, next_string}
 tok!{string_double_quote, DoubleQuote, next_string}
+
+tok!{fmtspec_char_raw, Char, next_fmtspec}
+tok!{fmtspec_number_raw, Integer, next_fmtspec}
 
 
 /// Match a single multiline string starting at a column.
@@ -599,6 +593,126 @@ fn string_data<'a>(input: In<'a>) -> Out<'a, StringElement> {
 }
 
 
+/// Matches a specific format specifier character.
+fn fmtspec_char<'a>(c: char) -> impl Parser<'a, ()> {
+    value(
+        (),
+        verify(
+            fmtspec_char_raw,
+            move |out| { out.unwrap().chars().next() == Some(c) },
+        ),
+    )
+}
+
+
+/// Matches a format specifier number.
+fn fmtspec_number<'a>(input: In<'a>) -> Out<'a, u32> {
+    map_res(
+        fmtspec_number_raw,
+        |out| out.as_ref().parse::<u32>(),
+    )(input)
+}
+
+
+/// Matches a format specifier alignment.
+fn fmtspec_align<'a>(input: In<'a>) -> Out<'a, AlignSpec> {
+    alt((
+        value(AlignSpec::Left, fmtspec_char('<')),
+        value(AlignSpec::Right, fmtspec_char('>')),
+        value(AlignSpec::Center, fmtspec_char('^')),
+        value(AlignSpec::AfterSign, fmtspec_char('=')),
+    ))(input)
+}
+
+
+/// Matches a format specifier fill and alignment.
+fn fmtspec_fill_align<'a>(input: In<'a>) -> Out<'a, (Option<char>, AlignSpec)> {
+    alt((
+        map(
+            tuple((fmtspec_char_raw, fmtspec_align)),
+            |(fill, align)| (Some(fill.unwrap().chars().next().unwrap()), align)
+        ),
+        map(
+            fmtspec_align,
+            |align| (None, align)
+        ),
+    ))(input)
+}
+
+
+/// Matches a format specifier sign
+fn fmtspec_sign<'a>(input: In<'a>) -> Out<'a, SignSpec> {
+    alt((
+        value(SignSpec::Plus, fmtspec_char('+')),
+        value(SignSpec::Minus, fmtspec_char('-')),
+        value(SignSpec::Space, fmtspec_char(' ')),
+    ))(input)
+}
+
+
+/// Matches a format specifier grouping
+fn fmtspec_grouping<'a>(input: In<'a>) -> Out<'a, GroupingSpec> {
+    alt((
+        value(GroupingSpec::Comma, fmtspec_char(',')),
+        value(GroupingSpec::Underscore, fmtspec_char('_')),
+    ))(input)
+}
+
+
+/// Matches a format speficier type
+fn fmtspec_type<'a>(input: In<'a>) -> Out<'a, FormatType> {
+    alt((
+        value(FormatType::String, fmtspec_char('s')),
+
+        value(FormatType::Binary, fmtspec_char('b')),
+        value(FormatType::Character, fmtspec_char('c')),
+        value(FormatType::Decimal, fmtspec_char('d')),
+        value(FormatType::Octal, fmtspec_char('o')),
+        value(FormatType::Hex(UppercaseSpec::Lower), fmtspec_char('x')),
+        value(FormatType::Hex(UppercaseSpec::Upper), fmtspec_char('X')),
+
+        value(FormatType::Sci(UppercaseSpec::Lower), fmtspec_char('e')),
+        value(FormatType::Sci(UppercaseSpec::Upper), fmtspec_char('E')),
+        value(FormatType::Fixed(UppercaseSpec::Lower), fmtspec_char('f')),
+        value(FormatType::Fixed(UppercaseSpec::Upper), fmtspec_char('F')),
+        value(FormatType::General(UppercaseSpec::Lower), fmtspec_char('g')),
+        value(FormatType::General(UppercaseSpec::Upper), fmtspec_char('G')),
+        value(FormatType::Percentage, fmtspec_char('%')),
+    ))(input)
+}
+
+
+/// Matches a format specifier
+fn format_specifier<'a>(input: In<'a>) -> Out<'a, FormatSpec> {
+    map(
+        tuple((
+            opt(fmtspec_fill_align),
+            opt(fmtspec_sign),
+            opt(value(true, fmtspec_char('#'))),
+            opt(value(true, fmtspec_char('0'))),
+            opt(fmtspec_number),
+            opt(fmtspec_grouping),
+            opt(preceded(fmtspec_char('.'), fmtspec_number)),
+            opt(fmtspec_type),
+        )),
+
+        |(fill_align, sign, alternate, zero, width, grouping, precision, fmt_type)| FormatSpec {
+            fill: match fill_align {
+                None => ' ',
+                Some((None, _)) => ' ',
+                Some((Some(fill), _)) => fill,
+            },
+
+            align: fill_align.map(|(_, align)| align),
+            alternate: alternate.unwrap_or(false),
+            zero: zero.unwrap_or(false),
+
+            sign, width, grouping, precision, fmt_type,
+        }
+    )(input)
+}
+
+
 /// Matches an interpolated string element.
 fn string_interp<'a>(input: In<'a>) -> Out<'a, StringElement> {
     map(
@@ -607,11 +721,17 @@ fn string_interp<'a>(input: In<'a>) -> Out<'a, StringElement> {
                 string_dollar,
                 fail(open_brace, TokenType::OpenBrace),
             ),
-            fail(expression, SyntaxElement::Expression),
+            tuple((
+                fail(expression, SyntaxElement::Expression),
+                opt(preceded(
+                    colon,
+                    format_specifier,
+                ))
+            )),
             fail(close_brace, TokenType::CloseBrace),
         ),
 
-        |x| StringElement::Interpolate(x.inner()),
+        |(expression, fmt_spec)| StringElement::Interpolate(expression.inner(), fmt_spec),
     )(input)
 }
 
@@ -1538,8 +1658,6 @@ fn binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
             ),
             |(x,_)| {
                 x.wrap(Binding::List)
-                // let loc = x.span();
-                // x.wrap(Binding::List, x.loc)
             },
         ),
 

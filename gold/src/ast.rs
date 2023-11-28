@@ -244,13 +244,85 @@ impl Validatable for Binding {
 // StringElement
 // ----------------------------------------------------------------
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AlignSpec {
+    Left,
+    Right,
+    AfterSign,
+    Center,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum SignSpec {
+    Plus,
+    Minus,
+    Space,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum GroupingSpec {
+    Comma,
+    Underscore,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum UppercaseSpec {
+    Upper,
+    Lower,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum FormatType {
+    String,
+
+    Binary,
+    Character,
+    Decimal,
+    Octal,
+    Hex(UppercaseSpec),
+
+    Sci(UppercaseSpec),
+    Fixed(UppercaseSpec),
+    General(UppercaseSpec),
+    Percentage,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FormatSpec {
+    pub fill: char,
+    pub align: Option<AlignSpec>,
+    pub sign: Option<SignSpec>,
+    pub alternate: bool,
+    pub zero: bool,
+    pub width: Option<u32>,
+    pub grouping: Option<GroupingSpec>,
+    pub precision: Option<u32>,
+    pub fmt_type: Option<FormatType>,
+}
+
+impl Default for FormatSpec{
+    fn default() -> Self {
+        Self {
+            fill: ' ',
+            align: None,
+            sign: None,
+            alternate: false,
+            zero: false,
+            width: None,
+            grouping: None,
+            precision: None,
+            fmt_type: None,
+        }
+    }
+}
+
 /// A string element is anything that is legal in a string: either raw string
 /// data or an interpolated expression. A string is represented as a li of
 /// string elements.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StringElement {
     Raw(Arc<str>),
-    Interpolate(Tagged<Expr>),
+    Interpolate(Tagged<Expr>, Option<FormatSpec>),
 }
 
 impl StringElement {
@@ -263,7 +335,7 @@ impl StringElement {
 impl Validatable for StringElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            StringElement::Interpolate(node) => { node.validate()?; }
+            StringElement::Interpolate(node, _) => { node.validate()?; }
             _ => {},
         }
         Ok(())
@@ -937,7 +1009,7 @@ impl FreeImpl for Expr {
             Expr::Literal(_) => {},
             Expr::String(elements) => {
                 for element in elements {
-                    if let StringElement::Interpolate(expr) = element {
+                    if let StringElement::Interpolate(expr, _) = element {
                         expr.free_impl(free);
                     }
                 }

@@ -57,6 +57,8 @@ pub enum TokenType {
     Integer,            // Integer
     StringLit,          // String literal
     MultiString,        // Multiple-line string literal
+
+    Char,               // Arbitrary non-newline character
 }
 
 
@@ -78,6 +80,9 @@ pub(crate) enum Ctx {
 
     /// Multiple-line string context (after double colon in map context)
     MultiString(u32),
+
+    /// Format specification context
+    FmtSpec,
 }
 
 
@@ -119,6 +124,7 @@ impl Display for TokenType {
             Self::Integer => "int",
             Self::StringLit => "string literal",
             Self::MultiString => "multi-line string literal",
+            Self::Char => "character",
         })
     }
 }
@@ -161,6 +167,9 @@ lazy_static! {
 
     // Regex for matching an integer
     static ref DIGITS: Regex = Regex::new("^[[:digit:]][[:digit:]_]*").unwrap();
+
+    // Regex for matching an integer (no underscores)
+    static ref PUREDIGITS: Regex = Regex::new("^[1-9][[:digit:]]*").unwrap();
 }
 
 
@@ -259,6 +268,11 @@ impl<'a> Lexer<'a> {
         WHITESPACE.find(self.code).map(|m| self.skip(m.end(), 0)).unwrap()
     }
 
+    /// Interpret the next token as a positive integer and return it.
+    fn next_pure_integer(self) -> LexResult<'a> {
+        self.traverse(&PUREDIGITS, SyntaxElement::Number, TokenType::Integer)
+    }
+
     /// Interpret the next token as a number (integer or float) and return it.
     fn next_number(self) -> LexResult<'a> {
         self.traverse(&FLOAT_A, SyntaxElement::Number, TokenType::Float)
@@ -293,6 +307,7 @@ impl<'a> Lexer<'a> {
             Ctx::Map => self.tokenize_map(),
             Ctx::String => self.tokenize_string(),
             Ctx::MultiString(col) => self.tokenize_multistring(col),
+            Ctx::FmtSpec => self.tokenize_fmtspec(),
         };
 
         // Set the cache and return
@@ -439,6 +454,17 @@ impl<'a> Lexer<'a> {
             }
         }
     }
+
+    /// Return the next token in a format specification context.
+    fn tokenize_fmtspec(self) -> LexResult<'a> {
+        match self.peek() {
+            None => Err(self.error(Syntax::UnexpectedEof)),
+            Some('\n') => Err(self.error(Syntax::UnexpectedChar('\n'))),
+            Some('}') => self.skip_tag(1, 0, TokenType::CloseBrace),
+            Some('1'..='9') => self.next_pure_integer(),
+            Some(_) => self.skip_tag(1, 0, TokenType::Char),
+        }
+    }
 }
 
 // Allow the lexer to be used as input by some nom combinators that check
@@ -506,6 +532,11 @@ impl<'a> CachedLexer<'a> {
     /// whose indentation is not greater than `col`.
     pub fn next_multistring(self, col: u32) -> CachedLexResult<'a> {
         self.next(Ctx::MultiString(col))
+    }
+
+    /// Return the next format specification token.
+    pub fn next_fmtspec(self) -> CachedLexResult<'a> {
+        self.next(Ctx::FmtSpec)
     }
 
     /// Skip an arbitrary amount of whitespace (including comments and newlines).
