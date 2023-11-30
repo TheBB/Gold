@@ -12,6 +12,8 @@ validation:
 copyright: Copyright &copy; 2023 SINTEF AS
 extra:
   generator: false
+  version:
+    provider: mike
 theme:
   name: material
   logo: assets/logo-640.png
