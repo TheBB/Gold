@@ -399,20 +399,11 @@ Gold supports string interpolation of other values:
 
 ```
 let a = "Gold"
-in "This language is $a"
+in "This language is ${a}"
 ```
 
-To explicitly demarcate the expression to be interpolated, use curly braces.
-This allows usages like the following, to prevent Gold looking for the binding
-`prefixflammable`:
-
-```
-let prefix = "in"
-in "Be careful with ${prefix}flammable objects"
-```
-
-and the following, where the expression to be interpolated is more sophisticated
-than just a name:
+The curly braces are mandatory. The expression to be interpolated can of course
+be more sophisticated than just a name:
 
 ```
 "1 + 2 is ${1 + 2}"
