@@ -517,6 +517,9 @@ pub enum TypeMismatch {
     /// Attempted to string interpolate an exotic type.
     Interpolate(Type),
 
+    /// Attempted to interpolate a type with the wrong format spec.
+    InterpolateSpec(Type),
+
     /// Two types were incompatible with a binary operator.
     BinOp(Type, Type, BinOp),
 
@@ -854,7 +857,8 @@ impl Display for Reason {
             Self::TypeMismatch(TypeMismatch::Call(x)) => f.write_fmt(format_args!("unsuitable type for function call: {}", x)),
             Self::TypeMismatch(TypeMismatch::ExpectedPosArg { index, allowed, received }) => fmt_expected_arg(f, index + 1, allowed, received),
             Self::TypeMismatch(TypeMismatch::ExpectedKwArg { name, allowed, received }) => fmt_expected_arg(f, name, allowed, received),
-            Self::TypeMismatch(TypeMismatch::Interpolate(x)) => f.write_fmt(format_args!("unsuitable type for string interpolation: {}", x)),
+            Self::TypeMismatch(TypeMismatch::Interpolate(x)) => f.write_fmt(format_args!("unsuitable type for interpolation: {}", x)),
+            Self::TypeMismatch(TypeMismatch::InterpolateSpec(x)) => f.write_fmt(format_args!("unsuitable type for format spec: {}", x)),
             Self::TypeMismatch(TypeMismatch::Iterate(x)) => f.write_fmt(format_args!("non-iterable type: {}", x)),
             Self::TypeMismatch(TypeMismatch::Json(x)) => f.write_fmt(format_args!("unsuitable type for JSON-like conversion: {}", x)),
             Self::TypeMismatch(TypeMismatch::MapKey(x)) => f.write_fmt(format_args!("unsuitable type for map key: {}", x)),

@@ -1,8 +1,8 @@
 use crate::ast::*;
 use crate::error::{Span, Tagged, Error, Reason, Syntax, SyntaxElement as S, Action};
-use crate::lexing::{TokenType as T};
+use crate::lexing::TokenType as T;
 use crate::object::{Object, Key};
-use crate::parsing::{parse as parse_file};
+use crate::parsing::parse as parse_file;
 use crate::traits::{Boxable, Taggable};
 
 
@@ -125,7 +125,7 @@ fn strings() {
         parse("\"dingbob${a}\""),
         Ok(Expr::String(vec![
             StringElement::raw("dingbob"),
-            StringElement::Interpolate("a".id(10)),
+            StringElement::Interpolate("a".id(10), None),
         ]).tag(0..13)),
     );
 
@@ -133,7 +133,7 @@ fn strings() {
         parse("\"dingbob${ a}\""),
         Ok(Expr::String(vec![
             StringElement::raw("dingbob"),
-            StringElement::Interpolate("a".id(11)),
+            StringElement::Interpolate("a".id(11), None),
         ]).tag(0..14)),
     );
 
@@ -144,6 +144,73 @@ fn strings() {
             StringElement::raw("bravo"),
         ]).tag(0..15))
     );
+}
+
+#[test]
+fn string_format() {
+    assert_eq!(
+        FormatSpec::default(),
+        FormatSpec {
+            fill: ' ',
+            align: None,
+            sign: None,
+            alternate: false,
+            width: None,
+            grouping: None,
+            precision: None,
+            fmt_type: None,
+        }
+    );
+
+    assert_eq!(parse("\"${a}\""), Ok(Expr::String(vec![
+        StringElement::Interpolate("a".id(3), None),
+    ]).tag(0..6)));
+
+    assert_eq!(parse("\"${a:}\""), Ok(Expr::String(vec![
+        StringElement::Interpolate(
+            "a".id(3),
+            Some(Default::default()),
+        ),
+    ]).tag(0..7)));
+
+    assert_eq!(parse("\"${a: >+30}\""), Ok(Expr::String(vec![
+        StringElement::Interpolate(
+            "a".id(3),
+            Some(FormatSpec {
+                align: Some(AlignSpec::String(StringAlignSpec::Right)),
+                sign: Some(SignSpec::Plus),
+                width: Some(30),
+                ..Default::default()
+            })
+        ),
+    ]).tag(0..12)));
+
+    assert_eq!(parse("\"${a:$^#.3}\""), Ok(Expr::String(vec![
+        StringElement::Interpolate(
+            "a".id(3),
+            Some(FormatSpec {
+                fill: '$',
+                align: Some(AlignSpec::String(StringAlignSpec::Center)),
+                alternate: true,
+                precision: Some(3),
+                ..Default::default()
+            })
+        ),
+    ]).tag(0..12)));
+
+    assert_eq!(parse("\"${a:0,.5s}\""), Ok(Expr::String(vec![
+        StringElement::Interpolate(
+            "a".id(3),
+            Some(FormatSpec {
+                fill: '0',
+                align: Some(AlignSpec::AfterSign),
+                grouping: Some(GroupingSpec::Comma),
+                precision: Some(5),
+                fmt_type: Some(FormatType::String),
+                ..Default::default()
+            })
+        ),
+    ]).tag(0..12)));
 }
 
 #[test]

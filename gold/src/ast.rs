@@ -5,6 +5,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{BindingType, Span, Syntax};
+use crate::object::{StringFormatSpec, IntegerFormatSpec, FloatFormatSpec};
 
 use super::error::{Error, Tagged, Action};
 use super::object::{Object, Key};
@@ -244,13 +245,187 @@ impl Validatable for Binding {
 // StringElement
 // ----------------------------------------------------------------
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum StringAlignSpec {
+    Left,
+    Right,
+    Center,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum AlignSpec {
+    AfterSign,
+    String(StringAlignSpec),
+}
+
+impl Default for AlignSpec {
+    fn default() -> Self {
+        Self::left()
+    }
+}
+
+impl AlignSpec {
+    pub fn left() -> Self {
+        Self::String(StringAlignSpec::Left)
+    }
+
+    pub fn right() -> Self {
+        Self::String(StringAlignSpec::Right)
+    }
+
+    pub fn center() -> Self {
+        Self::String(StringAlignSpec::Center)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum SignSpec {
+    Plus,
+    Minus,
+    Space,
+}
+
+impl Default for SignSpec {
+    fn default() -> Self {
+        Self::Minus
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum GroupingSpec {
+    Comma,
+    Underscore,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum UppercaseSpec {
+    Upper,
+    Lower,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum IntegerFormatType {
+    Binary,
+    Character,
+    Decimal,
+    Octal,
+    Hex(UppercaseSpec),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum FloatFormatType {
+    Sci(UppercaseSpec),
+    Fixed,
+    General,
+    Percentage,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum FormatType {
+    String,
+    Integer(IntegerFormatType),
+    Float(FloatFormatType),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct FormatSpec {
+    pub fill: char,
+    pub align: Option<AlignSpec>,
+    pub sign: Option<SignSpec>,
+    pub alternate: bool,
+    pub width: Option<usize>,
+    pub grouping: Option<GroupingSpec>,
+    pub precision: Option<usize>,
+    pub fmt_type: Option<FormatType>,
+}
+
+impl FormatSpec {
+    pub(crate) fn string_spec(&self) -> Option<StringFormatSpec> {
+        if self.sign.is_some() ||
+           self.alternate ||
+           self.grouping.is_some() ||
+           self.precision.is_some() ||
+           self.fmt_type.is_some_and(|x| x != FormatType::String)
+        {
+            return None;
+        }
+
+        let align = match self.align {
+            Some(AlignSpec::AfterSign) => { return None; },
+            Some(AlignSpec::String(x)) => x,
+            None => StringAlignSpec::Left,
+        };
+
+        Some(StringFormatSpec {
+            fill: self.fill,
+            width: self.width,
+            align,
+        })
+    }
+
+    pub(crate) fn integer_spec(&self) -> Option<IntegerFormatSpec> {
+        if self.precision.is_some() {
+            return None;
+        }
+
+        let fmt_type = match self.fmt_type {
+            None => IntegerFormatType::Decimal,
+            Some(FormatType::Integer(x)) => x,
+            _ => { return None; },
+        };
+
+        Some(IntegerFormatSpec {
+            fill: self.fill,
+            align: self.align.unwrap_or_else(AlignSpec::right),
+            sign: self.sign.unwrap_or_default(),
+            alternate: self.alternate,
+            width: self.width,
+            grouping: self.grouping,
+            fmt_type,
+        })
+    }
+
+    pub(crate) fn float_spec(&self) -> Option<FloatFormatSpec> {
+        let fmt_type = match self.fmt_type {
+            Some(FormatType::Float(x)) => x,
+            None => if self.precision.is_some() { FloatFormatType::Fixed } else { FloatFormatType::General },
+            _ => { return None; },
+        };
+
+        Some(FloatFormatSpec {
+            fill: self.fill,
+            align: self.align.unwrap_or_else(AlignSpec::right),
+            sign: self.sign.unwrap_or_default(),
+            width: self.width,
+            grouping: self.grouping,
+            precision: self.precision.unwrap_or(6),
+            fmt_type,
+        })
+    }
+}
+
+impl Default for FormatSpec{
+    fn default() -> Self {
+        Self {
+            fill: ' ',
+            align: None,
+            sign: None,
+            alternate: false,
+            width: None,
+            grouping: None,
+            precision: None,
+            fmt_type: None,
+        }
+    }
+}
+
 /// A string element is anything that is legal in a string: either raw string
 /// data or an interpolated expression. A string is represented as a li of
 /// string elements.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum StringElement {
     Raw(Arc<str>),
-    Interpolate(Tagged<Expr>),
+    Interpolate(Tagged<Expr>, Option<FormatSpec>),
 }
 
 impl StringElement {
@@ -263,7 +438,7 @@ impl StringElement {
 impl Validatable for StringElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            StringElement::Interpolate(node) => { node.validate()?; }
+            StringElement::Interpolate(node, _) => { node.validate()?; }
             _ => {},
         }
         Ok(())
@@ -937,7 +1112,7 @@ impl FreeImpl for Expr {
             Expr::Literal(_) => {},
             Expr::String(elements) => {
                 for element in elements {
-                    if let StringElement::Interpolate(expr) = element {
+                    if let StringElement::Interpolate(expr, _) = element {
                         expr.free_impl(free);
                     }
                 }

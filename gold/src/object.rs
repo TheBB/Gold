@@ -33,7 +33,7 @@ use symbol_table::GlobalSymbol;
 use crate::builtins::BUILTINS;
 use crate::traits::{ToVec, ToMap};
 
-use crate::ast::{ListBinding, MapBinding, Expr, BinOp, UnOp};
+use crate::ast::{ListBinding, MapBinding, Expr, BinOp, UnOp, FormatSpec, StringAlignSpec, AlignSpec, IntegerFormatType, GroupingSpec, SignSpec, UppercaseSpec, FloatFormatType};
 use crate::error::{Error, Tagged, TypeMismatch, Value, Reason};
 use crate::eval::Namespace;
 use crate::util;
@@ -97,6 +97,150 @@ impl Display for Type {
         }
     }
 }
+
+
+
+// Formatting
+// ------------------------------------------------------------------------------------------------
+
+pub(crate) struct StringFormatSpec {
+    pub fill: char,
+    pub align: StringAlignSpec,
+    pub width: Option<usize>,
+}
+
+fn fmt_str(s: &str, spec: StringFormatSpec) -> String {
+    match spec.width {
+        None => s.to_owned(),
+        Some(w) => {
+            let nchars = s.chars().count();
+            if nchars > w {
+                s.to_owned()
+            } else {
+                let missing = w - nchars;
+                let (lfill, rfill) = match spec.align {
+                    StringAlignSpec::Left => (0, missing),
+                    StringAlignSpec::Right => (missing, 0),
+                    StringAlignSpec::Center => (missing / 2, missing - missing / 2),
+                };
+                let mut r = String::with_capacity(w);
+                for _ in 0..lfill {
+                    r.push(spec.fill);
+                }
+                r += s;
+                for _ in 0..rfill {
+                    r.push(spec.fill);
+                }
+                r
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub(crate) struct FloatFormatSpec {
+    pub fill: char,
+    pub align: AlignSpec,
+    pub sign: SignSpec,
+    pub width: Option<usize>,
+    pub grouping: Option<GroupingSpec>,
+    pub precision: usize,
+    pub fmt_type: FloatFormatType,
+}
+
+impl FloatFormatSpec {
+    fn string_spec(&self) -> Option<StringFormatSpec> {
+        match (self.align, self.width) {
+            (AlignSpec::AfterSign, _) => { return None; },
+            (_, None) => { return None; }
+            (AlignSpec::String(align), Some(width)) => Some(
+                StringFormatSpec { fill: self.fill, align, width: Some(width) }
+            ),
+        }
+    }
+}
+
+fn fmt_float(f: f64, spec: FloatFormatSpec) -> String {
+    let base = match spec.fmt_type {
+        FloatFormatType::Fixed => format!("{number:+.precision$}", number = f, precision = spec.precision),
+        FloatFormatType::General => format!("{:+}", f),
+        FloatFormatType::Sci(UppercaseSpec::Lower) =>
+            format!("{number:+.precision$e}", number = f, precision = spec.precision),
+        FloatFormatType::Sci(UppercaseSpec::Upper) =>
+            format!("{number:+.precision$E}", number = f, precision = spec.precision),
+        FloatFormatType::Percentage =>
+            format!("{number:+.precision$}%", number = 100.0*f, precision = spec.precision),
+    };
+
+    let mut base_digits = &base[1..];
+    let mut buffer = String::new();
+
+    match (spec.sign, f < 0.0) {
+        (_, true) => { buffer.push('-'); },
+        (SignSpec::Plus, false) => { buffer.push('+'); }
+        (SignSpec::Space, false) => { buffer.push(' '); }
+        _ => {},
+    }
+
+    if let Some(group_spec) = spec.grouping {
+        let group_size: usize = 3;
+        let group_char = match group_spec {
+            GroupingSpec::Comma => ',',
+            GroupingSpec::Underscore => '_',
+        };
+
+        let mut num_digits: usize = base_digits.len();
+        for (i, c) in base_digits.char_indices() {
+            match c {
+                '0'..='9' => {},
+                _ => { num_digits = i; break; }
+            }
+        }
+
+        let num_groups = (num_digits + group_size - 1) / group_size;
+        let first_group_size = num_digits - (num_groups - 1) * group_size;
+
+        if let (AlignSpec::AfterSign, Some(min_width)) = (spec.align, spec.width) {
+            let num_width = base_digits.len() + buffer.len() + num_groups - 1;
+            if num_width < min_width {
+                let extra = min_width - num_width;
+                for _ in 0..extra {
+                    buffer.push(spec.fill);
+                }
+            }
+        }
+
+        buffer += &base_digits[..first_group_size];
+        base_digits = &base_digits[first_group_size..];
+
+        for _ in 1..num_groups {
+            buffer.push(group_char);
+            buffer += &base_digits[..group_size];
+            base_digits = &base_digits[group_size..];
+        }
+
+        buffer += base_digits;
+    } else {
+        if let (AlignSpec::AfterSign, Some(min_width)) = (spec.align, spec.width) {
+            let num_width = base_digits.len() + buffer.len();
+            if num_width < min_width {
+                let extra = min_width - num_width;
+                for _ in 0..extra {
+                    buffer.push(spec.fill);
+                }
+            }
+        }
+
+        buffer += base_digits;
+    }
+
+    if let Some(str_spec) = spec.string_spec() {
+        fmt_str(buffer.as_str(), str_spec)
+    } else {
+        buffer
+    }
+}
+
 
 
 // String variant
@@ -196,11 +340,31 @@ impl StrVariant {
 // Integer variant
 // ------------------------------------------------------------------------------------------------
 
+pub(crate) struct IntegerFormatSpec {
+    pub fill: char,
+    pub align: AlignSpec,
+    pub sign: SignSpec,
+    pub alternate: bool,
+    pub width: Option<usize>,
+    pub grouping: Option<GroupingSpec>,
+    pub fmt_type: IntegerFormatType,
+}
+
+impl IntegerFormatSpec {
+    fn string_spec(&self) -> Option<StringFormatSpec> {
+        match (self.align, self.width) {
+            (AlignSpec::AfterSign, _) => { return None; },
+            (_, None) => { return None; }
+            (AlignSpec::String(align), Some(width)) => Some(
+                StringFormatSpec { fill: self.fill, align, width: Some(width) }
+            ),
+        }
+    }
+}
 
 /// The integer variant represents all possible Gold integers.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub enum IntVariant {
-
     /// Machine integers.
     Small(i64),
 
@@ -514,6 +678,98 @@ impl IntVariant {
             (Self::Big(x), Self::Big(y)) => x.eq(y),
         }
     }
+
+    fn format(&self, spec: IntegerFormatSpec) -> Result<String, Error> {
+        let base = match (spec.fmt_type, self) {
+            (IntegerFormatType::Character, _) => {
+                let codepoint = u32::try_from(self).map_err(|_| Error::new(Value::OutOfRange))?;
+                let c = char::try_from(codepoint).map_err(|_| Error::new(Value::OutOfRange))?;
+                return Ok(c.to_string());
+            },
+            (IntegerFormatType::Binary, Self::Small(x)) => format!("{:+b}", x),
+            (IntegerFormatType::Binary, Self::Big(x)) => format!("{:+b}", x.as_ref()),
+            (IntegerFormatType::Decimal, Self::Small(x)) => format!("{:+}", x),
+            (IntegerFormatType::Decimal, Self::Big(x)) => format!("{:+}", x),
+            (IntegerFormatType::Octal, Self::Small(x)) => format!("{:+o}", x),
+            (IntegerFormatType::Octal, Self::Big(x)) => format!("{:+o}", x.as_ref()),
+            (IntegerFormatType::Hex(UppercaseSpec::Lower), Self::Small(x)) => format!("{:+x}", x),
+            (IntegerFormatType::Hex(UppercaseSpec::Lower), Self::Big(x)) => format!("{:+x}", x.as_ref()),
+            (IntegerFormatType::Hex(UppercaseSpec::Upper), Self::Small(x)) => format!("{:+X}", x),
+            (IntegerFormatType::Hex(UppercaseSpec::Upper), Self::Big(x)) => format!("{:+X}", x.as_ref()),
+        };
+
+        let mut base_digits = &base[1..];
+        let mut buffer = String::new();
+
+        match (spec.sign, self < &Self::Small(0)) {
+            (_, true) => { buffer.push('-'); },
+            (SignSpec::Plus, false) => { buffer.push('+'); }
+            (SignSpec::Space, false) => { buffer.push(' '); }
+            _ => {},
+        }
+
+        if spec.alternate {
+            match spec.fmt_type {
+                IntegerFormatType::Binary => { buffer += "0b"; },
+                IntegerFormatType::Octal => { buffer += "0o"; },
+                IntegerFormatType::Hex(UppercaseSpec::Lower) => { buffer += "0x"; },
+                IntegerFormatType::Hex(UppercaseSpec::Upper) => { buffer += "0X"; },
+                _ => {},
+            }
+        }
+
+        if let Some(group_spec) = spec.grouping {
+            let group_size: usize = match spec.fmt_type {
+                IntegerFormatType::Decimal => 3,
+                _ => 4,
+            };
+
+            let group_char = match group_spec {
+                GroupingSpec::Comma => ',',
+                GroupingSpec::Underscore => '_',
+            };
+
+            let num_groups = (base_digits.len() + group_size - 1) / group_size;
+            let first_group_size = base_digits.len() - (num_groups - 1) * group_size;
+
+            if let (AlignSpec::AfterSign, Some(min_width)) = (spec.align, spec.width) {
+                let num_width = base_digits.len() + buffer.len() + num_groups - 1;
+                if num_width < min_width {
+                    let extra = min_width - num_width;
+                    for _ in 0..extra {
+                        buffer.push(spec.fill);
+                    }
+                }
+            }
+
+            buffer += &base_digits[..first_group_size];
+            base_digits = &base_digits[first_group_size..];
+
+            for _ in 1..num_groups {
+                buffer.push(group_char);
+                buffer += &base_digits[..group_size];
+                base_digits = &base_digits[group_size..];
+            }
+        } else {
+            if let (AlignSpec::AfterSign, Some(min_width)) = (spec.align, spec.width) {
+                let num_width = base_digits.len() + buffer.len();
+                if num_width < min_width {
+                    let extra = min_width - num_width;
+                    for _ in 0..extra {
+                        buffer.push(spec.fill);
+                    }
+                }
+            }
+
+            buffer += base_digits;
+        }
+
+        if let Some(str_spec) = spec.string_spec() {
+            Ok(fmt_str(buffer.as_str(), str_spec))
+        } else {
+            Ok(buffer)
+        }
+    }
 }
 
 
@@ -527,7 +783,6 @@ impl IntVariant {
 /// looked up in the [`BUILTINS`] mapping.
 #[derive(Clone)]
 pub struct Builtin {
-
     /// The rust callable for evaluating the function.
     pub func: fn(&List, Option<&Map>) -> Result<Object, Error>,
 
@@ -687,7 +942,6 @@ impl FuncVariant {
 /// struct enclosing an `ObjectVariant`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ObjectVariant {
-
     /// Integers
     Int(IntVariant),
 
@@ -743,7 +997,6 @@ impl PartialOrd<ObjectVariant> for ObjectVariant {
 }
 
 impl ObjectVariant {
-
     /// Convert back into an object.
     pub fn object(self) -> Object {
         Object(self)
@@ -789,14 +1042,52 @@ impl ObjectVariant {
     }
 
     /// String representation of this object. Used for string interpolation.
-    pub fn format(&self) -> Result<String, Error> {
+    pub fn format(&self, spec: FormatSpec) -> Result<String, Error> {
         match self {
-            Self::Str(r) => Ok(r.as_str().to_owned()),
-            Self::Int(r) => Ok(r.to_string()),
-            Self::Float(r) => Ok(r.to_string()),
-            Self::Boolean(true) => Ok("true".to_string()),
-            Self::Boolean(false) => Ok("false".to_string()),
-            Self::Null => Ok("null".to_string()),
+            Self::Str(r) => {
+                if let Some(str_spec) = spec.string_spec() {
+                    Ok(fmt_str(r.as_str(), str_spec))
+                } else {
+                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
+                }
+            },
+            Self::Boolean(x) => {
+                if let Some(str_spec) = spec.string_spec() {
+                    let s = if *x { "true" } else { "false" };
+                    Ok(fmt_str(s, str_spec))
+                } else if let Some(int_spec) = spec.integer_spec() {
+                    let i = if *x { 1 } else { 0 };
+                    IntVariant::Small(i).format(int_spec)
+                } else if let Some(float_spec) = spec.float_spec() {
+                    let f = if *x { 1.0 } else { 0.0 };
+                    Ok(fmt_float(f, float_spec))
+                } else {
+                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
+                }
+            },
+            Self::Null => {
+                if let Some(str_spec) = spec.string_spec() {
+                    Ok(fmt_str("null", str_spec))
+                } else {
+                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
+                }
+            },
+            Self::Int(r) => {
+                if let Some(int_spec) = spec.integer_spec() {
+                    r.format(int_spec)
+                } else if let Some(float_spec) = spec.float_spec() {
+                    Ok(fmt_float(r.to_f64(), float_spec))
+                } else {
+                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
+                }
+            },
+            Self::Float(r) => {
+                if let Some(float_spec) = spec.float_spec() {
+                    Ok(fmt_float(*r, float_spec))
+                } else {
+                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
+                }
+            },
             _ => Err(Error::new(TypeMismatch::Interpolate(self.type_of()))),
         }
     }
@@ -822,7 +1113,6 @@ impl ObjectVariant {
     /// method implements equality under Gold semantics.
     pub fn user_eq(&self, other: &Self) -> bool {
         match (self, other) {
-
             // Equality between disparate types
             (Self::Float(x), Self::Int(y)) => y.eq(x),
             (Self::Int(x), Self::Float(y)) => x.eq(y),
@@ -1493,5 +1783,3 @@ impl From<Key> for Object {
         Object::key(value)
     }
 }
-
-
