@@ -803,16 +803,10 @@ in {
 <h2 id="advanced-strings">Advanced strings</h2>
 <p>Gold supports string interpolation of other values:</p>
 <pre><code>let a = &quot;Gold&quot;
-in &quot;This language is $a&quot;
+in &quot;This language is ${a}&quot;
 </code></pre>
-<p>To explicitly demarcate the expression to be interpolated, use curly braces.
-This allows usages like the following, to prevent Gold looking for the binding
-<code>prefixflammable</code>:</p>
-<pre><code>let prefix = &quot;in&quot;
-in &quot;Be careful with ${prefix}flammable objects&quot;
-</code></pre>
-<p>and the following, where the expression to be interpolated is more sophisticated
-than just a name:</p>
+<p>The curly braces are mandatory. The expression to be interpolated can of course
+be more sophisticated than just a name:</p>
 <pre><code>&quot;1 + 2 is ${1 + 2}&quot;
 </code></pre>
 <p>Gold does not currently support format specifiers in string interpolation.</p>
