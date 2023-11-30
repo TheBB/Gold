@@ -606,10 +606,10 @@ fn fmtspec_char<'a>(c: char) -> impl Parser<'a, ()> {
 
 
 /// Matches a format specifier number.
-fn fmtspec_number<'a>(input: In<'a>) -> Out<'a, u32> {
+fn fmtspec_number<'a>(input: In<'a>) -> Out<'a, usize> {
     map_res(
         fmtspec_number_raw,
-        |out| out.as_ref().parse::<u32>(),
+        |out| out.as_ref().parse::<usize>(),
     )(input)
 }
 
@@ -617,9 +617,9 @@ fn fmtspec_number<'a>(input: In<'a>) -> Out<'a, u32> {
 /// Matches a format specifier alignment.
 fn fmtspec_align<'a>(input: In<'a>) -> Out<'a, AlignSpec> {
     alt((
-        value(AlignSpec::Left, fmtspec_char('<')),
-        value(AlignSpec::Right, fmtspec_char('>')),
-        value(AlignSpec::Center, fmtspec_char('^')),
+        value(AlignSpec::String(StringAlignSpec::Left), fmtspec_char('<')),
+        value(AlignSpec::String(StringAlignSpec::Right), fmtspec_char('>')),
+        value(AlignSpec::String(StringAlignSpec::Center), fmtspec_char('^')),
         value(AlignSpec::AfterSign, fmtspec_char('=')),
     ))(input)
 }
@@ -664,20 +664,18 @@ fn fmtspec_type<'a>(input: In<'a>) -> Out<'a, FormatType> {
     alt((
         value(FormatType::String, fmtspec_char('s')),
 
-        value(FormatType::Binary, fmtspec_char('b')),
-        value(FormatType::Character, fmtspec_char('c')),
-        value(FormatType::Decimal, fmtspec_char('d')),
-        value(FormatType::Octal, fmtspec_char('o')),
-        value(FormatType::Hex(UppercaseSpec::Lower), fmtspec_char('x')),
-        value(FormatType::Hex(UppercaseSpec::Upper), fmtspec_char('X')),
+        value(FormatType::Integer(IntegerFormatType::Binary), fmtspec_char('b')),
+        value(FormatType::Integer(IntegerFormatType::Character), fmtspec_char('c')),
+        value(FormatType::Integer(IntegerFormatType::Decimal), fmtspec_char('d')),
+        value(FormatType::Integer(IntegerFormatType::Octal), fmtspec_char('o')),
+        value(FormatType::Integer(IntegerFormatType::Hex(UppercaseSpec::Lower)), fmtspec_char('x')),
+        value(FormatType::Integer(IntegerFormatType::Hex(UppercaseSpec::Upper)), fmtspec_char('X')),
 
-        value(FormatType::Sci(UppercaseSpec::Lower), fmtspec_char('e')),
-        value(FormatType::Sci(UppercaseSpec::Upper), fmtspec_char('E')),
-        value(FormatType::Fixed(UppercaseSpec::Lower), fmtspec_char('f')),
-        value(FormatType::Fixed(UppercaseSpec::Upper), fmtspec_char('F')),
-        value(FormatType::General(UppercaseSpec::Lower), fmtspec_char('g')),
-        value(FormatType::General(UppercaseSpec::Upper), fmtspec_char('G')),
-        value(FormatType::Percentage, fmtspec_char('%')),
+        value(FormatType::Float(FloatFormatType::Sci(UppercaseSpec::Lower)), fmtspec_char('e')),
+        value(FormatType::Float(FloatFormatType::Sci(UppercaseSpec::Upper)), fmtspec_char('E')),
+        value(FormatType::Float(FloatFormatType::Fixed), fmtspec_char('f')),
+        value(FormatType::Float(FloatFormatType::General), fmtspec_char('g')),
+        value(FormatType::Float(FloatFormatType::Percentage), fmtspec_char('%')),
     ))(input)
 }
 
@@ -696,18 +694,25 @@ fn format_specifier<'a>(input: In<'a>) -> Out<'a, FormatSpec> {
             opt(fmtspec_type),
         )),
 
-        |(fill_align, sign, alternate, zero, width, grouping, precision, fmt_type)| FormatSpec {
-            fill: match fill_align {
-                None => ' ',
-                Some((None, _)) => ' ',
-                Some((Some(fill), _)) => fill,
-            },
+        |(fill_align, sign, alternate, zero_in, width, grouping, precision, fmt_type)| {
+            let zero = zero_in.unwrap_or_default();
+            FormatSpec {
+                fill: match fill_align {
+                    None => if zero { '0' } else {' '},
+                    Some((None, _)) => ' ',
+                    Some((Some(fill), _)) => fill,
+                },
 
-            align: fill_align.map(|(_, align)| align),
-            alternate: alternate.unwrap_or(false),
-            zero: zero.unwrap_or(false),
+                align: match (fill_align, zero) {
+                    (Some((_, align)), _) => Some(align), //fill_align.map(|(_, align)| align)
+                    (None, true) => Some(AlignSpec::AfterSign),
+                    _ => None,
+                },
 
-            sign, width, grouping, precision, fmt_type,
+                alternate: alternate.unwrap_or_default(),
+
+                sign, width, grouping, precision, fmt_type,
+            }
         }
     )(input)
 }

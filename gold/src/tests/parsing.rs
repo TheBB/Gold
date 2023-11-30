@@ -155,7 +155,6 @@ fn string_format() {
             align: None,
             sign: None,
             alternate: false,
-            zero: false,
             width: None,
             grouping: None,
             precision: None,
@@ -178,7 +177,7 @@ fn string_format() {
         StringElement::Interpolate(
             "a".id(3),
             Some(FormatSpec {
-                align: Some(AlignSpec::Right),
+                align: Some(AlignSpec::String(StringAlignSpec::Right)),
                 sign: Some(SignSpec::Plus),
                 width: Some(30),
                 ..Default::default()
@@ -191,7 +190,7 @@ fn string_format() {
             "a".id(3),
             Some(FormatSpec {
                 fill: '$',
-                align: Some(AlignSpec::Center),
+                align: Some(AlignSpec::String(StringAlignSpec::Center)),
                 alternate: true,
                 precision: Some(3),
                 ..Default::default()
@@ -203,7 +202,8 @@ fn string_format() {
         StringElement::Interpolate(
             "a".id(3),
             Some(FormatSpec {
-                zero: true,
+                fill: '0',
+                align: Some(AlignSpec::AfterSign),
                 grouping: Some(GroupingSpec::Comma),
                 precision: Some(5),
                 fmt_type: Some(FormatType::String),

@@ -484,9 +484,9 @@ impl<'a> Namespace<'a> {
                 for element in elements {
                     match element {
                         StringElement::Raw(val) => rval += val.as_ref(),
-                        StringElement::Interpolate(expr, _) => {
+                        StringElement::Interpolate(expr, spec) => {
                             let val = self.eval(expr)?;
-                            let text = val.format().map_err(expr.tag_error(Action::Format))?;
+                            let text = val.format(spec.clone().unwrap_or_default()).map_err(expr.tag_error(Action::Format))?;
                             rval += &text;
                         }
                     }
