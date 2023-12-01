@@ -479,7 +479,7 @@ If the first line is empty, it is ignored. Extra indentation is not stripped:
 Functions are defined using the syntax
 
 ```
-|param1, parm2, ...| expression
+fn (param1, parm2, ...) expression
 ```
 
 Where *expression* may depend on the values of *param1*, *param2*, etc.
@@ -488,21 +488,21 @@ Functions in Gold are always anonymous, and must be called immediately or bound
 to a name to have an effect. For example:
 
 ```
-let add = |x, y| x + y
+let add = fn (x, y) x + y
 in add(1, 2)
 ```
 
 or
 
 ```
-(|x, y| x + y)(1, 2)
+(fn (x, y) x + y)(1, 2)
 ```
 
 Functions may take any number of parameters (including none at all), and form
 closures around non-local names. For example:
 
 ```
-let make_adder = |x| |y| x + y
+let make_adder = fn (x) fn (y) x + y
 let adder = make_adder(3)
 let x = 4
 in adder(5)
@@ -516,13 +516,13 @@ Functions may take positional as well as keyword parameters. The two kinds of
 parameters are separated by a semicolon:
 
 ```
-|x; y| x + y
+fn (x; y) x + y
 ```
 
 This function can be called in this way:
 
 ```
-let add = |x; y| x + y
+let add = fn (x; y) x + y
 in add(1, y: 2)
 ```
 
@@ -539,13 +539,13 @@ Functions which only accept keyword parameters can be defined with the
 alternative syntax:
 
 ```
-{|x, y, z|} x + y + z
+fn {x, y, z} x + y + z
 ```
 
 Althouth this is perfectly valid (although somewhat ugly):
 
 ```
-|; x, y, z| x + y + z
+fn (; x, y, z) x + y + z
 ```
 
 Function parameters are syntactically equivalent to list and object
@@ -553,14 +553,14 @@ destructuring expressions, respectively. Anything that works in those contexts
 also works in function definitions:
 
 ```
-let sum_first_elements = |[x, ...], [y, ...]| x + y
+let sum_first_elements = fn ([x, ...], [y, ...]) x + y
 in sum_first_elements([1, 2], [3, 4])
 ```
 
 Most notably, default parameter values:
 
 ```
-|x, y = 2; multiply = false| if multiply then x * y else x + y
+fn (x, y = 2; multiply = false) if multiply then x * y else x + y
 ```
 
 
@@ -576,7 +576,7 @@ file `mylib.gold`:
 
 ```
 {
-    add: |x, y| x + y,
+    add: fn (x, y) x + y,
 }
 ```
 
@@ -595,11 +595,12 @@ add(1, 2)
 ```
 
 Of course, there is no requirement that the value of an imported file must be an
-object. For the single function *add*, the following would work just as well:
+object - only a convention (although a strong one). For the single function
+*add*, the following would work just as well:
 
 ```
 # mylib.gold
-|x, y| x + y
+fn (x, y) x + y
 
 # Other file
 import "mylib.gold" as add

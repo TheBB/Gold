@@ -28,7 +28,7 @@ can be written in Gold in a more natural way
 {
   jobs: {
     production-deploy: {
-      if: |github| github.repository == "octo-org/octo-repo-prod"
+      if: fn (github) github.repository == "octo-org/octo-repo-prod"
     }
   }
 }
