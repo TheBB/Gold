@@ -409,7 +409,7 @@ be more sophisticated than just a name:
 "1 + 2 is ${1 + 2}"
 ```
 
-Gold does not currently support format specifiers in string interpolation.
+Gold also supports format specifiers, see [string formatting](formatting.md).
 
 To facilitate long strings, Gold supports juxtaposition:
 

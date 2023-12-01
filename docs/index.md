@@ -42,3 +42,5 @@ different mini-language from other keys that need similar features.)
 
 This feature of first-class functions was integral to the original motivation
 for creating the Gold language.
+
+Please continue to the [whirlwind tour](whirlwind.md) of features.

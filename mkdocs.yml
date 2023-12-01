@@ -3,6 +3,7 @@ site_url: https://thebb.github.io/Gold
 nav:
   - Introduction: 'index.md'
   - 'whirlwind.md'
+  - 'formatting.md'
 markdown_extensions:
   - attr_list
 validation:

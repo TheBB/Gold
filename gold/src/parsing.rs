@@ -1462,7 +1462,6 @@ fn ident_binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
 /// - singleton binding with default: `let [y = z] = x`
 fn list_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListBindingElement>> {
     alt((
-
         // Named and anonymous slurps
         map(
             tuple((
@@ -1502,7 +1501,6 @@ fn list_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListBindingElement>
                 }.tag(span)
             },
         ),
-
     ))(input)
 }
 
