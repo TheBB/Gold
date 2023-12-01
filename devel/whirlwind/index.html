@@ -877,20 +877,20 @@ all lines. Thus the string above could also be rendered as</p>
 </code></pre>
 <h2 id="functions">Functions</h2>
 <p>Functions are defined using the syntax</p>
-<pre><code>|param1, parm2, ...| expression
+<pre><code>fn (param1, parm2, ...) expression
 </code></pre>
 <p>Where <em>expression</em> may depend on the values of <em>param1</em>, <em>param2</em>, etc.</p>
 <p>Functions in Gold are always anonymous, and must be called immediately or bound
 to a name to have an effect. For example:</p>
-<pre><code>let add = |x, y| x + y
+<pre><code>let add = fn (x, y) x + y
 in add(1, 2)
 </code></pre>
 <p>or</p>
-<pre><code>(|x, y| x + y)(1, 2)
+<pre><code>(fn (x, y) x + y)(1, 2)
 </code></pre>
 <p>Functions may take any number of parameters (including none at all), and form
 closures around non-local names. For example:</p>
-<pre><code>let make_adder = |x| |y| x + y
+<pre><code>let make_adder = fn (x) fn (y) x + y
 let adder = make_adder(3)
 let x = 4
 in adder(5)
@@ -900,10 +900,10 @@ in adder(5)
 later binding of <em>x</em> to 4.</p>
 <p>Functions may take positional as well as keyword parameters. The two kinds of
 parameters are separated by a semicolon:</p>
-<pre><code>|x; y| x + y
+<pre><code>fn (x; y) x + y
 </code></pre>
 <p>This function can be called in this way:</p>
-<pre><code>let add = |x; y| x + y
+<pre><code>let add = fn (x; y) x + y
 in add(1, y: 2)
 </code></pre>
 <p>but not in either of these ways:</p>
@@ -913,19 +913,19 @@ add(x: 1, y: 2)
 <p>In Gold, positional and keyword parameters are strictly distinct.</p>
 <p>Functions which only accept keyword parameters can be defined with the
 alternative syntax:</p>
-<pre><code>{|x, y, z|} x + y + z
+<pre><code>fn {x, y, z} x + y + z
 </code></pre>
 <p>Althouth this is perfectly valid (although somewhat ugly):</p>
-<pre><code>|; x, y, z| x + y + z
+<pre><code>fn (; x, y, z) x + y + z
 </code></pre>
 <p>Function parameters are syntactically equivalent to list and object
 destructuring expressions, respectively. Anything that works in those contexts
 also works in function definitions:</p>
-<pre><code>let sum_first_elements = |[x, ...], [y, ...]| x + y
+<pre><code>let sum_first_elements = fn ([x, ...], [y, ...]) x + y
 in sum_first_elements([1, 2], [3, 4])
 </code></pre>
 <p>Most notably, default parameter values:</p>
-<pre><code>|x, y = 2; multiply = false| if multiply then x * y else x + y
+<pre><code>fn (x, y = 2; multiply = false) if multiply then x * y else x + y
 </code></pre>
 <h2 id="importing">Importing</h2>
 <p>Gold supports importing code and data from other files. The <em>import</em> statement
@@ -935,7 +935,7 @@ or a destructuring pattern.</p>
 <p>This can be used to write libraries of functions. If this is the contents of the
 file <code>mylib.gold</code>:</p>
 <pre><code>{
-    add: |x, y| x + y,
+    add: fn (x, y) x + y,
 }
 </code></pre>
 <p>The function <em>add</em> can then be used from another file like this:</p>
@@ -947,9 +947,10 @@ mylib.add(1, 2)
 add(1, 2)
 </code></pre>
 <p>Of course, there is no requirement that the value of an imported file must be an
-object. For the single function <em>add</em>, the following would work just as well:</p>
+object - only a convention (although a strong one). For the single function
+<em>add</em>, the following would work just as well:</p>
 <pre><code># mylib.gold
-|x, y| x + y
+fn (x, y) x + y
 
 # Other file
 import &quot;mylib.gold&quot; as add

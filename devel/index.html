@@ -346,7 +346,7 @@ Gold offers the following features distinct from Dhall:</p>
 <pre><code>{
   jobs: {
     production-deploy: {
-      if: |github| github.repository == &quot;octo-org/octo-repo-prod&quot;
+      if: fn (github) github.repository == &quot;octo-org/octo-repo-prod&quot;
     }
   }
 }
