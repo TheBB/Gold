@@ -46,11 +46,11 @@ pub mod python;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use eval::{eval as evaluate};
+use eval::eval as evaluate;
 use error::{Error, FileSystem};
 
 pub use object::Object;
-pub use parsing::parse;
+pub use parsing::{parse, parse_type};
 pub use eval::ImportConfig;
 
 

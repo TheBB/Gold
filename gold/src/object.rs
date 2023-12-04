@@ -827,7 +827,6 @@ impl<'a> Deserialize<'a> for Builtin {
 /// A function implemented in Gold.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Func {
-
     /// A pattern for destructuring a list of positional arguments.
     pub args: ListBinding,
 
@@ -942,9 +941,28 @@ impl FuncVariant {
 // ------------------------------------------------------------------------------------------------
 
 
-#[derive(Clone,Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TypeVariant {
+    /// Built-in leaves.
     Builtin(BuiltinType),
+
+    /// Built-in parametrized collections.
+    HomogeneousList(Option<Box<Object>>),
+    HomogeneousMap(Option<Box<Object>>),
+}
+
+impl TypeVariant {
+    pub fn any() -> TypeVariant {
+        TypeVariant::Builtin(BuiltinType::Any)
+    }
+
+    pub fn list(arg: Object) -> TypeVariant {
+        TypeVariant::HomogeneousList(Some(Box::new(arg)))
+    }
+
+    pub fn map(arg: Object) -> TypeVariant {
+        TypeVariant::HomogeneousMap(Some(Box::new(arg)))
+    }
 }
 
 impl From<BuiltinType> for TypeVariant {
@@ -954,6 +972,15 @@ impl From<BuiltinType> for TypeVariant {
 }
 
 impl TypeVariant {
+    /// The type application operator.
+    pub fn typecall(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+        match self {
+            Self::HomogeneousList(None) => builtins::list_typeapply(args, kwargs),
+            Self::HomogeneousMap(None) => builtins::map_typeapply(args, kwargs),
+            _ => Err(Error::new(TypeMismatch::NotParametrized)),
+        }
+    }
+
     /// The function call operator.
     pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
         match self {
@@ -967,7 +994,7 @@ impl TypeVariant {
 }
 
 
-#[derive(Clone,Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum BuiltinType {
     Int,
     Float,
@@ -1339,6 +1366,14 @@ impl ObjectVariant {
         }
     }
 
+    /// The type application operator.
+    pub fn typecall(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+        match self {
+            Self::Type(tp) => tp.typecall(args, kwargs),
+            _ => Err(Error::new(TypeMismatch::TypeCall(self.type_of()))),
+        }
+    }
+
     /// Extract the list variant if applicable.
     pub fn get_list<'a>(&'a self) -> Option<&'a List> {
         match self {
@@ -1594,7 +1629,6 @@ macro_rules! extractkw {
 /// calling conventions.
 #[macro_export]
 macro_rules! signature {
-
     // Entry point pattern
     ($args:ident = [ $($param:ident : $type:ident),* ] $kwargs:ident = { $($kw:ident : $kwtype:ident),* } $block:block) => {
         signature!(0 ; $args [ $($param : $type),* ] , $kwargs [ $($kw : $kwtype),* ] , $block)
@@ -1849,5 +1883,11 @@ impl From<&str> for Object {
 impl From<Key> for Object {
     fn from(value: Key) -> Self {
         Object::key(value)
+    }
+}
+
+impl From<TypeVariant> for Object {
+    fn from(value: TypeVariant) -> Self {
+        Object(ObjectVariant::Type(value))
     }
 }

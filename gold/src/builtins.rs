@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::collections::HashMap;
 
 use crate::error::Value;
-use crate::object::{Object, List, Map, Builtin, Type, signature, IntVariant, BuiltinType, Key};
+use crate::object::{Object, List, Map, Builtin, Type, signature, IntVariant, BuiltinType, Key, TypeVariant};
 use crate::error::{Error, TypeMismatch};
 
 
@@ -67,7 +67,6 @@ lazy_static! {
         builtin!(m, isobject);
         builtin!(m, islist);
         builtin!(m, isfunc);
-        builtin!(m, istype);
         m
     };
 }
@@ -472,9 +471,15 @@ fn isfunc(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 }
 
 
-/// Check whether the argument is a type.
-fn istype(args: &List, _: Option<&Map>) -> Result<Object, Error> {
-    signature!(args = [_x: typeobj] { return Ok(Object::bool(true)); });
-    signature!(args = [_x: any] { return Ok(Object::bool(false)); });
+/// Type application: list
+pub fn list_typeapply(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+    signature!(args = [x: any] { return Ok(Object::from(TypeVariant::list(x.clone()))); });
+    argcount!(1, args)
+}
+
+
+/// Type application: object
+pub fn map_typeapply(args: &List, _: Option<&Map>) -> Result<Object, Error> {
+    signature!(args = [x: any] { return Ok(Object::from(TypeVariant::map(x.clone()))); });
     argcount!(1, args)
 }

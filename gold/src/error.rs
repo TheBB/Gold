@@ -416,6 +416,9 @@ pub enum SyntaxElement {
     /// elements)
     ListElement,
 
+    /// An element of a list type
+    TypeListElement,
+
     /// An element of a map binding (any binding or a slurp)
     MapBindingElement,
 
@@ -577,6 +580,12 @@ pub enum TypeMismatch {
 
     /// Attempted to call a non-function.
     Call(Type),
+
+    /// Attempted to type-apply a non-type.
+    TypeCall(Type),
+
+    /// Attempted to type-apply a non-parametrized type.
+    NotParametrized,
 
     /// Attempted to convert a non-JSON type to JSON.
     Json(Type),
@@ -840,6 +849,7 @@ impl Display for SyntaxElement {
             Self::PosParam => f.write_str("positional parameter"),
             Self::Then => f.write_str("'then'"),
             Self::Type => f.write_str("type expression"),
+            Self::TypeListElement => f.write_str("type list element"),
             Self::Whitespace => f.write_str("whitespace"),
             Self::Token(t) => f.write_fmt(format_args!("{}", t)),
         }
@@ -912,9 +922,11 @@ impl Display for Reason {
             Self::TypeMismatch(TypeMismatch::Iterate(x)) => f.write_fmt(format_args!("non-iterable type: {}", x)),
             Self::TypeMismatch(TypeMismatch::Json(x)) => f.write_fmt(format_args!("unsuitable type for JSON-like conversion: {}", x)),
             Self::TypeMismatch(TypeMismatch::MapKey(x)) => f.write_fmt(format_args!("unsuitable type for map key: {}", x)),
+            Self::TypeMismatch(TypeMismatch::NotParametrized) => f.write_fmt(format_args!("type is not parametrized")),
             Self::TypeMismatch(TypeMismatch::SplatArg(x)) => f.write_fmt(format_args!("unsuitable type for splatting: {}", x)),
             Self::TypeMismatch(TypeMismatch::SplatList(x)) => f.write_fmt(format_args!("unsuitable type for splatting: {}", x)),
             Self::TypeMismatch(TypeMismatch::SplatMap(x)) => f.write_fmt(format_args!("unsuitable type for splatting: {}", x)),
+            Self::TypeMismatch(TypeMismatch::TypeCall(x)) => f.write_fmt(format_args!("unsuitable type for type application: {}", x)),
             Self::TypeMismatch(TypeMismatch::UnOp(x, op)) => f.write_fmt(format_args!("unsuitable type for '{}': {}", op, x)),
 
             Self::Value(Value::TooLarge) => f.write_str("value too large"),

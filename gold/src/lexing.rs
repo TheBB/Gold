@@ -15,7 +15,7 @@ pub(crate) type CachedLexResult<'a> = Result<(CachedLexer<'a>, Tagged<Token<'a>>
 
 
 /// To speed up lexing, the result from the last call is saved.
-type LexCache<'a> = UnsafeCell<Option<(Ctx, usize, LexResult<'a>)>>;
+pub(crate) type LexCache<'a> = UnsafeCell<Option<(Ctx, usize, LexResult<'a>)>>;
 
 
 /// Complete list of all token types in the Gold grammar.

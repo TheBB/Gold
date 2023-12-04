@@ -16,7 +16,7 @@ use nom::{
 use crate::ast::*;
 use crate::error::{Error, Span, Tagged, Syntax, SyntaxError, SyntaxElement};
 use crate::lexing::{Lexer, TokenType, CachedLexer, CachedLexResult};
-use crate::object::{Object, Key};
+use crate::object::{Object, Key, TypeVariant};
 use crate::traits::{Boxable, Taggable, Validatable, HasSpan, HasMaybeSpan};
 
 
@@ -180,7 +180,6 @@ impl<T> HasSpan for Paren<T> {
 
 
 type PExpr = Paren<Expr>;
-type PType = Paren<TypeExpr>;
 type PList = Paren<ListElement>;
 type PMap = Paren<MapElement>;
 
@@ -822,6 +821,12 @@ fn atomic<'a>(input: In<'a>) -> Out<'a, PExpr> {
 }
 
 
+/// Matches any atomic (non-divisible) type expression.
+fn type_atomic<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    naked(map(identifier, |x| x.wrap(Expr::Identifier))).parse(input)
+}
+
+
 /// Matches a list element: anything that is legal in a list.
 ///
 /// There are four cases:
@@ -831,7 +836,6 @@ fn atomic<'a>(input: In<'a>) -> Out<'a, PExpr> {
 /// - iterated elements: `[for x in y: @]`
 fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
     alt((
-
         // Splat
         naked(map(
             tuple((
@@ -889,7 +893,6 @@ fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
 
         // Singleton
         map(expression, |x| x.map_wrap(ListElement::Singleton))
-
     ))(input)
 }
 
@@ -907,6 +910,51 @@ fn list<'a>(input: In<'a>) -> Out<'a, PExpr> {
             comma,
             close_bracket,
             (TokenType::CloseBracket, SyntaxElement::ListElement),
+            (TokenType::CloseBracket, TokenType::Comma),
+        ),
+
+        |(a, x, b)| Expr::List(x.into_iter().map(|y| y.inner()).collect()).tag(a.span().join(&b)),
+    )).parse(input)
+}
+
+
+/// Matches a type list element.
+fn type_list_element<'a>(input: In<'a>) -> Out<'a, PList> {
+    alt((
+        // Splat
+        naked(map(
+            tuple((
+                ellipsis,
+                opt(type_expression),
+            )),
+            |(start, expr)| {
+                let span = if let Some(x) = &expr {
+                    start.span().join(x)
+                } else {
+                    start.span()
+                };
+                let tp = expr.unwrap_or_else(
+                    || Paren::Naked(Expr::Literal(Object::from(TypeVariant::any())).tag(start))
+                );
+                ListElement::Splat(tp.inner()).tag(span)
+            },
+        )),
+
+        // Singleton
+        map(type_expression, |x| x.map_wrap(ListElement::Singleton))
+    ))(input)
+}
+
+
+/// Matches a type list.
+fn type_list<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    naked(map(
+        seplist(
+            open_bracket,
+            type_list_element,
+            comma,
+            close_bracket,
+            (TokenType::CloseBracket, SyntaxElement::TypeListElement),
             (TokenType::CloseBracket, TokenType::Comma),
         ),
 
@@ -991,7 +1039,6 @@ fn map_element_singleton<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
 /// - iterated elements: `{for x in y: @}`
 fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
     alt((
-
         // Splat
         dont_skip(naked(map(
             tuple((
@@ -1056,7 +1103,6 @@ fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
 }
 
 
-
 /// Matches a map.
 ///
 /// A list is composed of an opening brace, a potentially empty comma-separated
@@ -1111,6 +1157,15 @@ fn postfixable<'a>(input: In<'a>) -> Out<'a, PExpr> {
 }
 
 
+/// Matches a type expression that can be an operand.
+fn type_postfixable<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    alt((
+        type_atomic,
+        type_list,
+    ))(input)
+}
+
+
 /// Matches a dot-syntax subscripting operator.
 ///
 /// This is a dot followed by an identifier.
@@ -1151,7 +1206,6 @@ fn object_index<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
 /// - singleton arguments: `f(x)`
 fn function_arg<'a>(input: In<'a>) -> Out<'a, Tagged<ArgElement>> {
     alt((
-
         // Splat
         map(
             tuple((
@@ -1187,7 +1241,6 @@ fn function_arg<'a>(input: In<'a>) -> Out<'a, Tagged<ArgElement>> {
                 ArgElement::Singleton(x.inner()).tag(span)
             },
         ),
-
     ))(input)
 }
 
@@ -1215,6 +1268,32 @@ fn function_call<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
 }
 
 
+/// Matches a type function call operator.
+fn type_function_call<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
+    map(
+        seplist(
+            open_angle,
+            // type_expression,
+            map(
+                type_expression,
+                |x| {
+                    let span = x.outer();
+                    ArgElement::Singleton(x.inner()).tag(span)
+                },
+            ),
+            comma,
+            close_angle,
+            (TokenType::CloseAngle, SyntaxElement::ArgElement),
+            (TokenType::CloseAngle, TokenType::Comma),
+        ),
+        |(a, expr, b)| {
+            let span = a.span().join(&b);
+            Transform::TypeCall(expr.tag(span)).tag(span)
+        },
+    )(input)
+}
+
+
 /// Matches any postfix operator expression.
 ///
 /// This is a postfixable expression (see [`postfixable`]) followed by an
@@ -1227,6 +1306,34 @@ fn postfixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
                 object_access,
                 object_index,
                 function_call,
+            ))),
+        )),
+
+        |(expr, ops)| {
+            ops.into_iter().fold(
+                expr,
+                |expr, operator| {
+                    let span = expr.outer().join(&operator);
+                    PExpr::Naked(Expr::Transformed {
+                        operand: Box::new(expr.inner()),
+                        transform: operator.unwrap()
+                    }.tag(span))
+                },
+            )
+        },
+    )(input)
+}
+
+
+/// Matches any type postfix operator expression.
+fn type_postfixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    map(
+        tuple((
+            type_postfixable,
+            many0(alt((
+                // object_access,
+                // object_index,
+                type_function_call,
             ))),
         )),
 
@@ -1669,6 +1776,55 @@ fn pattern<'a>(input: In<'a>) -> Out<'a, Tagged<Pattern>> {
 }
 
 
+/// Matches a binding.
+/// A binding is a pattern followed by a potential type annotation.
+///
+/// This parser is parametrized on the type of pattern it matches.
+fn binding<'a>(pattern: impl Parser<'a, Tagged<Pattern>> + Copy) -> impl Parser<'a, Tagged<Binding>> {
+    move |input: In<'a>| {
+        map(
+            tuple((
+                pattern,
+                opt(preceded(
+                    colon,
+                    type_expression,
+                )),
+            )),
+
+            |(pattern, tp)| {
+                let span = pattern.span().maybe_join(&tp);
+                Binding { pattern, tp: tp.map(Paren::inner) }.tag(span)
+            },
+        )(input)
+    }
+}
+
+
+/// Matches a list of type parameters.
+fn type_parameters<'a>(input: In<'a>) -> Out<'a, Vec<Tagged<Key>>> {
+    map(
+        seplist(
+            open_angle,
+            identifier,
+            comma,
+            close_angle,
+            (TokenType::CloseAngle, SyntaxElement::Identifier),
+            (TokenType::CloseAngle, TokenType::Comma),
+        ),
+        |(_, params, _)| params,
+    )(input)
+}
+
+
+/// Matches a function return type annotation.
+fn return_type<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    preceded(
+        arrow,
+        type_expression,
+    )(input)
+}
+
+
 /// Matches a function definition.
 ///
 /// This is the 'fn' keyword followed by either an open paren or brace.
@@ -1723,7 +1879,7 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         (i, ListBinding(vec![]), Some(kwargs), expr)
     };
 
-    let (i, rtype) = opt(return_type)(i)?;
+    let (i, return_type) = opt(return_type)(i)?;
 
     let span = init.span()..expr.outer();
     let result = PExpr::Naked(Expr::Function {
@@ -1731,59 +1887,10 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         positional: args,
         keywords: kwargs.map(Tagged::unwrap),
         expression: Box::new(expr.inner()),
-        return_type: rtype.map(PType::inner),
+        return_type: return_type.map(|x| Box::new(x.inner())),
     }.tag(span));
 
     Ok((i, result))
-}
-
-
-/// Matches a binding.
-/// A binding is a pattern followed by a potential type annotation.
-///
-/// This parser is parametrized on the type of pattern it matches.
-fn binding<'a>(pattern: impl Parser<'a, Tagged<Pattern>> + Copy) -> impl Parser<'a, Tagged<Binding>> {
-    move |input: In<'a>| {
-        map(
-            tuple((
-                pattern,
-                opt(preceded(
-                    colon,
-                    type_expr,
-                )),
-            )),
-
-            |(pattern, tp)| {
-                let span = pattern.span().maybe_join(&tp);
-                Binding { pattern, tp: tp.map(PType::inner) }.tag(span)
-            },
-        )(input)
-    }
-}
-
-
-/// Matches a list of type parameters.
-fn type_parameters<'a>(input: In<'a>) -> Out<'a, Vec<Tagged<Key>>> {
-    map(
-        seplist(
-            open_angle,
-            identifier,
-            comma,
-            close_angle,
-            (TokenType::CloseAngle, SyntaxElement::Identifier),
-            (TokenType::CloseAngle, TokenType::Comma),
-        ),
-        |(_, params, _)| params,
-    )(input)
-}
-
-
-/// Matches a function return type annotation.
-fn return_type<'a>(input: In<'a>) -> Out<'a, PType> {
-    preceded(
-        arrow,
-        type_expr,
-    )(input)
 }
 
 
@@ -1815,7 +1922,7 @@ fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         (i, None)
     };
 
-    let (i, rtype) = opt(return_type)(i)?;
+    let (i, return_type) = opt(return_type)(i)?;
 
     let (i, expr) = fail(expression, SyntaxElement::Expression).parse(i)?;
     let span = args.span().join(&expr);
@@ -1825,7 +1932,7 @@ fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         positional: args.unwrap(),
         keywords: kwargs.map(Tagged::unwrap),
         expression: expr.inner().to_box(),
-        return_type: rtype.map(PType::inner),
+        return_type: return_type.map(|x| Box::new(x.inner())),
     }.tag(span));
 
     eprintln!("gold: |...| syntax is deprecated, use fn (...) instead");
@@ -1851,7 +1958,7 @@ fn keyword_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
             fail(expression, SyntaxElement::Expression),
         )),
 
-        |(params, kwargs, rtype, expr)| {
+        |(params, kwargs, return_type, expr)| {
             let span = kwargs.span().join(&expr);
             eprintln!("gold: {{|...|}} syntax is deprecated, use fn {{...}} instead");
             PExpr::Naked(Expr::Function {
@@ -1859,7 +1966,7 @@ fn keyword_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
                 positional: ListBinding(vec![]),
                 keywords: Some(kwargs.unwrap()),
                 expression: Box::new(expr.inner()),
-                return_type: rtype.map(PType::inner),
+                return_type: return_type.map(|x| Box::new(x.inner())),
             }.tag(span))
         },
     )(input)
@@ -1969,6 +2076,14 @@ fn expression<'a>(input: In<'a>) -> Out<'a, PExpr> {
 }
 
 
+/// Matches a type expression.
+fn type_expression<'a>(input: In<'a>) -> Out<'a, PExpr> {
+    alt((
+        type_postfixed,
+    ))(input)
+}
+
+
 /// Matches an import statement.
 ///
 /// An import statement consists of the keyword 'import' followed by a raw
@@ -2000,7 +2115,7 @@ fn typedef<'a>(input: In<'a>) -> Out<'a, TopLevel> {
         tuple((
             preceded(keyword("type"), identifier),
             opt(type_parameters),
-            preceded(eq, type_expr),
+            preceded(eq, type_expression),
         )),
 
         |(name, params, expr)| {
@@ -2038,34 +2153,21 @@ fn file<'a>(input: In<'a>) -> Out<'a, File> {
 }
 
 
-/// Matches a type expression.
-fn type_expr<'a>(input: In<'a>) -> Out<'a, PType> {
-    alt((
-        map(
-            tuple((
-                identifier,
-                opt(seplist(
-                    open_angle,
-                    type_expr,
-                    comma,
-                    close_angle,
-                    (TokenType::CloseAngle, SyntaxElement::Type),
-                    (TokenType::CloseAngle, TokenType::Comma),
-                )),
-            )),
-
-            |(name, params)| {
-                let mut span = name.span();
-                if let Some((_, _, right)) = &params {
-                    span = span.join(right);
-                }
-
-                let params = params.map(|(_, params, _)| params.into_iter().map(PType::inner).collect());
-                PType::Naked(TypeExpr::Parametrized { name, params }.tag(span))
-            }
-        ),
-
-    ))(input)
+/// Parse the input and return an [`Expr`] object.
+pub fn parse_type(input: &str) -> Result<Tagged<Expr>, Error> {
+    let cache = Lexer::cache();
+    let lexer = Lexer::new(input).with_cache(&cache);
+    type_expression(lexer).map_or_else(
+        |err| match err {
+            NomError::Incomplete(_) => Err(Error::default()),
+            NomError::Error(e) | NomError::Failure(e) => Err(e.to_error()),
+        },
+        |(_, node)| {
+            let expr = node.inner();
+            expr.validate()?;
+            Ok(expr)
+        }
+    )
 }
 
 

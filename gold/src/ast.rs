@@ -34,7 +34,6 @@ fn binding_element_free_and_bound(
 /// A list binding element is anything that is legal inside a list pattern.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ListPatternElement {
-
     /// An ordinary binding with potential default value
     Binding {
         binding: Tagged<Binding>,
@@ -254,7 +253,7 @@ impl Validatable for Pattern {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Binding {
     pub pattern: Tagged<Pattern>,
-    pub tp: Option<Tagged<TypeExpr>>,
+    pub tp: Option<Tagged<Expr>>,
 }
 
 impl Binding {
@@ -741,7 +740,6 @@ pub enum BinOp {
 /// such as x + y, the transform (+ y) acts on the 'operand' x.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Transform {
-
     /// Unary operator
     UnOp(Tagged<UnOp>),
 
@@ -750,6 +748,9 @@ pub enum Transform {
 
     /// Function call operator with arguments
     FunCall(Tagged<Vec<Tagged<ArgElement>>>),
+
+    /// Type application operator with arguments
+    TypeCall(Tagged<Vec<Tagged<ArgElement>>>),
 }
 
 impl Transform {
@@ -922,7 +923,6 @@ impl Display for BinOp {
 /// The most important AST node: an evaluatable expression.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Expr {
-
     /// A literal object (usually numbers, booleans, null and strings).
     Literal(Object),
 
@@ -942,7 +942,6 @@ pub enum Expr {
 
     /// A let-binding block
     Let {
-
         /// List expressions to be bound to patterns.
         bindings: Vec<(Tagged<Binding>, Tagged<Expr>)>,
 
@@ -954,7 +953,6 @@ pub enum Expr {
     /// operands, where the left operand is the input, and the operator and the
     /// right operand together form the transform.
     Transformed {
-
         /// The expression to act on.
         operand: Box<Tagged<Expr>>,
 
@@ -964,7 +962,6 @@ pub enum Expr {
 
     /// A function definition.
     Function {
-
         /// Optional type parameters.
         type_params: Option<Vec<Tagged<Key>>>,
 
@@ -975,7 +972,7 @@ pub enum Expr {
         keywords: Option<MapBinding>,
 
         /// Optional return type.
-        return_type: Option<Tagged<TypeExpr>>,
+        return_type: Option<Box<Tagged<Expr>>>,
 
         /// The expression to evaluate when called.
         expression: Box<Tagged<Expr>>,
@@ -1123,6 +1120,14 @@ impl Tagged<Expr> {
     /// * `loc` - the location of the function call operator in the buffer.
     pub fn funcall(self, args: impl ToVec<Tagged<ArgElement>>, loc: impl HasSpan) -> Expr {
         self.transform(Transform::FunCall(args.to_vec().tag(loc)))
+    }
+
+    /// Form a type call expression from by calling this function with a
+    /// list of arguments.
+    ///
+    /// * `loc` - the location of the function call operator in the buffer.
+    pub fn typecall(self, args: impl ToVec<Tagged<ArgElement>>, loc: impl HasSpan) -> Expr {
+        self.transform(Transform::TypeCall(args.to_vec().tag(loc)))
     }
 }
 
@@ -1274,7 +1279,6 @@ impl Validatable for Expr {
 /// A top-level AST node, only legal at the top level of a file.
 #[derive(Debug, PartialEq)]
 pub enum TopLevel {
-
     /// Import an object by loading another file and binding it to a pattern.
     Import(Tagged<String>, Tagged<Pattern>),
 
@@ -1282,7 +1286,7 @@ pub enum TopLevel {
     TypeDef {
         name: Tagged<Key>,
         params: Option<Vec<Tagged<Key>>>,
-        expr: Tagged<TypeExpr>,
+        expr: Tagged<Expr>,
     }
 }
 
@@ -1304,7 +1308,6 @@ impl Validatable for TopLevel {
 /// statements followed by an expression.
 #[derive(Debug, PartialEq)]
 pub struct File {
-
     /// Top-level statements.
     pub statements: Vec<TopLevel>,
 
@@ -1324,21 +1327,20 @@ impl Validatable for File {
 
 
 
-// TypeExpr
-// ----------------------------------------------------------------
+// // TypeExpr
+// // ----------------------------------------------------------------
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub enum TypeExpr {
+// #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+// pub enum TypeExpr {
+//     /// Parametrized type
+//     Parametrized {
+//         name: Tagged<Key>,
+//         params: Option<Vec<Tagged<TypeExpr>>>,
+//     },
+// }
 
-    /// Parametrized type
-    Parametrized {
-        name: Tagged<Key>,
-        params: Option<Vec<Tagged<TypeExpr>>>,
-    },
-}
-
-impl Validatable for TypeExpr {
-    fn validate(&self) -> Result<(), Error> {
-        Ok(())
-    }
-}
+// impl Validatable for TypeExpr {
+//     fn validate(&self) -> Result<(), Error> {
+//         Ok(())
+//     }
+// }

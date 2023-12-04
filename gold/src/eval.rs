@@ -396,7 +396,6 @@ impl<'a> Namespace<'a> {
     /// Evaluate a transform (an operator, typically) applied to a value.
     fn transform(&self, transform: &Transform, value: Object) -> Result<Object, Error> {
         match transform {
-
             // Unary operators
             Transform::UnOp(op) => {
                 match op.as_ref() {
@@ -408,7 +407,6 @@ impl<'a> Namespace<'a> {
 
             // Binary operators
             Transform::BinOp(op, node) => {
-
                 // Short-circuiting operators
                 match op.as_ref() {
                     BinOp::And => return if value.truthy() { self.eval(node) } else { Ok(value) },
@@ -454,6 +452,16 @@ impl<'a> Namespace<'a> {
                 }
                 value.call(&call_args, Some(&call_kwargs)).map_err(elements.tag_error(Action::Evaluate))
             },
+
+            // Type application
+            Transform::TypeCall(elements) => {
+                let mut call_args: List = vec![];
+                let mut call_kwargs: Map = Map::new();
+                for element in elements.as_ref() {
+                    self.fill_args(element, &mut call_args, &mut call_kwargs)?;
+                }
+                value.typecall(&call_args, Some(&call_kwargs)).map_err(elements.tag_error(Action::Evaluate))
+            }
         }
     }
 
@@ -477,7 +485,6 @@ impl<'a> Namespace<'a> {
     // Evaluate an expression.
     pub fn eval(&self, node: &Tagged<Expr>) -> Result<Object, Error> {
         match node.as_ref() {
-
             // Literal values: just clone and return.
             Expr::Literal(val) => Ok(val.clone()),
 
