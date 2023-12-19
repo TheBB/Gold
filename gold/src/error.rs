@@ -42,11 +42,11 @@ impl Position {
     ///
     /// Do NOT use this method to jump to the middle of a new line. To do that,
     /// compose two calls to `adjust`.
-    pub fn adjust(&self, offset: usize, delta_line: u32) -> Position {
+    pub fn adjust(&self, offset: isize, delta_line: u32) -> Position {
         Position {
-            offset: self.offset + offset,
+            offset: if offset < 0 { self.offset - (-offset) as usize } else { self.offset + offset as usize },
             line: self.line + delta_line,
-            column: if delta_line > 0 { 0 } else { self.column + offset as u32 }
+            column: if delta_line > 0 { 0 } else if offset < 0 { self.column - (-offset) as u32 } else { self.column + offset as u32 }
         }
     }
 
@@ -164,6 +164,16 @@ impl Span {
         self.with_line(line).with_column(col)
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn adjust(self, start_offset: isize, end_offset: isize) -> Self {
+        let length_diff = end_offset - start_offset;
+        let new_length = if length_diff < 0 { self.length + (-length_diff) as usize } else { self.length + length_diff as usize};
+        Span {
+            start: self.start.adjust(start_offset, 0),
+            length: new_length,
+        }
+    }
+
     /// Extend a span.
     pub fn join(self, other: &impl HasSpan) -> Span {
         (self..other.span()).span()
@@ -275,9 +285,14 @@ impl<T> Tagged<T> {
         self.retag(loc)
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn adjust(self, start_offset: isize, end_offset: isize) -> Self {
+        let new_span = self.span.adjust(start_offset, end_offset);
+        self.retag(new_span)
+    }
+
     /// Map the wrapped object and return a new tagged wrapper.
-    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Tagged<U>
-    {
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Tagged<U> {
         Tagged::<U> {
             span: self.span,
             contents: f(self.contents),
@@ -287,8 +302,7 @@ impl<T> Tagged<T> {
     /// Map the whole tagged object and return a new tagged wrapper.
     ///
     /// Useful for creating longer layers of tagged objects.
-    pub fn wrap<U>(self, f: impl FnOnce(Tagged<T>) -> U) -> Tagged<U>
-    {
+    pub fn wrap<U>(self, f: impl FnOnce(Tagged<T>) -> U) -> Tagged<U> {
         Tagged::<U> {
             span: self.span,
             contents: f(self),
@@ -296,8 +310,7 @@ impl<T> Tagged<T> {
     }
 
     /// Substitute the text span with a new one.
-    pub fn retag(self, loc: impl HasSpan) -> Tagged<T>
-    {
+    pub fn retag(self, loc: impl HasSpan) -> Tagged<T> {
         Tagged::<T> {
             span: loc.span(),
             contents: self.contents,
@@ -428,6 +441,9 @@ pub enum SyntaxElement {
 
     /// The value of a map item (after a key)
     MapValue,
+
+    /// An element of a map type
+    TypeMapElement,
 
     /// A number
     Number,
@@ -850,6 +866,7 @@ impl Display for SyntaxElement {
             Self::Then => f.write_str("'then'"),
             Self::Type => f.write_str("type expression"),
             Self::TypeListElement => f.write_str("type list element"),
+            Self::TypeMapElement => f.write_str("type map element"),
             Self::Whitespace => f.write_str("whitespace"),
             Self::Token(t) => f.write_fmt(format_args!("{}", t)),
         }

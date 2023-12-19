@@ -104,64 +104,256 @@ impl<U> ExprAble for U where Object: From<U> {
 }
 
 
+macro_rules! tag {
+    ($node:expr , $line:literal $column:literal $start:literal $end:literal) => {
+        $node.tag($start..$end).with_coord($line, $column)
+    };
+    ($node:expr , $line:literal $column:literal $start:literal) => {
+        $node.tag($start).with_coord($line, $column)
+    };
+    ($node:expr , $start:literal $end:literal) => {
+        $node.tag($start..$end)
+    };
+    ($node:expr , $start:literal) => {
+        $node.tag($start)
+    };
+}
+
+
+macro_rules! strel {
+    ($val:literal) => {
+        StringElement::raw($val)
+    };
+    (interpolate $node:tt) => {
+        StringElement::Interpolate(e!($node), None)
+    };
+    (($($t:tt)*)) => { strel!($($t)*) };
+}
+
+
+macro_rules! listel {
+    (splat $node:tt) => {
+        e!($node).wrap(ListElement::Splat).adjust(-3, 0)
+    };
+    (splat $node:tt $offset:literal) => {
+        e!($node).wrap(ListElement::Splat).adjust($offset, 0)
+    };
+    (splat $node:tt $offset:literal $roffset:literal) => {
+        e!($node).wrap(ListElement::Splat).adjust($offset, $roffset)
+    };
+    (each $binding:tt $iterable:tt $expr:tt $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(ListElement::Loop {
+            binding: binding!($binding),
+            iterable: e!($iterable),
+            element: Box::new(listel!($expr)),
+        }, $($line $column)? $start $($end)?)
+    };
+    (cond $cond:tt $expr:tt $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(ListElement::Cond {
+            condition: e!($cond),
+            element: Box::new(listel!($expr)),
+        }, $($line $column)? $start $($end)?)
+    };
+    ($name:ident $($node:tt)*) => {
+        e!($name $($node)*).wrap(ListElement::Singleton)
+    };
+    (($($t:tt)*)) => { listel!($($t)*) };
+}
+
+
+macro_rules! mapel {
+    (splat $node:tt) => {
+        e!($node).wrap(MapElement::Splat).adjust(-3, 0)
+    };
+    (each $binding:tt $iterable:tt $expr:tt $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(MapElement::Loop {
+            binding: binding!($binding),
+            iterable: e!($iterable),
+            element: Box::new(mapel!($expr)),
+        }, $($line $column)? $start $($end)?)
+    };
+    ($key:tt $value:tt) => { {
+        let key = e!($key);
+        let value = e!($value);
+        let span = key.span().join(&value);
+        MapElement::Singleton { key, value }.tag(span)
+    } };
+    ($key:tt $value:tt $offset:literal) => { {
+        let key = e!($key);
+        let value = e!($value);
+        let span = key.span().join(&value);
+        MapElement::Singleton { key, value }.tag(span).adjust($offset, 0)
+    } };
+    (($($t:tt)*)) => { mapel!($($t)*) };
+}
+
+
+macro_rules! argel {
+    ($name:ident $($node:tt)*) => {
+        e!($name $($node)*).wrap(ArgElement::Singleton)
+    };
+    (($($t:tt)*)) => { argel!($($t)*) };
+}
+
+
+macro_rules! listbindel {
+    ($name:ident $($t:tt)*) => { {
+        let binding = binding!($name $($t)*);
+        let span = binding.span();
+        ListPatternElement::Binding { binding, default: None }.tag(span)
+    } };
+    (($($t:tt)*)) => { listbindel!($($t)*) };
+}
+
+
+macro_rules! binding {
+    (name $val:literal $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(Binding {
+            pattern: tag!(Pattern::Identifier(
+                tag!(Key::new($val), $($line $column)? $start $($end)?)
+            ), $($line $column)? $start $($end)?),
+            tp: None,
+        }, $($line $column)? $start $($end)?)
+    };
+    (name $val:ident $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(Binding {
+            pattern: tag!(Pattern::Identifier(
+                tag!(Key::new(stringify!($val)), $($line $column)? $start $($end)?)
+            ), $($line $column)? $start $($end)?),
+            tp: None,
+        }, $($line $column)? $start $($end)?)
+    };
+    (list $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? => $($val:tt)*) => {
+        tag!(Binding {
+            pattern: tag!(Pattern::List(tag!(ListBinding(vec![
+                $(listbindel!($val)),*
+            ]), $($line $column)? $start $($end)?)), $($line $column)? $start $($end)?),
+            tp: None,
+        }, $($line $column)? $start $($end)?)
+    };
+    (($($t:tt)*)) => { binding!($($t)*) };
+}
+
+
+macro_rules! e {
+    (true $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(Expr::Literal(Object::bool(true)), $($line $column)? $start $($end)?)
+    };
+    (false $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(Expr::Literal(Object::bool(false)), $($line $column)? $start $($end)?)
+    };
+    (null $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(Expr::Literal(Object::null()), $($line $column)? $start $($end)?)
+    };
+    (name $val:literal $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(
+            Expr::Identifier(tag!(Key::new($val), $($line $column)? $start $($end)?)),
+            $($line $column)? $start $($end)?
+        )
+    };
+    (name $val:ident $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(
+            Expr::Identifier(tag!(Key::new(stringify!($val)), $($line $column)? $start $($end)?)),
+            $($line $column)? $start $($end)?
+        )
+    };
+    (int $val:literal $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(Expr::Literal(Object::int($val)), $($line $column)? $start $($end)?)
+    };
+    (big $val:literal $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(Expr::Literal(Object::bigint($val).unwrap()), $($line $column)? $start $($end)?)
+    };
+    (float $val:literal $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(Expr::Literal(Object::float($val as f64)), $($line $column)? $start $($end)?)
+    };
+    (str $val:literal $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(Expr::Literal(Object::str($val)), $($line $column)? $start $($end)?)
+    };
+    (str $val:ident $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? ) => {
+        tag!(Expr::Literal(Object::str(stringify!($val))), $($line $column)? $start $($end)?)
+    };
+    (cat $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? => $($val:tt)*) => {
+        tag!(Expr::String(vec![
+            $(strel!($val)),*
+        ]), $($line $column)? $start $($end)?)
+    };
+    (list $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? => $($val:tt)*) => {
+        tag!(Expr::List(vec![
+            $(listel!($val)),*
+        ]), $($line $column)? $start $($end)?)
+    };
+    (map $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? => $($val:tt)*) => {
+        tag!(Expr::Map(vec![
+            $(mapel!($val)),*
+        ]), $($line $column)? $start $($end)?)
+    };
+    (call $start:literal $(.. $end:literal)? $(: $line:literal : $column:literal)? => $func:tt $($arg:tt)*) => { {
+        let args = tag!(vec![ $(argel!($arg)),* ], $($line $column)? $start $($end)?);
+        let func = e!($func);
+        let span = func.span().join(&args);
+        Expr::Transformed {
+            operand: Box::new(func),
+            transform: Transform::FunCall(args)
+        }.tag(span)
+    } };
+    (($($t:tt)*)) => { e!($($t)*) };
+}
+
+
+macro_rules! oke {
+    ($($rest:tt)*) => { Ok(e!($($rest)*)) };
+}
+
+
 #[test]
 fn booleans_and_null() {
-    assert_eq!(parse_expr("true"), Ok(true.expr(0..4)));
-    assert_eq!(parse_expr("false"), Ok(false.expr(0..5)));
-    assert_eq!(parse_expr("null"), Ok(Object::null().expr(0..4)));
+    assert_eq!(parse_expr("true"), oke!(true 0..4));
+    assert_eq!(parse_expr("false"), oke!(false 0..5));
+    assert_eq!(parse_expr("null"), oke!(null 0..4));
 }
 
 #[test]
 fn integers() {
-    assert_eq!(parse_expr("0"), Ok(0.expr(0)));
-    assert_eq!(parse_expr("1"), Ok(1.expr(0)));
-    assert_eq!(parse_expr("1  "), Ok(1.expr(0)));
-    assert_eq!(parse_expr("9223372036854775807"), Ok(9223372036854775807i64.expr(0..19)));
-    assert_eq!(parse_expr("9223372036854776000"), Ok(Object::bigint("9223372036854776000").unwrap().expr(0..19)));
+    assert_eq!(parse_expr("0"), oke!(int 0 0));
+    assert_eq!(parse_expr("1"), oke!(int 1 0));
+    assert_eq!(parse_expr("1  "), oke!(int 1 0));
+    assert_eq!(parse_expr("9223372036854775807"), oke!(int 9223372036854775807i64 0..19));
+    assert_eq!(parse_expr("9223372036854776000"), oke!(big "9223372036854776000" 0..19));
 }
 
 #[test]
 fn floats() {
-    assert_eq!(parse_expr("0.0"), Ok(0f64.expr(0..3)));
-    assert_eq!(parse_expr("0."), Ok(0f64.expr(0..2)));
-    assert_eq!(parse_expr(".0"), Ok(0f64.expr(0..2)));
-    assert_eq!(parse_expr("0e0"), Ok(0f64.expr(0..3)));
-    assert_eq!(parse_expr("0e1"), Ok(0f64.expr(0..3)));
-    assert_eq!(parse_expr("1."), Ok(1f64.expr(0..2)));
-    assert_eq!(parse_expr("1e+1"), Ok(10f64.expr(0..4)));
-    assert_eq!(parse_expr("1e1"), Ok(10f64.expr(0..3)));
-    assert_eq!(parse_expr("1e-1"), Ok(0.1f64.expr(0..4)));
+    assert_eq!(parse_expr("0.0"), oke!(float 0 0..3));
+    assert_eq!(parse_expr("0."), oke!(float 0 0..2));
+    assert_eq!(parse_expr(".0"), oke!(float 0 0..2));
+    assert_eq!(parse_expr("0e0"), oke!(float 0 0..3));
+    assert_eq!(parse_expr("0e1"), oke!(float 0 0..3));
+    assert_eq!(parse_expr("1."), oke!(float 1 0..2));
+    assert_eq!(parse_expr("1e+1"), oke!(float 10 0..4));
+    assert_eq!(parse_expr("1e1"), oke!(float 10 0..3));
+    assert_eq!(parse_expr("1e-1"), oke!(float 0.1 0..4));
 }
 
 #[test]
 fn strings() {
-    assert_eq!(parse_expr("\"\""), Ok("".expr(0..2)));
-    assert_eq!(parse_expr("\"dingbob\""), Ok("dingbob".expr(0..9)));
-    assert_eq!(parse_expr("\"ding\\\"bob\""), Ok("ding\"bob".expr(0..11)));
-    assert_eq!(parse_expr("\"ding\\\\bob\""), Ok("ding\\bob".expr(0..11)));
+    assert_eq!(parse_expr("\"\""), oke!(str "" 0..2));
+    assert_eq!(parse_expr("\"dingbob\""), oke!(str "dingbob" 0..9));
+    assert_eq!(parse_expr("\"ding\\\"bob\""), oke!(str "ding\"bob" 0..11));
+    assert_eq!(parse_expr("\"ding\\\\bob\""), oke!(str "ding\\bob" 0..11));
 
     assert_eq!(
         parse_expr("\"dingbob${a}\""),
-        Ok(Expr::String(vec![
-            StringElement::raw("dingbob"),
-            StringElement::Interpolate("a".id(10), None),
-        ]).tag(0..13)),
+        oke!(cat 0..13 => "dingbob" (interpolate (name "a" 10))),
     );
 
     assert_eq!(
         parse_expr("\"dingbob${ a}\""),
-        Ok(Expr::String(vec![
-            StringElement::raw("dingbob"),
-            StringElement::Interpolate("a".id(11), None),
-        ]).tag(0..14)),
+        oke!(cat 0..14 => "dingbob" (interpolate (name "a" 11))),
     );
 
     assert_eq!(
         parse_expr("\"alpha\" \"bravo\""),
-        Ok(Expr::String(vec![
-            StringElement::raw("alpha"),
-            StringElement::raw("bravo"),
-        ]).tag(0..15))
+        oke!(cat 0..15 => "alpha" "bravo")
     );
 }
 
@@ -234,144 +426,111 @@ fn string_format() {
 
 #[test]
 fn identifiers() {
-    assert_eq!(parse_expr("dingbob"), Ok("dingbob".id(0..7)));
-    assert_eq!(parse_expr("lets"), Ok("lets".id(0..4)));
-    assert_eq!(parse_expr("not1"), Ok("not1".id(0..4)));
+    assert_eq!(parse_expr("dingbob"), oke!(name "dingbob" 0..7));
+    assert_eq!(parse_expr("lets"), oke!(name "lets" 0..4));
+    assert_eq!(parse_expr("not1"), oke!(name "not1" 0..4));
 }
 
 #[test]
 fn lists() {
     assert_eq!(
         parse_expr("[]"),
-        Ok(Expr::list(()).tag(0..2)),
+        oke!(list 0..2 =>),
     );
 
     assert_eq!(
         parse_expr("[   ]"),
-        Ok(Expr::list(()).tag(0..5)),
+        oke!(list 0..5 =>),
     );
 
     assert_eq!(
         parse_expr("[true]"),
-        Ok(Expr::list(vec![
-            true.lel(1..5),
-        ]).tag(0..6)),
+        oke!(list 0..6 => (true 1..5)),
     );
 
     assert_eq!(
         parse_expr("[\"\"]"),
-        Ok(Expr::list(vec![
-            "".lel(1..3),
-        ]).tag(0..4)),
+        oke!(list 0..4 => (str "" 1..3)),
     );
 
     assert_eq!(
         parse_expr("[1,]"),
-        Ok(Expr::list(vec![
-            1.lel(1),
-        ]).tag(0..4)),
+        oke!(list 0..4 => (int 1 1)),
     );
 
     assert_eq!(
         parse_expr("[  1   ,  ]"),
-        Ok(Expr::list(vec![
-            1.lel(3),
-        ]).tag(0..11)),
+        oke!(list 0..11 => (int 1 3)),
     );
 
     assert_eq!(
         parse_expr("[  1   ,2  ]"),
-        Ok(Expr::list(vec![
-            1.lel(3),
-            2.lel(8),
-        ]).tag(0..12)),
+        oke!(list 0..12 => (int 1 3) (int 2 8)),
     );
 
     assert_eq!(
         parse_expr("[  1   ,2  ,]"),
-        Ok(Expr::list(vec![
-            1.lel(3),
-            2.lel(8),
-        ]).tag(0..13)),
+        oke!(list 0..13 => (int 1 3) (int 2 8)),
     );
 
     assert_eq!(
         parse_expr("[1, false, 2.3, \"fable\", lel]"),
-        Ok(Expr::list(vec![
-            1.lel(1),
-            false.lel(4..9),
-            2.3.lel(11..14),
-            "fable".lel(16..23),
-            ListElement::Singleton("lel".id(25..28)).tag(25..28),
-        ]).tag(0..29)),
+        oke!(list 0..29 =>
+            (int 1 1)
+            (false 4..9)
+            (float 2.3 11..14)
+            (str "fable" 16..23)
+            (name "lel" 25..28)
+        ),
     );
 
     assert_eq!(
         parse_expr("[1, ...x, y]"),
-        Ok(Expr::list(vec![
-            1.lel(1),
-            "x".id(7).wrap(ListElement::Splat).retag(4..8),
-            "y".id(10).wrap(ListElement::Singleton),
-        ]).tag(0..12)),
+        oke!(list 0..12 =>
+            (int 1 1)
+            (splat (name "x" 7))
+            (name "y" 10)
+        ),
     );
 
     assert_eq!(
         parse_expr("[1, for x in y: x, 2]"),
-        Ok(Expr::list(vec![
-            1.lel(1),
-            ListElement::Loop {
-                binding: "x".bid(8),
-                iterable: "y".id(13),
-                element: "x".id(16).wrap(ListElement::Singleton).to_box(),
-            }.tag(4..17),
-            2.lel(19),
-        ]).tag(0..21)),
+        oke!(list 0..21 =>
+            (int 1 1)
+            (each (name "x" 8) (name "y" 13) (name "x" 16) 4..17)
+            (int 2 19)
+        ),
     );
 
     assert_eq!(
         parse_expr("[when f(x): x]"),
-        Ok(Expr::list(vec![
-            ListElement::Cond {
-                condition: "f".id(6).funcall(vec![
-                    "x".id(8).wrap(ArgElement::Singleton),
-                ], 7..10).tag(6..10),
-                element: "x".id(12).wrap(ListElement::Singleton).to_box(),
-            }.tag(1..13),
-        ]).tag(0..14)),
+        oke!(list 0..14 =>
+            (cond
+                (call 7..10 => (name "f" 6) (name "x" 8))
+                (name "x" 12)
+                1..13
+            )
+        ),
     );
 
     assert_eq!(
         parse_expr("[ 1 , ... x , when x : y , for x in y : z , ]"),
-        Ok(Expr::list(vec![
-            1.lel(2),
-            "x".id(10).wrap(ListElement::Splat).retag(6..11),
-            ListElement::Cond {
-                condition: "x".id(19),
-                element: "y".id(23).wrap(ListElement::Singleton).to_box(),
-            }.tag(14..24),
-            ListElement::Loop {
-                binding: "x".bid(31),
-                iterable: "y".id(36),
-                element: "z".id(40).wrap(ListElement::Singleton).to_box(),
-            }.tag(27..41),
-        ]).tag(0..45)),
+        oke!(list 0..45 =>
+            (int 1 2)
+            (splat (name "x" 10) -4)
+            (cond (name "x" 19) (name "y" 23) 14..24)
+            (each (name "x" 31) (name "y" 36) (name "z" 40) 27..41)
+        ),
     );
 
     assert_eq!(
         parse_expr("[ (1) , ... (x), when x: (y) , for x in y: (z) ]"),
-        Ok(Expr::list(vec![
-            1.lel(3),
-            "x".id(13).wrap(ListElement::Splat).retag(8..15),
-            ListElement::Cond {
-                condition: "x".id(22),
-                element: "y".id(26).wrap(ListElement::Singleton).to_box(),
-            }.tag(17..28),
-            ListElement::Loop {
-                binding: "x".bid(35),
-                iterable: "y".id(40),
-                element: "z".id(44).wrap(ListElement::Singleton).to_box(),
-            }.tag(31..46),
-        ]).tag(0..48)),
+        oke!(list 0..48 =>
+            (int 1 3)
+            (splat (name "x" 13) -5 1)
+            (cond (name "x" 22) (name "y" 26) 17..28)
+            (each (name "x" 35) (name "y" 40) (name "z" 44) 31..46)
+        ),
     );
 }
 
@@ -379,19 +538,15 @@ fn lists() {
 fn nested_lists() {
     assert_eq!(
         parse_expr("[[]]"),
-        Ok(Expr::list(vec![
-            Expr::list(()).tag(1..3).wrap(ListElement::Singleton),
-        ]).tag(0..4)),
+        oke!(list 0..4 => (list 1..3 =>)),
     );
 
     assert_eq!(
         parse_expr("[1, [2]]"),
-        Ok(Expr::list(vec![
-            1.lel(1),
-            Expr::list(vec![
-                2.lel(5),
-            ]).tag(4..7).wrap(ListElement::Singleton),
-        ]).tag(0..8)),
+        oke!(list 0..8 =>
+            (int 1 1)
+            (list 4..7 => (int 2 5))
+        ),
     );
 }
 
@@ -399,107 +554,81 @@ fn nested_lists() {
 fn maps() {
     assert_eq!(
         parse_expr("{}"),
-        Ok(Expr::map(()).tag(0..2)),
+        oke!(map 0..2 =>),
     );
 
     assert_eq!(
         parse_expr("{  }"),
-        Ok(Expr::map(()).tag(0..4)),
+        oke!(map 0..4 =>),
     );
 
     assert_eq!(
         parse_expr("{a: 1}"),
-        Ok(Expr::map(vec![
-            ("a".lit(1), 1.expr(4)).mel(),
-        ]).tag(0..6)),
+        oke!(map 0..6 => ((str a 1) (int 1 4))),
     );
 
     assert_eq!(
         parse_expr("{a: 1,}"),
-        Ok(Expr::map(vec![
-            ("a".lit(1), 1.expr(4)).mel(),
-        ]).tag(0..7)),
+        oke!(map 0..7 => ((str a 1) (int 1 4))),
     );
 
     assert_eq!(
         parse_expr("{  a :1,}"),
-        Ok(Expr::map(vec![
-            ("a".lit(3), 1.expr(6)).mel(),
-        ]).tag(0..9)),
+        oke!(map 0..9 => ((str a 3) (int 1 6))),
     );
 
     assert_eq!(
         parse_expr("{a: 1  ,b:2}"),
-        Ok(Expr::map(vec![
-            ("a".lit(1), 1.expr(4)).mel(),
-            ("b".lit(8), 2.expr(10)).mel(),
-        ]).tag(0..12)),
+        oke!(map 0..12 =>
+            ((str a 1) (int 1 4))
+            ((str b 8) (int 2 10))
+        ),
     );
 
     assert_eq!(
         parse_expr("{che9: false}"),
-        Ok(Expr::map(vec![
-            ("che9".lit(1..5), false.expr(7..12)).mel(),
-        ]).tag(0..13)),
+        oke!(map 0..13 => ((str che9 1..5) (false 7..12))),
     );
 
     assert_eq!(
         parse_expr("{fable: \"fable\"}"),
-        Ok(Expr::map(vec![
-            ("fable".lit(1..6), "fable".expr(8..15)).mel(),
-        ]).tag(0..16)),
+        oke!(map 0..16 => ((str fable 1..6) (str fable 8..15))),
     );
 
     assert_eq!(
         parse_expr("{format: 1}"),
-        Ok(Expr::map(vec![
-            ("format".lit(1..7), 1.expr(9)).mel(),
-        ]).tag(0..11)),
+        oke!(map 0..11 => ((str format 1..7) (int 1 9))),
     );
 
     assert_eq!(
         parse_expr("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}"),
-        Ok(Expr::map(vec![
-            ("a".lit(1), 1.expr(4)).mel(),
-            ("b".lit(7), true.expr(10..14)).mel(),
-            ("c".lit(16), 20.0.expr(19..23)).mel(),
-            ("d".lit(25), "hoho".expr(28..34)).mel(),
-            ("e".lit(36), 10.0.expr(39..42)).mel(),
-        ]).tag(0..43)),
+        oke!(map 0..43 =>
+            ((str a 1) (int 1 4))
+            ((str b 7) (true 10..14))
+            ((str c 16) (float 20 19..23))
+            ((str d 25) (str hoho 28..34))
+            ((str e 36) (float 10 39..42))
+        ),
     );
 
     assert_eq!(
         parse_expr("{ident-with-hyphen: 1}"),
-        Ok(Expr::map(vec![
-            ("ident-with-hyphen".lit(1..18), 1.expr(20)).mel(),
-        ]).tag(0..22)),
+        oke!(map 0..22 => ((str "ident-with-hyphen" 1..18) (int 1 20))),
     );
 
     assert_eq!(
         parse_expr("{$z: y}"),
-        Ok(Expr::map(vec![
-            MapElement::Singleton {
-                key: "z".id(2),
-                value: "y".id(5)
-            }.tag(1..6),
-        ]).tag(0..7)),
+        oke!(map 0..7 => ((name z 2) (name y 5) -1)),
     );
 
     assert_eq!(
         parse_expr("{$(z): y}"),
-        Ok(Expr::map(vec![
-            MapElement::Singleton {
-                key: "z".id(3),
-                value: "y".id(7),
-            }.tag(1..8),
-        ]).tag(0..9)),
+        oke!(map 0..9 => ((name z 3) (name y 7) -2)),
     );
 
     assert_eq!(
         parse_expr("{\"z\": y}"),
-        Ok(Expr::map(vec![
-            ("z".lit(1..4), "y".id(6)).mel(),
-        ]).tag(0..8)),
+        oke!(map 0..8 => ((str z 1..4) (name y 6))),
     );
 
     assert_eq!(
@@ -508,9 +637,7 @@ fn maps() {
             "   z:: here's some text\n",
             "}\n",
         )),
-        Ok(Expr::map(vec![
-            ("z".lit(5).with_coord(1,3), "here's some text".expr(8..26).with_coord(1,6)).mel(),
-        ]).tag(0..27)),
+        oke!(map 0..27 => ((str z 5:1:3) (str "here's some text" 8..26:1:6))),
     );
 
     assert_eq!(
@@ -520,9 +647,7 @@ fn maps() {
             "       text\n",
             "}\n",
         )),
-        Ok(Expr::map(vec![
-            ("z".lit(5).with_coord(1,3), "here's some\ntext".expr(8..33).with_coord(1,6)).mel(),
-        ]).tag(0..34)),
+        oke!(map 0..34 => ((str z 5:1:3) (str "here's some\ntext" 8..33:1:6))),
     );
 
     assert_eq!(
@@ -532,9 +657,7 @@ fn maps() {
             "     text\n",
             "}\n",
         )),
-        Ok(Expr::map(vec![
-            ("z".lit(5).with_coord(1,3), "here's some\ntext".expr(8..31).with_coord(1,6)).mel(),
-        ]).tag(0..32)),
+        oke!(map 0..32 => ((str z 5:1:3) (str "here's some\ntext" 8..31:1:6))),
     );
 
     assert_eq!(
@@ -545,9 +668,7 @@ fn maps() {
             "     text\n",
             "}\n",
         )),
-        Ok(Expr::map(vec![
-            ("z".lit(5).with_coord(1,3), "here's some\ntext".expr(8..36).with_coord(1,6)).mel(),
-        ]).tag(0..37)),
+        oke!(map 0..37 => ((str z 5:1:3) (str "here's some\ntext" 8..36:1:6))),
     );
 
     assert_eq!(
@@ -558,9 +679,7 @@ fn maps() {
             "       text\n",
             "}\n",
         )),
-        Ok(Expr::map(vec![
-            ("z".lit(5).with_coord(1,3), "here's some\n  text".expr(8..38).with_coord(1,6)).mel(),
-        ]).tag(0..39)),
+        oke!(map 0..39 => ((str z 5:1:3) (str "here's some\n  text" 8..38:1:6))),
     );
 
     assert_eq!(
@@ -571,9 +690,7 @@ fn maps() {
             "     text\n",
             "}\n",
         )),
-        Ok(Expr::map(vec![
-            ("z".lit(5).with_coord(1,3), "  here's some\ntext".expr(8..38).with_coord(1,6)).mel(),
-        ]).tag(0..39)),
+        oke!(map 0..39 => ((str z 5:1:3) (str "  here's some\ntext" 8..38:1:6))),
     );
 
     assert_eq!(
@@ -583,38 +700,29 @@ fn maps() {
             "    b: y,\n",
             "}\n",
         )),
-        Ok(Expr::map(vec![
-            ("a".lit(6).with_coord(1,4), "x".expr(9..12).with_coord(1,7)).mel(),
-            ("b".lit(16).with_coord(2,4), "y".key(19).with_coord(2,7).wrap(Expr::Identifier)).mel(),
-        ]).tag(0..23)),
+        oke!(map 0..23 =>
+            ((str a 6:1:4) (str x 9..12:1:7))
+            ((str b 16:2:4) (name y 19:2:7))
+        ),
     );
 
     assert_eq!(
         parse_expr("{...y, x: 1}"),
-        Ok(Expr::map(vec![
-            MapElement::Splat("y".id(4)).tag(1..5),
-            ("x".lit(7), 1.expr(10)).mel(),
-        ]).tag(0..12)),
+        oke!(map 0..12 =>
+            (splat (name y 4))
+            ((str x 7) (int 1 10))
+        ),
     );
 
     assert_eq!(
         parse_expr("{for [x,y] in z: x: y}"),
-        Ok(Expr::map(vec![
-            MapElement::Loop {
-                binding: Pattern::List(ListBinding(vec![
-                    ListPatternElement::Binding {
-                        binding: "x".bid(6),
-                        default: None
-                    }.tag(6),
-                    ListPatternElement::Binding {
-                        binding: "y".bid(8),
-                        default: None
-                    }.tag(8),
-                ]).tag(5..10)).tag(5..10).bind(),
-                iterable: "z".id(14),
-                element: ("x".lit(17), "y".id(20)).mel().to_box(),
-            }.tag(1..21),
-        ]).tag(0..22)),
+        oke!(map 0..22 =>
+            (each
+                (list 5..10 => (name x 6) (name y 8))
+                (name z 14)
+                ((str x 17) (name y 20))
+                1..21)
+        ),
     );
 
     assert_eq!(
@@ -1330,6 +1438,14 @@ fn types() {
                 ], 13..18).tag(9..18)
             ).tag(9..18),
         ]).tag(0..19)),
+    );
+
+    assert_eq!(
+        parse_type("[argh, ...blargh]"),
+        Ok(Expr::list(vec![
+            "argh".id(1..5).wrap(ListElement::Singleton),
+            "blargh".id(10..16).wrap(ListElement::Splat).retag(7..16),
+        ]).tag(0..17)),
     );
 }
 

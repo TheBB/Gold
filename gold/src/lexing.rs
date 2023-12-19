@@ -215,7 +215,7 @@ impl<'a> Lexer<'a> {
     fn skip(self, offset: usize, delta_line: u32) -> Self {
         Lexer {
             code: &self.code[offset..],
-            position: self.position.adjust(offset, delta_line)
+            position: self.position.adjust(offset as isize, delta_line)
         }
     }
 
