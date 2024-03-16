@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::collections::HashMap;
 
 use crate::error::Value;
-use crate::object::{Object, List, Map, Builtin, Type, signature, IntVariant};
+use crate::object::{Object, List, Map, Builtin, Type, IntVariant};
 use crate::error::{Error, TypeMismatch};
 
 

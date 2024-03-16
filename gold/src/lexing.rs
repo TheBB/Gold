@@ -1,6 +1,5 @@
 use std::cell::UnsafeCell;
 use std::fmt::Display;
-use std::iter::Iterator;
 use regex::Regex;
 
 use nom::InputLength;
