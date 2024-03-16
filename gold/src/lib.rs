@@ -35,6 +35,9 @@ mod traits;
 /// Utility functions.
 mod util;
 
+/// Wrappers for various types (to be able to add traits).
+mod wrappers;
+
 #[cfg(test)]
 mod tests;
 
@@ -46,7 +49,7 @@ pub mod python;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use eval::{eval as evaluate};
+use eval::eval as evaluate;
 use error::{Error, FileSystem};
 
 pub use object::Object;

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use num_bigint::BigInt;
 
@@ -8,9 +8,10 @@ use pyo3::types::{PyList, PyDict, PyTuple, PyString};
 use pyo3::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError, PyException, PySyntaxError, PyNameError, PyKeyError, PyOSError, PyImportError};
 
-use crate::eval::{ImportConfig as GoldImportConfig};
-use crate::object::{Object, FuncVariant, List, Map, Key, Closure, ObjectVariant, IntVariant};
 use crate::error::{Error, Reason};
+use crate::eval::ImportConfig as GoldImportConfig;
+use crate::object::{Object, FuncVariant, List, Map, Key, Closure, ObjectVariant, IntVariant};
+use crate::traits::Peek;
 
 
 /// Convert a Gold error to a Python error.
@@ -38,7 +39,7 @@ pub fn err_to_py(err: Error) -> PyErr {
 /// opaque Python type.
 ///
 /// This type represents all kinds of callable objects.
-#[pyclass]
+#[pyclass(unsendable)]
 #[derive(Clone)]
 pub struct Function(FuncVariant);
 
@@ -98,7 +99,7 @@ impl<'s> FromPyObject<'s> for Object {
             Ok(Object::null())
         } else if obj.is_callable() {
             let func: Py<PyAny> = obj.into();
-            let closure = Closure(Arc::new(
+            let closure = Closure(Rc::new(
                 move |args: &List, kwargs: Option<&Map>| {
                     let result = Python::with_gil(|py| {
                         let a = PyTuple::new(py, args.iter().map(|x| x.clone().into_py(py)));
@@ -127,9 +128,9 @@ impl<'s> FromPyObject<'s> for Object {
 /// Convert Gold objects to Python
 impl pyo3::IntoPy<PyObject> for Object {
     fn into_py(self, py: Python<'_>) -> PyObject {
-        match self.variant() {
+        match &self.0 {
             ObjectVariant::Int(IntVariant::Small(x)) => x.into_py(py),
-            ObjectVariant::Int(IntVariant::Big(x)) => x.as_ref().clone().into_py(py),
+            ObjectVariant::Int(IntVariant::Big(x)) => x.peek().clone().into_py(py),
             ObjectVariant::Float(x) => x.into_py(py),
             ObjectVariant::Str(x) => x.as_str().into_py(py),
             ObjectVariant::Boolean(x) => x.into_py(py),
@@ -148,7 +149,7 @@ impl pyo3::IntoPy<PyObject> for Object {
 }
 
 
-struct ImportFunction(Arc<dyn Fn(&str) -> Result<Option<Object>, Error> + Send + Sync>);
+struct ImportFunction(Rc<dyn Fn(&str) -> Result<Option<Object>, Error>>);
 
 impl<'s> FromPyObject<'s> for ImportFunction {
     fn extract(obj: &'s PyAny) -> PyResult<Self> {
@@ -164,7 +165,7 @@ impl<'s> FromPyObject<'s> for ImportFunction {
 
                 result.map_err(|err| Error::new(Reason::External(err.to_string())))
             };
-            Ok(ImportFunction(Arc::new(closure)))
+            Ok(ImportFunction(Rc::new(closure)))
         } else {
             Err(PyTypeError::new_err(
                 format!("got {}, expected callable", obj.get_type().name().unwrap_or("unknown"))
@@ -175,15 +176,14 @@ impl<'s> FromPyObject<'s> for ImportFunction {
 
 
 /// Python version of the [`ImportConfig`] struct.
-#[pyclass]
+#[pyclass(unsendable)]
 #[derive(Clone)]
 pub struct ImportConfig {
-
     /// Corresponds to [`ImportConfig::root_path`].
     pub root_path: Option<String>,
 
     /// Corresponds to [`ImportConfig::custom`].
-    pub custom: Option<Arc<dyn Fn(&str) -> Result<Option<Object>, Error> + Send + Sync>>,
+    pub custom: Option<Rc<dyn Fn(&str) -> Result<Option<Object>, Error>>>,
 }
 
 #[pymethods]

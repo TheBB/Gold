@@ -32,7 +32,7 @@ macro_rules! builtin {
 
 lazy_static! {
     /// Table of all builtin functions.
-    pub static ref BUILTINS: HashMap<&'static str, Builtin> = {
+    pub(crate) static ref BUILTINS: HashMap<&'static str, Builtin> = {
         let mut m = HashMap::new();
         builtin!(m, len);
         builtin!(m, range);

@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 
-use indexmap::IndexMap;
 use symbol_table::GlobalSymbol;
 
 use crate::error::{Error, Span, Tagged};
 use crate::object::Key;
+use crate::wrappers::OrderedMap;
 
 
 // Boxable
@@ -12,7 +12,6 @@ use crate::object::Key;
 
 /// Utility trait for converting any value to a boxed value.
 pub trait Boxable<T> where T: Sized {
-
     /// Convert self to a boxed value.
     fn to_box(self) -> Box<T>;
 }
@@ -39,7 +38,6 @@ impl<T> Boxable<T> for T {
 /// Most nodes should implement [`FreeImpl`] instead of [`Free`], relying on the
 /// default implementation of [`Free`].
 pub trait Free {
-
     /// Return a set of all free names in this AST node.
     fn free(&self) -> HashSet<Key>;
 }
@@ -47,7 +45,6 @@ pub trait Free {
 /// Utility trait for implementing [`Free`] by mutating an existing set instead
 /// of creating new ones at each AST node.
 pub trait FreeImpl {
-
     /// Add all free names in this AST node to the set `free`.
     fn free_impl(&self, free: &mut HashSet<Key>);
 }
@@ -80,7 +77,6 @@ impl<T: FreeImpl> Free for T {
 /// may rely on previously-bound names in the same pattern, thus necessitating
 /// computing both free and bound names in the same traversal.
 pub trait FreeAndBound {
-
     /// Add all free names in this AST node to the set `free`, and all bound
     /// names to the set `bound`.
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>);
@@ -104,7 +100,6 @@ impl<T: FreeAndBound> FreeAndBound for Tagged<T> {
 ///
 /// There's no need to implement this trait beyond the blanket implementation.
 pub trait Taggable: Sized {
-
     /// Wrap this object in a tagged wrapper.
     fn tag<T>(self, loc: T) -> Tagged<Self> where Span: From<T>;
 }
@@ -122,7 +117,6 @@ impl<T> Taggable for T where T: Sized {
 /// This trait is implemented by all AST nodes that require a validation step,
 /// to catch integrity errors which the parser either can't or won't catch.
 pub trait Validatable {
-
     /// Validate this node and return a suitable error if necessary.
     ///
     /// By the Anna Karenina rule, there's no distinction on success.
@@ -161,19 +155,19 @@ impl<T> ToVec<T> for Vec<T> {
 // ------------------------------------------------------------------------------------------------
 
 /// Utility trait for converting things to maps. This is used by the Object::map constructor.
-pub trait ToMap<K,V> {
-    fn to_map(self) -> IndexMap<K,V>;
+pub(crate) trait ToMap<K,V> {
+    fn to_map(self) -> OrderedMap<K,V>;
 }
 
-impl<K,V> ToMap<K,V> for IndexMap<K,V> {
-    fn to_map(self) -> IndexMap<K,V> {
+impl<K,V> ToMap<K,V> for OrderedMap<K,V> {
+    fn to_map(self) -> OrderedMap<K,V> {
         self
     }
 }
 
 impl<K,V> ToMap<K,V> for () {
-    fn to_map(self) -> IndexMap<K,V> {
-        IndexMap::new()
+    fn to_map(self) -> OrderedMap<K,V> {
+        OrderedMap::new()
     }
 }
 
@@ -182,11 +176,20 @@ where
     A: AsRef<str>,
     V: From<B>,
 {
-    fn to_map(self) -> IndexMap<GlobalSymbol,V> {
-        let mut ret = IndexMap::new();
+    fn to_map(self) -> OrderedMap<GlobalSymbol,V> {
+        let mut ret = OrderedMap::new();
         for (k, v) in self {
             ret.insert(GlobalSymbol::new(k.as_ref()), V::from(v));
         }
         ret
     }
+}
+
+
+// Peek
+// ------------------------------------------------------------------------------------------------
+
+/// Utility trait for unwrapping wrappers
+pub(crate) trait Peek<T> {
+    fn peek(&self) -> &T;
 }

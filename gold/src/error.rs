@@ -4,6 +4,7 @@ use std::ops::{Deref, Range, Sub};
 use std::fmt::{Debug, Display, Write};
 use std::path::PathBuf;
 
+use gc::{custom_trace, Finalize, Trace};
 use serde::{Serialize, Deserialize};
 
 use crate::ast::{BinOp, UnOp};
@@ -261,6 +262,16 @@ impl<T> Tagged<T> {
     pub fn tag_error(&self, action: Action) -> impl Fn(Error) -> Error {
         let span = self.span();
         move |err: Error| err.tag(span, action)
+    }
+}
+
+unsafe impl<T: Trace> Trace for Tagged<T> {
+    custom_trace!(this, { mark(&this.contents); });
+}
+
+impl<T: Finalize> Finalize for Tagged<T> {
+    fn finalize(&self) {
+        self.contents.finalize();
     }
 }
 
