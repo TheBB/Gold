@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
@@ -17,7 +17,6 @@ const STDLIB: &str = include_str!("std.gold");
 /// Configure the import behavior when evaluating Gold code.
 #[derive(Clone, Default)]
 pub struct ImportConfig {
-
     /// If set, unresolved imports will be loaded relative to this path.
     pub root_path: Option<PathBuf>,
 
@@ -27,7 +26,7 @@ pub struct ImportConfig {
     /// case, the importer will attempt to resolve the import to a path if
     /// possible. If the function returns an error, import resolution will be
     /// aborted.
-    pub custom: Option<Arc<dyn Fn(&str) -> Result<Option<Object>, Error> + Send + Sync>>,
+    pub custom: Option<Rc<dyn Fn(&str) -> Result<Option<Object>, Error>>>,
 }
 
 impl ImportConfig {
@@ -69,8 +68,7 @@ impl ImportConfig {
 
 
 /// The Namespace object is the core type for AST evaluation.
-pub enum Namespace<'a> {
-
+pub(crate) enum Namespace<'a> {
     /// Empty namespace - no names bound
     Empty,
 

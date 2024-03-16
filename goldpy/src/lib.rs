@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use pyo3::prelude::*;
 
-use gold::{Object};
+use gold::Object;
 use gold::python::{err_to_py, Function, ImportConfig};
 
 
