@@ -16,9 +16,9 @@ let carlo = {
     admin: false,
 }
 
-let isAdmin = |person| person.admin
+let isAdmin = fn (person) person.admin
 
-let filter = |pred, list| [
+let filter = fn (pred, list) [
     for x in list: when pred(x): x
 ]
 

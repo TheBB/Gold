@@ -1,18 +1,18 @@
-let smallServer = |hostname| {
+let smallServer = fn (hostname) {
     cpus: 1,
     gigabytesOfRAM: 1,
     hostname: hostname,
     terabytesOfDisk: 1
 }
 
-let mediumServer = |hostname| {
+let mediumServer = fn (hostname) {
     cpus: 8,
     gigabytesOfRAM: 16,
     hostname: hostname,
     terabytesOfDisk: 4,
 }
 
-let largeServer = |hostname| {
+let largeServer = fn (hostname) {
     cpus: 64,
     gigabytesOfRAM: 256,
     hostname: hostname,
