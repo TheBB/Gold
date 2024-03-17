@@ -1,0 +1,11 @@
+let fib = (
+    let recurse = fn (n, [a, b]) (
+        if n == 0 then
+            [a, b]
+        else
+            recurse(n-1, [b, a + b])
+    )
+    in fn (n) let [_, x] = recurse(n, [1, 1]) in x
+)
+
+in fib(5)

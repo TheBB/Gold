@@ -1,11 +1,11 @@
-let educationalBook = |publisher, title| {
+let educationalBook = fn (publisher, title) {
     category: "nonfiction",
     department: "books",
     publisher: publisher,
     title: title,
 }
 
-let makeOreilly = |title| educationalBook("O'Reilly Media", title)
+let makeOreilly = fn (title) educationalBook("O'Reilly Media", title)
 
 in [
     makeOreilly("Microservices for Java Developers"),

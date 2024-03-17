@@ -1,4 +1,4 @@
-let makeUser = |user| (
+let makeUser = fn (user) (
     let home = "/home/${user}"
     let privateKey = "${home}/.ssh/id_ed25519"
     let publicKey = privateKey + ".pub"
