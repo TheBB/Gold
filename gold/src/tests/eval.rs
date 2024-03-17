@@ -330,6 +330,16 @@ fn function_bindings() {
 
 
 #[test]
+fn deferred() {
+    assert_seq!(eval(concat!(
+        "let a = fn () b\n",
+        "let b = 1\n",
+        "in a()",
+    )), Object::int(1));
+}
+
+
+#[test]
 fn arithmetic() {
     assert_seq!(eval("1 + 2"), Object::int(3));
     assert_seq!(eval("3 + 2"), Object::int(5));

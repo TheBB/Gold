@@ -13,6 +13,7 @@
 
 
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::io::{Read, Write};
 use std::iter::Step;
@@ -36,7 +37,7 @@ use crate::ast::{ListBinding, MapBinding, Expr, BinOp, UnOp, FormatSpec, StringA
 use crate::error::{Error, Tagged, TypeMismatch, Value, Reason};
 use crate::eval::Namespace;
 use crate::util;
-use crate::wrappers::{WBigInt, OrderedMap};
+use crate::wrappers::{WBigInt, OrderedMap, GcCell};
 
 
 /// This type is used for all interned strings, map keys, variable names, etc.
@@ -830,6 +831,10 @@ pub(crate) struct Func {
     /// closure.
     pub closure: Map,
 
+    /// A set of names to be resolved later
+    #[unsafe_ignore_trace]
+    pub deferred: Option<HashSet<Key>>,
+
     /// The expression to evaluate.
     pub expr: Tagged<Expr>,
 }
@@ -849,7 +854,7 @@ pub(crate) struct Closure(pub(crate) Rc<dyn Fn(&List, Option<&Map>) -> Result<Ob
 #[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
 pub(crate) enum FuncVariant {
     /// Function implemented in Gold.
-    Func(Gc<Func>),
+    Func(Gc<GcCell<Func>>),
 
     /// Static (serializable) function implemented in Rust.
     Builtin(#[unsafe_ignore_trace] Builtin),
@@ -871,7 +876,7 @@ impl Debug for FuncVariant {
 
 impl From<Func> for FuncVariant {
     fn from(value: Func) -> Self {
-        FuncVariant::Func(Gc::new(value))
+        FuncVariant::Func(Gc::new(GcCell::new(value)))
     }
 }
 
@@ -902,7 +907,7 @@ impl FuncVariant {
             Self::Builtin(Builtin { func, .. }) => func(args, kwargs),
             Self::Closure(Closure(func)) => func(args, kwargs),
             Self::Func(func) => {
-                let Func { args: fargs, kwargs: fkwargs, closure, expr } = func.as_ref();
+                let Func { args: fargs, kwargs: fkwargs, closure, expr, .. } = &*func.as_ref().borrow();
 
                 // Create a new namespace from the enclosed-over bindings.
                 let ns = Namespace::Frozen(closure);
@@ -923,6 +928,20 @@ impl FuncVariant {
                 // Evaluate the function.
                 sub.eval(expr)
             }
+        }
+    }
+
+    pub(crate) fn resolve_deferred(&self, ns: &Namespace) -> Result<(), Error> {
+        match self {
+            Self::Func(func) => {
+                if let Func { closure, deferred: Some(deferred), .. } = &mut *func.as_ref().borrow_mut() {
+                    for name in deferred.iter() {
+                        closure.insert(*name, ns.get_immediate(name)?);
+                    }
+                }
+                Ok(())
+            }
+            _ => Ok(()),
         }
     }
 }
@@ -1176,6 +1195,14 @@ impl ObjectVariant {
             Self::Int(x) => Some(x.to_f64()),
             Self::Float(x) => Some(*x),
             _ => None,
+        }
+    }
+
+    /// Resolve deferred bindings.
+    pub(crate) fn resolve_deferred(&self, ns: &Namespace) -> Result<(), Error> {
+        match self {
+            Self::Func(func) => func.resolve_deferred(ns),
+            _ => Ok(()),
         }
     }
 }
@@ -1682,6 +1709,11 @@ impl Object {
             }
             _ => Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Index))),
         }
+    }
+
+    /// Wrap [`ObjectVariant::resolve_deferred`]
+    pub(crate) fn resolve_deferred(&self, ns: &Namespace) -> Result<(), Error> {
+        self.0.resolve_deferred(ns)
     }
 
     /// Wrap [`ObjectVariant::format`].
