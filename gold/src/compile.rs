@@ -1,9 +1,11 @@
+use std::collections::{HashMap, HashSet};
+
 use gc::{Trace, Finalize};
 use serde::{Serialize, Deserialize};
 
-use crate::ast::{BinOp, Expr, Transform, UnOp};
-use crate::error::Error;
-use crate::object::Object;
+use crate::ast::{BinOp, Binding, Expr, FormatSpec, ListElement, MapElement, StringElement, Transform, UnOp};
+use crate::error::{Error, Reason};
+use crate::object::{Key, Object};
 use crate::wrappers::GcCell;
 
 
@@ -14,6 +16,9 @@ pub(crate) struct Function {
 
     #[unsafe_ignore_trace]
     pub code: Vec<Instruction>,
+
+    #[unsafe_ignore_trace]
+    pub fmt_specs: Vec<FormatSpec>,
 }
 
 
@@ -26,12 +31,15 @@ pub(crate) enum Instruction {
     CondJump(usize),
     Jump(usize),
     Duplicate,
+    DuplicateIndex(usize),
     Discard,
+    DiscardMany(usize),
     Noop,
 
     // Unary operators
     ArithmeticalNegate,
     LogicalNegate,
+    Format(usize),
 
     // Binary mathematical operators
     Add,
@@ -50,15 +58,26 @@ pub(crate) enum Instruction {
     NotEqual,
     Contains,
 
+    // Other operators
+    Index,
+
     // Constructors
     NewList,
     NewMap,
+
+    // Mutability
+    PushToList,
+    PushToMap,
+    SplatToCollection,
 }
 
 
 pub(crate) struct Compiler {
     constants: Vec<Object>,
     code: Vec<Instruction>,
+    fmt_specs: Vec<FormatSpec>,
+
+    names: Vec<(usize, HashMap<Key, usize>)>,
 }
 
 impl Compiler {
@@ -66,6 +85,8 @@ impl Compiler {
         Compiler {
             code: Vec::new(),
             constants: Vec::new(),
+            fmt_specs: Vec::new(),
+            names: Vec::new(),
          }
     }
 
@@ -77,10 +98,32 @@ impl Compiler {
                 Ok(1)
             }
 
+            Expr::Identifier(key) => {
+                for (_, ns) in self.names.iter().rev() {
+                    if ns.contains_key(key) {
+                        let index = ns[key];
+                        self.instruction(Instruction::DuplicateIndex(index));
+                        return Ok(1)
+                    }
+                }
+                Err(Error::new(Reason::None))
+            }
+
             Expr::Transformed { operand, transform } => {
                 let mut len = self.emit(operand)?;
                 len += self.emit_transform(transform)?;
                 Ok(len)
+            }
+
+            Expr::String(elements) => {
+                let index = self.constant(Object::str(""));
+                self.instruction(Instruction::LoadConst(index));
+
+                let mut len = 0;
+                for element in elements {
+                    len += self.emit_string_element(element)?;
+                }
+                Ok(len + 1)
             }
 
             Expr::Branch { condition, true_branch, false_branch } => {
@@ -98,12 +141,103 @@ impl Compiler {
 
             Expr::List(elements) => {
                 self.instruction(Instruction::NewList);
-                Ok(1)
+
+                let mut len = 0;
+                for element in elements {
+                    len += self.emit_list_element(element)?;
+                }
+                Ok(len + 1)
             }
 
             Expr::Map(elements) => {
                 self.instruction(Instruction::NewMap);
-                Ok(1)
+
+                let mut len = 0;
+                for element in elements {
+                    len += self.emit_map_element(element)?;
+                }
+                Ok(len + 1)
+            }
+
+            Expr::Let { bindings, expression } => {
+                self.push_namespace();
+
+                let mut len = 0;
+                for (binding, expr) in bindings {
+                    len += self.emit(expr)?;
+                    len += self.emit_binding(binding)?;
+                }
+
+                len += self.emit(expression)?;
+                len += self.pop_namespace();
+                Ok(len)
+            }
+
+            _ => { Ok(0) }
+        }
+    }
+
+    fn emit_binding(&mut self, binding: &Binding) -> Result<usize, Error> {
+        match binding {
+            Binding::Identifier(key) => {
+                self.bind_name(**key);
+                Ok(0)
+            }
+
+            _ => { Ok(0) }
+        }
+    }
+
+    fn emit_string_element(&mut self, element: &StringElement) -> Result<usize, Error> {
+        match element {
+            StringElement::Raw(expr) => {
+                let index = self.constant(Object::str(expr.as_ref()));
+                self.instruction(Instruction::LoadConst(index));
+                self.instruction(Instruction::Add);
+                Ok(2)
+            }
+
+            StringElement::Interpolate(expr, spec) => {
+                let len = self.emit(expr)?;
+                let index = self.fmt_spec(spec.unwrap_or_default());
+                self.instruction(Instruction::Format(index));
+                self.instruction(Instruction::Add);
+                Ok(len + 2)
+            }
+        }
+    }
+
+    fn emit_list_element(&mut self, element: &ListElement) -> Result<usize, Error> {
+        match element {
+            ListElement::Singleton(expr) => {
+                let len = self.emit(expr)?;
+                self.instruction(Instruction::PushToList);
+                Ok(len + 1)
+            }
+
+            ListElement::Splat(expr) => {
+                let len = self.emit(expr)?;
+                self.instruction(Instruction::SplatToCollection);
+                Ok(len + 1)
+            }
+
+            _ => { Ok(0) }
+        }
+    }
+
+    fn emit_map_element(&mut self, element: &MapElement) -> Result<usize, Error> {
+        match element {
+            MapElement::Singleton { key, value } => {
+                let mut len = self.emit(key)?;
+                len += self.emit(value)?;
+                self.instruction(Instruction::PushToMap);
+                Ok(len + 1)
+            }
+
+            MapElement::Splat(expr) => {
+                let len = self.emit(expr)?;
+                self.instruction(Instruction::SplatToCollection);
+                Ok(len + 1)
             }
 
             _ => { Ok(0) }
@@ -155,8 +289,8 @@ impl Compiler {
                     BinOp::Equal => { self.code.push(Instruction::Equal); }
                     BinOp::NotEqual => { self.code.push(Instruction::NotEqual); }
                     BinOp::Contains => { self.code.push(Instruction::Contains); }
+                    BinOp::Index => { self.code.push(Instruction::Index); }
                     BinOp::Or | BinOp::And => {}
-                    _ => {}
                 }
 
                 Ok(len + 1)
@@ -178,12 +312,41 @@ impl Compiler {
         r
     }
 
+    fn fmt_spec(&mut self, spec: FormatSpec) -> usize {
+        let r = self.fmt_specs.len();
+        self.fmt_specs.push(spec);
+        r
+    }
+
+    fn push_namespace(&mut self) {
+        if let Some((num_names, names)) = self.names.last() {
+            self.names.push((num_names + names.len(), HashMap::new()))
+        } else {
+            self.names.push((0, HashMap::new()))
+        }
+    }
+
+    fn pop_namespace(&mut self) -> usize {
+        let (len, _) = self.names.pop().unwrap();
+        self.instruction(Instruction::DiscardMany(len));
+        len
+    }
+
+    fn bind_name(&mut self, name: Key) -> usize {
+        let (num_names, names) = self.names.last_mut().unwrap();
+        let r = *num_names + names.len();
+        names.insert(name, r);
+        println!("{:?}", self.names);
+        r
+    }
+
     pub fn finalize(mut self) -> Function {
         self.code.push(Instruction::Return);
         Function {
             constants: self.constants,
             cells: Vec::new(),
             code: self.code,
+            fmt_specs: self.fmt_specs,
         }
     }
 }

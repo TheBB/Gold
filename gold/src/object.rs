@@ -1207,6 +1207,54 @@ impl ObjectVariant {
             _ => Ok(()),
         }
     }
+
+    pub(crate) fn push_to_list(&self, other: Object) -> Result<(), Error> {
+        match self {
+            Self::List(x) => {
+                let mut xx = x.borrow_mut();
+                xx.push(other);
+                Ok(())
+            }
+            _ => Err(Error::new(Reason::None))
+        }
+    }
+
+    pub(crate) fn push_to_map(&self, key: Object, value: Object) -> Result<(), Error> {
+        match self {
+            Self::Map(x) => {
+                let mut xx = x.borrow_mut();
+                if let Some(k) = key.get_key() {
+                    xx.insert(k, value);
+                    Ok(())
+                } else {
+                    Err(Error::new(Reason::None))
+                }
+            }
+            _ => Err(Error::new(Reason::None))
+        }
+    }
+
+    pub(crate) fn splat_into(&self, other: Object) -> Result<(), Error> {
+        match (self, &other.0) {
+            (Self::List(x), Self::List(y)) => {
+                let mut xx = x.borrow_mut();
+                let yy = y.borrow();
+                xx.extend_from_slice(&*yy);
+                Ok(())
+            }
+
+            (Self::Map(x), Self::Map(y)) => {
+                let mut xx = x.borrow_mut();
+                let yy = y.borrow();
+                for (k, v) in yy.iter() {
+                    xx.insert(k.clone(), v.clone());
+                }
+                Ok(())
+            }
+
+            _ => Err(Error::new(Reason::None))
+        }
+    }
 }
 
 impl<T> From<T> for ObjectVariant where IntVariant: From<T> {
@@ -1748,6 +1796,21 @@ impl Object {
     /// Wrap [`ObjectVariant::contains`].
     pub fn contains(self, other: &Self) -> Result<bool, Error> {
         self.0.contains(other)
+    }
+
+    /// Wrap [`ObjectVariant::push_to_list`]
+    pub(crate) fn push_to_list(&self, other: Self) -> Result<(), Error> {
+        self.0.push_to_list(other)
+    }
+
+    /// Wrap [`ObjectVariant::push_to_list`]
+    pub(crate) fn push_to_map(&self, key: Self, value: Self) -> Result<(), Error> {
+        self.0.push_to_map(key, value)
+    }
+
+    /// Wrap [`ObjectVariant::splat_into`]
+    pub(crate) fn splat_into(&self, other: Self) -> Result<(), Error> {
+        self.0.splat_into(other)
     }
 
     // Auto-wrap some unary and binary operators.

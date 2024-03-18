@@ -732,8 +732,21 @@ impl<'a> Vm<'a> {
                     self.push(obj);
                 }
 
+                Instruction::DuplicateIndex(i) => {
+                    let obj = self.peek_at(i).clone();
+                    self.push(obj);
+                }
+
                 Instruction::Discard => {
                     self.pop();
+                }
+
+                Instruction::DiscardMany(n) => {
+                    let obj = self.pop();
+                    for _ in 0..n {
+                        self.pop();
+                    }
+                    self.push(obj);
                 }
 
                 Instruction::Noop => {}
@@ -746,6 +759,12 @@ impl<'a> Vm<'a> {
                 Instruction::LogicalNegate => {
                     let obj = self.pop();
                     self.push(Object::bool(!obj.truthy()));
+                }
+
+                Instruction::Format(i) => {
+                    let obj = self.pop();
+                    let result = Object::str(obj.format(self.cur_frame().function.fmt_specs[i])?);
+                    self.push(result);
                 }
 
                 Instruction::Add => {
@@ -842,12 +861,34 @@ impl<'a> Vm<'a> {
                     self.push(Object::bool(lhs.contains(&rhs)?));
                 }
 
+                Instruction::Index => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    self.push(lhs.index(&rhs)?);
+                }
+
                 Instruction::NewList => {
                     self.push(Object::new_list());
                 }
 
                 Instruction::NewMap => {
                     self.push(Object::new_map());
+                }
+
+                Instruction::PushToList => {
+                    let obj = self.pop();
+                    self.peek().push_to_list(obj)?;
+                }
+
+                Instruction::PushToMap => {
+                    let value = self.pop();
+                    let key = self.pop();
+                    self.peek().push_to_map(key, value)?;
+                }
+
+                Instruction::SplatToCollection => {
+                    let obj = self.pop();
+                    self.peek().splat_into(obj)?;
                 }
             }
         }
@@ -859,6 +900,10 @@ impl<'a> Vm<'a> {
 
     fn peek(&mut self) -> &Object {
         self.cur_frame().stack.last().unwrap()
+    }
+
+    fn peek_at(&mut self, i: usize) -> &Object {
+        &self.cur_frame().stack[i]
     }
 
     fn pop(&mut self) -> Object {
