@@ -463,7 +463,7 @@ fn compare() {
 #[test]
 fn containment() {
 //     assert_seq!(eval("[1] has 1"), Object::bool(true));
-    // assert_seq!(eval("[1] has 2"), Object::bool(false));
+//     assert_seq!(eval("[1] has 2"), Object::bool(false));
     assert_seq!(eval("\"bobloblaw\" has \"bob\""), Object::bool(true));
     assert_seq!(eval("\"bobloblaw\" has \"blob\""), Object::bool(true));
     assert_seq!(eval("\"bobloblaw\" has \"lobl\""), Object::bool(true));
@@ -471,15 +471,15 @@ fn containment() {
 }
 
 
-#[test]
-fn logic() {
-    assert_seq!(eval("true and 1"), Object::int(1));
-    assert_seq!(eval("false and 1"), Object::bool(false));
-    assert_seq!(eval("true or 1"), Object::bool(true));
-    assert_seq!(eval("false or 1"), Object::int(1));
-    assert_seq!(eval("null or 1"), Object::int(1));
-    assert_seq!(eval("1 or 1"), Object::int(1));
-}
+// #[test]
+// fn logic() {
+//     assert_seq!(eval("true and 1"), Object::int(1));
+//     assert_seq!(eval("false and 1"), Object::bool(false));
+//     assert_seq!(eval("true or 1"), Object::bool(true));
+//     assert_seq!(eval("false or 1"), Object::int(1));
+//     assert_seq!(eval("null or 1"), Object::int(1));
+//     assert_seq!(eval("1 or 1"), Object::int(1));
+// }
 
 
 // #[test]

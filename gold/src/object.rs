@@ -22,7 +22,7 @@ use std::rc::Rc;
 use std::time::SystemTime;
 
 use json::JsonValue;
-use gc::{Gc, Trace, Finalize};
+use gc::{Finalize, Gc, GcCellRef, Trace};
 use num_bigint::{BigInt, BigUint};
 use num_traits::{ToPrimitive, checked_pow};
 use rmp_serde::{decode, encode};
@@ -971,10 +971,10 @@ pub(crate) enum ObjectVariant {
     Boolean(bool),
 
     /// Lists
-    List(Gc<List>),
+    List(Gc<GcCell<List>>),
 
     /// Mappings
-    Map(Gc<Map>),
+    Map(Gc<GcCell<Map>>),
 
     /// Functions
     Func(FuncVariant),
@@ -1029,12 +1029,12 @@ impl ObjectVariant {
 
     /// Construct a list.
     pub fn list<T>(x: T) -> Self where T: ToVec<Object> {
-        Self::List(Gc::new(x.to_vec()))
+        Self::List(Gc::new(GcCell::new(x.to_vec())))
     }
 
     /// Construct a map.
     pub fn map<T>(x: T) -> Self where T: ToMap<Key, Object> {
-        Self::Map(Gc::new(x.to_map()))
+        Self::Map(Gc::new(GcCell::new(x.to_map())))
     }
 
     /// Normalize an integer variant, converting bignums to machine integers if
@@ -1110,7 +1110,7 @@ impl ObjectVariant {
     /// The plus operator: concatenate strings and lists, or delegate to mathematical addition.
     pub fn add(&self, other: &Self) -> Result<Self, Error> {
         match (&self, &other) {
-            (Self::List(x), Self::List(y)) => Ok(Self::list(x.iter().chain(y.iter()).map(Object::clone).collect::<List>())),
+            (Self::List(x), Self::List(y)) => Ok(Self::list(x.borrow().iter().chain(y.borrow().iter()).map(Object::clone).collect::<List>())),
             (Self::Str(x), Self::Str(y)) => Ok(Self::Str(x.add(y))),
             _ => self.operate(other, IntVariant::add, |x,y| x + y, BinOp::Add),
         }
@@ -1181,7 +1181,7 @@ impl ObjectVariant {
     /// The containment operator.
     pub fn contains(&self, other: &Object) -> Result<bool, Error> {
         if let Self::List(x) = self {
-            return Ok(x.contains(other));
+            return Ok(x.borrow().contains(other));
         }
 
         if let (Self::Str(haystack), Self::Str(needle)) = (self, &other.0) {
@@ -1231,7 +1231,8 @@ impl Display for ObjectVariant {
 
             Self::List(elements) => {
                 f.write_str("[")?;
-                let mut iter = elements.iter().peekable();
+                let temp = elements.borrow();
+                let mut iter = temp.iter().peekable();
                 while let Some(element) = iter.next() {
                     f.write_fmt(format_args!("{}", element))?;
                     if iter.peek().is_some() {
@@ -1243,7 +1244,8 @@ impl Display for ObjectVariant {
 
             Self::Map(elements) => {
                 f.write_str("{")?;
-                let mut iter = elements.iter().peekable();
+                let temp = elements.borrow();
+                let mut iter = temp.iter().peekable();
                 while let Some((k, v)) = iter.next() {
                     f.write_fmt(format_args!("{}: {}", k, v))?;
                     if iter.peek().is_some() {
@@ -1269,14 +1271,14 @@ impl TryFrom<&ObjectVariant> for JsonValue {
             ObjectVariant::Boolean(x) => Ok(JsonValue::from(*x)),
             ObjectVariant::List(x) => {
                 let mut val = JsonValue::new_array();
-                for element in x.as_ref() {
+                for element in x.borrow().iter() {
                     val.push(JsonValue::try_from(element.clone())?).unwrap();
                 }
                 Ok(val)
             },
             ObjectVariant::Map(x) => {
                 let mut val = JsonValue::new_object();
-                for (key, element) in x.as_ref() {
+                for (key, element) in x.borrow().iter() {
                     val[key.as_str()] = JsonValue::try_from(element.clone())?;
                 }
                 Ok(val)
@@ -1487,7 +1489,7 @@ impl Object {
 
     /// Construct an empty list.
     pub fn new_list() -> Self {
-        Self(ObjectVariant::List(Gc::new(vec![])))
+        Self(ObjectVariant::List(Gc::new(GcCell::new(vec![]))))
     }
 
     /// Construct a map.
@@ -1497,7 +1499,7 @@ impl Object {
 
     /// Construct an empty map.
     pub fn new_map() -> Self {
-        Self(ObjectVariant::Map(Gc::new(Map::new())))
+        Self(ObjectVariant::Map(Gc::new(GcCell::new(Map::new()))))
     }
 
     /// Serialize this objcet to a byte vector.
@@ -1559,10 +1561,12 @@ impl Object {
             // `eq` would not delegate to checking contained objects using
             // `user_eq`.
             (ObjectVariant::List(x), ObjectVariant::List(y)) => {
-                if x.len() != y.len() {
-                    return false
+                let xx = x.borrow();
+                let yy = y.borrow();
+                if xx.len() != yy.len() {
+                    return false;
                 }
-                for (xx, yy) in x.iter().zip(y.as_ref()) {
+                for (xx, yy) in xx.iter().zip(yy.iter()) {
                     if !xx.user_eq(yy) {
                         return false
                     }
@@ -1571,11 +1575,13 @@ impl Object {
             },
 
             (ObjectVariant::Map(x), ObjectVariant::Map(y)) => {
-                if x.len() != y.len() {
+                let xx = x.borrow();
+                let yy = y.borrow();
+                if xx.len() != yy.len() {
                     return false
                 }
-                for (xk, xv) in x.iter() {
-                    if let Some(yv) = y.get(xk) {
+                for (xk, xv) in xx.iter() {
+                    if let Some(yv) = yy.get(xk) {
                         if !xv.user_eq(yv) {
                             return false
                         }
@@ -1624,17 +1630,17 @@ impl Object {
     }
 
     /// Extract the list variant if applicable.
-    pub fn get_list<'a>(&'a self) -> Option<&'a List> {
+    pub fn get_list<'a>(&'a self) -> Option<GcCellRef<'_, List>> {
         match &self.0 {
-            ObjectVariant::List(x) => Some(x.as_ref()),
+            ObjectVariant::List(x) => Some(x.borrow()),
             _ => None
         }
     }
 
     /// Extract the map variant if applicable.
-    pub(crate) fn get_map<'a>(&'a self) -> Option<&'a Map> {
+    pub(crate) fn get_map<'a>(&'a self) -> Option<GcCellRef<'_, Map>> {
         match &self.0 {
-            ObjectVariant::Map(x) => Some(x.as_ref()),
+            ObjectVariant::Map(x) => Some(x.borrow()),
             _ => None
         }
     }
@@ -1707,16 +1713,18 @@ impl Object {
     pub fn index(&self, other: &Object) -> Result<Object, Error> {
         match (&self.0, &other.0) {
             (ObjectVariant::List(x), ObjectVariant::Int(y)) => {
+                let xx = x.borrow();
                 let i: usize = y.try_into().map_err(|_| Error::new(Value::OutOfRange))?;
-                if i >= x.len() {
+                if i >= xx.len() {
                     Err(Error::new(Value::OutOfRange))
                 } else {
-                    Ok(x[i].clone())
+                    Ok(xx[i].clone())
                 }
             }
             (ObjectVariant::Map(x), ObjectVariant::Str(y)) => {
+                let xx = x.borrow();
                 let yy = GlobalSymbol::from(y);
-                x.get(&yy).ok_or_else(|| Error::new(Reason::Unassigned(yy))).map(Object::clone)
+                xx.get(&yy).ok_or_else(|| Error::new(Reason::Unassigned(yy))).map(Object::clone)
             }
             _ => Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Index))),
         }
@@ -1754,7 +1762,7 @@ impl Object {
 
 impl FromIterator<Object> for Object {
     fn from_iter<T: IntoIterator<Item = Object>>(iter: T) -> Self {
-        Object(ObjectVariant::List(Gc::new(iter.into_iter().collect())))
+        Object(ObjectVariant::List(Gc::new(GcCell::new(iter.into_iter().collect()))))
     }
 }
 

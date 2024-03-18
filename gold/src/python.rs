@@ -61,9 +61,9 @@ impl Function {
             let gkwargs = x.get_map().ok_or_else(
                 || PyTypeError::new_err("internal error py002 - this should not happen, please file a bug report")
             )?;
-            func.call(posargs, Some(gkwargs))
+            func.call(&*posargs, Some(&*gkwargs))
         } else {
-            func.call(posargs, None)
+            func.call(&*posargs, None)
         }.map_err(err_to_py)?;
 
         Ok(result.into_py(py))
@@ -134,10 +134,10 @@ impl pyo3::IntoPy<PyObject> for Object {
             ObjectVariant::Float(x) => x.into_py(py),
             ObjectVariant::Str(x) => x.as_str().into_py(py),
             ObjectVariant::Boolean(x) => x.into_py(py),
-            ObjectVariant::List(x) => PyList::new(py, x.iter().map(|x| x.clone().into_py(py))).into(),
+            ObjectVariant::List(x) => PyList::new(py, x.borrow().iter().map(|x| x.clone().into_py(py))).into(),
             ObjectVariant::Map(x) => {
                 let r = PyDict::new(py);
-                for (k, v) in x.as_ref() {
+                for (k, v) in x.borrow().iter() {
                     r.set_item(k.as_str(), v.clone().into_py(py)).unwrap();
                 }
                 r.into()

@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::str::FromStr;
 use std::collections::HashMap;
 
@@ -255,7 +256,7 @@ fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 fn map(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [f: func, x: list] {
         let mut ret = List::new();
-        for obj in x {
+        for obj in x.borrow().iter() {
             let elt = f.call(&vec![obj.clone()], None)?;
             ret.push(elt);
         }
@@ -277,7 +278,7 @@ fn map(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 fn filter(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [f: func, x: list] {
         let mut ret = List::new();
-        for obj in x {
+        for obj in x.borrow().iter() {
             let elt = f.call(&vec![obj.clone()], None)?;
             if elt.truthy() {
                 ret.push(obj.clone());
@@ -297,7 +298,7 @@ fn filter(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: map] {
         let mut ret = List::new();
-        for (key, val) in x {
+        for (key, val) in x.borrow().iter() {
             ret.push(Object::list(vec![
                 Object::key(*key),
                 val.clone()

@@ -316,13 +316,13 @@ impl<'a> Namespace<'a> {
                 let list = value.get_list().ok_or_else(
                     || Error::new(Unpack::TypeMismatch(binding.type_of(), value.type_of())).tag(binding, Action::Bind)
                 )?;
-                self.bind_list(&bindings.0, list).map_err(bindings.tag_error(Action::Bind))
+                self.bind_list(&bindings.0, &*list).map_err(bindings.tag_error(Action::Bind))
             }
             Binding::Map(bindings) => {
                 let obj = value.get_map().ok_or_else(
                     || Error::new(Unpack::TypeMismatch(binding.type_of(), value.type_of())).tag(binding, Action::Bind)
                 )?;
-                self.bind_map(&bindings.0, obj).map_err(bindings.tag_error(Action::Bind))
+                self.bind_map(&bindings.0, &*obj).map_err(bindings.tag_error(Action::Bind))
             }
         }
     }
@@ -340,7 +340,8 @@ impl<'a> Namespace<'a> {
             // Splat: evaluate the expression, then add all its elements to the list.
             ListElement::Splat(node) => {
                 let val = self.eval(node)?;
-                if let Some(from_values) = val.get_list() {
+                let list = val.get_list();
+                if let Some(from_values) = list {
                     values.extend_from_slice(&*from_values);
                     Ok(())
                 } else {
@@ -361,7 +362,8 @@ impl<'a> Namespace<'a> {
             // bind to a pattern and then recurse.
             ListElement::Loop { binding, iterable, element } => {
                 let val = self.eval(iterable)?;
-                if let Some(from_values) = val.get_list() {
+                let list = val.get_list();
+                if let Some(from_values) = list {
                     let mut sub = self.subtend();
                     for entry in &*from_values {
                         sub.bind(binding, entry.clone())?;
@@ -393,7 +395,8 @@ impl<'a> Namespace<'a> {
             // Splat: evaluate the expression, then insert all its pairs in the map.
             MapElement::Splat(node) => {
                 let val = self.eval(node)?;
-                if let Some(from_values) = val.get_map() {
+                let map = val.get_map();
+                if let Some(from_values) = map {
                     for (k, v) in &*from_values {
                         values.insert(k.clone(), v.clone());
                     }
@@ -416,9 +419,10 @@ impl<'a> Namespace<'a> {
             // biend to a pattern and then recurse.
             MapElement::Loop { binding, iterable, element } => {
                 let val = self.eval(iterable)?;
-                if let Some(from_values) = val.get_list() {
+                let list = val.get_list();
+                if let Some(from_values) = list {
                     let mut sub = self.subtend();
-                    for entry in from_values {
+                    for entry in from_values.iter() {
                         sub.bind(&binding, entry.clone())?;
                         sub.fill_map(element, values)?;
                     }
@@ -448,10 +452,12 @@ impl<'a> Namespace<'a> {
             // of the value.
             ArgElement::Splat(node) => {
                 let val = self.eval(node)?;
-                if let Some(list) = val.get_list() {
-                    args.extend_from_slice(list);
-                } else if let Some(obj) = val.get_map() {
-                    for (k, v) in obj {
+                let list = val.get_list();
+                let map = val.get_map();
+                if let Some(list) = list {
+                    args.extend_from_slice(&*list);
+                } else if let Some(obj) = map {
+                    for (k, v) in obj.iter() {
                         kwargs.insert(k.clone(), v.clone());
                     }
                 } else {
