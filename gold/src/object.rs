@@ -31,6 +31,7 @@ use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use symbol_table::GlobalSymbol;
 
 use crate::builtins::BUILTINS;
+use crate::compile::Function;
 use crate::traits::{Peek, ToMap, ToVec};
 
 use crate::ast::{ListBinding, MapBinding, Expr, BinOp, UnOp, FormatSpec, StringAlignSpec, AlignSpec, IntegerFormatType, GroupingSpec, SignSpec, UppercaseSpec, FloatFormatType};
@@ -776,7 +777,6 @@ impl IntVariant {
 // Function variant
 // ------------------------------------------------------------------------------------------------
 
-
 /// A builtin function is a 'pure' function implemented in Rust associated with
 /// a name. The name is used for serializing. When deserializing, the name is
 /// looked up in the [`BUILTINS`] mapping.
@@ -818,26 +818,26 @@ impl<'a> Deserialize<'a> for Builtin {
 }
 
 
-/// A function implemented in Gold.
-#[derive(Debug, PartialEq, Serialize, Deserialize, Trace, Finalize)]
-pub(crate) struct Func {
-    /// A pattern for destructuring a list of positional arguments.
-    pub args: ListBinding,
+// /// A function implemented in Gold.
+// #[derive(Debug, PartialEq, Serialize, Deserialize, Trace, Finalize)]
+// pub(crate) struct Func {
+    // /// A pattern for destructuring a list of positional arguments.
+    // pub args: ListBinding,
 
-    /// A pattern for destructuring a map of keyword arguments.
-    pub kwargs: Option<MapBinding>,
+    // /// A pattern for destructuring a map of keyword arguments.
+    // pub kwargs: Option<MapBinding>,
 
-    /// A mapping of captured bindings from the point-of-definition of the
-    /// closure.
-    pub closure: Map,
+    // /// A mapping of captured bindings from the point-of-definition of the
+    // /// closure.
+    // pub closure: Map,
 
-    /// A set of names to be resolved later
-    #[unsafe_ignore_trace]
-    pub deferred: Option<HashSet<Key>>,
+    // /// A set of names to be resolved later
+    // #[unsafe_ignore_trace]
+    // pub deferred: Option<HashSet<Key>>,
 
-    /// The expression to evaluate.
-    pub expr: Tagged<Expr>,
-}
+    // /// The expression to evaluate.
+    // pub expr: Tagged<Expr>,
+// }
 
 
 /// A 'pure' function implemented in Rust. Unlike [`Builtin`], this form of
@@ -854,7 +854,7 @@ pub(crate) struct Closure(pub(crate) Rc<dyn Fn(&List, Option<&Map>) -> Result<Ob
 #[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
 pub(crate) enum FuncVariant {
     /// Function implemented in Gold.
-    Func(Gc<GcCell<Func>>),
+    Func(Gc<Function>),
 
     /// Static (serializable) function implemented in Rust.
     Builtin(#[unsafe_ignore_trace] Builtin),
@@ -867,16 +867,16 @@ pub(crate) enum FuncVariant {
 impl Debug for FuncVariant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Func(x) => f.debug_tuple("FuncVariant::Function").field(x).finish(),
+            Self::Func(x) => f.debug_tuple("FuncVariant::Func").field(x).finish(),
             Self::Builtin(_) => f.debug_tuple("FuncVariant::Builtin").finish(),
             Self::Closure(_) => f.debug_tuple("FuncVariant::Closure").finish(),
         }
     }
 }
 
-impl From<Func> for FuncVariant {
-    fn from(value: Func) -> Self {
-        FuncVariant::Func(Gc::new(GcCell::new(value)))
+impl From<Function> for FuncVariant {
+    fn from(value: Function) -> Self {
+        FuncVariant::Func(Gc::new(value))
     }
 }
 
@@ -903,46 +903,48 @@ impl FuncVariant {
 
     /// Call this function with positional and keyword arguments.
     pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
-        match self {
-            Self::Builtin(Builtin { func, .. }) => func(args, kwargs),
-            Self::Closure(Closure(func)) => func(args, kwargs),
-            Self::Func(func) => {
-                let Func { args: fargs, kwargs: fkwargs, closure, expr, .. } = &*func.as_ref().borrow();
+        Ok(Object::int(0))
+        // match self {
+        //     Self::Builtin(Builtin { func, .. }) => func(args, kwargs),
+        //     Self::Closure(Closure(func)) => func(args, kwargs),
+        //     Self::Func(func) => {
+        //         let Func { args: fargs, kwargs: fkwargs, closure, expr, .. } = &*func.as_ref().borrow();
 
-                // Create a new namespace from the enclosed-over bindings.
-                let ns = Namespace::Frozen(closure);
+        //         // Create a new namespace from the enclosed-over bindings.
+        //         let ns = Namespace::Frozen(closure);
 
-                // Create a mutable sub-namespace for function parameters.
-                let mut sub = ns.subtend();
+        //         // Create a mutable sub-namespace for function parameters.
+        //         let mut sub = ns.subtend();
 
-                // Bind the positional arguments.
-                sub.bind_list(&fargs.0, args)?;
+        //         // Bind the positional arguments.
+        //         sub.bind_list(&fargs.0, args)?;
 
-                // Bind the keyword arguments.
-                match (fkwargs, kwargs) {
-                    (Some(b), Some(k)) => { sub.bind_map(&b.0, k)?; },
-                    (Some(b), None) => { sub.bind_map(&b.0, &Map::new())?; },
-                    _ => {},
-                }
+        //         // Bind the keyword arguments.
+        //         match (fkwargs, kwargs) {
+        //             (Some(b), Some(k)) => { sub.bind_map(&b.0, k)?; },
+        //             (Some(b), None) => { sub.bind_map(&b.0, &Map::new())?; },
+        //             _ => {},
+        //         }
 
-                // Evaluate the function.
-                sub.eval(expr)
-            }
-        }
+        //         // Evaluate the function.
+        //         sub.eval(expr)
+        //     }
+        // }
     }
 
     pub(crate) fn resolve_deferred(&self, ns: &Namespace) -> Result<(), Error> {
-        match self {
-            Self::Func(func) => {
-                if let Func { closure, deferred: Some(deferred), .. } = &mut *func.as_ref().borrow_mut() {
-                    for name in deferred.iter() {
-                        closure.insert(*name, ns.get_immediate(name)?);
-                    }
-                }
-                Ok(())
-            }
-            _ => Ok(()),
-        }
+        Ok(())
+        // match self {
+        //     Self::Func(func) => {
+        //         if let Func { closure, deferred: Some(deferred), .. } = &mut *func.as_ref().borrow_mut() {
+        //             for name in deferred.iter() {
+        //                 closure.insert(*name, ns.get_immediate(name)?);
+        //             }
+        //         }
+        //         Ok(())
+        //     }
+        //     _ => Ok(()),
+        // }
     }
 }
 
@@ -1361,7 +1363,6 @@ macro_rules! extractkw {
 /// calling conventions.
 #[macro_export]
 macro_rules! signature {
-
     // Entry point pattern
     ($args:ident = [ $($param:ident : $type:ident),* ] $kwargs:ident = { $($kw:ident : $kwtype:ident),* } $block:block) => {
         signature!(0 ; $args [ $($param : $type),* ] , $kwargs [ $($kw : $kwtype),* ] , $block)
@@ -1484,9 +1485,19 @@ impl Object {
         Self(ObjectVariant::list(x))
     }
 
+    /// Construct an empty list.
+    pub fn new_list() -> Self {
+        Self(ObjectVariant::List(Gc::new(vec![])))
+    }
+
     /// Construct a map.
     pub(crate) fn map(x: impl ToMap<Key, Object>) -> Self {
         Self(ObjectVariant::map(x))
+    }
+
+    /// Construct an empty map.
+    pub fn new_map() -> Self {
+        Self(ObjectVariant::Map(Gc::new(Map::new())))
     }
 
     /// Serialize this objcet to a byte vector.

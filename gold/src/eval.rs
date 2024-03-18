@@ -3,11 +3,12 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use crate::compile::{Function, Instruction};
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::builtins::BUILTINS;
 use crate::error::{Error, Internal, Tagged, Unpack, TypeMismatch, Action, Reason};
-use crate::object::{Object, Func, Key, Map, List};
+use crate::object::{Object, Key, Map, List};
 use crate::traits::{Bound, Free};
 
 
@@ -634,13 +635,15 @@ impl<'a> Namespace<'a> {
                     }
                 }
 
-                Ok(Object::func(Func {
-                    args: positional.clone(),
-                    kwargs: keywords.clone(),
-                    closure,
-                    deferred,
-                    expr: expression.as_ref().clone(),
-                }))
+                Ok(Object::int(1))
+
+                // Ok(Object::func(Func {
+                //     args: positional.clone(),
+                //     kwargs: keywords.clone(),
+                //     closure,
+                //     deferred,
+                //     expr: expression.as_ref().clone(),
+                // }))
             },
         }
     }
@@ -650,4 +653,213 @@ impl<'a> Namespace<'a> {
 /// Evaluate a parsed file AST with given import behavior.
 pub fn eval(file: &File, importer: &ImportConfig) -> Result<Object, Error> {
     Namespace::Empty.eval_file(file, importer)
+}
+
+
+pub(crate) struct Frame<'a> {
+    pub function: &'a Function,
+    pub stack: Vec<Object>,
+    pub ip: usize,
+}
+
+impl<'a> Frame<'a> {
+    pub fn new(function: &'a Function) -> Frame {
+        Frame { function, stack: vec![], ip: 0 }
+    }
+
+    pub fn next_instruction(&mut self) -> Instruction {
+        self.ip += 1;
+        self.function.code[self.ip - 1]
+    }
+}
+
+
+pub(crate) struct Vm<'a> {
+    frames: Vec<Frame<'a>>,
+    fp: usize,
+}
+
+impl<'a> Vm<'a> {
+    pub fn new() -> Self {
+        Self { frames: vec![], fp: 0 }
+    }
+
+    pub fn eval(&mut self, function: &'a Function) -> Result<Object, Error> {
+        self.frames.push(Frame::new(function));
+        self.fp = 0;
+        self.eval_impl()
+    }
+
+    fn eval_impl(&mut self) -> Result<Object, Error> {
+        loop {
+            let instruction = self.cur_frame().next_instruction();
+            match instruction {
+                Instruction::LoadConst(i) => {
+                    let obj = self.cur_frame().function.constants[i].clone();
+                    self.push(obj);
+                }
+
+                Instruction::Return => {
+                    let obj = self.pop();
+                    self.frames.pop();
+                    if self.fp == 0 {
+                        return Ok(obj)
+                    } else {
+                        self.fp -= 1;
+                        self.push(obj);
+                    }
+                }
+
+                Instruction::CondJump(delta) => {
+                    let obj = self.pop();
+                    if obj.truthy() {
+                        self.cur_frame().ip += delta;
+                    }
+                }
+
+                Instruction::Jump(delta) => {
+                    self.cur_frame().ip += delta;
+                }
+
+                Instruction::Duplicate => {
+                    let obj = self.peek().clone();
+                    self.push(obj);
+                }
+
+                Instruction::Discard => {
+                    self.pop();
+                }
+
+                Instruction::Noop => {}
+
+                Instruction::ArithmeticalNegate => {
+                    let obj = self.pop();
+                    self.push(obj.neg()?);
+                }
+
+                Instruction::LogicalNegate => {
+                    let obj = self.pop();
+                    self.push(Object::bool(!obj.truthy()));
+                }
+
+                Instruction::Add => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    self.push(lhs.add(&rhs)?);
+                }
+
+                Instruction::Subtract => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    self.push(lhs.sub(&rhs)?);
+                }
+
+                Instruction::Multiply => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    self.push(lhs.mul(&rhs)?);
+                }
+
+                Instruction::IntegerDivide => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    self.push(lhs.idiv(&rhs)?);
+                }
+
+                Instruction::Divide => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    self.push(lhs.div(&rhs)?);
+                }
+
+                Instruction::Power => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    self.push(lhs.pow(&rhs)?);
+                }
+
+                Instruction::Less => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    let res = lhs
+                        .cmp_bool(&rhs, Ordering::Less)
+                        .ok_or_else(|| Error::new(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::Less)))
+                        .map(Object::bool)?;
+                    self.push(res);
+                }
+
+                Instruction::Greater => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    let res = lhs
+                        .cmp_bool(&rhs, Ordering::Greater)
+                        .ok_or_else(|| Error::new(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::Greater)))
+                        .map(Object::bool)?;
+                    self.push(res);
+                }
+
+                Instruction::LessEqual => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    let res = lhs
+                        .cmp_bool(&rhs, Ordering::Greater)
+                        .ok_or_else(|| Error::new(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::LessEqual)))
+                        .map(|x| Object::bool(!x))?;
+                    self.push(res);
+                }
+
+                Instruction::GreaterEqual => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    let res = lhs
+                        .cmp_bool(&rhs, Ordering::Less)
+                        .ok_or_else(|| Error::new(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::GreaterEqual)))
+                        .map(|x| Object::bool(!x))?;
+                    self.push(res);
+                }
+
+                Instruction::Equal => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    self.push(Object::bool(lhs.user_eq(&rhs)));
+                }
+
+                Instruction::NotEqual => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    self.push(Object::bool(!lhs.user_eq(&rhs)));
+                }
+
+                Instruction::Contains => {
+                    let rhs = self.pop();
+                    let lhs = self.pop();
+                    self.push(Object::bool(lhs.contains(&rhs)?));
+                }
+
+                Instruction::NewList => {
+                    self.push(Object::new_list());
+                }
+
+                Instruction::NewMap => {
+                    self.push(Object::new_map());
+                }
+            }
+        }
+    }
+
+    fn cur_frame(&mut self) -> &mut Frame<'a> {
+        &mut self.frames[self.fp]
+    }
+
+    fn peek(&mut self) -> &Object {
+        self.cur_frame().stack.last().unwrap()
+    }
+
+    fn pop(&mut self) -> Object {
+        self.cur_frame().stack.pop().unwrap()
+    }
+
+    fn push(&mut self, obj: Object) {
+        self.cur_frame().stack.push(obj)
+    }
 }

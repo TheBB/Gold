@@ -4,6 +4,7 @@ use std::fmt::Display;
 use gc::{Gc, Trace, Finalize};
 use serde::{Deserialize, Serialize};
 
+use crate::compile::{Compiler, Function};
 use crate::error::{BindingType, Span, Syntax};
 use crate::object::{StringFormatSpec, IntegerFormatSpec, FloatFormatSpec};
 
@@ -1241,7 +1242,6 @@ impl Validatable for TopLevel {
 /// statements followed by an expression.
 #[derive(Debug)]
 pub struct File {
-
     /// Top-level statements.
     pub statements: Vec<TopLevel>,
 
@@ -1256,5 +1256,13 @@ impl Validatable for File {
         }
         self.expression.validate()?;
         Ok(())
+    }
+}
+
+impl File {
+    pub(crate) fn compile(&self) -> Result<Function, Error> {
+        let mut compiler = Compiler::new();
+        compiler.emit(&self.expression)?;
+        Ok(compiler.finalize())
     }
 }
