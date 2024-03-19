@@ -440,6 +440,9 @@ pub enum Syntax {
 
     /// Multiple slurps in one collection (thrown by the validator)
     MultiSlurp,
+
+    /// Non-default followed by default in list binding (thrown by the validator)
+    DefaultSequence,
 }
 
 impl<T> From<T> for Syntax where SyntaxElement: From<T> {
@@ -841,6 +844,7 @@ impl Display for Reason {
             Self::Syntax(Syntax::ExpectedTwo(x, y)) => f.write_fmt(format_args!("expected {} or {}", x, y)),
             Self::Syntax(Syntax::ExpectedThree(x, y, z)) => f.write_fmt(format_args!("expected {}, {} or {}", x, y, z)),
             Self::Syntax(Syntax::MultiSlurp) => f.write_str("only one slurp allowed in this context"),
+            Self::Syntax(Syntax::DefaultSequence) => f.write_str("binding without default value follows binding with default value"),
 
             Self::Unbound(key) => f.write_fmt(format_args!("unbound name '{}'", key)),
 

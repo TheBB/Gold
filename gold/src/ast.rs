@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::default;
 use std::fmt::Display;
 
 use gc::{Gc, Trace, Finalize};
@@ -134,6 +135,45 @@ impl Validatable for MapBindingElement {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub struct ListBinding(pub Vec<Tagged<ListBindingElement>>);
 
+#[derive(Debug, Default)]
+pub struct ListBindingSolution<'a> {
+    pub num_front: usize,
+    pub num_back: usize,
+    pub def_front: usize,
+    pub def_back: usize,
+    pub slurp: Option<Option<Key>>,
+
+    pub front: &'a [Tagged<ListBindingElement>],
+    pub back: &'a [Tagged<ListBindingElement>],
+}
+
+impl<'a> ListBinding {
+    pub fn solution(&'a self) -> ListBindingSolution<'a> {
+        let mut ret = ListBindingSolution::default();
+
+        for element in &self.0 {
+            match element.as_ref() {
+                ListBindingElement::Slurp => { ret.slurp = Some(None); continue; }
+                ListBindingElement::SlurpTo(key) => { ret.slurp = Some(Some(**key)); continue; }
+                _ => {}
+            }
+
+            let has_default = if let ListBindingElement::Binding { default: Some(_), .. } = **element { true } else { false };
+            match (has_default, ret.slurp) {
+                (true, Some(_)) => { ret.def_back += 1 }
+                (true, None) => { ret.def_front += 1 }
+                (false, Some(_)) => { ret.num_back += 1 }
+                (false, None) => { ret.num_front += 1 }
+            }
+        }
+
+        ret.front = &self.0[.. ret.num_front + ret.def_front];
+        ret.back = &self.0[self.0.len() - ret.num_back - ret.def_back ..];
+
+        ret
+    }
+}
+
 impl FreeAndBound for ListBinding {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         for element in &self.0 {
@@ -145,6 +185,7 @@ impl FreeAndBound for ListBinding {
 impl Validatable for ListBinding {
     fn validate(&self) -> Result<(), Error> {
         let mut found_slurp = false;
+        let mut found_default = false;
         for element in &self.0 {
             element.validate()?;
 
@@ -156,6 +197,18 @@ impl Validatable for ListBinding {
                 }
                 found_slurp = true;
             }
+
+            // It's illegal to have a non-default binding follow a default binding.
+            if let ListBindingElement::Binding { default: Some(_), .. } = **element {
+                found_default = true;
+            } else if let ListBindingElement::Binding { default: None, .. } = **element {
+                if found_default {
+                    return Err(Error::new(Syntax::DefaultSequence).tag(element, Action::Parse))
+                }
+            }
+            // else if found_default && let ListBindingElement::Binding { default: None, .. } = **element {
+            //     return Err(Error::new(Syntax::DefaultSequence).tag(element, Action::Parse))
+            // }
         }
         Ok(())
     }

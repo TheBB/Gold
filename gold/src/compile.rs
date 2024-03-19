@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 
 use gc::{Trace, Finalize};
 use serde::{Serialize, Deserialize};
 
-use crate::ast::{BinOp, Binding, Expr, FormatSpec, ListElement, MapElement, StringElement, Transform, UnOp};
+use crate::ast::{BinOp, Binding, Expr, FormatSpec, ListBinding, ListBindingElement, ListElement, MapElement, StringElement, Transform, UnOp};
 use crate::error::{Error, Reason};
 use crate::object::{Key, Object};
 use crate::wrappers::GcCell;
@@ -19,22 +20,33 @@ pub(crate) struct Function {
 
     #[unsafe_ignore_trace]
     pub fmt_specs: Vec<FormatSpec>,
+
+    pub num_slots: usize,
 }
 
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub(crate) enum Instruction {
+    // Loading
     LoadConst(usize),
+    LoadLocal(usize),
+
+    // Storing
+    StoreLocal(usize),
 
     // Control flow
     Return,
     CondJump(usize),
     Jump(usize),
     Duplicate,
-    DuplicateIndex(usize),
     Discard,
     DiscardMany(usize),
+    Interchange,
     Noop,
+
+    // Asserts
+    ListMinLength(usize),
+    ListMinMaxLength(usize, usize),
 
     // Unary operators
     ArithmeticalNegate,
@@ -69,6 +81,16 @@ pub(crate) enum Instruction {
     PushToList,
     PushToMap,
     SplatToCollection,
+
+    // Shortcuts for internal use
+    IntIndex(usize),
+    IntIndexAndJump { index: usize, jump: usize },
+    IntIndexFromEnd { index: usize, root_front: usize, root_back: usize },
+    IntIndexFromEndAndJump { index: usize, root_front: usize, root_back: usize, jump: usize },
+    IntSlice { start: usize, from_end: usize },
+
+    // Dummy opcode for providing arguments to other opcodes
+    Arg(usize),
 }
 
 
@@ -78,6 +100,7 @@ pub(crate) struct Compiler {
     fmt_specs: Vec<FormatSpec>,
 
     names: Vec<(usize, HashMap<Key, usize>)>,
+    num_slots: usize,
 }
 
 impl Compiler {
@@ -87,6 +110,7 @@ impl Compiler {
             constants: Vec::new(),
             fmt_specs: Vec::new(),
             names: Vec::new(),
+            num_slots: 0,
          }
     }
 
@@ -99,14 +123,8 @@ impl Compiler {
             }
 
             Expr::Identifier(key) => {
-                for (_, ns) in self.names.iter().rev() {
-                    if ns.contains_key(key) {
-                        let index = ns[key];
-                        self.instruction(Instruction::DuplicateIndex(index));
-                        return Ok(1)
-                    }
-                }
-                Err(Error::new(Reason::None))
+                self.instruction(Instruction::LoadLocal(self.index_of_name(key)?));
+                Ok(1)
             }
 
             Expr::Transformed { operand, transform } => {
@@ -169,7 +187,7 @@ impl Compiler {
                 }
 
                 len += self.emit(expression)?;
-                len += self.pop_namespace();
+                self.pop_namespace();
                 Ok(len)
             }
 
@@ -180,12 +198,91 @@ impl Compiler {
     fn emit_binding(&mut self, binding: &Binding) -> Result<usize, Error> {
         match binding {
             Binding::Identifier(key) => {
-                self.bind_name(**key);
-                Ok(0)
+                let index = self.bind_name(key);
+                self.instruction(Instruction::StoreLocal(index));
+                Ok(1)
+            }
+
+            Binding::List(elements) => {
+                let len = self.emit_list_binding(elements.as_ref())?;
+                self.instruction(Instruction::Discard);
+                Ok(len + 1)
             }
 
             _ => { Ok(0) }
         }
+    }
+
+    fn emit_list_binding(&mut self, binding: &ListBinding) -> Result<usize, Error> {
+        let mut len = 0;
+        let solution = binding.solution();
+
+        if solution.slurp.is_some() {
+            self.instruction(Instruction::ListMinLength(solution.num_front + solution.num_back));
+            len += 1;
+        } else {
+            self.instruction(Instruction::ListMinMaxLength(solution.num_front, solution.num_front + solution.def_front));
+            len += 1;
+        }
+
+        if let Some(Some(key)) = solution.slurp {
+            self.instruction(Instruction::IntSlice {
+                start: solution.num_front + solution.def_front,
+                from_end: solution.num_back + solution.def_back,
+            });
+            let index = self.bind_name(&key);
+            self.instruction(Instruction::StoreLocal(index));
+            len += 2;
+        }
+
+        for (i, element) in solution.front.iter().enumerate() {
+            match element.as_ref() {
+                ListBindingElement::Binding { binding, default } => {
+                    if let Some(d) = default {
+                        let index = self.instruction(Instruction::Noop);
+                        let default_len = self.emit(d.as_ref())?;
+                        self.code[index] = Instruction::IntIndexAndJump { index: i, jump: default_len };
+                        len += default_len + 1;
+                    } else {
+                        self.instruction(Instruction::IntIndex(i));
+                        len += 1;
+                    }
+                    len += self.emit_binding(binding)?;
+                }
+
+                _ => {}
+            }
+        }
+
+        for (i, element) in solution.back.iter().enumerate() {
+            match element.as_ref() {
+                ListBindingElement::Binding { binding, default } => {
+                    if let Some(d) = default {
+                        let index = self.instruction(Instruction::Noop);
+                        let default_len = self.emit(d.as_ref())?;
+                        self.code[index] = Instruction::IntIndexFromEndAndJump {
+                            index: i,
+                            root_front: solution.num_front + solution.def_front,
+                            root_back: solution.num_back + solution.def_back,
+                            jump: default_len,
+                        };
+                        len += default_len + 1;
+                    } else {
+                        self.instruction(Instruction::IntIndexFromEnd {
+                            index: i,
+                            root_front: solution.num_front + solution.def_front,
+                            root_back: solution.num_back + solution.def_back,
+                        });
+                        len += 1;
+                    }
+                    len += self.emit_binding(binding)?;
+                }
+
+                _ => {}
+            }
+        }
+
+        Ok(len)
     }
 
     fn emit_string_element(&mut self, element: &StringElement) -> Result<usize, Error> {
@@ -318,26 +415,38 @@ impl Compiler {
         r
     }
 
-    fn push_namespace(&mut self) {
-        if let Some((num_names, names)) = self.names.last() {
-            self.names.push((num_names + names.len(), HashMap::new()))
+    fn bind_name(&mut self, name: &Key) -> usize {
+        let (count, names) = self.names.last_mut().unwrap();
+        if names.contains_key(name) {
+            names[name]
         } else {
-            self.names.push((0, HashMap::new()))
+            let r = *count + names.len();
+            self.num_slots = (r + 1).max(self.num_slots);
+            names.insert(*name, r);
+            r
         }
     }
 
-    fn pop_namespace(&mut self) -> usize {
-        let (len, _) = self.names.pop().unwrap();
-        self.instruction(Instruction::DiscardMany(len));
-        len
+    fn push_namespace(&mut self) {
+        if let Some((count, names)) = self.names.last() {
+            self.names.push((count + names.len(), HashMap::new()));
+        } else {
+            self.names.push((0, HashMap::new()));
+        }
     }
 
-    fn bind_name(&mut self, name: Key) -> usize {
-        let (num_names, names) = self.names.last_mut().unwrap();
-        let r = *num_names + names.len();
-        names.insert(name, r);
-        println!("{:?}", self.names);
-        r
+    fn pop_namespace(&mut self) {
+        self.names.pop();
+    }
+
+    fn index_of_name(&self, name: &Key) -> Result<usize, Error> {
+        for (_, names) in self.names.iter().rev() {
+            if names.contains_key(name) {
+                return Ok(names[name]);
+            }
+        }
+
+        Err(Error::new(Reason::None))
     }
 
     pub fn finalize(mut self) -> Function {
@@ -347,6 +456,7 @@ impl Compiler {
             cells: Vec::new(),
             code: self.code,
             fmt_specs: self.fmt_specs,
+            num_slots: self.num_slots,
         }
     }
 }

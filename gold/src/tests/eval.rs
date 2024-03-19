@@ -139,51 +139,57 @@ fn let_bindings() {
 }
 
 
-// #[test]
-// fn list_bindings() {
-//     assert_seq!(eval("let [a] = [1] in a"), Object::int(1));
-//     assert_seq!(eval("let [a, ...] = [1] in a"), Object::int(1));
-//     assert_seq!(eval("let [a, ...] = [1, 2, 3] in a"), Object::int(1));
-//     assert_seq!(eval("let [_, a, ...] = [1, 2, 3] in a"), Object::int(2));
-//     assert_seq!(eval("let [_, _, a, ...] = [1, 2, 3] in a"), Object::int(3));
-//     assert_seq!(eval("let [_, _, a] = [1, 2, 3] in a"), Object::int(3));
+#[test]
+fn list_bindings() {
+    assert_seq!(eval("let [a] = [1] in a"), Object::int(1));
+    assert_seq!(eval("let [a, ...] = [1] in a"), Object::int(1));
+    assert_seq!(eval("let [a, ...] = [1, 2, 3] in a"), Object::int(1));
+    assert_seq!(eval("let [_, a, ...] = [1, 2, 3] in a"), Object::int(2));
+    assert_seq!(eval("let [_, _, a, ...] = [1, 2, 3] in a"), Object::int(3));
+    assert_seq!(eval("let [_, _, a] = [1, 2, 3] in a"), Object::int(3));
 
-//     assert_seq!(eval("let [...a] = [1, 2, 3] in a"), (1..4).map(Object::int).collect());
-//     assert_seq!(eval("let [...a, _] = [1, 2, 3] in a"), (1..3).map(Object::int).collect());
-//     assert_seq!(eval("let [...a, _, _] = [1, 2, 3] in a"), Object::list(vec![Object::int(1)]));
-//     assert_seq!(eval("let [_, ...a, _] = [1, 2, 3] in a"), Object::list(vec![Object::int(2)]));
+    assert_seq!(eval("let [...a] = [1, 2, 3] in a"), (1..4).map(Object::int).collect());
+    assert_seq!(eval("let [...a, _] = [1, 2, 3] in a"), (1..3).map(Object::int).collect());
+    assert_seq!(eval("let [...a, _, _] = [1, 2, 3] in a"), Object::list(vec![Object::int(1)]));
+    assert_seq!(eval("let [_, ...a, _] = [1, 2, 3] in a"), Object::list(vec![Object::int(2)]));
 
-//     assert_seq!(eval("let [_, ...a, _, _] = [1, 2, 3] in a"), Object::list(()));
+    assert_seq!(eval("let [_, ...a, _, _] = [1, 2, 3] in a"), Object::list(()));
 
-//     assert_seq!(eval("let [a = 1] = [] in a"), Object::int(1));
-//     assert_seq!(eval("let [b, a = 1] = [2] in b"), Object::int(2));
-//     assert_seq!(eval("let [b, a = 1] = [2] in a"), Object::int(1));
-//     assert_seq!(eval("let [b = 3, a = 1] = [2] in a"), Object::int(1));
-//     assert_seq!(eval("let [b = 3, a = 1] = [2] in b"), Object::int(2));
+    assert_seq!(eval("let [..., a] = [1] in a"), Object::int(1));
+    assert_seq!(eval("let [..., _, a] = [1, 2] in a"), Object::int(2));
+    assert_seq!(eval("let [..., a=1] = [2] in a"), Object::int(2));
+    assert_seq!(eval("let [..., a=1] = [] in a"), Object::int(1));
+    assert_seq!(eval("let [...a, _=1] = [2] in a"), Object::new_list());
 
-//     assert!(eval("let [x] = [1, 2, 3] in x").is_err());
-//     assert!(eval("let [x, y, z, a, ...] = [1, 2, 3] in x").is_err());
-//     assert!(eval("let [x, ..., y, z, a] = [1, 2, 3] in x").is_err());
-//     assert!(eval("let [x] = [] in x").is_err());
-//     assert!(eval("let [x, y = 1] = [] in x").is_err());
-//     assert!(eval("let [x = 1, y] = [] in x").is_err());
+    assert_seq!(eval("let [a = 1] = [] in a"), Object::int(1));
+    assert_seq!(eval("let [b, a = 1] = [2] in b"), Object::int(2));
+    assert_seq!(eval("let [b, a = 1] = [2] in a"), Object::int(1));
+    assert_seq!(eval("let [b = 3, a = 1] = [2] in a"), Object::int(1));
+    assert_seq!(eval("let [b = 3, a = 1] = [2] in b"), Object::int(2));
 
-//     assert_seq!(eval("let [a,b] = [1,2] in {a: a, b: b}"), Object::map(vec![
-//         ("a", Object::int(1)),
-//         ("b", Object::int(2)),
-//     ]));
+    assert!(eval("let [x] = [1, 2, 3] in x").is_err());
+    assert!(eval("let [x, y, z, a, ...] = [1, 2, 3] in x").is_err());
+    assert!(eval("let [x, ..., y, z, a] = [1, 2, 3] in x").is_err());
+    assert!(eval("let [x] = [] in x").is_err());
+    assert!(eval("let [x, y = 1] = [] in x").is_err());
+    assert!(eval("let [x = 1, y] = [] in x").is_err());
 
-//     assert_seq!(eval("let [a,[b]] = [1,[2]] in {a: a, b: b}"), Object::map(vec![
-//         ("a", Object::int(1)),
-//         ("b", Object::int(2)),
-//     ]));
+    assert_seq!(eval("let [a,b] = [1,2] in {a: a, b: b}"), Object::map(vec![
+        ("a", Object::int(1)),
+        ("b", Object::int(2)),
+    ]));
 
-//     assert_seq!(eval("let [a, b = 1, ...c] = [2] in [a, b, c]"), Object::list(vec![
-//         Object::int(2),
-//         Object::int(1),
-//         Object::list(()),
-//     ]));
-// }
+    assert_seq!(eval("let [a,[b]] = [1,[2]] in {a: a, b: b}"), Object::map(vec![
+        ("a", Object::int(1)),
+        ("b", Object::int(2)),
+    ]));
+
+    assert_seq!(eval("let [a, b = 1, ...c] = [2] in [a, b, c]"), Object::list(vec![
+        Object::int(2),
+        Object::int(1),
+        Object::list(()),
+    ]));
+}
 
 
 // #[test]

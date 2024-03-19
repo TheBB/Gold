@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -202,10 +203,8 @@ impl<'a> Namespace<'a> {
 
         for binding_element in bindings {
             match binding_element.as_ref() {
-
                 // Standard binding
                 ListBindingElement::Binding { binding, default } => {
-
                     // Calculate the next value in the list
                     let val = value_iter.next()
                         .map(Object::clone)
@@ -665,12 +664,18 @@ pub fn eval(file: &File, importer: &ImportConfig) -> Result<Object, Error> {
 pub(crate) struct Frame<'a> {
     pub function: &'a Function,
     pub stack: Vec<Object>,
+    pub locals: Vec<Object>,
     pub ip: usize,
 }
 
 impl<'a> Frame<'a> {
     pub fn new(function: &'a Function) -> Frame {
-        Frame { function, stack: vec![], ip: 0 }
+        Frame {
+            function,
+            stack: Vec::new(),
+            locals: vec![Object::null(); function.num_slots],
+            ip: 0,
+        }
     }
 
     pub fn next_instruction(&mut self) -> Instruction {
@@ -696,6 +701,26 @@ impl<'a> Vm<'a> {
         self.eval_impl()
     }
 
+    fn cur_frame(&mut self) -> &mut Frame<'a> {
+        &mut self.frames[self.fp]
+    }
+
+    fn peek(&self) -> &Object {
+        self.frames[self.fp].stack.last().unwrap()
+    }
+
+    fn peek_at(&mut self, i: usize) -> &Object {
+        &self.cur_frame().stack[i]
+    }
+
+    fn pop(&mut self) -> Object {
+        self.cur_frame().stack.pop().unwrap()
+    }
+
+    fn push(&mut self, obj: Object) {
+        self.cur_frame().stack.push(obj)
+    }
+
     fn eval_impl(&mut self) -> Result<Object, Error> {
         loop {
             let instruction = self.cur_frame().next_instruction();
@@ -703,6 +728,16 @@ impl<'a> Vm<'a> {
                 Instruction::LoadConst(i) => {
                     let obj = self.cur_frame().function.constants[i].clone();
                     self.push(obj);
+                }
+
+                Instruction::LoadLocal(i) => {
+                    let obj = self.cur_frame().locals[i].clone();
+                    self.push(obj);
+                }
+
+                Instruction::StoreLocal(i) => {
+                    let obj = self.pop();
+                    self.cur_frame().locals[i] = obj;
                 }
 
                 Instruction::Return => {
@@ -732,11 +767,6 @@ impl<'a> Vm<'a> {
                     self.push(obj);
                 }
 
-                Instruction::DuplicateIndex(i) => {
-                    let obj = self.peek_at(i).clone();
-                    self.push(obj);
-                }
-
                 Instruction::Discard => {
                     self.pop();
                 }
@@ -749,7 +779,41 @@ impl<'a> Vm<'a> {
                     self.push(obj);
                 }
 
+                Instruction::Interchange => {
+                    let a = self.pop();
+                    let b = self.pop();
+                    self.push(a);
+                    self.push(b);
+                }
+
                 Instruction::Noop => {}
+
+                Instruction::ListMinLength(len) => {
+                    let obj = self.peek();
+                    match obj.get_list() {
+                        None => { return Err(Error::new(Reason::None)) }
+                        Some(l) => {
+                            if l.borrow().len() < len {
+                                return Err(Error::new(Reason::None))
+                            }
+                        }
+                    }
+                }
+
+                Instruction::ListMinMaxLength(min, max) => {
+                    let obj = self.peek();
+                    match obj.get_list() {
+                        None => { return Err(Error::new(Reason::None)) }
+                        Some(l) => {
+                            if l.borrow().len() < min {
+                                return Err(Error::new(Reason::None))
+                            }
+                            if l.borrow().len() > max {
+                                return Err(Error::new(Reason::None))
+                            }
+                        }
+                    }
+                }
 
                 Instruction::ArithmeticalNegate => {
                     let obj = self.pop();
@@ -890,27 +954,74 @@ impl<'a> Vm<'a> {
                     let obj = self.pop();
                     self.peek().splat_into(obj)?;
                 }
+
+                Instruction::IntIndex(i) => {
+                    let obj = {
+                        let l = self.peek().get_list().ok_or_else(|| Error::new(Reason::None))?;
+                        l.borrow().get(i).ok_or_else(|| Error::new(Reason::None))?.clone()
+                    };
+                    self.push(obj);
+                }
+
+                Instruction::IntIndexAndJump { index, jump } => {
+                    let obj = {
+                        let l = self.peek().get_list().ok_or_else(|| Error::new(Reason::None))?;
+                        l.borrow().get(index).cloned()
+                    };
+
+                    if let Some(x) = obj {
+                        self.push(x);
+                        self.cur_frame().ip += jump;
+                    }
+                }
+
+                Instruction::IntIndexFromEnd { index, root_front, root_back } => {
+                    let obj = {
+                        let l = self.peek().get_list().ok_or_else(|| Error::new(Reason::None))?;
+                        let ll = l.borrow();
+                        let i = (ll.len() - root_back).max(root_front) + index;
+                        ll.get(i).ok_or_else(|| Error::new(Reason::None))?.clone()
+                    };
+                    self.push(obj);
+                }
+
+                Instruction::IntIndexFromEndAndJump { index, root_front, root_back, jump } => {
+                    let obj = {
+                        let l = self.peek().get_list().ok_or_else(|| Error::new(Reason::None))?;
+                        let ll = l.borrow();
+                        let root = if root_back > ll.len() { root_front } else { (ll.len() - root_back).max(root_front) };
+                        l.borrow().get(root + index).cloned()
+                    };
+
+                    if let Some(x) = obj {
+                        self.push(x);
+                        self.cur_frame().ip += jump;
+                    }
+                }
+
+                Instruction::IntSlice { start, from_end } => {
+                    let obj = self.peek().get_list()
+                        .map(|l| {
+                            let ll = l.borrow();
+                            if from_end > ll.len() {
+                                return Object::new_list();
+                            }
+                            let end = ll.len() - from_end;
+                            if start < end {
+                                Object::list(ll[start .. end].to_vec())
+                            } else {
+                                Object::new_list()
+                            }
+                        }).ok_or_else(
+                            || Error::new(Reason::None)
+                        )?;
+                    self.push(obj);
+                }
+
+                Instruction::Arg(_) => {
+                    return Err(Error::new(Reason::None))
+                }
             }
         }
-    }
-
-    fn cur_frame(&mut self) -> &mut Frame<'a> {
-        &mut self.frames[self.fp]
-    }
-
-    fn peek(&mut self) -> &Object {
-        self.cur_frame().stack.last().unwrap()
-    }
-
-    fn peek_at(&mut self, i: usize) -> &Object {
-        &self.cur_frame().stack[i]
-    }
-
-    fn pop(&mut self) -> Object {
-        self.cur_frame().stack.pop().unwrap()
-    }
-
-    fn push(&mut self, obj: Object) {
-        self.cur_frame().stack.push(obj)
     }
 }
