@@ -22,7 +22,7 @@ use std::rc::Rc;
 use std::time::SystemTime;
 
 use json::JsonValue;
-use gc::{Finalize, Gc, GcCellRef, Trace};
+use gc::{Finalize, Gc, GcCellRef, GcCellRefMut, Trace};
 use num_bigint::{BigInt, BigUint};
 use num_traits::{ToPrimitive, checked_pow};
 use rmp_serde::{decode, encode};
@@ -1219,16 +1219,12 @@ impl ObjectVariant {
         }
     }
 
-    pub(crate) fn push_to_map(&self, key: Object, value: Object) -> Result<(), Error> {
+    pub(crate) fn push_to_map(&self, key: Key, value: Object) -> Result<(), Error> {
         match self {
             Self::Map(x) => {
                 let mut xx = x.borrow_mut();
-                if let Some(k) = key.get_key() {
-                    xx.insert(k, value);
-                    Ok(())
-                } else {
-                    Err(Error::new(Reason::None))
-                }
+                xx.insert(key, value);
+                Ok(())
             }
             _ => Err(Error::new(Reason::None))
         }
@@ -1489,6 +1485,10 @@ impl Object {
         }
     }
 
+    pub(crate) fn closure(val: Function) -> Self {
+        Self(ObjectVariant::Func(FuncVariant::Func(Gc::new(val))))
+    }
+
     /// Construct a string directly from an interned symbol.
     pub fn key(val: Key) -> Self {
         Self(ObjectVariant::Str(StrVariant::Interned(val)))
@@ -1693,6 +1693,22 @@ impl Object {
         }
     }
 
+    /// Extract the map variant if applicable.
+    pub(crate) fn get_map_mut<'a>(&'a self) -> Option<GcCellRefMut<'_, Map>> {
+        match &self.0 {
+            ObjectVariant::Map(x) => Some(x.borrow_mut()),
+            _ => None
+        }
+    }
+
+    /// Extract the function variant if applicable.
+    pub(crate) fn get_func_variant<'a>(&'a self) -> Option<&'a FuncVariant> {
+        match &self.0 {
+            ObjectVariant::Func(func) => Some(func),
+            _ => None,
+        }
+    }
+
     /// Extract the key variant if applicable (an interned string).
     pub fn get_key(&self) -> Option<Key> {
         match &self.0 {
@@ -1803,8 +1819,13 @@ impl Object {
         self.0.push_to_list(other)
     }
 
-    /// Wrap [`ObjectVariant::push_to_list`]
+    /// Wrap [`ObjectVariant::push_to_map`]
     pub(crate) fn push_to_map(&self, key: Self, value: Self) -> Result<(), Error> {
+        self.0.push_to_map(key.get_key().ok_or_else(|| Error::new(Reason::None))?, value)
+    }
+
+    /// Wrap [`ObjectVariant::push_to_map`]
+    pub(crate) fn push_to_map_key(&self, key: Key, value: Self) -> Result<(), Error> {
         self.0.push_to_map(key, value)
     }
 

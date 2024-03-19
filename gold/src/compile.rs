@@ -4,16 +4,16 @@ use std::hash::Hash;
 use gc::{Trace, Finalize};
 use serde::{Serialize, Deserialize};
 
-use crate::ast::{BinOp, Binding, Expr, FormatSpec, ListBinding, ListBindingElement, ListElement, MapElement, StringElement, Transform, UnOp};
+use crate::ast::{ArgElement, BinOp, Binding, Expr, FormatSpec, ListBinding, ListBindingElement, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, Transform, UnOp};
 use crate::error::{Error, Reason};
 use crate::object::{Key, Object};
 use crate::wrappers::GcCell;
 
 
-#[derive(Debug, Serialize, Deserialize, Trace, Finalize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
 pub(crate) struct Function {
     pub constants: Vec<Object>,
-    pub cells: Vec<GcCell<Object>>,
+    pub functions: Vec<Function>,
 
     #[unsafe_ignore_trace]
     pub code: Vec<Instruction>,
@@ -21,7 +21,7 @@ pub(crate) struct Function {
     #[unsafe_ignore_trace]
     pub fmt_specs: Vec<FormatSpec>,
 
-    pub num_slots: usize,
+    pub num_locals: usize,
 }
 
 
@@ -30,6 +30,7 @@ pub(crate) enum Instruction {
     // Loading
     LoadConst(usize),
     LoadLocal(usize),
+    LoadFunc(usize),
 
     // Storing
     StoreLocal(usize),
@@ -42,6 +43,7 @@ pub(crate) enum Instruction {
     Discard,
     DiscardMany(usize),
     Interchange,
+    Call,
     Noop,
 
     // Asserts
@@ -81,23 +83,28 @@ pub(crate) enum Instruction {
     PushToList,
     PushToMap,
     SplatToCollection,
+    DelKeyIfExists(Key),
 
     // Shortcuts for internal use
-    IntIndex(usize),
-    IntIndexAndJump { index: usize, jump: usize },
+    IntIndexL(usize),
+    IntIndexLAndJump { index: usize, jump: usize },
     IntIndexFromEnd { index: usize, root_front: usize, root_back: usize },
     IntIndexFromEndAndJump { index: usize, root_front: usize, root_back: usize, jump: usize },
     IntSlice { start: usize, from_end: usize },
-
-    // Dummy opcode for providing arguments to other opcodes
-    Arg(usize),
+    IntIndexM(Key),
+    IntIndexMAndJump { key: Key, jump: usize },
+    IntPushToKwargs(Key),
+    IntArgSplat,
 }
+
 
 
 pub(crate) struct Compiler {
     constants: Vec<Object>,
-    code: Vec<Instruction>,
+    funcs: Vec<Function>,
     fmt_specs: Vec<FormatSpec>,
+
+    code: Vec<Instruction>,
 
     names: Vec<(usize, HashMap<Key, usize>)>,
     num_slots: usize,
@@ -106,10 +113,11 @@ pub(crate) struct Compiler {
 impl Compiler {
     pub fn new() -> Compiler {
         Compiler {
-            code: Vec::new(),
             constants: Vec::new(),
+            funcs: Vec::new(),
+            code: Vec::new(),
             fmt_specs: Vec::new(),
-            names: Vec::new(),
+            names: vec![(0, HashMap::new())],
             num_slots: 0,
          }
     }
@@ -191,6 +199,22 @@ impl Compiler {
                 Ok(len)
             }
 
+            Expr::Function { positional, keywords, expression } => {
+                let mut compiler = Compiler::new();
+                compiler.emit_list_binding(positional)?;
+                compiler.instruction(Instruction::Discard);
+                if let Some(kw) = keywords {
+                    compiler.emit_map_binding(kw)?;
+                }
+                compiler.instruction(Instruction::Discard);
+                compiler.emit(expression)?;
+                let func = compiler.finalize();
+
+                let index = self.function(func);
+                self.instruction(Instruction::LoadFunc(index));
+                Ok(1)
+            }
+
             _ => { Ok(0) }
         }
     }
@@ -209,7 +233,11 @@ impl Compiler {
                 Ok(len + 1)
             }
 
-            _ => { Ok(0) }
+            Binding::Map(elements) => {
+                let len = self.emit_map_binding(elements.as_ref())?;
+                self.instruction(Instruction::Discard);
+                Ok(len + 1)
+            }
         }
     }
 
@@ -241,10 +269,10 @@ impl Compiler {
                     if let Some(d) = default {
                         let index = self.instruction(Instruction::Noop);
                         let default_len = self.emit(d.as_ref())?;
-                        self.code[index] = Instruction::IntIndexAndJump { index: i, jump: default_len };
+                        self.code[index] = Instruction::IntIndexLAndJump { index: i, jump: default_len };
                         len += default_len + 1;
                     } else {
-                        self.instruction(Instruction::IntIndex(i));
+                        self.instruction(Instruction::IntIndexL(i));
                         len += 1;
                     }
                     len += self.emit_binding(binding)?;
@@ -279,6 +307,47 @@ impl Compiler {
                 }
 
                 _ => {}
+            }
+        }
+
+        Ok(len)
+    }
+
+    fn emit_map_binding(&mut self, binding: &MapBinding) -> Result<usize, Error> {
+        let mut len = 0;
+
+        for element in binding.0.iter() {
+            match element.as_ref() {
+                MapBindingElement::Binding { key, binding, default } => {
+                    if let Some(d) = default {
+                        let index = self.instruction(Instruction::Noop);
+                        let default_len = self.emit(d.as_ref())?;
+                        self.code[index] = Instruction::IntIndexMAndJump {
+                            key: *key.as_ref(),
+                            jump: default_len,
+                        };
+                        len += default_len + 1;
+                    } else {
+                        self.instruction(Instruction::IntIndexM(*key.as_ref()));
+                    }
+                    len += self.emit_binding(binding)?;
+                }
+
+                MapBindingElement::SlurpTo(key) => {
+                    self.instruction(Instruction::Duplicate);
+                    len += 1;
+
+                    for element in binding.0.iter() {
+                        if let MapBindingElement::Binding { key, .. } = element.as_ref() {
+                            self.instruction(Instruction::DelKeyIfExists(*key.as_ref()));
+                            len += 1;
+                        }
+                    }
+
+                    let index = self.bind_name(&key);
+                    self.instruction(Instruction::StoreLocal(index));
+                    len += 1;
+                }
             }
         }
 
@@ -393,7 +462,40 @@ impl Compiler {
                 Ok(len + 1)
             }
 
-            _ => { Ok(0) }
+            Transform::FunCall(args) => {
+                let mut len = 0;
+                self.instruction(Instruction::NewMap);
+                self.instruction(Instruction::NewList);
+
+                for arg in args.iter() {
+                    len += self.emit_arg_element(arg)?;
+                }
+
+                self.instruction(Instruction::Call);
+                Ok(len + 3)
+            }
+        }
+    }
+
+    fn emit_arg_element(&mut self, arg: &ArgElement) -> Result<usize, Error> {
+        match arg {
+            ArgElement::Singleton(expr) => {
+                let len = self.emit(expr)?;
+                self.instruction(Instruction::PushToList);
+                Ok(len + 1)
+            }
+
+            ArgElement::Keyword(key, expr) => {
+                let len = self.emit(expr)?;
+                self.instruction(Instruction::IntPushToKwargs(**key));
+                Ok(len + 1)
+            }
+
+            ArgElement::Splat(expr) => {
+                let len = self.emit(expr)?;
+                self.instruction(Instruction::IntArgSplat);
+                Ok(len + 1)
+            }
         }
     }
 
@@ -406,6 +508,12 @@ impl Compiler {
     fn constant(&mut self, constant: Object) -> usize {
         let r = self.constants.len();
         self.constants.push(constant);
+        r
+    }
+
+    fn function(&mut self, function: Function) -> usize {
+        let r = self.funcs.len();
+        self.funcs.push(function);
         r
     }
 
@@ -453,10 +561,10 @@ impl Compiler {
         self.code.push(Instruction::Return);
         Function {
             constants: self.constants,
-            cells: Vec::new(),
+            functions: self.funcs,
             code: self.code,
             fmt_specs: self.fmt_specs,
-            num_slots: self.num_slots,
+            num_locals: self.num_slots,
         }
     }
 }

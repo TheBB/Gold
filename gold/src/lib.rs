@@ -72,7 +72,7 @@ pub fn eval(input: &str, importer: &ImportConfig) -> Result<Object, Error> {
     let code = ast.compile()?;
     println!("compiled {:?}", code);
     let mut vm = Vm::new();
-    vm.eval(&code)
+    vm.eval(code)
     // let ret = parsing::parse(input).and_then(|file| evaluate(&file, importer));
     // ret.map_err(|err| err.render(Some(input)))
 }

@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -9,7 +9,7 @@ use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::builtins::BUILTINS;
 use crate::error::{Error, Internal, Tagged, Unpack, TypeMismatch, Action, Reason};
-use crate::object::{Object, Key, Map, List};
+use crate::object::{Builtin, Closure, FuncVariant, Key, List, Map, Object, Type};
 use crate::traits::{Bound, Free};
 
 
@@ -661,19 +661,20 @@ pub fn eval(file: &File, importer: &ImportConfig) -> Result<Object, Error> {
 }
 
 
-pub(crate) struct Frame<'a> {
-    pub function: &'a Function,
+pub(crate) struct Frame {
+    pub function: Function,
     pub stack: Vec<Object>,
     pub locals: Vec<Object>,
     pub ip: usize,
 }
 
-impl<'a> Frame<'a> {
-    pub fn new(function: &'a Function) -> Frame {
+impl Frame {
+    pub fn new(function: Function) -> Frame {
+        let num_locals = function.num_locals;
         Frame {
             function,
             stack: Vec::new(),
-            locals: vec![Object::null(); function.num_slots],
+            locals: vec![Object::null(); num_locals],
             ip: 0,
         }
     }
@@ -685,32 +686,34 @@ impl<'a> Frame<'a> {
 }
 
 
-pub(crate) struct Vm<'a> {
-    frames: Vec<Frame<'a>>,
+pub(crate) struct Vm {
+    frames: Vec<Frame>,
     fp: usize,
 }
 
-impl<'a> Vm<'a> {
+impl Vm {
     pub fn new() -> Self {
         Self { frames: vec![], fp: 0 }
     }
 
-    pub fn eval(&mut self, function: &'a Function) -> Result<Object, Error> {
+    pub fn eval(&mut self, function: Function) -> Result<Object, Error> {
         self.frames.push(Frame::new(function));
         self.fp = 0;
         self.eval_impl()
     }
 
-    fn cur_frame(&mut self) -> &mut Frame<'a> {
+    fn cur_frame(&mut self) -> &mut Frame {
         &mut self.frames[self.fp]
+    }
+
+    fn peek_back(&self) -> &Object {
+        let stack = &self.frames[self.fp].stack;
+        let i = stack.len() - 2;
+        stack.get(i).unwrap()
     }
 
     fn peek(&self) -> &Object {
         self.frames[self.fp].stack.last().unwrap()
-    }
-
-    fn peek_at(&mut self, i: usize) -> &Object {
-        &self.cur_frame().stack[i]
     }
 
     fn pop(&mut self) -> Object {
@@ -732,6 +735,12 @@ impl<'a> Vm<'a> {
 
                 Instruction::LoadLocal(i) => {
                     let obj = self.cur_frame().locals[i].clone();
+                    self.push(obj);
+                }
+
+                Instruction::LoadFunc(i) => {
+                    let func = self.cur_frame().function.functions[i].clone();
+                    let obj = Object::closure(func);
                     self.push(obj);
                 }
 
@@ -784,6 +793,37 @@ impl<'a> Vm<'a> {
                     let b = self.pop();
                     self.push(a);
                     self.push(b);
+                }
+
+                Instruction::Call => {
+                    let args = self.pop();
+                    let kwargs = self.pop();
+                    let func = self.pop();
+
+                    match func.get_func_variant() {
+                        Some(FuncVariant::Closure(Closure(f))) => {
+                            let x = args.get_list().ok_or_else(|| Error::new(Reason::None))?;
+                            let y = kwargs.get_map().ok_or_else(|| Error::new(Reason::None))?;
+                            let result = f(x.borrow(), Some(y.borrow()))?;
+                            self.push(result);
+                        }
+
+                        Some(FuncVariant::Builtin(Builtin { func: f, .. })) => {
+                            let x = args.get_list().ok_or_else(|| Error::new(Reason::None))?;
+                            let y = kwargs.get_map().ok_or_else(|| Error::new(Reason::None))?;
+                            let result = f(x.borrow(), Some(y.borrow()))?;
+                            self.push(result);
+                        }
+
+                        Some(FuncVariant::Func(f)) => {
+                            self.frames.push(Frame::new(f.as_ref().clone()));
+                            self.fp += 1;
+                            self.push(kwargs);
+                            self.push(args);
+                        }
+
+                        None => { return Err(Error::new(Reason::None)); }
+                    }
                 }
 
                 Instruction::Noop => {}
@@ -955,15 +995,20 @@ impl<'a> Vm<'a> {
                     self.peek().splat_into(obj)?;
                 }
 
-                Instruction::IntIndex(i) => {
+                Instruction::DelKeyIfExists(key) => {
+                    let mut l = self.peek().get_map_mut().ok_or_else(|| Error::new(Reason::None))?;
+                    l.remove(&key);
+                }
+
+                Instruction::IntIndexL(i) => {
                     let obj = {
                         let l = self.peek().get_list().ok_or_else(|| Error::new(Reason::None))?;
-                        l.borrow().get(i).ok_or_else(|| Error::new(Reason::None))?.clone()
+                        l.get(i).ok_or_else(|| Error::new(Reason::None))?.clone()
                     };
                     self.push(obj);
                 }
 
-                Instruction::IntIndexAndJump { index, jump } => {
+                Instruction::IntIndexLAndJump { index, jump } => {
                     let obj = {
                         let l = self.peek().get_list().ok_or_else(|| Error::new(Reason::None))?;
                         l.borrow().get(index).cloned()
@@ -1018,8 +1063,38 @@ impl<'a> Vm<'a> {
                     self.push(obj);
                 }
 
-                Instruction::Arg(_) => {
-                    return Err(Error::new(Reason::None))
+                Instruction::IntIndexM(key) => {
+                    let obj = {
+                        let l = self.peek().get_map().ok_or_else(|| Error::new(Reason::None))?;
+                        l.borrow().get(&key).ok_or_else(|| Error::new(Reason::None))?.clone()
+                    };
+                    self.push(obj);
+                }
+
+                Instruction::IntIndexMAndJump { key, jump } => {
+                    let obj = {
+                        let l = self.peek().get_map().ok_or_else(|| Error::new(Reason::None))?;
+                        l.borrow().get(&key).cloned()
+                    };
+
+                    if let Some(x) = obj {
+                        self.push(x);
+                        self.cur_frame().ip += jump;
+                    }
+                }
+
+                Instruction::IntPushToKwargs(key) => {
+                    let value = self.pop();
+                    self.peek_back().push_to_map_key(key, value)?;
+                }
+
+                Instruction::IntArgSplat => {
+                    let value = self.pop();
+                    if value.type_of() == Type::List {
+                        self.peek().splat_into(value)?;
+                    } else {
+                        self.peek_back().splat_into(value)?;
+                    }
                 }
             }
         }
