@@ -854,7 +854,7 @@ pub(crate) struct Closure(pub(crate) Rc<dyn Fn(&List, Option<&Map>) -> Result<Ob
 #[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
 pub(crate) enum FuncVariant {
     /// Function implemented in Gold.
-    Func(Gc<Function>),
+    Func(Gc<Function>, Gc<GcCell<Vec<Gc<GcCell<Object>>>>>),
 
     /// Static (serializable) function implemented in Rust.
     Builtin(#[unsafe_ignore_trace] Builtin),
@@ -867,18 +867,18 @@ pub(crate) enum FuncVariant {
 impl Debug for FuncVariant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Func(x) => f.debug_tuple("FuncVariant::Func").field(x).finish(),
+            Self::Func(x, e) => f.debug_tuple("FuncVariant::Func").field(x).field(e).finish(),
             Self::Builtin(_) => f.debug_tuple("FuncVariant::Builtin").finish(),
             Self::Closure(_) => f.debug_tuple("FuncVariant::Closure").finish(),
         }
     }
 }
 
-impl From<Function> for FuncVariant {
-    fn from(value: Function) -> Self {
-        FuncVariant::Func(Gc::new(value))
-    }
-}
+// impl From<Function> for FuncVariant {
+//     fn from(value: Function) -> Self {
+//         FuncVariant::Func(Gc::new(value))
+//     }
+// }
 
 impl From<Builtin> for FuncVariant {
     fn from(value: Builtin) -> Self {
@@ -1251,6 +1251,17 @@ impl ObjectVariant {
             _ => Err(Error::new(Reason::None))
         }
     }
+
+    pub(crate) fn push_to_closure(&self, other: Gc<GcCell<Object>>) -> Result<(), Error> {
+        match self {
+            Self::Func(FuncVariant::Func(_, enclosed)) => {
+                let mut e = enclosed.borrow_mut();
+                e.push(other);
+                Ok(())
+            }
+            _ => { Err(Error::new(Reason::None)) }
+        }
+    }
 }
 
 impl<T> From<T> for ObjectVariant where IntVariant: From<T> {
@@ -1486,7 +1497,7 @@ impl Object {
     }
 
     pub(crate) fn closure(val: Function) -> Self {
-        Self(ObjectVariant::Func(FuncVariant::Func(Gc::new(val))))
+        Self(ObjectVariant::Func(FuncVariant::Func(Gc::new(val), Gc::new(GcCell::new(vec![])))))
     }
 
     /// Construct a string directly from an interned symbol.
@@ -1832,6 +1843,10 @@ impl Object {
     /// Wrap [`ObjectVariant::splat_into`]
     pub(crate) fn splat_into(&self, other: Self) -> Result<(), Error> {
         self.0.splat_into(other)
+    }
+
+    pub(crate) fn push_to_closure(&self, other: Gc<GcCell<Self>>) -> Result<(), Error> {
+        self.0.push_to_closure(other)
     }
 
     // Auto-wrap some unary and binary operators.

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, hash_map::{Iter, Keys}};
 use std::default;
 use std::fmt::Display;
 
@@ -11,14 +11,189 @@ use crate::object::{StringFormatSpec, IntegerFormatSpec, FloatFormatSpec};
 
 use super::error::{Error, Tagged, Action};
 use super::object::{Object, Key};
-use super::traits::{Boxable, Free, FreeImpl, FreeAndBound, Validatable, Taggable, ToVec};
+use super::traits::{Boxable, Free__, FreeImpl__, FreeAndBound__, Validatable, Taggable, ToVec};
+
+
+
+pub(crate) trait Visitable {
+    fn visit<T: Visitor>(&self, visitor: &mut T);
+}
+
+pub(crate) trait Visitor {
+    fn free(&mut self, name: Key);
+    fn bound(&mut self, name: Key);
+    fn captured(&mut self, name: Key);
+}
+
+pub(crate) enum NameStatus {
+    Free,
+    Captured,
+}
+
+pub(crate) struct FreeNames {
+    names: HashMap<Key, NameStatus>
+}
+
+impl FreeNames {
+    pub fn new() -> FreeNames {
+        FreeNames { names: HashMap::new() }
+    }
+
+    pub fn free_names<'a>(&'a self) -> Keys<'a, Key, NameStatus> {
+        self.names.keys()
+    }
+
+    pub fn captured_names<'a>(&'a self) -> CapturedNamesIterator<'a> {
+        CapturedNamesIterator { iter: self.names.iter() }
+    }
+}
+
+impl Visitor for FreeNames {
+    fn free(&mut self, name: Key) {
+        match self.names.get(&name) {
+            Some(_) => {}
+            None => { self.names.insert(name, NameStatus::Free); }
+        }
+    }
+
+    fn captured(&mut self, name: Key) {
+        self.names.insert(name, NameStatus::Captured);
+    }
+
+    fn bound(&mut self, _name: Key) { }
+}
+
+pub(crate) struct CapturedNamesIterator<'a> {
+    iter: Iter<'a, Key, NameStatus>
+}
+
+impl<'a> Iterator for CapturedNamesIterator<'a> {
+    type Item = Key;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.iter.next() {
+                Some((key, NameStatus::Captured)) => { return Some(*key); }
+                Some(_) => { }
+                None => { return None; }
+            }
+        }
+    }
+}
+
+pub(crate) struct BindingShield<'a> {
+    bound: HashSet<Key>,
+    parent: &'a mut dyn Visitor,
+}
+
+impl<'a> BindingShield<'a> {
+    pub fn new(parent: &'a mut dyn Visitor) -> BindingShield<'a> {
+        BindingShield { bound: HashSet::new(), parent }
+    }
+}
+
+impl<'a> Visitor for BindingShield<'a> {
+    fn free(&mut self, name: Key) {
+        if !self.bound.contains(&name) {
+            self.parent.free(name);
+        }
+    }
+
+    fn captured(&mut self, name: Key) {
+        if !self.bound.contains(&name) {
+            self.parent.captured(name);
+        }
+    }
+
+    fn bound(&mut self, name: Key) {
+        self.bound.insert(name);
+    }
+}
+
+pub(crate) struct FunctionThreshold<'a> {
+    parent: &'a mut dyn Visitor,
+}
+
+impl<'a> FunctionThreshold<'a> {
+    pub fn new(parent: &'a mut dyn Visitor) -> FunctionThreshold<'a> {
+        FunctionThreshold { parent: parent }
+    }
+}
+
+impl<'a> Visitor for FunctionThreshold<'a> {
+    fn free(&mut self, name: Key) {
+        self.parent.captured(name);
+    }
+
+    fn captured(&mut self, name: Key) {
+        self.parent.captured(name);
+    }
+
+    fn bound(&mut self, _nmae: Key) { }
+}
+
+#[derive(PartialEq)]
+pub(crate) enum BindingMode {
+    Local,
+    Cell,
+}
+
+pub(crate) struct BindingClassifier {
+    bindings: HashMap<Key, BindingMode>,
+}
+
+impl BindingClassifier {
+    pub fn new() -> BindingClassifier {
+        BindingClassifier { bindings: HashMap::new() }
+    }
+
+    pub fn names_with_mode(&self, mode: BindingMode) -> BindingClassifierIterator {
+        BindingClassifierIterator {
+            mode: mode,
+            iter: self.bindings.iter(),
+        }
+    }
+}
+
+impl Visitor for BindingClassifier {
+    fn free(&mut self, _name: Key) { }
+
+    fn bound(&mut self, name: Key) {
+        if !self.bindings.contains_key(&name) {
+            self.bindings.insert(name, BindingMode::Local);
+        }
+    }
+
+    fn captured(&mut self, name: Key) {
+        self.bindings.insert(name, BindingMode::Cell);
+    }
+}
+
+pub(crate) struct BindingClassifierIterator<'a> {
+    mode: BindingMode,
+    iter: Iter<'a, Key, BindingMode>,
+}
+
+impl<'a> Iterator for BindingClassifierIterator<'a> {
+    type Item = Key;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.iter.next() {
+                Some((key, mode)) if *mode == self.mode => { return Some(*key); }
+                None => { return None; }
+                Some(_) => { }
+            }
+        }
+    }
+}
 
 
 /// Utility function for collecting free and bound names from a binding element
 /// with a potential default value.
 fn binding_element_free_and_bound(
-    binding: &impl FreeAndBound,
-    default: Option<&impl Free>,
+    binding: &impl FreeAndBound__,
+    default: Option<&impl Free__>,
     free: &mut HashSet<Key>,
     bound: &mut HashSet<Key>,
 ) {
@@ -52,6 +227,21 @@ pub enum ListBindingElement {
     Slurp,
 }
 
+impl Visitable for ListBindingElement {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        match self {
+            Self::Binding { binding, default } => {
+                if let Some(d) = default {
+                    d.visit(visitor);
+                }
+                binding.visit(visitor);
+            }
+            Self::SlurpTo(name) => { visitor.bound(**name); }
+            Self::Slurp => { }
+        }
+    }
+}
+
 impl Validatable for ListBindingElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
@@ -67,7 +257,7 @@ impl Validatable for ListBindingElement {
     }
 }
 
-impl FreeAndBound for ListBindingElement {
+impl FreeAndBound__ for ListBindingElement {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             ListBindingElement::Binding { binding, default } => {
@@ -101,7 +291,22 @@ pub enum MapBindingElement {
     SlurpTo(#[unsafe_ignore_trace] Tagged<Key>),
 }
 
-impl FreeAndBound for MapBindingElement {
+impl Visitable for MapBindingElement {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        match self {
+            Self::Binding { binding, default, .. } => {
+                if let Some(d) = default {
+                    d.visit(visitor);
+                }
+                binding.visit(visitor);
+            }
+            Self::SlurpTo(name) => { visitor.bound(**name); }
+            _ => { }
+        }
+    }
+}
+
+impl FreeAndBound__ for MapBindingElement {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             MapBindingElement::Binding { key: _, binding, default } => {
@@ -174,10 +379,18 @@ impl<'a> ListBinding {
     }
 }
 
-impl FreeAndBound for ListBinding {
+impl FreeAndBound__ for ListBinding {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         for element in &self.0 {
             element.free_and_bound(free, bound);
+        }
+    }
+}
+
+impl Visitable for ListBinding {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        for element in self.0.iter() {
+            element.visit(visitor);
         }
     }
 }
@@ -223,10 +436,18 @@ impl Validatable for ListBinding {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub struct MapBinding(pub Vec<Tagged<MapBindingElement>>);
 
-impl FreeAndBound for MapBinding {
+impl FreeAndBound__ for MapBinding {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         for element in &self.0 {
             element.free_and_bound(free, bound);
+        }
+    }
+}
+
+impl Visitable for MapBinding {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        for element in self.0.iter() {
+            element.visit(visitor);
         }
     }
 }
@@ -274,12 +495,22 @@ impl Binding {
     }
 }
 
-impl FreeAndBound for Binding {
+impl FreeAndBound__ for Binding {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         match self {
             Binding::Identifier(name) => { bound.insert(**name); },
             Binding::List(elements) => elements.free_and_bound(free, bound),
             Binding::Map(elements) => elements.free_and_bound(free, bound),
+        }
+    }
+}
+
+impl Visitable for Binding {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        match self {
+            Self::Identifier(name) => { visitor.bound(**name); }
+            Self::List(binding) => { binding.visit(visitor); }
+            Self::Map(binding) => { binding.visit(visitor); }
         }
     }
 }
@@ -488,6 +719,15 @@ impl StringElement {
     }
 }
 
+impl Visitable for StringElement {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        match self {
+            Self::Interpolate(expr, _) => { expr.visit(visitor); }
+            _ => { }
+        }
+    }
+}
+
 impl Validatable for StringElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
@@ -522,7 +762,7 @@ pub enum ListElement {
     },
 }
 
-impl FreeImpl for ListElement {
+impl FreeImpl__ for ListElement {
     fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
             ListElement::Singleton(expr) => expr.free_impl(free),
@@ -540,6 +780,25 @@ impl FreeImpl for ListElement {
                         free.insert(ident);
                     }
                 }
+            }
+        }
+    }
+}
+
+impl Visitable for ListElement {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        match self {
+            Self::Singleton(expr) => { expr.visit(visitor); }
+            Self::Splat(expr) => { expr.visit(visitor); }
+            Self::Loop { binding, iterable, element } => {
+                let mut shield = BindingShield::new(visitor);
+                iterable.visit(&mut shield);
+                binding.visit(&mut shield);
+                element.visit(&mut shield);
+            }
+            Self::Cond { condition, element } => {
+                condition.visit(visitor);
+                element.visit(visitor);
             }
         }
     }
@@ -591,7 +850,7 @@ pub enum MapElement {
     },
 }
 
-impl FreeImpl for MapElement {
+impl FreeImpl__ for MapElement {
     fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
             MapElement::Singleton { key, value } => {
@@ -612,6 +871,28 @@ impl FreeImpl for MapElement {
                         free.insert(ident);
                     }
                 }
+            }
+        }
+    }
+}
+
+impl Visitable for MapElement {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        match self {
+            Self::Singleton { key, value } => {
+                key.visit(visitor);
+                value.visit(visitor);
+            }
+            Self::Splat(expr) => { expr.visit(visitor); }
+            Self::Loop { binding, iterable, element } => {
+                let mut shield = BindingShield::new(visitor);
+                iterable.visit(&mut shield);
+                binding.visit(&mut shield);
+                element.visit(&mut shield);
+            }
+            Self::Cond { condition, element } => {
+                condition.visit(visitor);
+                element.visit(visitor);
             }
         }
     }
@@ -656,12 +937,22 @@ pub enum ArgElement {
     Splat(Tagged<Expr>),
 }
 
-impl FreeImpl for ArgElement {
+impl FreeImpl__ for ArgElement {
     fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
             ArgElement::Singleton(expr) => { expr.free_impl(free); },
             ArgElement::Splat(expr) => { expr.free_impl(free); },
             ArgElement::Keyword(_, expr) => { expr.free_impl(free); },
+        }
+    }
+}
+
+impl Visitable for ArgElement {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        match self {
+            Self::Singleton(expr) => { expr.visit(visitor); }
+            Self::Keyword(_, expr) => { expr.visit(visitor); }
+            Self::Splat(expr) => { expr.visit(visitor); }
         }
     }
 }
@@ -874,6 +1165,20 @@ impl Transform {
     /// * `loc` - the location of the indexing operator in the buffer.
     pub fn or<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
         Transform::BinOp(BinOp::Or.tag(loc), rhs.to_box())
+    }
+}
+
+impl Visitable for Transform {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        match self {
+            Self::BinOp(_, expr) => { expr.visit(visitor); }
+            Self::FunCall(args) => {
+                for arg in args.iter() {
+                    arg.visit(visitor);
+                }
+            }
+            Self::UnOp(_) => { }
+        }
     }
 }
 
@@ -1152,7 +1457,59 @@ impl Expr {
     }
 }
 
-impl FreeImpl for Expr {
+impl Visitable for Expr {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        match self {
+            Self::Literal(_) => {}
+            Self::String(elements) => {
+                for element in elements {
+                    element.visit(visitor);
+                }
+            }
+            Self::Identifier(name) => {
+                visitor.free(**name);
+            }
+            Self::List(elements) => {
+                for element in elements {
+                    element.visit(visitor);
+                }
+            }
+            Self::Map(elements) => {
+                for element in elements {
+                    element.visit(visitor);
+                }
+            }
+            Self::Transformed { operand, transform } => {
+                operand.visit(visitor);
+                transform.visit(visitor);
+            }
+            Self::Branch { condition, true_branch, false_branch } => {
+                condition.visit(visitor);
+                true_branch.visit(visitor);
+                false_branch.visit(visitor);
+            }
+            Self::Let { bindings, expression } => {
+                let mut shield = BindingShield::new(visitor);
+                for (binding, expr) in bindings {
+                    expr.visit(&mut shield);
+                    binding.visit(&mut shield);
+                }
+                expression.visit(&mut shield);
+            }
+            Self::Function { positional, keywords, expression } => {
+                let mut threshold = FunctionThreshold::new(visitor);
+                let mut shield = BindingShield::new(&mut threshold);
+                positional.visit(&mut shield);
+                if let Some(kw) = keywords {
+                    kw.visit(&mut shield);
+                }
+                expression.visit(&mut shield);
+            }
+        }
+    }
+}
+
+impl FreeImpl__ for Expr {
     fn free_impl(&self, free: &mut HashSet<Key>) {
         match self {
             Expr::Literal(_) => {},

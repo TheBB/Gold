@@ -4,7 +4,7 @@ use std::hash::Hash;
 use gc::{Trace, Finalize};
 use serde::{Serialize, Deserialize};
 
-use crate::ast::{ArgElement, BinOp, Binding, Expr, FormatSpec, ListBinding, ListBindingElement, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, Transform, UnOp};
+use crate::ast::{ArgElement, BinOp, Binding, BindingClassifier, BindingMode, BindingShield, Expr, FormatSpec, FreeNames, ListBinding, ListBindingElement, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, Transform, UnOp, Visitable};
 use crate::error::{Error, Reason};
 use crate::object::{Key, Object};
 use crate::wrappers::GcCell;
@@ -22,6 +22,7 @@ pub(crate) struct Function {
     pub fmt_specs: Vec<FormatSpec>,
 
     pub num_locals: usize,
+    pub num_cells: usize,
 }
 
 
@@ -30,10 +31,13 @@ pub(crate) enum Instruction {
     // Loading
     LoadConst(usize),
     LoadLocal(usize),
+    LoadCell(usize),
+    LoadEnclosed(usize),
     LoadFunc(usize),
 
     // Storing
     StoreLocal(usize),
+    StoreCell(usize),
 
     // Control flow
     Return,
@@ -84,6 +88,7 @@ pub(crate) enum Instruction {
     PushToMap,
     SplatToCollection,
     DelKeyIfExists(Key),
+    PushCellToClosure(usize),
 
     // Shortcuts for internal use
     IntIndexL(usize),
@@ -98,6 +103,117 @@ pub(crate) enum Instruction {
 }
 
 
+#[derive(Debug)]
+enum BindingSlot {
+    Local(usize),
+    Cell(usize),
+    Enclosed(usize),
+}
+
+#[derive(Debug)]
+struct Namespace {
+    next_local: usize,
+    next_cell: usize,
+    next_enclosed: usize,
+    types: HashMap<Key, BindingSlot>,
+}
+
+impl Namespace {
+    pub fn new(parent: Option<&Namespace>) -> Namespace {
+        Namespace {
+            next_local: parent.as_ref().map(|p| p.next_local).unwrap_or(0),
+            next_cell: parent.as_ref().map(|p| p.next_cell).unwrap_or(0),
+            next_enclosed: 0,
+            types: HashMap::new(),
+        }
+    }
+
+    pub fn lookup_instruction(&self, key: Key) -> Option<Instruction> {
+        match self.types.get(&key) {
+            Some(BindingSlot::Local(i)) => Some(Instruction::LoadLocal(*i)),
+            Some(BindingSlot::Cell(i)) => Some(Instruction::LoadCell(*i)),
+            Some(BindingSlot::Enclosed(i)) => Some(Instruction::LoadEnclosed(*i)),
+            None => None,
+        }
+    }
+
+    pub fn store_instruction(&mut self, key: Key) -> Instruction {
+        match self.types.get(&key) {
+            Some(BindingSlot::Local(i)) => Instruction::StoreLocal(*i),
+            Some(BindingSlot::Cell(i)) => Instruction::StoreCell(*i),
+            Some(BindingSlot::Enclosed(_)) => { panic!("storing in an enclosed slot"); },
+            None => {
+                self.types.insert(key, BindingSlot::Local(self.next_local));
+                self.next_local += 1;
+                Instruction::StoreLocal(self.next_local - 1)
+            },
+        }
+    }
+
+    pub fn mark_cell(&mut self, key: Key) {
+        match self.types.get(&key) {
+            Some(BindingSlot::Local(_)) => { panic!("mark as cell but already local"); }
+            Some(BindingSlot::Cell(_)) => { }
+            Some(BindingSlot::Enclosed(_)) => { panic!("maring an enclosed slot as a cell"); }
+            None => {
+                self.types.insert(key, BindingSlot::Cell(self.next_cell));
+                self.next_cell += 1;
+            }
+        }
+    }
+
+    pub fn require_enclosed(&mut self, key: Key) {
+        match self.types.get(&key) {
+            Some(BindingSlot::Enclosed(_)) => { }
+            Some(_) => { panic!("marking as enclosed a binding that already exists"); }
+            None => {
+                self.types.insert(key, BindingSlot::Enclosed(self.next_enclosed));
+                self.next_enclosed += 1;
+            }
+        }
+    }
+}
+
+
+struct NamespaceStack {
+    namespaces: Vec<Namespace>,
+}
+
+impl NamespaceStack {
+    pub fn new() -> NamespaceStack {
+        NamespaceStack { namespaces: vec![Namespace::new(None)] }
+    }
+
+    pub fn push(&mut self) {
+        self.namespaces.push(Namespace::new(self.namespaces.last()))
+    }
+
+    pub fn pop(&mut self) {
+        self.namespaces.pop();
+    }
+
+    pub fn lookup_instruction(&self, key: Key) -> Option<Instruction> {
+        for namespace in self.namespaces.iter().rev() {
+            if let Some(instruction) = namespace.lookup_instruction(key) {
+                return Some(instruction);
+            }
+        }
+        None
+    }
+
+    pub fn store_instruction(&mut self, key: Key) -> Instruction {
+        self.namespaces.last_mut().unwrap().store_instruction(key)
+    }
+
+    pub fn mark_cell(&mut self, key: Key) {
+        self.namespaces.last_mut().unwrap().mark_cell(key);
+    }
+
+    pub fn require_enclosed(&mut self, key: Key) {
+        self.namespaces.last_mut().unwrap().require_enclosed(key);
+    }
+}
+
 
 pub(crate) struct Compiler {
     constants: Vec<Object>,
@@ -106,8 +222,10 @@ pub(crate) struct Compiler {
 
     code: Vec<Instruction>,
 
-    names: Vec<(usize, HashMap<Key, usize>)>,
-    num_slots: usize,
+    names: NamespaceStack,
+
+    num_locals: usize,
+    num_cells: usize,
 }
 
 impl Compiler {
@@ -115,10 +233,11 @@ impl Compiler {
         Compiler {
             constants: Vec::new(),
             funcs: Vec::new(),
-            code: Vec::new(),
             fmt_specs: Vec::new(),
-            names: vec![(0, HashMap::new())],
-            num_slots: 0,
+            code: Vec::new(),
+            names: NamespaceStack::new(),
+            num_locals: 0,
+            num_cells: 0,
          }
     }
 
@@ -131,8 +250,13 @@ impl Compiler {
             }
 
             Expr::Identifier(key) => {
-                self.instruction(Instruction::LoadLocal(self.index_of_name(key)?));
-                Ok(1)
+                if let Some(instruction) = self.names.lookup_instruction(**key) {
+                    self.instruction(instruction);
+                    Ok(1)
+                } else {
+                    eprintln!("failed to look up {:?}", **key);
+                    return Err(Error::new(Reason::None));
+                }
             }
 
             Expr::Transformed { operand, transform } => {
@@ -186,7 +310,19 @@ impl Compiler {
             }
 
             Expr::Let { bindings, expression } => {
-                self.push_namespace();
+                self.names.push();
+
+                let mut classifier = BindingClassifier::new();
+                for (binding, expr) in bindings {
+                    expr.visit(&mut classifier);
+                    binding.visit(&mut classifier);
+                }
+                expression.visit(&mut classifier);
+
+                for key in classifier.names_with_mode(BindingMode::Cell) {
+                    println!("marking {:?} as cell in let-binding", key);
+                    self.names.mark_cell(key);
+                }
 
                 let mut len = 0;
                 for (binding, expr) in bindings {
@@ -195,12 +331,43 @@ impl Compiler {
                 }
 
                 len += self.emit(expression)?;
-                self.pop_namespace();
+                self.names.pop();
                 Ok(len)
             }
 
             Expr::Function { positional, keywords, expression } => {
+                let load_index = self.instruction(Instruction::Noop);
+                let mut len = 1;
+
                 let mut compiler = Compiler::new();
+
+                let mut name_collection = FreeNames::new();
+                let mut shield = BindingShield::new(&mut name_collection);
+                positional.visit(&mut shield);
+                keywords.as_ref().map(|kw| kw.visit(&mut shield));
+                expression.visit(&mut shield);
+
+                println!("compiling a function");
+
+                for name in name_collection.free_names() {
+                    compiler.require_enclosed(*name);
+                    println!("{:?}", self.names.lookup_instruction(*name));
+                    if let Some(Instruction::LoadCell(i)) = self.names.lookup_instruction(*name) {
+                        self.instruction(Instruction::PushCellToClosure(i));
+                        len += 2;
+                    } else {
+                        panic!("failed to look up name that must be provided to closure: {:?}", name);
+                    }
+                }
+
+                let mut new_name_collection = FreeNames::new();
+                expression.visit(&mut new_name_collection);
+
+                for name in new_name_collection.captured_names() {
+                    println!("marking as captured: {:?}", name);
+                    compiler.names.mark_cell(name);
+                }
+
                 compiler.emit_list_binding(positional)?;
                 compiler.instruction(Instruction::Discard);
                 if let Some(kw) = keywords {
@@ -208,11 +375,13 @@ impl Compiler {
                 }
                 compiler.instruction(Instruction::Discard);
                 compiler.emit(expression)?;
+
                 let func = compiler.finalize();
 
                 let index = self.function(func);
-                self.instruction(Instruction::LoadFunc(index));
-                Ok(1)
+                self.code[load_index] = Instruction::LoadFunc(index);
+                println!("compiled a function");
+                Ok(len)
             }
 
             _ => { Ok(0) }
@@ -222,8 +391,8 @@ impl Compiler {
     fn emit_binding(&mut self, binding: &Binding) -> Result<usize, Error> {
         match binding {
             Binding::Identifier(key) => {
-                let index = self.bind_name(key);
-                self.instruction(Instruction::StoreLocal(index));
+                let instruction = self.names.store_instruction(**key);
+                self.instruction(instruction);
                 Ok(1)
             }
 
@@ -258,8 +427,8 @@ impl Compiler {
                 start: solution.num_front + solution.def_front,
                 from_end: solution.num_back + solution.def_back,
             });
-            let index = self.bind_name(&key);
-            self.instruction(Instruction::StoreLocal(index));
+            let instruction = self.names.store_instruction(key);
+            self.instruction(instruction);
             len += 2;
         }
 
@@ -344,8 +513,9 @@ impl Compiler {
                         }
                     }
 
-                    let index = self.bind_name(&key);
-                    self.instruction(Instruction::StoreLocal(index));
+                    let instruction = self.names.store_instruction(**key);
+                    self.instruction(instruction);
+
                     len += 1;
                 }
             }
@@ -502,6 +672,15 @@ impl Compiler {
     fn instruction(&mut self, instruction: Instruction) -> usize {
         let r = self.code.len();
         self.code.push(instruction);
+
+        match instruction {
+            Instruction::StoreLocal(i) => { self.num_locals = self.num_locals.max(i + 1); }
+            Instruction::LoadLocal(i) => { self.num_locals = self.num_locals.max(i + 1); }
+            Instruction::StoreCell(i) => { self.num_cells = self.num_cells.max(i + 1); }
+            Instruction::LoadCell(i) => { self.num_cells = self.num_cells.max(i + 1); }
+            _ => { }
+        }
+
         r
     }
 
@@ -523,48 +702,57 @@ impl Compiler {
         r
     }
 
-    fn bind_name(&mut self, name: &Key) -> usize {
-        let (count, names) = self.names.last_mut().unwrap();
-        if names.contains_key(name) {
-            names[name]
-        } else {
-            let r = *count + names.len();
-            self.num_slots = (r + 1).max(self.num_slots);
-            names.insert(*name, r);
-            r
-        }
-    }
+    // fn bind_name(&mut self, name: &Key) -> usize {
+    //     let (count, names) = self.names.last_mut().unwrap();
+    //     if names.contains_key(name) {
+    //         names[name]
+    //     } else {
+    //         let r = *count + names.len();
+    //         self.num_slots = (r + 1).max(self.num_slots);
+    //         names.insert(*name, r);
+    //         r
+    //     }
+    // }
 
-    fn push_namespace(&mut self) {
-        if let Some((count, names)) = self.names.last() {
-            self.names.push((count + names.len(), HashMap::new()));
-        } else {
-            self.names.push((0, HashMap::new()));
-        }
-    }
+    // fn push_namespace(&mut self) {
+    //     if let Some((count, names)) = self.names.last() {
+    //         self.names.push((count + names.len(), HashMap::new()));
+    //     } else {
+    //         self.names.push((0, HashMap::new()));
+    //     }
+    // }
 
-    fn pop_namespace(&mut self) {
-        self.names.pop();
-    }
+    // fn pop_namespace(&mut self) {
+    //     self.names.pop();
+    // }
 
-    fn index_of_name(&self, name: &Key) -> Result<usize, Error> {
-        for (_, names) in self.names.iter().rev() {
-            if names.contains_key(name) {
-                return Ok(names[name]);
-            }
-        }
+    // fn index_of_name(&self, name: &Key) -> Option<usize> {
+    //     for (_, names) in self.names.iter().rev() {
+    //         if names.contains_key(name) {
+    //             return Some(names[name]);
+    //         }
+    //     }
 
-        Err(Error::new(Reason::None))
+    //     None
+    // }
+
+    // fn index_of_cell(&self, name: &Key) -> Option<usize> {
+    //     self.cells.get(name).copied()
+    // }
+
+    pub fn require_enclosed(&mut self, key: Key) {
+        self.names.require_enclosed(key);
     }
 
     pub fn finalize(mut self) -> Function {
         self.code.push(Instruction::Return);
         Function {
-            constants: self.constants,
             functions: self.funcs,
+            constants: self.constants,
             code: self.code,
             fmt_specs: self.fmt_specs,
-            num_locals: self.num_slots,
+            num_locals: self.num_locals,
+            num_cells: self.num_cells,
         }
     }
 }

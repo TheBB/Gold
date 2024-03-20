@@ -37,34 +37,34 @@ impl<T> Boxable<T> for T {
 ///
 /// Most nodes should implement [`FreeImpl`] instead of [`Free`], relying on the
 /// default implementation of [`Free`].
-pub trait Free {
+pub(crate) trait Free__ {
     /// Return a set of all free names in this AST node.
     fn free(&self) -> HashSet<Key>;
 }
 
 /// Utility trait for traversing the AST to find bound names.
-pub(crate) trait Bound {
+pub(crate) trait Bound__ {
     /// Return a set of all bound names in this AST node.
     fn bound(&self) -> HashSet<Key>;
 }
 
 /// Utility trait for implementing [`Free`] by mutating an existing set instead
 /// of creating new ones at each AST node.
-pub trait FreeImpl {
+pub trait FreeImpl__ {
     /// Add all free names in this AST node to the set `free`.
     fn free_impl(&self, free: &mut HashSet<Key>);
 }
 
 /// Since almost all AST nodes occur only as tagged objects, provide a
 /// pass-through implementation.
-impl<T: FreeImpl> FreeImpl for Tagged<T> {
+impl<T: FreeImpl__> FreeImpl__ for Tagged<T> {
     fn free_impl(&self, free: &mut HashSet<Key>) {
         self.as_ref().free_impl(free)
     }
 }
 
 /// Default implementation of [`Free`] for anything that implements [`FreeImpl`].
-impl<T: FreeImpl> Free for T {
+impl<T: FreeImpl__> Free__ for T {
     fn free(&self) -> HashSet<Key> {
         let mut free = HashSet::new();
         self.free_impl(&mut free);
@@ -78,7 +78,7 @@ impl<T: FreeImpl> Free for T {
 /// existing names, such as binding patterns with default values. Such defaults
 /// may rely on previously-bound names in the same pattern, thus necessitating
 /// computing both free and bound names in the same traversal.
-pub trait FreeAndBound {
+pub trait FreeAndBound__ {
     /// Add all free names in this AST node to the set `free`, and all bound
     /// names to the set `bound`.
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>);
@@ -86,13 +86,13 @@ pub trait FreeAndBound {
 
 /// Since almost all AST nodes occur only as tagged objects, provide a
 /// pass-through implementation.
-impl<T: FreeAndBound> FreeAndBound for Tagged<T> {
+impl<T: FreeAndBound__> FreeAndBound__ for Tagged<T> {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         self.as_ref().free_and_bound(free, bound)
     }
 }
 
-impl<T: FreeAndBound> Bound for T {
+impl<T: FreeAndBound__> Bound__ for T {
     fn bound(&self) -> HashSet<Key> {
         let mut free = HashSet::new();
         let mut bound = HashSet::new();

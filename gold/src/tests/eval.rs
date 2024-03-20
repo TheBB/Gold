@@ -224,17 +224,17 @@ fn function_bindings() {
         "in f([])"
     )), Object::int(1));
 
-//     assert_seq!(eval(concat!(
-//         "let q = 1\n",
-//         "let f = fn ([y = q]) y\n",
-//         "in f([])"
-//     )), Object::int(1));
+    assert_seq!(eval(concat!(
+        "let q = 1\n",
+        "let f = fn ([y = q]) y\n",
+        "in f([])"
+    )), Object::int(1));
 
-//     assert_seq!(eval(concat!(
-//         "let f = fn (q) fn ([y = q]) y\n",
-//         "let q = 1\n",
-//         "in f(2)([])"
-//     )), Object::int(2));
+    assert_seq!(eval(concat!(
+        "let f = fn (q) fn ([y = q]) y\n",
+        "let q = 1\n",
+        "in f(2)([])"
+    )), Object::int(2));
 
     assert_seq!(eval(concat!(
         "let f = fn (x; y, z) x + y + z\n",
@@ -246,17 +246,17 @@ fn function_bindings() {
         "in f()"
     )), Object::int(1));
 
-//     assert_seq!(eval(concat!(
-//         "let q = 1\n",
-//         "let f = fn (; y=q) y\n",
-//         "in f()"
-//     )), Object::int(1));
+    assert_seq!(eval(concat!(
+        "let q = 1\n",
+        "let f = fn (; y=q) y\n",
+        "in f()"
+    )), Object::int(1));
 
-//     assert_seq!(eval(concat!(
-//         "let f = fn (q) fn (; y=q) y\n",
-//         "let q = 1\n",
-//         "in f(2)()"
-//     )), Object::int(2));
+    assert_seq!(eval(concat!(
+        "let f = fn (q) fn (; y=q) y\n",
+        "let q = 1\n",
+        "in f(2)()"
+    )), Object::int(2));
 
     assert_seq!(eval(concat!(
         "let f = fn (x, y=15; z=200) [x,y,z]\n",
@@ -335,14 +335,14 @@ fn function_bindings() {
 }
 
 
-// #[test]
-// fn deferred() {
-//     assert_seq!(eval(concat!(
-//         "let a = fn () b\n",
-//         "let b = 1\n",
-//         "in a()",
-//     )), Object::int(1));
-// }
+#[test]
+fn deferred() {
+    assert_seq!(eval(concat!(
+        "let a = fn () b\n",
+        "let b = 1\n",
+        "in a()",
+    )), Object::int(1));
+}
 
 
 #[test]
@@ -531,31 +531,31 @@ fn functions() {
         Object::int(1),
     ]));
 
-//     assert_seq!(eval(concat!(
-//         "let a = 1\n",
-//         "let b = fn () a\n",
-//         "let a = 2\n",
-//         "in b()"
-//     )), Object::int(1));
+    assert_seq!(eval(concat!(
+        "let a = 1\n",
+        "let b = fn () a\n",
+        "let a = 2\n",
+        "in b()"
+    )), Object::int(2));
 
-//     assert_seq!(eval(concat!(
-//         "let a = 1\n",
-//         "let b = fn (q = a) q\n",
-//         "in b()"
-//     )), Object::int(1));
+    assert_seq!(eval(concat!(
+        "let a = 1\n",
+        "let b = fn (q = a) q\n",
+        "in b()"
+    )), Object::int(1));
 
-//     assert_seq!(eval(concat!(
-//         "let a = 1\n",
-//         "let b = fn (q = a) q\n",
-//         "let a = 2\n",
-//         "in b()"
-//     )), Object::int(1));
+    assert_seq!(eval(concat!(
+        "let a = 1\n",
+        "let b = fn (q = a) q\n",
+        "let a = 2\n",
+        "in b()"
+    )), Object::int(2));
 
-//     assert_seq!(eval(concat!(
-//         "let b = fn () let a = 1 in fn (q = a) q\n",
-//         "let c = b()\n",
-//         "in c()"
-//     )), Object::int(1));
+    assert_seq!(eval(concat!(
+        "let b = fn () let a = 1 in fn (q = a) q\n",
+        "let c = b()\n",
+        "in c()"
+    )), Object::int(1));
 
     assert_seq!(eval(concat!(
         "let a = fn (q, ...x) [q, ...x]\n",

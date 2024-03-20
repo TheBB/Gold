@@ -4,13 +4,16 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use gc::Gc;
+
 use crate::compile::{Function, Instruction};
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::builtins::BUILTINS;
 use crate::error::{Error, Internal, Tagged, Unpack, TypeMismatch, Action, Reason};
 use crate::object::{Builtin, Closure, FuncVariant, Key, List, Map, Object, Type};
-use crate::traits::{Bound, Free};
+use crate::traits::{Bound__, Free__};
+use crate::wrappers::GcCell;
 
 
 /// Source code of the standard library (imported under the name 'std')
@@ -665,16 +668,27 @@ pub(crate) struct Frame {
     pub function: Function,
     pub stack: Vec<Object>,
     pub locals: Vec<Object>,
+    pub cells: Vec<Gc<GcCell<Object>>>,
+    pub enclosed: Gc<GcCell<Vec<Gc<GcCell<Object>>>>>,
     pub ip: usize,
 }
 
 impl Frame {
-    pub fn new(function: Function) -> Frame {
+    pub fn new(function: Function, enclosed: Gc<GcCell<Vec<Gc<GcCell<Object>>>>>) -> Frame {
         let num_locals = function.num_locals;
+        let num_cells = function.num_cells;
+
+        let mut cells = Vec::with_capacity(num_cells);
+        for _ in 0..num_cells {
+            cells.push(Gc::new(GcCell::new(Object::null())));
+        }
+
         Frame {
             function,
             stack: Vec::new(),
             locals: vec![Object::null(); num_locals],
+            cells,
+            enclosed,
             ip: 0,
         }
     }
@@ -697,7 +711,7 @@ impl Vm {
     }
 
     pub fn eval(&mut self, function: Function) -> Result<Object, Error> {
-        self.frames.push(Frame::new(function));
+        self.frames.push(Frame::new(function, Gc::new(GcCell::new(vec![]))));
         self.fp = 0;
         self.eval_impl()
     }
@@ -738,6 +752,21 @@ impl Vm {
                     self.push(obj);
                 }
 
+                Instruction::LoadCell(i) => {
+                    let cell = self.cur_frame().cells[i].as_ref();
+                    let obj = cell.borrow().clone();
+                    self.push(obj);
+                }
+
+                Instruction::LoadEnclosed(i) => {
+                    let obj = {
+                        let e = self.cur_frame().enclosed.as_ref().borrow();
+                        let f = e[i].as_ref().borrow();
+                        f.clone()
+                    };
+                    self.push(obj);
+                }
+
                 Instruction::LoadFunc(i) => {
                     let func = self.cur_frame().function.functions[i].clone();
                     let obj = Object::closure(func);
@@ -747,6 +776,12 @@ impl Vm {
                 Instruction::StoreLocal(i) => {
                     let obj = self.pop();
                     self.cur_frame().locals[i] = obj;
+                }
+
+                Instruction::StoreCell(i) => {
+                    let obj = self.pop();
+                    let cell = self.cur_frame().cells[i].as_ref();
+                    *cell.borrow_mut() = obj;
                 }
 
                 Instruction::Return => {
@@ -815,8 +850,8 @@ impl Vm {
                             self.push(result);
                         }
 
-                        Some(FuncVariant::Func(f)) => {
-                            self.frames.push(Frame::new(f.as_ref().clone()));
+                        Some(FuncVariant::Func(f, e)) => {
+                            self.frames.push(Frame::new(f.as_ref().clone(), e.clone()));
                             self.fp += 1;
                             self.push(kwargs);
                             self.push(args);
@@ -998,6 +1033,11 @@ impl Vm {
                 Instruction::DelKeyIfExists(key) => {
                     let mut l = self.peek().get_map_mut().ok_or_else(|| Error::new(Reason::None))?;
                     l.remove(&key);
+                }
+
+                Instruction::PushCellToClosure(i) => {
+                    let cell = self.cur_frame().cells[i].clone();
+                    self.peek().push_to_closure(cell)?;
                 }
 
                 Instruction::IntIndexL(i) => {
