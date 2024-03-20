@@ -627,19 +627,19 @@ fn branching_in_collections() {
 }
 
 
-// #[test]
-// fn conditional_collection_elements() {
-//     assert_seq!(eval("[when true: 1, when false: 2, if true then 3 else 4, 5]"), Object::list(vec![
-//         Object::int(1),
-//         Object::int(3),
-//         Object::int(5),
-//     ]));
+#[test]
+fn conditional_collection_elements() {
+    assert_seq!(eval("[when true: 1, when false: 2, if true then 3 else 4, 5]"), Object::list(vec![
+        Object::int(1),
+        Object::int(3),
+        Object::int(5),
+    ]));
 
-//     assert_seq!(eval("{a: if true then 1 else 2, when true: b: 3, when false: c: 4}"), Object::map(vec![
-//         ("a", Object::int(1)),
-//         ("b", Object::int(3)),
-//     ]));
-// }
+    assert_seq!(eval("{a: if true then 1 else 2, when true: b: 3, when false: c: 4}"), Object::map(vec![
+        ("a", Object::int(1)),
+        ("b", Object::int(3)),
+    ]));
+}
 
 
 // #[test]

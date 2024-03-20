@@ -557,6 +557,15 @@ impl Compiler {
                 Ok(len + 1)
             }
 
+            ListElement::Cond { condition, element } => {
+                let condition_len = self.emit(condition)?;
+                self.instruction(Instruction::LogicalNegate);
+                let index = self.instruction(Instruction::Noop);
+                let element_len = self.emit_list_element(element)?;
+                self.code[index] = Instruction::CondJump(element_len);
+                Ok(condition_len + element_len + 2)
+            }
+
             _ => { Ok(0) }
         }
     }
@@ -574,6 +583,15 @@ impl Compiler {
                 let len = self.emit(expr)?;
                 self.instruction(Instruction::SplatToCollection);
                 Ok(len + 1)
+            }
+
+            MapElement::Cond { condition, element } => {
+                let condition_len = self.emit(condition)?;
+                self.instruction(Instruction::LogicalNegate);
+                let index = self.instruction(Instruction::Noop);
+                let element_len = self.emit_map_element(element)?;
+                self.code[index] = Instruction::CondJump(element_len);
+                Ok(condition_len + element_len + 2)
             }
 
             _ => { Ok(0) }
