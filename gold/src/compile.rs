@@ -5,6 +5,7 @@ use gc::{Trace, Finalize};
 use serde::{Serialize, Deserialize};
 
 use crate::ast::{ArgElement, BinOp, Binding, BindingClassifier, BindingMode, BindingShield, Expr, FormatSpec, FreeNames, ListBinding, ListBindingElement, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, Transform, UnOp, Visitable};
+use crate::builtins::BUILTINS;
 use crate::error::{Error, Reason};
 use crate::object::{Key, Object};
 use crate::wrappers::GcCell;
@@ -34,6 +35,7 @@ pub(crate) enum Instruction {
     LoadCell(usize),
     LoadEnclosed(usize),
     LoadFunc(usize),
+    LoadBuiltin(usize),
 
     // Storing
     StoreLocal(usize),
@@ -43,6 +45,7 @@ pub(crate) enum Instruction {
     Return,
     CondJump(usize),
     Jump(usize),
+    JumpBack(usize),
     Duplicate,
     Discard,
     DiscardMany(usize),
@@ -82,6 +85,7 @@ pub(crate) enum Instruction {
     // Constructors
     NewList,
     NewMap,
+    NewIterator,
 
     // Mutability
     PushToList,
@@ -89,6 +93,8 @@ pub(crate) enum Instruction {
     SplatToCollection,
     DelKeyIfExists(Key),
     PushCellToClosure(usize),
+    PushEnclosedToClosure(usize),
+    NextOrJump(usize),
 
     // Shortcuts for internal use
     IntIndexL(usize),
@@ -154,7 +160,7 @@ impl Namespace {
         match self.types.get(&key) {
             Some(BindingSlot::Local(_)) => { panic!("mark as cell but already local"); }
             Some(BindingSlot::Cell(_)) => { }
-            Some(BindingSlot::Enclosed(_)) => { panic!("maring an enclosed slot as a cell"); }
+            Some(BindingSlot::Enclosed(_)) => { }
             None => {
                 self.types.insert(key, BindingSlot::Cell(self.next_cell));
                 self.next_cell += 1;
@@ -198,7 +204,8 @@ impl NamespaceStack {
                 return Some(instruction);
             }
         }
-        None
+
+        BUILTINS.0.get(key.as_str()).map(|i| Instruction::LoadBuiltin(*i))
     }
 
     pub fn store_instruction(&mut self, key: Key) -> Instruction {
@@ -351,10 +358,13 @@ impl Compiler {
 
                 for name in name_collection.free_names() {
                     compiler.require_enclosed(*name);
-                    println!("{:?}", self.names.lookup_instruction(*name));
-                    if let Some(Instruction::LoadCell(i)) = self.names.lookup_instruction(*name) {
+                    let instruction = self.names.lookup_instruction(*name);
+                    if let Some(Instruction::LoadCell(i)) = instruction {
                         self.instruction(Instruction::PushCellToClosure(i));
-                        len += 2;
+                        len += 1;
+                    } else if let Some(Instruction::LoadEnclosed(i)) = instruction {
+                        self.instruction(Instruction::PushEnclosedToClosure(i));
+                        len += 1;
                     } else {
                         panic!("failed to look up name that must be provided to closure: {:?}", name);
                     }
@@ -566,7 +576,32 @@ impl Compiler {
                 Ok(condition_len + element_len + 2)
             }
 
-            _ => { Ok(0) }
+            ListElement::Loop { binding, iterable, element } => {
+                let iterable_len = self.emit(iterable)?;
+                self.instruction(Instruction::NewIterator);
+
+                self.names.push();
+
+                let mut classifier = BindingClassifier::new();
+                binding.visit(&mut classifier);
+                element.visit(&mut classifier);
+
+                for key in classifier.names_with_mode(BindingMode::Cell) {
+                    self.names.mark_cell(key);
+                }
+
+                let index = self.instruction(Instruction::Noop);
+                let mut jump_len = self.emit_binding(binding)?;
+                self.instruction(Instruction::Interchange);
+                jump_len += self.emit_list_element(element)?;
+                self.instruction(Instruction::Interchange);
+                self.instruction(Instruction::JumpBack(jump_len + 4));
+                self.code[index] = Instruction::NextOrJump(jump_len + 3);
+                self.instruction(Instruction::Discard);
+
+                self.names.pop();
+                Ok(iterable_len + jump_len + 6)
+            }
         }
     }
 
@@ -594,7 +629,32 @@ impl Compiler {
                 Ok(condition_len + element_len + 2)
             }
 
-            _ => { Ok(0) }
+            MapElement::Loop { binding, iterable, element } => {
+                let iterable_len = self.emit(iterable)?;
+                self.instruction(Instruction::NewIterator);
+
+                self.names.push();
+
+                let mut classifier = BindingClassifier::new();
+                binding.visit(&mut classifier);
+                element.visit(&mut classifier);
+
+                for key in classifier.names_with_mode(BindingMode::Cell) {
+                    self.names.mark_cell(key);
+                }
+
+                let index = self.instruction(Instruction::Noop);
+                let mut jump_len = self.emit_binding(binding)?;
+                self.instruction(Instruction::Interchange);
+                jump_len += self.emit_map_element(element)?;
+                self.instruction(Instruction::Interchange);
+                self.instruction(Instruction::JumpBack(jump_len + 4));
+                self.code[index] = Instruction::NextOrJump(jump_len + 3);
+                self.instruction(Instruction::Discard);
+
+                self.names.pop();
+                Ok(iterable_len + jump_len + 6)
+            }
         }
     }
 
@@ -719,44 +779,6 @@ impl Compiler {
         self.fmt_specs.push(spec);
         r
     }
-
-    // fn bind_name(&mut self, name: &Key) -> usize {
-    //     let (count, names) = self.names.last_mut().unwrap();
-    //     if names.contains_key(name) {
-    //         names[name]
-    //     } else {
-    //         let r = *count + names.len();
-    //         self.num_slots = (r + 1).max(self.num_slots);
-    //         names.insert(*name, r);
-    //         r
-    //     }
-    // }
-
-    // fn push_namespace(&mut self) {
-    //     if let Some((count, names)) = self.names.last() {
-    //         self.names.push((count + names.len(), HashMap::new()));
-    //     } else {
-    //         self.names.push((0, HashMap::new()));
-    //     }
-    // }
-
-    // fn pop_namespace(&mut self) {
-    //     self.names.pop();
-    // }
-
-    // fn index_of_name(&self, name: &Key) -> Option<usize> {
-    //     for (_, names) in self.names.iter().rev() {
-    //         if names.contains_key(name) {
-    //             return Some(names[name]);
-    //         }
-    //     }
-
-    //     None
-    // }
-
-    // fn index_of_cell(&self, name: &Key) -> Option<usize> {
-    //     self.cells.get(name).copied()
-    // }
 
     pub fn require_enclosed(&mut self, key: Key) {
         self.names.require_enclosed(key);

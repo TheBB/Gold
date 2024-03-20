@@ -591,6 +591,16 @@ fn functions() {
         "let a = fn {k = 1} k\n",
         "in a(k: 2)"
     )), Object::int(2));
+
+    assert_seq!(eval(concat!(
+        "let a = 1\n",
+        "in (fn () fn () a)()()"
+    )), Object::int(1));
+
+    assert_seq!(eval(concat!(
+        "let a = 1\n",
+        "in (fn () fn () fn () a)()()()"
+    )), Object::int(1));
 }
 
 
@@ -642,84 +652,84 @@ fn conditional_collection_elements() {
 }
 
 
-// #[test]
-// fn iterable_collection_elements() {
-//     assert_seq!(eval("let a = [1, 2, 3] in [for x in a: x + 1]"), (2..5).map(Object::int).collect());
+#[test]
+fn iterable_collection_elements() {
+    assert_seq!(eval("let a = [1, 2, 3] in [for x in a: x + 1]"), (2..5).map(Object::int).collect());
 
-//     assert_seq!(eval("{for [x,y] in [[\"a\", 1], [\"b\", 2]]: $x: y}"), Object::map(vec![
-//         ("a", Object::int(1)),
-//         ("b", Object::int(2))
-//     ]));
-// }
-
-
-// #[test]
-// fn complex_collection_elements() {
-//     assert_seq!(eval(concat!(
-//         "let a = [1, 2, 3, 4, 5]\n",
-//         "in [for x in a: when x < 3: x]"
-//     )), (1..3).map(Object::int).collect());
-
-//     assert_seq!(eval(concat!(
-//         "let a = [[1], [2, 3], [4, 5, 6]]\n",
-//         "in [for x in a: when len(x) > 1: ...x]"
-//     )), (2..7).map(Object::int).collect());
-
-//     assert_seq!(eval(concat!(
-//         "let a = [[\"x\",1], [\"y\",2], [\"z\",3]]\n",
-//         "in {for [x,y] in a: when y != 2: $x: y}"
-//     )), Object::map(vec![
-//         ("x", Object::int(1)),
-//         ("z", Object::int(3)),
-//     ]));
-// }
+    assert_seq!(eval("{for [x,y] in [[\"a\", 1], [\"b\", 2]]: $x: y}"), Object::map(vec![
+        ("a", Object::int(1)),
+        ("b", Object::int(2))
+    ]));
+}
 
 
-// #[test]
-// fn builtins() {
-//     assert_seq!(eval("len([1, 2])"), Object::int(2));
-//     assert_seq!(eval("len([])"), Object::int(0));
+#[test]
+fn complex_collection_elements() {
+    assert_seq!(eval(concat!(
+        "let a = [1, 2, 3, 4, 5]\n",
+        "in [for x in a: when x < 3: x]"
+    )), (1..3).map(Object::int).collect());
 
-//     assert_seq!(eval("len({})"), Object::int(0));
-//     assert_seq!(eval("len({a: 1})"), Object::int(1));
+    assert_seq!(eval(concat!(
+        "let a = [[1], [2, 3], [4, 5, 6]]\n",
+        "in [for x in a: when len(x) > 1: ...x]"
+    )), (2..7).map(Object::int).collect());
 
-//     assert_seq!(eval("len(\"\")"), Object::int(0));
-//     assert_seq!(eval("len(\"abc\")"), Object::int(3));
-//     assert_seq!(eval("len(\"å\")"), Object::int(1));
+    assert_seq!(eval(concat!(
+        "let a = [[\"x\",1], [\"y\",2], [\"z\",3]]\n",
+        "in {for [x,y] in a: when y != 2: $x: y}"
+    )), Object::map(vec![
+        ("x", Object::int(1)),
+        ("z", Object::int(3)),
+    ]));
+}
 
-//     assert_seq!(eval("range(3)"), (0..3).map(Object::int).collect());
-//     assert_seq!(eval("range(1, 3)"), (1..3).map(Object::int).collect());
 
-//     assert_seq!(eval("int(1)"), Object::int(1));
-//     assert_seq!(eval("int(true)"), Object::int(1));
-//     assert_seq!(eval("int(false)"), Object::int(0));
-//     assert_seq!(eval("int(1.2)"), Object::int(1));
-//     assert_seq!(eval("int(-1.2)"), Object::int(-1));
-//     assert_seq!(eval("int(\"-3\")"), Object::int(-3));
+#[test]
+fn builtins() {
+    assert_seq!(eval("len([1, 2])"), Object::int(2));
+    assert_seq!(eval("len([])"), Object::int(0));
 
-//     assert_seq!(eval("bool(1)"), Object::bool(true));
-//     assert_seq!(eval("bool(0)"), Object::bool(false));
-//     assert_seq!(eval("bool(1.5)"), Object::bool(true));
-//     assert_seq!(eval("bool(0.0)"), Object::bool(false));
-//     assert_seq!(eval("bool(true)"), Object::bool(true));
-//     assert_seq!(eval("bool(false)"), Object::bool(false));
-//     assert_seq!(eval("bool(null)"), Object::bool(false));
-//     assert_seq!(eval("bool([])"), Object::bool(true));
-//     assert_seq!(eval("bool({})"), Object::bool(true));
+    assert_seq!(eval("len({})"), Object::int(0));
+    assert_seq!(eval("len({a: 1})"), Object::int(1));
 
-//     assert_seq!(eval("str(1)"), Object::str("1"));
-//     assert_seq!(eval("str(1.2)"), Object::str("1.2"));
-//     assert_seq!(eval("str(\"delta\")"), Object::str("delta"));
-//     assert_seq!(eval("str(true)"), Object::str("true"));
-//     assert_seq!(eval("str(false)"), Object::str("false"));
-//     assert_seq!(eval("str(null)"), Object::str("null"));
+    assert_seq!(eval("len(\"\")"), Object::int(0));
+    assert_seq!(eval("len(\"abc\")"), Object::int(3));
+    assert_seq!(eval("len(\"å\")"), Object::int(1));
 
-//     assert_seq!(eval("float(1)"), Object::float(1.0));
-//     assert_seq!(eval("float(1.0)"), Object::float(1.0));
-//     assert_seq!(eval("float(true)"), Object::float(1.0));
-//     assert_seq!(eval("float(false)"), Object::float(0.0));
-//     assert_seq!(eval("float(\"1.2\")"), Object::float(1.2));
-// }
+    assert_seq!(eval("range(3)"), (0..3).map(Object::int).collect());
+    assert_seq!(eval("range(1, 3)"), (1..3).map(Object::int).collect());
+
+    assert_seq!(eval("int(1)"), Object::int(1));
+    assert_seq!(eval("int(true)"), Object::int(1));
+    assert_seq!(eval("int(false)"), Object::int(0));
+    assert_seq!(eval("int(1.2)"), Object::int(1));
+    assert_seq!(eval("int(-1.2)"), Object::int(-1));
+    assert_seq!(eval("int(\"-3\")"), Object::int(-3));
+
+    assert_seq!(eval("bool(1)"), Object::bool(true));
+    assert_seq!(eval("bool(0)"), Object::bool(false));
+    assert_seq!(eval("bool(1.5)"), Object::bool(true));
+    assert_seq!(eval("bool(0.0)"), Object::bool(false));
+    assert_seq!(eval("bool(true)"), Object::bool(true));
+    assert_seq!(eval("bool(false)"), Object::bool(false));
+    assert_seq!(eval("bool(null)"), Object::bool(false));
+    assert_seq!(eval("bool([])"), Object::bool(true));
+    assert_seq!(eval("bool({})"), Object::bool(true));
+
+    assert_seq!(eval("str(1)"), Object::str("1"));
+    assert_seq!(eval("str(1.2)"), Object::str("1.2"));
+    assert_seq!(eval("str(\"delta\")"), Object::str("delta"));
+    assert_seq!(eval("str(true)"), Object::str("true"));
+    assert_seq!(eval("str(false)"), Object::str("false"));
+    assert_seq!(eval("str(null)"), Object::str("null"));
+
+    assert_seq!(eval("float(1)"), Object::float(1.0));
+    assert_seq!(eval("float(1.0)"), Object::float(1.0));
+    assert_seq!(eval("float(true)"), Object::float(1.0));
+    assert_seq!(eval("float(false)"), Object::float(0.0));
+    assert_seq!(eval("float(\"1.2\")"), Object::float(1.2));
+}
 
 
 // macro_rules! loc {

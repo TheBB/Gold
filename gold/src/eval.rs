@@ -170,7 +170,9 @@ impl<'a> Namespace<'a> {
         match self {
             // The top level namespace should always be empty, in which case we
             // pass the ball to the builtins.
-            Namespace::Empty => BUILTINS.get(key.as_str()).cloned().map(Object::func).ok_or_else(|| Error::unbound(key.clone())).into(),
+            Namespace::Empty => {
+                BUILTINS.0.get(key.as_str()).map(|i| BUILTINS.1[*i].clone()).map(Object::func).ok_or_else(|| Error::unbound(key.clone())).into()
+            },
             Namespace::Frozen(names) => names.get(key).map(Object::clone).ok_or_else(|| Error::unbound(key.clone())).into(),
             Namespace::Mutable { names, expected, prev } => {
                 if let Some(obj) = names.get(key) {
@@ -741,6 +743,8 @@ impl Vm {
     fn eval_impl(&mut self) -> Result<Object, Error> {
         loop {
             let instruction = self.cur_frame().next_instruction();
+            println!("Instruction: {:?}", instruction);
+            println!("Stack before: {:?}", self.cur_frame().stack);
             match instruction {
                 Instruction::LoadConst(i) => {
                     let obj = self.cur_frame().function.constants[i].clone();
@@ -771,6 +775,10 @@ impl Vm {
                     let func = self.cur_frame().function.functions[i].clone();
                     let obj = Object::closure(func);
                     self.push(obj);
+                }
+
+                Instruction::LoadBuiltin(i) => {
+                    self.push(Object::func(BUILTINS.1[i].clone()))
                 }
 
                 Instruction::StoreLocal(i) => {
@@ -804,6 +812,10 @@ impl Vm {
 
                 Instruction::Jump(delta) => {
                     self.cur_frame().ip += delta;
+                }
+
+                Instruction::JumpBack(delta) => {
+                    self.cur_frame().ip -= delta;
                 }
 
                 Instruction::Duplicate => {
@@ -1014,6 +1026,11 @@ impl Vm {
                     self.push(Object::new_map());
                 }
 
+                Instruction::NewIterator => {
+                    let obj = self.pop();
+                    self.push(Object::iterator(&obj)?);
+                }
+
                 Instruction::PushToList => {
                     let obj = self.pop();
                     self.peek().push_to_list(obj)?;
@@ -1038,6 +1055,22 @@ impl Vm {
                 Instruction::PushCellToClosure(i) => {
                     let cell = self.cur_frame().cells[i].clone();
                     self.peek().push_to_closure(cell)?;
+                }
+
+                Instruction::PushEnclosedToClosure(i) => {
+                    let cell = {
+                        let cells = self.cur_frame().enclosed.as_ref().borrow();
+                        cells[i].clone()
+                    };
+                    self.peek().push_to_closure(cell)?;
+                }
+
+                Instruction::NextOrJump(usize) => {
+                    let obj = self.peek().next()?;
+                    match obj {
+                        None => { self.cur_frame().ip += usize; }
+                        Some(x) => { self.push(x); }
+                    }
                 }
 
                 Instruction::IntIndexL(i) => {
@@ -1137,6 +1170,7 @@ impl Vm {
                     }
                 }
             }
+            println!("Stack after: {:?}\n", self.cur_frame().stack);
         }
     }
 }

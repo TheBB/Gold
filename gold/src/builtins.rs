@@ -19,45 +19,53 @@ use crate::error::{Error, TypeMismatch};
 /// // map["func"] is now available
 /// ```
 macro_rules! builtin {
-    ($m: ident, $e: ident) => {
-        $m.insert(
-            stringify!($e),
-            Builtin {
-                func: $e,
-                name: $crate::object::Key::new(stringify!($e).to_string()),
-            },
-        )
+    ($m: ident, $t: ident, $e: ident) => {
+        let index = $t.len();
+        $t.push(Builtin {
+            func: $e,
+            name: $crate::object::Key::new(stringify!($e).to_string()),
+        });
+        $m.insert(stringify!($e), index);
+        //     Builtin {
+        //         func: $e,
+        //         name: $crate::object::Key::new(stringify!($e).to_string()),
+        //     },
+        // )
     };
 }
 
 
 lazy_static! {
     /// Table of all builtin functions.
-    pub(crate) static ref BUILTINS: HashMap<&'static str, Builtin> = {
+    pub(crate) static ref BUILTINS: (
+        HashMap<&'static str, usize>,
+        Vec<Builtin>,
+    ) = {
         let mut m = HashMap::new();
-        builtin!(m, len);
-        builtin!(m, range);
-        builtin!(m, int);
-        builtin!(m, float);
-        builtin!(m, bool);
-        builtin!(m, str);
-        builtin!(m, map);
-        builtin!(m, filter);
-        builtin!(m, items);
-        builtin!(m, exp);
-        builtin!(m, log);
-        builtin!(m, ord);
-        builtin!(m, chr);
-        builtin!(m, isint);
-        builtin!(m, isstr);
-        builtin!(m, isnull);
-        builtin!(m, isbool);
-        builtin!(m, isfloat);
-        builtin!(m, isnumber);
-        builtin!(m, isobject);
-        builtin!(m, islist);
-        builtin!(m, isfunc);
-        m
+        let mut t = Vec::new();
+        builtin!(m, t, len);
+        builtin!(m, t, range);
+        builtin!(m, t, int);
+        builtin!(m, t, float);
+        builtin!(m, t, bool);
+        builtin!(m, t, str);
+        builtin!(m, t, map);
+        builtin!(m, t, filter);
+        builtin!(m, t, items);
+        builtin!(m, t, exp);
+        builtin!(m, t, log);
+        builtin!(m, t, ord);
+        builtin!(m, t, chr);
+        builtin!(m, t, isint);
+        builtin!(m, t, isstr);
+        builtin!(m, t, isnull);
+        builtin!(m, t, isbool);
+        builtin!(m, t, isfloat);
+        builtin!(m, t, isnumber);
+        builtin!(m, t, isobject);
+        builtin!(m, t, islist);
+        builtin!(m, t, isfunc);
+        (m, t)
     };
 }
 

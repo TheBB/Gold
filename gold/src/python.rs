@@ -143,6 +143,7 @@ impl pyo3::IntoPy<PyObject> for Object {
                 r.into()
             },
             ObjectVariant::Null => (None as Option<bool>).into_py(py),
+            ObjectVariant::ListIter(_, _) => 1.into_py(py),  // TODO
             ObjectVariant::Func(x) => Function(x.clone()).into_py(py),
         }
     }

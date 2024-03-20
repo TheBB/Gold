@@ -12,6 +12,7 @@
 //! [`ObjectVariant`] (`Object` implements `Deref<ObjectVariant>`) are stable.
 
 
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display};
@@ -78,6 +79,9 @@ pub enum Type {
     /// FuncVariant
     Function,
 
+    /// Iterator
+    Iterator,
+
     /// The empty variant
     Null,
 }
@@ -95,6 +99,7 @@ impl Display for Type {
             Self::List => f.write_str("list"),
             Self::Map => f.write_str("map"),
             Self::Function => f.write_str("function"),
+            Self::Iterator => f.write_str("iterator"),
             Self::Null => f.write_str("null"),
         }
     }
@@ -807,7 +812,7 @@ impl<'a> Visitor<'a> for BuiltinVisitor {
     }
 
     fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        BUILTINS.get(v).ok_or(E::custom("unknown builtin name")).cloned()
+        BUILTINS.0.get(v).map(|i| BUILTINS.1[*i].clone()).ok_or(E::custom("unknown builtin name"))
     }
 }
 
@@ -979,6 +984,9 @@ pub(crate) enum ObjectVariant {
     /// Functions
     Func(FuncVariant),
 
+    /// Iterator
+    ListIter(Gc<GcCell<usize>>, Gc<GcCell<List>>),
+
     /// Null
     Null,
 }
@@ -1023,6 +1031,7 @@ impl ObjectVariant {
             Self::List(_) => Type::List,
             Self::Map(_) => Type::Map,
             Self::Func(_) => Type::Function,
+            Self::ListIter(_, _) => Type::Iterator,
             Self::Null => Type::Null,
         }
     }
@@ -1559,6 +1568,32 @@ impl Object {
     /// Construct an empty map.
     pub fn new_map() -> Self {
         Self(ObjectVariant::Map(Gc::new(GcCell::new(Map::new()))))
+    }
+
+    /// Construct an iterator
+    pub fn iterator(obj: &Object) -> Result<Self, Error> {
+        if let Object(ObjectVariant::List(l)) = obj {
+            Ok(Object(ObjectVariant::ListIter(Gc::new(GcCell::new(0)), l.clone())))
+        } else {
+            Err(Error::new(Reason::None))
+        }
+    }
+
+    /// Get next value from an iterator
+    pub fn next(&self) -> Result<Option<Self>, Error> {
+        if let Object(ObjectVariant::ListIter(index_cell, list)) = self {
+            let mut index_cell_ref = index_cell.as_ref().borrow_mut();
+            let l = list.as_ref().borrow();
+            if *index_cell_ref < l.len() {
+                let obj = l[*index_cell_ref].clone();
+                *index_cell_ref += 1;
+                Ok(Some(obj))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Err(Error::new(Reason::None))
+        }
     }
 
     /// Serialize this objcet to a byte vector.

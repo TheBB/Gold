@@ -791,8 +791,8 @@ impl Visitable for ListElement {
             Self::Singleton(expr) => { expr.visit(visitor); }
             Self::Splat(expr) => { expr.visit(visitor); }
             Self::Loop { binding, iterable, element } => {
+                iterable.visit(visitor);
                 let mut shield = BindingShield::new(visitor);
-                iterable.visit(&mut shield);
                 binding.visit(&mut shield);
                 element.visit(&mut shield);
             }
@@ -885,8 +885,8 @@ impl Visitable for MapElement {
             }
             Self::Splat(expr) => { expr.visit(visitor); }
             Self::Loop { binding, iterable, element } => {
+                iterable.visit(visitor);
                 let mut shield = BindingShield::new(visitor);
-                iterable.visit(&mut shield);
                 binding.visit(&mut shield);
                 element.visit(&mut shield);
             }
