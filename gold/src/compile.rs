@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
 
 use gc::{Trace, Finalize};
 use serde::{Serialize, Deserialize};
@@ -8,7 +7,6 @@ use crate::ast::{ArgElement, BinOp, Binding, BindingClassifier, BindingMode, Bin
 use crate::builtins::BUILTINS;
 use crate::error::{Action, Error, IntervalTree, Reason, Span, Tagged, Unpack};
 use crate::object::{Key, Object};
-use crate::wrappers::GcCell;
 
 
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
@@ -436,8 +434,6 @@ impl Compiler {
                 self.code[load_index] = Instruction::LoadFunc(index);
                 Ok(len)
             }
-
-            _ => { Ok(0) }
         }
     }
 
@@ -904,17 +900,7 @@ impl Compiler {
 
     pub fn finalize(mut self) -> Function {
         self.code.push(Instruction::Return);
-
-        // for action in &self.actions {
-        //     println!(">>> {:?}", action);
-        // }
-        // println!();
-        // for (i, instruction) in self.code.iter().enumerate() {
-        //     println!(">>> {:?} {:?}", i, instruction);
-        // }
-
         let trace = self.build_trace();
-        // let reasons = self.build_reasons();
 
         Function {
             functions: self.funcs,

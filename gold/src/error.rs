@@ -6,7 +6,7 @@ use std::fmt::{Debug, Display, Write};
 use std::path::PathBuf;
 
 use gc::{custom_trace, Finalize, Trace};
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 use crate::ast::{BinOp, UnOp};
 use crate::lexing::TokenType;
@@ -233,6 +233,7 @@ impl<T> Tagged<T> {
         self.retag(loc)
     }
 
+    /// Wrapper for [`Span::with_length`]
     pub fn with_length(self, length: usize) -> Tagged<T> {
         let loc = self.span.with_length(length);
         self.retag(loc)
@@ -267,14 +268,6 @@ impl<T> Tagged<T> {
             span: Span::from(loc),
             contents: self.contents,
         }
-    }
-
-    /// Return a function that can apply a tag to error objects.
-    ///
-    /// Useful for `Result<_, Error>::map_err(result, _.tag_error(...))`
-    pub fn tag_error(&self, action: Action) -> impl Fn(Error) -> Error {
-        let span = self.span();
-        move |err: Error| err.tag(span, action)
     }
 }
 
@@ -695,7 +688,7 @@ pub enum FileSystem {
 
 /// Grand enumeration of all possible error reasons.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum Reason {
+pub(crate) enum Reason {
     /// Unknown reason - should never happen.
     None,
 
@@ -771,7 +764,7 @@ impl From<Value> for Reason {
 /// Enumerates all different 'actions' - things that Gold might try to do which
 /// can cause an error.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum Action {
+pub(crate) enum Action {
     /// Parsing phase.
     Parse,
 
@@ -808,19 +801,19 @@ pub enum Action {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Error {
     /// Stack trace of locations where the error happened.
-    pub locations: Option<Vec<(Span, Action)>>,
+    locations: Option<Vec<(Span, Action)>>,
 
     /// Reason for the error.
-    pub reason: Option<Reason>,
+    reason: Option<Reason>,
 
     /// Human friendly string representation.
-    pub rendered: Option<String>,
+    rendered: Option<String>,
 }
 
 impl Error {
     /// Append a location to the stack. Takes ownership and returns the same
     /// object, for ease of use with `Result::map_err`.
-    pub fn tag<T>(mut self, loc: T, action: Action) -> Self where Span: From<T> {
+    pub(crate) fn tag<T>(mut self, loc: T, action: Action) -> Self where Span: From<T> {
         match &mut self.locations {
             None => { self.locations = Some(vec![(Span::from(loc), action)]); },
             Some(vec) => { vec.push((Span::from(loc), action)); },
@@ -828,17 +821,33 @@ impl Error {
         self
     }
 
-    pub fn with_reason<T>(mut self, reason: T) -> Self where Reason: From<T> {
+    /// Get the reason
+    pub(crate) fn reason(&self) -> Option<&Reason> {
+        self.reason.as_ref()
+    }
+
+    /// Get the human-friendly text
+    pub fn rendered(&self) -> Option<&str> {
+        self.rendered.as_ref().map(String::as_str)
+    }
+
+    pub(crate) fn with_reason<T>(mut self, reason: T) -> Self where Reason: From<T> {
         self.reason = Some(Reason::from(reason));
         self
     }
 
-    pub fn with_locations(mut self, error: Self) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn with_locations_vec(mut self, locations: Vec<(Span, Action)>) -> Self {
+        self.locations = Some(locations);
+        self
+    }
+
+    pub(crate) fn with_locations(mut self, error: Self) -> Self {
         self.locations = error.locations;
         self
     }
 
-    pub fn add_locations(mut self, other: Self) -> Self {
+    pub(crate) fn add_locations(mut self, other: Self) -> Self {
         self.locations = match (self.locations, other.locations) {
             (Some(mut v), Some(mut w)) => { v.append(&mut w); Some(v) }
             (_, w) => w,
@@ -847,7 +856,7 @@ impl Error {
     }
 
     /// Construct a new error with an empty stack.
-    pub fn new<T>(reason: T) -> Self where Reason: From<T> {
+    pub(crate) fn new<T>(reason: T) -> Self where Reason: From<T> {
         Self {
             locations: None,
             reason: Some(Reason::from(reason)),
@@ -855,28 +864,16 @@ impl Error {
         }
     }
 
-    /// Construct error with the 'unboud name' reason.
-    pub fn unbound(key: Key) -> Self {
-        Self::new(Reason::Unbound(key))
-    }
-
     /// Remove the human-friendly string representation.
-    pub fn unrender(self) -> Self {
-        Self {
-            locations: self.locations,
-            reason: self.reason,
-            rendered: None,
-        }
+    pub fn unrender(mut self) -> Self {
+        self.rendered = None;
+        self
     }
 
     /// Add a human-friendly string representation.
-    pub fn render(self, code: Option<&str>) -> Self {
-        let rendered = format!("{}", ErrorRenderer(&self, code));
-        Self {
-            locations: self.locations,
-            reason: self.reason,
-            rendered: Some(rendered),
-        }
+    pub fn render(mut self, code: Option<&str>) -> Self {
+        self.rendered = Some(format!("{}", ErrorRenderer(&self, code)));
+        self
     }
 }
 

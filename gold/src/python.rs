@@ -17,8 +17,8 @@ use crate::traits::Peek;
 /// Convert a Gold error to a Python error.
 pub fn err_to_py(err: Error) -> PyErr {
     let err = err.render(None);
-    let pystr = format!("From Gold: {}", err.rendered.unwrap());
-    match err.reason {
+    let pystr = format!("From Gold: {}", err.rendered().unwrap());
+    match err.reason() {
         None => PyException::new_err(pystr),
         Some(Reason::None) => PyException::new_err(pystr),
         Some(Reason::Syntax(_)) => PySyntaxError::new_err(pystr),

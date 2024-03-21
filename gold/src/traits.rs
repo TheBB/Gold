@@ -42,12 +42,6 @@ pub(crate) trait Free__ {
     fn free(&self) -> HashSet<Key>;
 }
 
-/// Utility trait for traversing the AST to find bound names.
-pub(crate) trait Bound__ {
-    /// Return a set of all bound names in this AST node.
-    fn bound(&self) -> HashSet<Key>;
-}
-
 /// Utility trait for implementing [`Free`] by mutating an existing set instead
 /// of creating new ones at each AST node.
 pub trait FreeImpl__ {
@@ -89,15 +83,6 @@ pub trait FreeAndBound__ {
 impl<T: FreeAndBound__> FreeAndBound__ for Tagged<T> {
     fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
         self.as_ref().free_and_bound(free, bound)
-    }
-}
-
-impl<T: FreeAndBound__> Bound__ for T {
-    fn bound(&self) -> HashSet<Key> {
-        let mut free = HashSet::new();
-        let mut bound = HashSet::new();
-        self.free_and_bound(&mut free, &mut bound);
-        bound
     }
 }
 

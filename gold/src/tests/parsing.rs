@@ -1262,11 +1262,7 @@ macro_rules! err {
     ($code:expr, $offset:expr, $elt:expr $(,$elts:expr)*) => {
         assert_eq!(
             parse($code),
-            Err(Error {
-                locations: Some(vec![(Span::from($offset..$offset), Action::Parse)]),
-                reason: Some(Reason::Syntax(Syntax::from(($elt $(,$elts)*)))),
-                rendered: None,
-            })
+            Err(Error::new(Syntax::from(($elt $(,$elts)*))).with_locations_vec(vec![(Span::from($offset..$offset), Action::Parse)])),
         )
     };
 }
@@ -1276,11 +1272,7 @@ macro_rules! errl {
     ($code:expr, $offset:expr, $elt:expr) => {
         assert_eq!(
             parse($code),
-            Err(Error {
-                locations: Some(vec![(Span::from($offset), Action::Parse)]),
-                reason: Some(Reason::Syntax($elt)),
-                rendered: None,
-            })
+            Err(Error::new(Reason::Syntax($elt)).with_locations_vec(vec![(Span::from($offset), Action::Parse)]))
         )
     };
 }

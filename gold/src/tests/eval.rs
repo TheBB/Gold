@@ -9,7 +9,7 @@ fn eval(input: &str) -> Result<Object, Error> {
 }
 
 fn eval_errstr(input: &str) -> Option<String> {
-    eval_raw(input).err().map(|x| x.render(Some(input)).rendered).flatten()
+    eval_raw(input).err().map(|x| x.render(Some(input)).rendered().map(str::to_owned)).flatten()
 }
 
 
@@ -741,11 +741,7 @@ macro_rules! loc {
 
 macro_rules! err {
     ($reason:expr, $($locs:expr),*) => {
-        Err(Error {
-            locations: Some(vec![$($locs),*]),
-            reason: Some(Reason::from($reason)),
-            rendered: None,
-        })
+        Err(Error::new($reason).with_locations_vec(vec![$($locs),*]))
     }
 }
 

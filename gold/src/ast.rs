@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet, hash_map::{Iter, Keys}};
-use std::default;
 use std::fmt::Display;
 
 use gc::{Gc, Trace, Finalize};
@@ -301,7 +300,6 @@ impl Visitable for MapBindingElement {
                 binding.visit(visitor);
             }
             Self::SlurpTo(name) => { visitor.bound(**name); }
-            _ => { }
         }
     }
 }
@@ -419,9 +417,6 @@ impl Validatable for ListBinding {
                     return Err(Error::new(Syntax::DefaultSequence).tag(element, Action::Parse))
                 }
             }
-            // else if found_default && let ListBindingElement::Binding { default: None, .. } = **element {
-            //     return Err(Error::new(Syntax::DefaultSequence).tag(element, Action::Parse))
-            // }
         }
         Ok(())
     }

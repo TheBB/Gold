@@ -12,9 +12,7 @@
 //! [`ObjectVariant`] (`Object` implements `Deref<ObjectVariant>`) are stable.
 
 
-use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::HashSet;
 use std::fmt::{Debug, Display};
 use std::io::{Read, Write};
 use std::iter::Step;
@@ -33,11 +31,11 @@ use symbol_table::GlobalSymbol;
 
 use crate::builtins::BUILTINS;
 use crate::compile::Function;
+use crate::eval::Vm;
 use crate::traits::{Peek, ToMap, ToVec};
 
-use crate::ast::{ListBinding, MapBinding, Expr, BinOp, UnOp, FormatSpec, StringAlignSpec, AlignSpec, IntegerFormatType, GroupingSpec, SignSpec, UppercaseSpec, FloatFormatType};
-use crate::error::{Error, Internal, Reason, Tagged, TypeMismatch, Value};
-use crate::eval::Namespace;
+use crate::{ast, ImportConfig};
+use crate::error::{Error, Internal, Reason, TypeMismatch, Value};
 use crate::util;
 use crate::wrappers::{WBigInt, OrderedMap, GcCell};
 
@@ -112,7 +110,7 @@ impl Display for Type {
 
 pub(crate) struct StringFormatSpec {
     pub fill: char,
-    pub align: StringAlignSpec,
+    pub align: ast::StringAlignSpec,
     pub width: Option<usize>,
 }
 
@@ -126,9 +124,9 @@ fn fmt_str(s: &str, spec: StringFormatSpec) -> String {
             } else {
                 let missing = w - nchars;
                 let (lfill, rfill) = match spec.align {
-                    StringAlignSpec::Left => (0, missing),
-                    StringAlignSpec::Right => (missing, 0),
-                    StringAlignSpec::Center => (missing / 2, missing - missing / 2),
+                    ast::StringAlignSpec::Left => (0, missing),
+                    ast::StringAlignSpec::Right => (missing, 0),
+                    ast::StringAlignSpec::Center => (missing / 2, missing - missing / 2),
                 };
                 let mut r = String::with_capacity(w);
                 for _ in 0..lfill {
@@ -147,20 +145,20 @@ fn fmt_str(s: &str, spec: StringFormatSpec) -> String {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub(crate) struct FloatFormatSpec {
     pub fill: char,
-    pub align: AlignSpec,
-    pub sign: SignSpec,
+    pub align: ast::AlignSpec,
+    pub sign: ast::SignSpec,
     pub width: Option<usize>,
-    pub grouping: Option<GroupingSpec>,
+    pub grouping: Option<ast::GroupingSpec>,
     pub precision: usize,
-    pub fmt_type: FloatFormatType,
+    pub fmt_type: ast::FloatFormatType,
 }
 
 impl FloatFormatSpec {
     fn string_spec(&self) -> Option<StringFormatSpec> {
         match (self.align, self.width) {
-            (AlignSpec::AfterSign, _) => { return None; },
+            (ast::AlignSpec::AfterSign, _) => { return None; },
             (_, None) => { return None; }
-            (AlignSpec::String(align), Some(width)) => Some(
+            (ast::AlignSpec::String(align), Some(width)) => Some(
                 StringFormatSpec { fill: self.fill, align, width: Some(width) }
             ),
         }
@@ -169,13 +167,13 @@ impl FloatFormatSpec {
 
 fn fmt_float(f: f64, spec: FloatFormatSpec) -> String {
     let base = match spec.fmt_type {
-        FloatFormatType::Fixed => format!("{number:+.precision$}", number = f, precision = spec.precision),
-        FloatFormatType::General => format!("{:+}", f),
-        FloatFormatType::Sci(UppercaseSpec::Lower) =>
+        ast::FloatFormatType::Fixed => format!("{number:+.precision$}", number = f, precision = spec.precision),
+        ast::FloatFormatType::General => format!("{:+}", f),
+        ast::FloatFormatType::Sci(ast::UppercaseSpec::Lower) =>
             format!("{number:+.precision$e}", number = f, precision = spec.precision),
-        FloatFormatType::Sci(UppercaseSpec::Upper) =>
+        ast::FloatFormatType::Sci(ast::UppercaseSpec::Upper) =>
             format!("{number:+.precision$E}", number = f, precision = spec.precision),
-        FloatFormatType::Percentage =>
+        ast::FloatFormatType::Percentage =>
             format!("{number:+.precision$}%", number = 100.0*f, precision = spec.precision),
     };
 
@@ -184,16 +182,16 @@ fn fmt_float(f: f64, spec: FloatFormatSpec) -> String {
 
     match (spec.sign, f < 0.0) {
         (_, true) => { buffer.push('-'); },
-        (SignSpec::Plus, false) => { buffer.push('+'); }
-        (SignSpec::Space, false) => { buffer.push(' '); }
+        (ast::SignSpec::Plus, false) => { buffer.push('+'); }
+        (ast::SignSpec::Space, false) => { buffer.push(' '); }
         _ => {},
     }
 
     if let Some(group_spec) = spec.grouping {
         let group_size: usize = 3;
         let group_char = match group_spec {
-            GroupingSpec::Comma => ',',
-            GroupingSpec::Underscore => '_',
+            ast::GroupingSpec::Comma => ',',
+            ast::GroupingSpec::Underscore => '_',
         };
 
         let mut num_digits: usize = base_digits.len();
@@ -207,7 +205,7 @@ fn fmt_float(f: f64, spec: FloatFormatSpec) -> String {
         let num_groups = (num_digits + group_size - 1) / group_size;
         let first_group_size = num_digits - (num_groups - 1) * group_size;
 
-        if let (AlignSpec::AfterSign, Some(min_width)) = (spec.align, spec.width) {
+        if let (ast::AlignSpec::AfterSign, Some(min_width)) = (spec.align, spec.width) {
             let num_width = base_digits.len() + buffer.len() + num_groups - 1;
             if num_width < min_width {
                 let extra = min_width - num_width;
@@ -228,7 +226,7 @@ fn fmt_float(f: f64, spec: FloatFormatSpec) -> String {
 
         buffer += base_digits;
     } else {
-        if let (AlignSpec::AfterSign, Some(min_width)) = (spec.align, spec.width) {
+        if let (ast::AlignSpec::AfterSign, Some(min_width)) = (spec.align, spec.width) {
             let num_width = base_digits.len() + buffer.len();
             if num_width < min_width {
                 let extra = min_width - num_width;
@@ -348,20 +346,20 @@ impl StrVariant {
 
 pub(crate) struct IntegerFormatSpec {
     pub fill: char,
-    pub align: AlignSpec,
-    pub sign: SignSpec,
+    pub align: ast::AlignSpec,
+    pub sign: ast::SignSpec,
     pub alternate: bool,
     pub width: Option<usize>,
-    pub grouping: Option<GroupingSpec>,
-    pub fmt_type: IntegerFormatType,
+    pub grouping: Option<ast::GroupingSpec>,
+    pub fmt_type: ast::IntegerFormatType,
 }
 
 impl IntegerFormatSpec {
     fn string_spec(&self) -> Option<StringFormatSpec> {
         match (self.align, self.width) {
-            (AlignSpec::AfterSign, _) => { return None; },
+            (ast::AlignSpec::AfterSign, _) => { return None; },
             (_, None) => { return None; }
-            (AlignSpec::String(align), Some(width)) => Some(
+            (ast::AlignSpec::String(align), Some(width)) => Some(
                 StringFormatSpec { fill: self.fill, align, width: Some(width) }
             ),
         }
@@ -686,21 +684,21 @@ impl IntVariant {
 
     fn format(&self, spec: IntegerFormatSpec) -> Result<String, Error> {
         let base = match (spec.fmt_type, self) {
-            (IntegerFormatType::Character, _) => {
+            (ast::IntegerFormatType::Character, _) => {
                 let codepoint = u32::try_from(self).map_err(|_| Error::new(Value::OutOfRange))?;
                 let c = char::try_from(codepoint).map_err(|_| Error::new(Value::OutOfRange))?;
                 return Ok(c.to_string());
             },
-            (IntegerFormatType::Binary, Self::Small(x)) => format!("{:+b}", x),
-            (IntegerFormatType::Binary, Self::Big(x)) => format!("{:+b}", x.peek()),
-            (IntegerFormatType::Decimal, Self::Small(x)) => format!("{:+}", x),
-            (IntegerFormatType::Decimal, Self::Big(x)) => format!("{:+}", x.peek()),
-            (IntegerFormatType::Octal, Self::Small(x)) => format!("{:+o}", x),
-            (IntegerFormatType::Octal, Self::Big(x)) => format!("{:+o}", x.peek()),
-            (IntegerFormatType::Hex(UppercaseSpec::Lower), Self::Small(x)) => format!("{:+x}", x),
-            (IntegerFormatType::Hex(UppercaseSpec::Lower), Self::Big(x)) => format!("{:+x}", x.peek()),
-            (IntegerFormatType::Hex(UppercaseSpec::Upper), Self::Small(x)) => format!("{:+X}", x),
-            (IntegerFormatType::Hex(UppercaseSpec::Upper), Self::Big(x)) => format!("{:+X}", x.peek()),
+            (ast::IntegerFormatType::Binary, Self::Small(x)) => format!("{:+b}", x),
+            (ast::IntegerFormatType::Binary, Self::Big(x)) => format!("{:+b}", x.peek()),
+            (ast::IntegerFormatType::Decimal, Self::Small(x)) => format!("{:+}", x),
+            (ast::IntegerFormatType::Decimal, Self::Big(x)) => format!("{:+}", x.peek()),
+            (ast::IntegerFormatType::Octal, Self::Small(x)) => format!("{:+o}", x),
+            (ast::IntegerFormatType::Octal, Self::Big(x)) => format!("{:+o}", x.peek()),
+            (ast::IntegerFormatType::Hex(ast::UppercaseSpec::Lower), Self::Small(x)) => format!("{:+x}", x),
+            (ast::IntegerFormatType::Hex(ast::UppercaseSpec::Lower), Self::Big(x)) => format!("{:+x}", x.peek()),
+            (ast::IntegerFormatType::Hex(ast::UppercaseSpec::Upper), Self::Small(x)) => format!("{:+X}", x),
+            (ast::IntegerFormatType::Hex(ast::UppercaseSpec::Upper), Self::Big(x)) => format!("{:+X}", x.peek()),
         };
 
         let mut base_digits = &base[1..];
@@ -708,36 +706,36 @@ impl IntVariant {
 
         match (spec.sign, self < &Self::Small(0)) {
             (_, true) => { buffer.push('-'); },
-            (SignSpec::Plus, false) => { buffer.push('+'); }
-            (SignSpec::Space, false) => { buffer.push(' '); }
+            (ast::SignSpec::Plus, false) => { buffer.push('+'); }
+            (ast::SignSpec::Space, false) => { buffer.push(' '); }
             _ => {},
         }
 
         if spec.alternate {
             match spec.fmt_type {
-                IntegerFormatType::Binary => { buffer += "0b"; },
-                IntegerFormatType::Octal => { buffer += "0o"; },
-                IntegerFormatType::Hex(UppercaseSpec::Lower) => { buffer += "0x"; },
-                IntegerFormatType::Hex(UppercaseSpec::Upper) => { buffer += "0X"; },
+                ast::IntegerFormatType::Binary => { buffer += "0b"; },
+                ast::IntegerFormatType::Octal => { buffer += "0o"; },
+                ast::IntegerFormatType::Hex(ast::UppercaseSpec::Lower) => { buffer += "0x"; },
+                ast::IntegerFormatType::Hex(ast::UppercaseSpec::Upper) => { buffer += "0X"; },
                 _ => {},
             }
         }
 
         if let Some(group_spec) = spec.grouping {
             let group_size: usize = match spec.fmt_type {
-                IntegerFormatType::Decimal => 3,
+                ast::IntegerFormatType::Decimal => 3,
                 _ => 4,
             };
 
             let group_char = match group_spec {
-                GroupingSpec::Comma => ',',
-                GroupingSpec::Underscore => '_',
+                ast::GroupingSpec::Comma => ',',
+                ast::GroupingSpec::Underscore => '_',
             };
 
             let num_groups = (base_digits.len() + group_size - 1) / group_size;
             let first_group_size = base_digits.len() - (num_groups - 1) * group_size;
 
-            if let (AlignSpec::AfterSign, Some(min_width)) = (spec.align, spec.width) {
+            if let (ast::AlignSpec::AfterSign, Some(min_width)) = (spec.align, spec.width) {
                 let num_width = base_digits.len() + buffer.len() + num_groups - 1;
                 if num_width < min_width {
                     let extra = min_width - num_width;
@@ -756,7 +754,7 @@ impl IntVariant {
                 base_digits = &base_digits[group_size..];
             }
         } else {
-            if let (AlignSpec::AfterSign, Some(min_width)) = (spec.align, spec.width) {
+            if let (ast::AlignSpec::AfterSign, Some(min_width)) = (spec.align, spec.width) {
                 let num_width = base_digits.len() + buffer.len();
                 if num_width < min_width {
                     let extra = min_width - num_width;
@@ -823,28 +821,6 @@ impl<'a> Deserialize<'a> for Builtin {
 }
 
 
-// /// A function implemented in Gold.
-// #[derive(Debug, PartialEq, Serialize, Deserialize, Trace, Finalize)]
-// pub(crate) struct Func {
-    // /// A pattern for destructuring a list of positional arguments.
-    // pub args: ListBinding,
-
-    // /// A pattern for destructuring a map of keyword arguments.
-    // pub kwargs: Option<MapBinding>,
-
-    // /// A mapping of captured bindings from the point-of-definition of the
-    // /// closure.
-    // pub closure: Map,
-
-    // /// A set of names to be resolved later
-    // #[unsafe_ignore_trace]
-    // pub deferred: Option<HashSet<Key>>,
-
-    // /// The expression to evaluate.
-    // pub expr: Tagged<Expr>,
-// }
-
-
 /// A 'pure' function implemented in Rust. Unlike [`Builtin`], this form of
 /// function is backed by a dynamic callable object, which can be anything, such
 /// as a closure. Such objects can be created dynamically, and are thus
@@ -906,51 +882,64 @@ impl FuncVariant {
         }
     }
 
-    /// Call this function with positional and keyword arguments.
-    pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
-        Ok(Object::int(0))
-        // match self {
-        //     Self::Builtin(Builtin { func, .. }) => func(args, kwargs),
-        //     Self::Closure(Closure(func)) => func(args, kwargs),
-        //     Self::Func(func) => {
-        //         let Func { args: fargs, kwargs: fkwargs, closure, expr, .. } = &*func.as_ref().borrow();
-
-        //         // Create a new namespace from the enclosed-over bindings.
-        //         let ns = Namespace::Frozen(closure);
-
-        //         // Create a mutable sub-namespace for function parameters.
-        //         let mut sub = ns.subtend();
-
-        //         // Bind the positional arguments.
-        //         sub.bind_list(&fargs.0, args)?;
-
-        //         // Bind the keyword arguments.
-        //         match (fkwargs, kwargs) {
-        //             (Some(b), Some(k)) => { sub.bind_map(&b.0, k)?; },
-        //             (Some(b), None) => { sub.bind_map(&b.0, &Map::new())?; },
-        //             _ => {},
-        //         }
-
-        //         // Evaluate the function.
-        //         sub.eval(expr)
-        //     }
-        // }
+    /// The function call operator.
+    pub(crate) fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+        match self {
+            FuncVariant::Closure(Closure(f)) => f(args, kwargs),
+            FuncVariant::Builtin(Builtin { func: f, .. }) => f(args, kwargs),
+            FuncVariant::Func(f, e) => {
+                let importer = ImportConfig::default();
+                let mut vm = Vm::new(&importer);
+                vm.eval_with_args(f.as_ref().clone(), e.clone(), args, kwargs)
+            }
+        }
     }
 
-    pub(crate) fn resolve_deferred(&self, ns: &Namespace) -> Result<(), Error> {
-        Ok(())
-        // match self {
-        //     Self::Func(func) => {
-        //         if let Func { closure, deferred: Some(deferred), .. } = &mut *func.as_ref().borrow_mut() {
-        //             for name in deferred.iter() {
-        //                 closure.insert(*name, ns.get_immediate(name)?);
-        //             }
-        //         }
-        //         Ok(())
-        //     }
-        //     _ => Ok(()),
-        // }
-    }
+    // /// Call this function with positional and keyword arguments.
+    // pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+    //     Ok(Object::int(0))
+    //     // match self {
+    //     //     Self::Builtin(Builtin { func, .. }) => func(args, kwargs),
+    //     //     Self::Closure(Closure(func)) => func(args, kwargs),
+    //     //     Self::Func(func) => {
+    //     //         let Func { args: fargs, kwargs: fkwargs, closure, expr, .. } = &*func.as_ref().borrow();
+
+    //     //         // Create a new namespace from the enclosed-over bindings.
+    //     //         let ns = Namespace::Frozen(closure);
+
+    //     //         // Create a mutable sub-namespace for function parameters.
+    //     //         let mut sub = ns.subtend();
+
+    //     //         // Bind the positional arguments.
+    //     //         sub.bind_list(&fargs.0, args)?;
+
+    //     //         // Bind the keyword arguments.
+    //     //         match (fkwargs, kwargs) {
+    //     //             (Some(b), Some(k)) => { sub.bind_map(&b.0, k)?; },
+    //     //             (Some(b), None) => { sub.bind_map(&b.0, &Map::new())?; },
+    //     //             _ => {},
+    //     //         }
+
+    //     //         // Evaluate the function.
+    //     //         sub.eval(expr)
+    //     //     }
+    //     // }
+    // }
+
+    // pub(crate) fn resolve_deferred(&self, ns: &Namespace) -> Result<(), Error> {
+    //     Ok(())
+    //     // match self {
+    //     //     Self::Func(func) => {
+    //     //         if let Func { closure, deferred: Some(deferred), .. } = &mut *func.as_ref().borrow_mut() {
+    //     //             for name in deferred.iter() {
+    //     //                 closure.insert(*name, ns.get_immediate(name)?);
+    //     //             }
+    //     //         }
+    //     //         Ok(())
+    //     //     }
+    //     //     _ => Ok(()),
+    //     // }
+    // }
 }
 
 
@@ -1057,7 +1046,7 @@ impl ObjectVariant {
     }
 
     /// String representation of this object. Used for string interpolation.
-    pub fn format(&self, spec: FormatSpec) -> Result<String, Error> {
+    pub fn format(&self, spec: ast::FormatSpec) -> Result<String, Error> {
         match self {
             Self::Str(r) => {
                 if let Some(str_spec) = spec.string_spec() {
@@ -1112,7 +1101,7 @@ impl ObjectVariant {
         match self {
             Self::Int(x) => Ok(Self::Int(x.neg())),
             Self::Float(x) => Ok(Self::Float(-x)),
-            _ => Err(Error::new(TypeMismatch::UnOp(self.type_of(), UnOp::ArithmeticalNegate))),
+            _ => Err(Error::new(TypeMismatch::UnOp(self.type_of(), ast::UnOp::ArithmeticalNegate))),
         }
     }
 
@@ -1121,28 +1110,28 @@ impl ObjectVariant {
         match (&self, &other) {
             (Self::List(x), Self::List(y)) => Ok(Self::list(x.borrow().iter().chain(y.borrow().iter()).map(Object::clone).collect::<List>())),
             (Self::Str(x), Self::Str(y)) => Ok(Self::Str(x.add(y))),
-            _ => self.operate(other, IntVariant::add, |x,y| x + y, BinOp::Add),
+            _ => self.operate(other, IntVariant::add, |x,y| x + y, ast::BinOp::Add),
         }
     }
 
     /// The minus operator: mathematical subtraction.
     pub fn sub(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, IntVariant::sub, |x,y| x - y, BinOp::Subtract)
+        self.operate(other, IntVariant::sub, |x,y| x - y, ast::BinOp::Subtract)
     }
 
     /// The asterisk operator: mathematical multiplication.
     pub fn mul(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, IntVariant::mul, |x,y| x * y, BinOp::Multiply)
+        self.operate(other, IntVariant::mul, |x,y| x * y, ast::BinOp::Multiply)
     }
 
     /// The slash operator: mathematical division.
     pub fn div(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, IntVariant::div, |x,y| x / y, BinOp::Divide)
+        self.operate(other, IntVariant::div, |x,y| x / y, ast::BinOp::Divide)
     }
 
     /// The double slash operator: integer division.
     pub fn idiv(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, IntVariant::idiv, |x,y| (x / y).floor() as f64, BinOp::IntegerDivide)
+        self.operate(other, IntVariant::idiv, |x,y| (x / y).floor() as f64, ast::BinOp::IntegerDivide)
     }
 
     /// Universal utility method for implementing mathematical operators.
@@ -1157,7 +1146,7 @@ impl ObjectVariant {
         other: &Self,
         ixi: impl Fn(&IntVariant, &IntVariant) -> S,
         fxf: impl Fn(f64, f64) -> T,
-        op: BinOp
+        op: ast::BinOp,
     ) -> Result<Self, Error> where
         Self: From<S> + From<T>,
     {
@@ -1183,7 +1172,7 @@ impl ObjectVariant {
 
         let (xx, yy) = self.to_f64()
             .and_then(|x| other.to_f64().map(|y| (x, y)))
-            .ok_or_else(|| Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Power)))?;
+            .ok_or_else(|| Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), ast::BinOp::Power)))?;
         Ok(Self::from(xx.powf(yy)))
     }
 
@@ -1197,7 +1186,7 @@ impl ObjectVariant {
             return Ok(haystack.as_str().contains(needle.as_str()));
         }
 
-        Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Contains)))
+        Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), ast::BinOp::Contains)))
     }
 
     /// Convert to f64 if possible.
@@ -1209,13 +1198,13 @@ impl ObjectVariant {
         }
     }
 
-    /// Resolve deferred bindings.
-    pub(crate) fn resolve_deferred(&self, ns: &Namespace) -> Result<(), Error> {
-        match self {
-            Self::Func(func) => func.resolve_deferred(ns),
-            _ => Ok(()),
-        }
-    }
+    // /// Resolve deferred bindings.
+    // pub(crate) fn resolve_deferred(&self, ns: &Namespace) -> Result<(), Error> {
+    //     match self {
+    //         Self::Func(func) => func.resolve_deferred(ns),
+    //         _ => Ok(()),
+    //     }
+    // }
 
     pub(crate) fn push_to_list(&self, other: Object) -> Result<(), Error> {
         match self {
@@ -1795,9 +1784,9 @@ impl Object {
 
     /// The function call operator.
     pub(crate) fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
-        match &self.0 {
-            ObjectVariant::Func(func) => func.call(args, kwargs),
-            _ => Err(Error::new(TypeMismatch::Call(self.type_of()))),
+        match self.get_func_variant() {
+            Some(func) => func.call(args, kwargs),
+            None => { return Err(Error::new(TypeMismatch::Call(self.type_of()))) }
         }
     }
 
@@ -1840,17 +1829,17 @@ impl Object {
                 let yy = GlobalSymbol::from(y);
                 xx.get(&yy).ok_or_else(|| Error::new(Reason::Unassigned(yy))).map(Object::clone)
             }
-            _ => Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), BinOp::Index))),
+            _ => Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), ast::BinOp::Index))),
         }
     }
 
-    /// Wrap [`ObjectVariant::resolve_deferred`]
-    pub(crate) fn resolve_deferred(&self, ns: &Namespace) -> Result<(), Error> {
-        self.0.resolve_deferred(ns)
-    }
+    // /// Wrap [`ObjectVariant::resolve_deferred`]
+    // pub(crate) fn resolve_deferred(&self, ns: &Namespace) -> Result<(), Error> {
+    //     self.0.resolve_deferred(ns)
+    // }
 
     /// Wrap [`ObjectVariant::format`].
-    pub fn format(&self, spec: FormatSpec) -> Result<String, Error> {
+    pub fn format(&self, spec: ast::FormatSpec) -> Result<String, Error> {
         self.0.format(spec)
     }
 

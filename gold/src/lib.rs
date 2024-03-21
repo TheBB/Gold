@@ -52,7 +52,7 @@ pub mod python;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use eval::{eval as evaluate, Vm};
+use eval::Vm;
 use error::{Error, FileSystem};
 
 pub use object::Object;
@@ -66,15 +66,10 @@ pub use eval::ImportConfig;
 /// imports will not be possible. Provide a custom import resolver for full
 /// control over imports.
 pub fn eval(input: &str, importer: &ImportConfig) -> Result<Object, Error> {
-    // println!("parsing");
     let ast = parsing::parse(input)?;
-    // println!("parsed {:?}", ast);
     let code = ast.compile()?;
-    // println!("compiled {:?}", code);
     let mut vm = Vm::new(importer);
     vm.eval(code)
-    // let ret = parsing::parse(input).and_then(|file| evaluate(&file, importer));
-    // ret.map_err(|err| err.render(Some(input)))
 }
 
 
