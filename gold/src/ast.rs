@@ -1630,7 +1630,6 @@ impl Validatable for Expr {
 /// A top-level AST node, only legal at the top level of a file.
 #[derive(Debug)]
 pub enum TopLevel {
-
     /// Import an object by loading another file and binding it to a pattern.
     Import(Tagged<String>, Tagged<Binding>),
 }
@@ -1672,7 +1671,7 @@ impl Validatable for File {
 impl File {
     pub(crate) fn compile(&self) -> Result<Function, Error> {
         let mut compiler = Compiler::new();
-        compiler.emit(&self.expression)?;
+        compiler.emit_file(self)?;
         Ok(compiler.finalize())
     }
 }

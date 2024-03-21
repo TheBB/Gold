@@ -66,12 +66,12 @@ pub use eval::ImportConfig;
 /// imports will not be possible. Provide a custom import resolver for full
 /// control over imports.
 pub fn eval(input: &str, importer: &ImportConfig) -> Result<Object, Error> {
-    println!("parsing");
+    // println!("parsing");
     let ast = parsing::parse(input)?;
-    println!("parsed {:?}", ast);
+    // println!("parsed {:?}", ast);
     let code = ast.compile()?;
-    println!("compiled {:?}", code);
-    let mut vm = Vm::new();
+    // println!("compiled {:?}", code);
+    let mut vm = Vm::new(importer);
     vm.eval(code)
     // let ret = parsing::parse(input).and_then(|file| evaluate(&file, importer));
     // ret.map_err(|err| err.render(Some(input)))

@@ -702,14 +702,15 @@ impl Frame {
 }
 
 
-pub(crate) struct Vm {
+pub(crate) struct Vm<'a> {
     frames: Vec<Frame>,
     fp: usize,
+    importer: &'a ImportConfig,
 }
 
-impl Vm {
-    pub fn new() -> Self {
-        Self { frames: vec![], fp: 0 }
+impl<'a> Vm<'a> {
+    pub fn new(importer: &'a ImportConfig) -> Self {
+        Self { frames: vec![], fp: 0, importer }
     }
 
     pub fn eval(&mut self, function: Function) -> Result<Object, Error> {
@@ -751,8 +752,8 @@ impl Vm {
     fn eval_impl(&mut self) -> Result<Object, Error> {
         loop {
             let instruction = self.cur_frame().next_instruction();
-            println!("Instruction: {:?}", instruction);
-            println!("Stack before: {:?}", self.cur_frame().stack);
+            // println!("Instruction: {:?}", instruction);
+            // println!("Stack before: {:?}", self.cur_frame().stack);
             match instruction {
                 Instruction::LoadConst(i) => {
                     let obj = self.cur_frame().function.constants[i].clone();
@@ -787,6 +788,12 @@ impl Vm {
 
                 Instruction::LoadBuiltin(i) => {
                     self.push(Object::func(BUILTINS.1[i].clone()))
+                }
+
+                Instruction::Import(i) => {
+                    let path = self.frames[self.fp].function.import_paths.get(i).unwrap();
+                    let object = self.importer.resolve(path.as_ref()).map_err(|e| e.add_locations(self.err()))?;
+                    self.push(object);
                 }
 
                 Instruction::StoreLocal(i) => {
@@ -1188,7 +1195,7 @@ impl Vm {
                     }
                 }
             }
-            println!("Stack after: {:?}\n", self.cur_frame().stack);
+            // println!("Stack after: {:?}\n", self.cur_frame().stack);
         }
     }
 }

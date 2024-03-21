@@ -4,7 +4,7 @@ use std::hash::Hash;
 use gc::{Trace, Finalize};
 use serde::{Serialize, Deserialize};
 
-use crate::ast::{ArgElement, BinOp, Binding, BindingClassifier, BindingMode, BindingShield, Expr, FormatSpec, FreeNames, ListBinding, ListBindingElement, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, Transform, UnOp, Visitable};
+use crate::ast::{ArgElement, BinOp, Binding, BindingClassifier, BindingMode, BindingShield, Expr, File, FormatSpec, FreeNames, ListBinding, ListBindingElement, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, TopLevel, Transform, UnOp, Visitable};
 use crate::builtins::BUILTINS;
 use crate::error::{Action, Error, IntervalTree, Reason, Span, Tagged, Unpack};
 use crate::object::{Key, Object};
@@ -21,6 +21,9 @@ pub(crate) struct Function {
 
     #[unsafe_ignore_trace]
     pub fmt_specs: Vec<FormatSpec>,
+
+    #[unsafe_ignore_trace]
+    pub import_paths: Vec<String>,
 
     pub num_locals: usize,
     pub num_cells: usize,
@@ -39,6 +42,7 @@ pub(crate) enum Instruction {
     LoadEnclosed(usize),
     LoadFunc(usize),
     LoadBuiltin(usize),
+    Import(usize),
 
     // Storing
     StoreLocal(usize),
@@ -230,6 +234,7 @@ pub(crate) struct Compiler {
     constants: Vec<Object>,
     funcs: Vec<Function>,
     fmt_specs: Vec<FormatSpec>,
+    import_paths: Vec<String>,
 
     code: Vec<Instruction>,
 
@@ -248,6 +253,7 @@ impl Compiler {
             constants: Vec::new(),
             funcs: Vec::new(),
             fmt_specs: Vec::new(),
+            import_paths: Vec::new(),
             code: Vec::new(),
             names: NamespaceStack::new(),
             num_locals: 0,
@@ -257,7 +263,37 @@ impl Compiler {
          }
     }
 
-    pub fn emit(&mut self, expr: &Expr) -> Result<usize, Error> {
+    pub fn emit_file(&mut self, file: &File) -> Result<usize, Error> {
+        let mut new_name_collection = FreeNames::new();
+        file.expression.visit(&mut new_name_collection);
+
+        for name in new_name_collection.captured_names() {
+            self.names.mark_cell(name);
+        }
+
+        let mut len = 0;
+        for toplevel in &file.statements {
+            len += self.emit_toplevel(toplevel)?;
+        }
+
+        len += self.emit_expression(&file.expression)?;
+        Ok(len)
+    }
+
+    fn emit_toplevel(&mut self, statement: &TopLevel) -> Result<usize, Error> {
+        match statement {
+            TopLevel::Import(path, binding) => {
+                let index = self.import_path(path.as_ref().clone());
+                let loc = self.code.len();
+                self.instruction(Instruction::Import(index));
+                self.actions.push((loc, loc + 1, path.span(), Action::Import));
+                let len = self.emit_binding(binding)?;
+                Ok(len + 1)
+            }
+        }
+    }
+
+    fn emit_expression(&mut self, expr: &Expr) -> Result<usize, Error> {
         match expr {
             Expr::Literal(obj) => {
                 let index = self.constant(obj.clone());
@@ -275,7 +311,7 @@ impl Compiler {
             }
 
             Expr::Transformed { operand, transform } => {
-                let mut len = self.emit(operand)?;
+                let mut len = self.emit_expression(operand)?;
                 len += self.emit_transform(transform)?;
                 Ok(len)
             }
@@ -292,11 +328,11 @@ impl Compiler {
             }
 
             Expr::Branch { condition, true_branch, false_branch } => {
-                let cond_len = self.emit(condition)?;
+                let cond_len = self.emit_expression(condition)?;
                 let cjump_index = self.instruction(Instruction::Noop);
-                let false_len = self.emit(false_branch)?;
+                let false_len = self.emit_expression(false_branch)?;
                 let jump_index = self.instruction(Instruction::Noop);
-                let true_len = self.emit(true_branch)?;
+                let true_len = self.emit_expression(true_branch)?;
 
                 self.code[cjump_index] = Instruction::CondJump(false_len + 1);
                 self.code[jump_index] = Instruction::Jump(true_len);
@@ -335,17 +371,17 @@ impl Compiler {
                 expression.visit(&mut classifier);
 
                 for key in classifier.names_with_mode(BindingMode::Cell) {
-                    println!("marking {:?} as cell in let-binding", key);
+                    // println!("marking {:?} as cell in let-binding", key);
                     self.names.mark_cell(key);
                 }
 
                 let mut len = 0;
                 for (binding, expr) in bindings {
-                    len += self.emit(expr)?;
+                    len += self.emit_expression(expr)?;
                     len += self.emit_binding(binding)?;
                 }
 
-                len += self.emit(expression)?;
+                len += self.emit_expression(expression)?;
                 self.names.pop();
                 Ok(len)
             }
@@ -362,7 +398,7 @@ impl Compiler {
                 keywords.as_ref().map(|kw| kw.visit(&mut shield));
                 expression.visit(&mut shield);
 
-                println!("compiling a function");
+                // println!("compiling a function");
 
                 for name in name_collection.free_names() {
                     compiler.require_enclosed(*name);
@@ -382,7 +418,7 @@ impl Compiler {
                 expression.visit(&mut new_name_collection);
 
                 for name in new_name_collection.captured_names() {
-                    println!("marking as captured: {:?}", name);
+                    // println!("marking as captured: {:?}", name);
                     compiler.names.mark_cell(name);
                 }
 
@@ -392,7 +428,7 @@ impl Compiler {
                     compiler.emit_map_binding(kw)?;
                 }
                 compiler.instruction(Instruction::Discard);
-                compiler.emit(expression)?;
+                compiler.emit_expression(expression)?;
 
                 let func = compiler.finalize();
 
@@ -461,7 +497,7 @@ impl Compiler {
                 ListBindingElement::Binding { binding, default } => {
                     if let Some(d) = default {
                         let index = self.instruction(Instruction::Noop);
-                        let default_len = self.emit(d.as_ref())?;
+                        let default_len = self.emit_expression(d.as_ref())?;
                         self.code[index] = Instruction::IntIndexLAndJump { index: i, jump: default_len };
                         len += default_len + 1;
                     } else {
@@ -480,7 +516,7 @@ impl Compiler {
                 ListBindingElement::Binding { binding, default } => {
                     if let Some(d) = default {
                         let index = self.instruction(Instruction::Noop);
-                        let default_len = self.emit(d.as_ref())?;
+                        let default_len = self.emit_expression(d.as_ref())?;
                         self.code[index] = Instruction::IntIndexFromEndAndJump {
                             index: i,
                             root_front: solution.num_front + solution.def_front,
@@ -517,7 +553,7 @@ impl Compiler {
                 MapBindingElement::Binding { key, binding: sub_binding, default } => {
                     if let Some(d) = default {
                         let index = self.instruction(Instruction::Noop);
-                        let default_len = self.emit(d.as_ref())?;
+                        let default_len = self.emit_expression(d.as_ref())?;
                         self.code[index] = Instruction::IntIndexMAndJump {
                             key: *key.as_ref(),
                             jump: default_len,
@@ -564,7 +600,7 @@ impl Compiler {
             }
 
             StringElement::Interpolate(expr, spec) => {
-                let len = self.emit(expr)?;
+                let len = self.emit_expression(expr)?;
                 let index = self.fmt_spec(spec.unwrap_or_default());
                 let loc = self.code.len();
                 self.instruction(Instruction::Format(index));
@@ -578,13 +614,13 @@ impl Compiler {
     fn emit_list_element(&mut self, element: &ListElement) -> Result<usize, Error> {
         match element {
             ListElement::Singleton(expr) => {
-                let len = self.emit(expr)?;
+                let len = self.emit_expression(expr)?;
                 self.instruction(Instruction::PushToList);
                 Ok(len + 1)
             }
 
             ListElement::Splat(expr) => {
-                let len = self.emit(expr)?;
+                let len = self.emit_expression(expr)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::SplatToCollection);
                 self.actions.push((loc, loc + 1, expr.span(), Action::Splat));
@@ -592,7 +628,7 @@ impl Compiler {
             }
 
             ListElement::Cond { condition, element } => {
-                let condition_len = self.emit(condition)?;
+                let condition_len = self.emit_expression(condition)?;
                 self.instruction(Instruction::LogicalNegate);
                 let index = self.instruction(Instruction::Noop);
                 let element_len = self.emit_list_element(element)?;
@@ -601,7 +637,7 @@ impl Compiler {
             }
 
             ListElement::Loop { binding, iterable, element } => {
-                let iterable_len = self.emit(iterable)?;
+                let iterable_len = self.emit_expression(iterable)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::NewIterator);
                 self.actions.push((loc, loc+1, iterable.span(), Action::Iterate));
@@ -635,15 +671,15 @@ impl Compiler {
         match element {
             MapElement::Singleton { key, value } => {
                 let loc = self.code.len();
-                let mut len = self.emit(key)?;
+                let mut len = self.emit_expression(key)?;
                 self.actions.push((loc, self.code.len(), key.span(), Action::Assign));
-                len += self.emit(value)?;
+                len += self.emit_expression(value)?;
                 self.instruction(Instruction::PushToMap);
                 Ok(len + 1)
             }
 
             MapElement::Splat(expr) => {
-                let len = self.emit(expr)?;
+                let len = self.emit_expression(expr)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::SplatToCollection);
                 self.actions.push((loc, loc + 1, expr.span(), Action::Splat));
@@ -651,7 +687,7 @@ impl Compiler {
             }
 
             MapElement::Cond { condition, element } => {
-                let condition_len = self.emit(condition)?;
+                let condition_len = self.emit_expression(condition)?;
                 self.instruction(Instruction::LogicalNegate);
                 let index = self.instruction(Instruction::Noop);
                 let element_len = self.emit_map_element(element)?;
@@ -660,7 +696,7 @@ impl Compiler {
             }
 
             MapElement::Loop { binding, iterable, element } => {
-                let iterable_len = self.emit(iterable)?;
+                let iterable_len = self.emit_expression(iterable)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::NewIterator);
                 self.actions.push((loc, loc+1, iterable.span(), Action::Iterate));
@@ -712,7 +748,7 @@ impl Compiler {
                         self.instruction(Instruction::Duplicate);
                         let cjump_index = self.instruction(Instruction::Noop);
                         self.instruction(Instruction::Discard);
-                        let false_len = self.emit(operand)?;
+                        let false_len = self.emit_expression(operand)?;
                         self.code[cjump_index] = Instruction::CondJump(false_len + 1);
                         return Ok(false_len + 3);
                     }
@@ -721,14 +757,14 @@ impl Compiler {
                         self.instruction(Instruction::CondJump(1));
                         let jump_index = self.instruction(Instruction::Noop);
                         self.instruction(Instruction::Discard);
-                        let true_len = self.emit(operand)?;
+                        let true_len = self.emit_expression(operand)?;
                         self.code[jump_index] = Instruction::Jump(true_len + 1);
                         return Ok(true_len + 4);
                     }
                     _ => {}
                 }
 
-                let len = self.emit(operand.as_ref())?;
+                let len = self.emit_expression(operand.as_ref())?;
                 let loc = self.code.len();
 
                 match operator.as_ref() {
@@ -773,19 +809,19 @@ impl Compiler {
     fn emit_arg_element(&mut self, arg: &ArgElement) -> Result<usize, Error> {
         match arg {
             ArgElement::Singleton(expr) => {
-                let len = self.emit(expr)?;
+                let len = self.emit_expression(expr)?;
                 self.instruction(Instruction::PushToList);
                 Ok(len + 1)
             }
 
             ArgElement::Keyword(key, expr) => {
-                let len = self.emit(expr)?;
+                let len = self.emit_expression(expr)?;
                 self.instruction(Instruction::IntPushToKwargs(**key));
                 Ok(len + 1)
             }
 
             ArgElement::Splat(expr) => {
-                let len = self.emit(expr)?;
+                let len = self.emit_expression(expr)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::IntArgSplat);
                 self.actions.push((loc, loc+1, expr.span(), Action::Splat));
@@ -827,6 +863,12 @@ impl Compiler {
         r
     }
 
+    fn import_path(&mut self, path: String) -> usize {
+        let r = self.import_paths.len();
+        self.import_paths.push(path);
+        r
+    }
+
     fn build_trace(&mut self) -> IntervalTree<usize, (Span, Action), Reason> {
         let mut endpoints: HashSet<usize> = HashSet::new();
         for (left, right, ..) in &self.actions {
@@ -863,13 +905,13 @@ impl Compiler {
     pub fn finalize(mut self) -> Function {
         self.code.push(Instruction::Return);
 
-        for action in &self.actions {
-            println!(">>> {:?}", action);
-        }
-        println!();
-        for (i, instruction) in self.code.iter().enumerate() {
-            println!(">>> {:?} {:?}", i, instruction);
-        }
+        // for action in &self.actions {
+        //     println!(">>> {:?}", action);
+        // }
+        // println!();
+        // for (i, instruction) in self.code.iter().enumerate() {
+        //     println!(">>> {:?} {:?}", i, instruction);
+        // }
 
         let trace = self.build_trace();
         // let reasons = self.build_reasons();
@@ -879,6 +921,7 @@ impl Compiler {
             constants: self.constants,
             code: self.code,
             fmt_specs: self.fmt_specs,
+            import_paths: self.import_paths,
             num_locals: self.num_locals,
             num_cells: self.num_cells,
             trace,
