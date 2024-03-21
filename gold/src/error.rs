@@ -1,11 +1,12 @@
 use std::cmp::min;
+use std::collections::LinkedList;
 use std::ops::{Deref, Range, Sub};
 
 use std::fmt::{Debug, Display, Write};
 use std::path::PathBuf;
 
 use gc::{custom_trace, Finalize, Trace};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize, Serializer};
 
 use crate::ast::{BinOp, UnOp};
 use crate::lexing::TokenType;
@@ -152,6 +153,13 @@ impl Span {
     pub(crate) fn with_coord(self, line: u32, col: u32) -> Self {
         self.with_line(line).with_column(col)
     }
+
+    pub(crate) fn with_length(self, length: usize) -> Self {
+        Span {
+            start: self.start,
+            length: length,
+        }
+    }
 }
 
 impl From<Range<u32>> for Span {
@@ -222,6 +230,11 @@ impl<T> Tagged<T> {
     /// Wrapper for [`Span::with_coord`].
     pub fn with_coord(self, line: u32, col: u32) -> Tagged<T> {
         let loc = self.span.with_coord(line, col);
+        self.retag(loc)
+    }
+
+    pub fn with_length(self, length: usize) -> Tagged<T> {
+        let loc = self.span.with_length(length);
         self.retag(loc)
     }
 
@@ -339,7 +352,7 @@ impl SyntaxError {
 
 /// A complete enumeration of all grammatical elements in the Gold language,
 /// including tokens as well as composite structures.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum SyntaxElement {
     /// The keyword 'as'
     As,
@@ -421,7 +434,7 @@ impl From<TokenType> for SyntaxElement {
 /// - parsing: the token stream was illegal according to the grammar
 /// - validation: additional AST integrity checks which for various reasons are
 ///   not desirable as part of the parser
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Syntax {
     /// Input ended too soon (thrown by the lexer)
     UnexpectedEof,
@@ -471,15 +484,32 @@ impl<T,U,V> From<(T,U,V)> for Syntax where SyntaxElement: From<T> + From<U> + Fr
 
 
 /// Enumerates possible reasons for internal errors (which shouldn't happen).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Internal {
-    /// Gold attempted to bind a name in a frozen (immutable) namespace.
+    /// Gold attempted to bind a name in a frozen (immutable) namespace. (001)
     SetInFrozenNamespace,
+
+    /// Unable to find the correct error. (002)
+    UnknownError,
+
+    /// Attempted splatting into a non-collection. (003)
+    /// This should be prevented by the parser.
+    SplatToNonCollection,
+}
+
+impl Internal {
+    fn error_code(&self) -> usize {
+        match self {
+            Self::SetInFrozenNamespace => 1,
+            Self::UnknownError => 2,
+            Self::SplatToNonCollection => 3,
+        }
+    }
 }
 
 
 /// Enumerates possible binding types.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum BindingType {
     /// Bind a value to an identifier.
     Identifier,
@@ -493,7 +523,7 @@ pub enum BindingType {
 
 
 /// Enumerates different reasons why unpacking might fail.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Unpack {
     /// The list was too short - expected more values.
     ListTooShort,
@@ -510,9 +540,59 @@ pub enum Unpack {
 }
 
 
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) enum Types {
+    One(Type),
+    Two(Type, Type),
+    Three(Type, Type, Type),
+    Four(Type, Type, Type, Type),
+}
+
+impl Types {
+    fn vec(&self) -> Vec<Type> {
+        match self {
+            Self::One(x) => vec![*x],
+            Self::Two(x, y) => vec![*x, *y],
+            Self::Three(x, y, z) => vec![*x, *y, *z],
+            Self::Four(x, y, z, a) => vec![*x, *y, *z, *a],
+        }
+    }
+}
+
+impl From<Type> for Types {
+    fn from(x: Type) -> Self {
+        Types::One(x)
+    }
+}
+
+impl From<(Type,)> for Types {
+    fn from((x,): (Type,)) -> Self {
+        Types::One(x)
+    }
+}
+
+impl From<(Type, Type)> for Types {
+    fn from((x, y): (Type, Type)) -> Self {
+        Types::Two(x, y)
+    }
+}
+
+impl From<(Type, Type, Type)> for Types {
+    fn from((x, y, z): (Type, Type, Type)) -> Self {
+        Types::Three(x, y, z)
+    }
+}
+
+impl From<(Type, Type, Type, Type)> for Types {
+    fn from((x, y, z, a): (Type, Type, Type, Type)) -> Self {
+        Types::Four(x, y, z, a)
+    }
+}
+
+
 /// Enumerates different type mismatch reasons.
-#[derive(Debug, Clone, PartialEq)]
-pub enum TypeMismatch {
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub(crate) enum TypeMismatch {
     /// Attempted to iterate over a non-iterable.
     Iterate(Type),
 
@@ -552,19 +632,19 @@ pub enum TypeMismatch {
         index: usize,
 
         /// Allowed types.
-        allowed: Vec<Type>,
+        allowed: Types,
 
         /// Actual type received in function call.
         received: Type,
     },
 
     /// Expected a keyword function parameter to have a certain type, but it didn't.
-    ExpectedKwArg {
+    ExpectedKwarg {
         /// The name of the parameter.
-        name: String,
+        name: Key,
 
         /// Allowed types.
-        allowed: Vec<Type>,
+        allowed: Types,
 
         /// Actual type received in function call.
         received: Type,
@@ -585,7 +665,7 @@ pub enum TypeMismatch {
 
 
 /// Enumerates different value-based error reasons.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     /// Value was out of range.
     OutOfRange,
@@ -602,7 +682,7 @@ pub enum Value {
 
 
 /// Enumerates different file system error reasons.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum FileSystem {
     /// The file path has no parent (that is, no directory - unclear if this one
     /// will ever actully happen).
@@ -614,7 +694,7 @@ pub enum FileSystem {
 
 
 /// Grand enumeration of all possible error reasons.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Reason {
     /// Unknown reason - should never happen.
     None,
@@ -690,7 +770,7 @@ impl From<Value> for Reason {
 
 /// Enumerates all different 'actions' - things that Gold might try to do which
 /// can cause an error.
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Action {
     /// Parsing phase.
     Parse,
@@ -725,7 +805,7 @@ pub enum Action {
 
 
 /// The general error type of Gold.
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Error {
     /// Stack trace of locations where the error happened.
     pub locations: Option<Vec<(Span, Action)>>,
@@ -745,6 +825,24 @@ impl Error {
             None => { self.locations = Some(vec![(Span::from(loc), action)]); },
             Some(vec) => { vec.push((Span::from(loc), action)); },
         }
+        self
+    }
+
+    pub fn with_reason<T>(mut self, reason: T) -> Self where Reason: From<T> {
+        self.reason = Some(Reason::from(reason));
+        self
+    }
+
+    pub fn with_locations(mut self, error: Self) -> Self {
+        self.locations = error.locations;
+        self
+    }
+
+    pub fn add_locations(mut self, other: Self) -> Self {
+        self.locations = match (self.locations, other.locations) {
+            (Some(mut v), Some(mut w)) => { v.append(&mut w); Some(v) }
+            (_, w) => w,
+        };
         self
     }
 
@@ -855,7 +953,7 @@ impl Display for Reason {
             Self::Unpack(Unpack::ListTooShort) => f.write_str("list too short"),
             Self::Unpack(Unpack::TypeMismatch(x, y)) => f.write_fmt(format_args!("expected {}, found {}", x, y)),
 
-            Self::Internal(Internal::SetInFrozenNamespace) => f.write_str("internal error 001 - this should not happen, please file a bug report"),
+            Self::Internal(reason) => f.write_fmt(format_args!("internal error {:03} - this should not happen, please file a bug report", reason.error_code())),
 
             Self::External(reason) => f.write_fmt(format_args!("external error: {}", reason)),
 
@@ -870,8 +968,8 @@ impl Display for Reason {
             },
             Self::TypeMismatch(TypeMismatch::BinOp(l, r, op)) => f.write_fmt(format_args!("unsuitable types for '{}': {} and {}", op, l, r)),
             Self::TypeMismatch(TypeMismatch::Call(x)) => f.write_fmt(format_args!("unsuitable type for function call: {}", x)),
-            Self::TypeMismatch(TypeMismatch::ExpectedPosArg { index, allowed, received }) => fmt_expected_arg(f, index + 1, allowed, received),
-            Self::TypeMismatch(TypeMismatch::ExpectedKwArg { name, allowed, received }) => fmt_expected_arg(f, name, allowed, received),
+            Self::TypeMismatch(TypeMismatch::ExpectedPosArg { index, allowed, received }) => fmt_expected_arg(f, index + 1, &allowed.vec(), received),
+            Self::TypeMismatch(TypeMismatch::ExpectedKwarg { name, allowed, received }) => fmt_expected_arg(f, name, &allowed.vec(), received),
             Self::TypeMismatch(TypeMismatch::Interpolate(x)) => f.write_fmt(format_args!("unsuitable type for interpolation: {}", x)),
             Self::TypeMismatch(TypeMismatch::InterpolateSpec(x)) => f.write_fmt(format_args!("unsuitable type for format spec: {}", x)),
             Self::TypeMismatch(TypeMismatch::Iterate(x)) => f.write_fmt(format_args!("non-iterable type: {}", x)),
@@ -952,5 +1050,185 @@ impl<'a> Display for ErrorRenderer<'a> {
         }
 
         Ok(())
+    }
+}
+
+
+
+// Interval tree
+// ------------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct IntervalTree<I, S, T> {
+    root: Option<Node<I, S, T>>,
+}
+
+impl<I: Debug + Copy + PartialOrd, S: Debug, T: Debug> IntervalTree<I, S, T> {
+    pub fn new(mut endpoints: Vec<I>) -> Self {
+        if endpoints.len() == 0 {
+            return IntervalTree { root: None }
+        }
+
+        assert!(endpoints.len() > 1);
+
+        let mut leaves: LinkedList<Node<I, S, T>> = LinkedList::new();
+
+        while endpoints.len() > 1 {
+            let right = endpoints.pop().unwrap();
+            let left = *endpoints.last().unwrap();
+            let leaf = Node::leaf(left, right);
+            leaves.push_front(leaf);
+        }
+
+        let mut leaves_p2: LinkedList<Node<I, S, T>> = LinkedList::new();
+
+        while !(leaves.len() + leaves_p2.len()).is_power_of_two() {
+            let left = leaves.pop_front().unwrap();
+            let right = leaves.pop_front().unwrap();
+            let leaf = Node::combine(left, right);
+            leaves_p2.push_back(leaf);
+        }
+        leaves_p2.append(&mut leaves);
+
+        while leaves_p2.len() > 1 {
+            for _ in 0..leaves_p2.len()/2 {
+                let left = leaves_p2.pop_front().unwrap();
+                let right = leaves_p2.pop_front().unwrap();
+                let node = Node::combine(left, right);
+                leaves_p2.push_back(node);
+            }
+        }
+
+        IntervalTree { root: leaves_p2.pop_front() }
+    }
+
+    pub fn insert_first(&mut self, left: I, right: I, value: S) {
+        if let Some(root) = &mut self.root {
+            root.insert_first(left, right, value);
+        }
+    }
+
+    pub fn insert_second(&mut self, left: I, right: I, value: T) {
+        if let Some(root) = &mut self.root {
+            root.insert_second(left, right, value);
+        }
+    }
+
+}
+
+impl<I: Copy + PartialOrd> IntervalTree<I, (Span, Action), Reason> {
+    pub fn error(&self, loc: I) -> Error {
+        match &self.root {
+            None => Error::new(Internal::UnknownError),
+
+            Some(root) => {
+                let mut err = Error::new(root.most_specific_second(loc).cloned().unwrap_or(Reason::from(Internal::UnknownError)));
+
+                let mut locations: Vec<(Span, Action)> = Vec::new();
+                root.all_first(loc, &mut locations);
+                err.locations = Some(locations);
+
+                err
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Node<I, S, T> {
+    left_end: I,
+    right_end: I,
+    nodes: Option<Box<(Node<I, S, T>, Node<I, S, T>)>>,
+    data_s: Vec<S>,
+    data_t: Vec<T>,
+}
+
+impl<I: Copy + PartialOrd, S, T> Node<I, S, T> {
+    fn leaf(left: I, right: I) -> Self {
+        Node {
+            left_end: left,
+            right_end: right,
+            nodes: None,
+            data_s: Vec::new(),
+            data_t: Vec::new(),
+        }
+    }
+
+    fn combine(left: Self, right: Self) -> Self {
+        let left_end = left.left_end;
+        let right_end = right.right_end;
+        Node {
+            left_end, right_end,
+            nodes: Some(Box::new((left, right))),
+            data_s: Vec::new(),
+            data_t: Vec::new(),
+        }
+    }
+
+    fn insert_first(&mut self, left: I, right: I, value: S) {
+        if left <= self.left_end && self.right_end <= right {
+            self.data_s.push(value);
+            return;
+        }
+
+        if let Some(nodes) = &mut self.nodes {
+            let (l, r) = nodes.as_mut();
+            if left >= l.right_end {
+                r.insert_first(left, right, value);
+            } else {
+                l.insert_first(left, right, value);
+            }
+        }
+    }
+
+    fn insert_second(&mut self, left: I, right: I, value: T) {
+        if left <= self.left_end && self.right_end <= right {
+            self.data_t.push(value);
+            return;
+        }
+
+        if let Some(nodes) = &mut self.nodes {
+            let (l, r) = nodes.as_mut();
+            if left >= l.right_end {
+                r.insert_second(left, right, value);
+            } else {
+                l.insert_second(left, right, value);
+            }
+        }
+    }
+
+    fn most_specific_second(&self, loc: I) -> Option<&T> {
+        if let Some(nodes) = &self.nodes {
+            let (l, r) = nodes.as_ref();
+            if l.left_end <= loc && loc < l.right_end {
+                return l.most_specific_second(loc);
+            } else if r.left_end <= loc && loc < r.right_end {
+                return r.most_specific_second(loc);
+            }
+        }
+
+        if self.left_end <= loc && loc < self.right_end {
+            self.data_t.last()
+        } else {
+            None
+        }
+    }
+}
+
+
+impl<I: Copy + PartialOrd, S: Copy, T> Node<I, S, T> {
+    fn all_first(&self, loc: I, target: &mut Vec<S>) {
+        if let Some(nodes) = &self.nodes {
+            let (l, r) = nodes.as_ref();
+            if l.left_end <= loc && loc < l.right_end {
+                l.all_first(loc, target);
+            } else if r.left_end <= loc && loc < r.right_end {
+                r.all_first(loc, target);
+            }
+        }
+
+        for s in self.data_s.iter().rev() {
+            target.push(*s);
+        }
     }
 }

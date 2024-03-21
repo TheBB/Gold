@@ -1514,7 +1514,7 @@ fn list_binding<'a, T, U, V>(
     terminator: impl Parser<'a, Tagged<V>> + Copy,
     err_terminator_or_item: T,
     err_terminator_or_separator: U,
-) -> impl Parser<'a, (Tagged<ListBinding>, V)>
+) -> impl Parser<'a, (Tagged<ListBinding>, Tagged<V>)>
 where
     Syntax: From<T> + From<U>,
     T: Copy,
@@ -1529,7 +1529,7 @@ where
             err_terminator_or_item,
             err_terminator_or_separator,
         ),
-        |(a, x, b)| (ListBinding(x).tag(a.span()..b.span()), b.unwrap()),
+        |(a, x, b)| (ListBinding(x).tag(a.span()..b.span()), b),
     )(input)
 }
 
@@ -1703,21 +1703,24 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
             (TokenType::CloseParen, TokenType::SemiColon, TokenType::Comma),
         ).parse(i)?;
 
-        let (i, kwargs) = if end == ";" {
+        let (i, kwargs) = if *end.as_ref() == ";" {
             let (i, kwargs) = map_binding(
                 success,
                 |i| close_paren(i),
                 (TokenType::CloseParen, SyntaxElement::KeywordParam),
                 (TokenType::CloseParen, TokenType::Comma),
             ).parse(i)?;
-            (i, Some(kwargs))
+
+            let span = end.span()..kwargs.span();
+            (i, Some(kwargs.retag(span)))
         } else {
             (i, None)
         };
 
         let (i, expr) = fail(expression, SyntaxElement::Expression).parse(i)?;
 
-        (i, args.unwrap(), kwargs, expr)
+        let span = opener.span()..args.span();
+        (i, args.retag(span), kwargs, expr)
     } else {
         // Parse a keyword function
         let (i, kwargs) = map_binding(
@@ -1728,13 +1731,15 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         ).parse(i)?;
         let (i, expr) = fail(expression, SyntaxElement::Expression).parse(i)?;
 
-        (i, ListBinding(vec![]), Some(kwargs), expr)
+        let span = opener.span()..kwargs.span();
+        let kwargs = kwargs.retag(span);
+        (i, ListBinding(vec![]).tag(kwargs.span().with_length(1)), Some(kwargs), expr)
     };
 
     let span = init.span()..expr.outer();
     let result = PExpr::Naked(Expr::Function {
         positional: args,
-        keywords: kwargs.map(Tagged::unwrap),
+        keywords: kwargs,
         expression: Box::new(expr.inner()),
     }.tag(span));
 
@@ -1756,7 +1761,7 @@ fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         (TokenType::Pipe, TokenType::SemiColon, TokenType::Comma),
     ).parse(input)?;
 
-    let (j, kwargs) = if end == ";" {
+    let (j, kwargs) = if *end.as_ref() == ";" {
         let (j, kwargs) = map_binding(
             success,
             // |i: In<'a>| { let loc = i.position(); Ok((i, "".tag(loc.with_length(0)))) },
@@ -1773,8 +1778,8 @@ fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
     let span = args.span()..expr.outer();
 
     let result = PExpr::Naked(Expr::Function {
-        positional: args.unwrap(),
-        keywords: kwargs.map(Tagged::unwrap),
+        positional: args,
+        keywords: kwargs,
         expression: expr.inner().to_box(),
     }.tag(span));
 
@@ -1803,8 +1808,8 @@ fn keyword_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
             let span = kwargs.span()..expr.outer();
             eprintln!("gold: {{|...|}} syntax is deprecated, use fn {{...}} instead");
             PExpr::Naked(Expr::Function {
-                positional: ListBinding(vec![]),
-                keywords: Some(kwargs.unwrap()),
+                positional: ListBinding(vec![]).tag(kwargs.span().with_length(1)),
+                keywords: Some(kwargs),
                 expression: Box::new(expr.inner()),
             }.tag(span))
         },

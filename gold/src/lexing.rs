@@ -3,6 +3,7 @@ use std::fmt::Display;
 use regex::Regex;
 
 use nom::InputLength;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{Tagged, SyntaxError, Syntax, SyntaxElement, Position};
 use crate::traits::Taggable;
@@ -18,7 +19,7 @@ type LexCache<'a> = UnsafeCell<Option<(Ctx, usize, LexResult<'a>)>>;
 
 
 /// Complete list of all token types in the Gold grammar.
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub enum TokenType {
     Asterisk,           // *
     Caret,              // ^

@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 
 use crate::ast::{ArgElement, BinOp, Binding, BindingClassifier, BindingMode, BindingShield, Expr, FormatSpec, FreeNames, ListBinding, ListBindingElement, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, Transform, UnOp, Visitable};
 use crate::builtins::BUILTINS;
-use crate::error::{Error, Reason};
+use crate::error::{Action, Error, IntervalTree, Reason, Span, Tagged, Unpack};
 use crate::object::{Key, Object};
 use crate::wrappers::GcCell;
 
@@ -24,6 +24,9 @@ pub(crate) struct Function {
 
     pub num_locals: usize,
     pub num_cells: usize,
+
+    #[unsafe_ignore_trace]
+    pub trace: IntervalTree<usize, (Span, Action), Reason>,
 }
 
 
@@ -54,8 +57,9 @@ pub(crate) enum Instruction {
     Noop,
 
     // Asserts
-    ListMinLength(usize),
-    ListMinMaxLength(usize, usize),
+    AssertListMinLength(usize),
+    AssertListMinMaxLength(usize, usize),
+    AssertMap,
 
     // Unary operators
     ArithmeticalNegate,
@@ -233,6 +237,9 @@ pub(crate) struct Compiler {
 
     num_locals: usize,
     num_cells: usize,
+
+    actions: Vec<(usize, usize, Span, Action)>,
+    reasons: Vec<(usize, usize, Reason)>,
 }
 
 impl Compiler {
@@ -245,6 +252,8 @@ impl Compiler {
             names: NamespaceStack::new(),
             num_locals: 0,
             num_cells: 0,
+            actions: Vec::new(),
+            reasons: Vec::new(),
          }
     }
 
@@ -261,8 +270,7 @@ impl Compiler {
                     self.instruction(instruction);
                     Ok(1)
                 } else {
-                    eprintln!("failed to look up {:?}", **key);
-                    return Err(Error::new(Reason::None));
+                    return Err(Error::new(Reason::Unbound(**key)).tag(key, Action::LookupName));
                 }
             }
 
@@ -390,7 +398,6 @@ impl Compiler {
 
                 let index = self.function(func);
                 self.code[load_index] = Instruction::LoadFunc(index);
-                println!("compiled a function");
                 Ok(len)
             }
 
@@ -398,8 +405,10 @@ impl Compiler {
         }
     }
 
-    fn emit_binding(&mut self, binding: &Binding) -> Result<usize, Error> {
-        match binding {
+    fn emit_binding(&mut self, binding: &Tagged<Binding>) -> Result<usize, Error> {
+        let loc = self.code.len();
+
+        let retval = match binding.as_ref() {
             Binding::Identifier(key) => {
                 let instruction = self.names.store_instruction(**key);
                 self.instruction(instruction);
@@ -413,11 +422,16 @@ impl Compiler {
             }
 
             Binding::Map(elements) => {
-                let len = self.emit_map_binding(elements.as_ref())?;
+                let len = self.emit_map_binding(elements)?;
                 self.instruction(Instruction::Discard);
                 Ok(len + 1)
             }
-        }
+        };
+
+        let end = self.code.len();
+        self.actions.push((loc, end, binding.span(), Action::Bind));
+
+        retval
     }
 
     fn emit_list_binding(&mut self, binding: &ListBinding) -> Result<usize, Error> {
@@ -425,10 +439,10 @@ impl Compiler {
         let solution = binding.solution();
 
         if solution.slurp.is_some() {
-            self.instruction(Instruction::ListMinLength(solution.num_front + solution.num_back));
+            self.instruction(Instruction::AssertListMinLength(solution.num_front + solution.num_back));
             len += 1;
         } else {
-            self.instruction(Instruction::ListMinMaxLength(solution.num_front, solution.num_front + solution.def_front));
+            self.instruction(Instruction::AssertListMinMaxLength(solution.num_front, solution.num_front + solution.def_front));
             len += 1;
         }
 
@@ -492,12 +506,15 @@ impl Compiler {
         Ok(len)
     }
 
-    fn emit_map_binding(&mut self, binding: &MapBinding) -> Result<usize, Error> {
+    fn emit_map_binding(&mut self, binding: &Tagged<MapBinding>) -> Result<usize, Error> {
         let mut len = 0;
+
+        self.instruction(Instruction::AssertMap);
+        len += 1;
 
         for element in binding.0.iter() {
             match element.as_ref() {
-                MapBindingElement::Binding { key, binding, default } => {
+                MapBindingElement::Binding { key, binding: sub_binding, default } => {
                     if let Some(d) = default {
                         let index = self.instruction(Instruction::Noop);
                         let default_len = self.emit(d.as_ref())?;
@@ -507,9 +524,12 @@ impl Compiler {
                         };
                         len += default_len + 1;
                     } else {
+                        let loc = self.code.len();
                         self.instruction(Instruction::IntIndexM(*key.as_ref()));
+                        self.actions.push((loc, loc+1, key.span(), Action::Bind));
+                        self.reasons.push((loc, loc+1, Reason::from(Unpack::KeyMissing(**key))));
                     }
-                    len += self.emit_binding(binding)?;
+                    len += self.emit_binding(sub_binding)?;
                 }
 
                 MapBindingElement::SlurpTo(key) => {
@@ -546,7 +566,9 @@ impl Compiler {
             StringElement::Interpolate(expr, spec) => {
                 let len = self.emit(expr)?;
                 let index = self.fmt_spec(spec.unwrap_or_default());
+                let loc = self.code.len();
                 self.instruction(Instruction::Format(index));
+                self.actions.push((loc, loc + 1, expr.span(), Action::Format));
                 self.instruction(Instruction::Add);
                 Ok(len + 2)
             }
@@ -563,7 +585,9 @@ impl Compiler {
 
             ListElement::Splat(expr) => {
                 let len = self.emit(expr)?;
+                let loc = self.code.len();
                 self.instruction(Instruction::SplatToCollection);
+                self.actions.push((loc, loc + 1, expr.span(), Action::Splat));
                 Ok(len + 1)
             }
 
@@ -578,7 +602,9 @@ impl Compiler {
 
             ListElement::Loop { binding, iterable, element } => {
                 let iterable_len = self.emit(iterable)?;
+                let loc = self.code.len();
                 self.instruction(Instruction::NewIterator);
+                self.actions.push((loc, loc+1, iterable.span(), Action::Iterate));
 
                 self.names.push();
 
@@ -608,7 +634,9 @@ impl Compiler {
     fn emit_map_element(&mut self, element: &MapElement) -> Result<usize, Error> {
         match element {
             MapElement::Singleton { key, value } => {
+                let loc = self.code.len();
                 let mut len = self.emit(key)?;
+                self.actions.push((loc, self.code.len(), key.span(), Action::Assign));
                 len += self.emit(value)?;
                 self.instruction(Instruction::PushToMap);
                 Ok(len + 1)
@@ -616,7 +644,9 @@ impl Compiler {
 
             MapElement::Splat(expr) => {
                 let len = self.emit(expr)?;
+                let loc = self.code.len();
                 self.instruction(Instruction::SplatToCollection);
+                self.actions.push((loc, loc + 1, expr.span(), Action::Splat));
                 Ok(len + 1)
             }
 
@@ -631,7 +661,9 @@ impl Compiler {
 
             MapElement::Loop { binding, iterable, element } => {
                 let iterable_len = self.emit(iterable)?;
+                let loc = self.code.len();
                 self.instruction(Instruction::NewIterator);
+                self.actions.push((loc, loc+1, iterable.span(), Action::Iterate));
 
                 self.names.push();
 
@@ -660,10 +692,18 @@ impl Compiler {
 
     fn emit_transform(&mut self, transform: &Transform) -> Result<usize, Error> {
         match transform {
-            Transform::UnOp(op) => match op.as_ref() {
-                UnOp::Passthrough => { Ok(0) },
-                UnOp::ArithmeticalNegate => { self.code.push(Instruction::ArithmeticalNegate); Ok(1) }
-                UnOp::LogicalNegate => { self.code.push(Instruction::LogicalNegate); Ok(1) }
+            Transform::UnOp(op) => {
+                let loc = self.code.len();
+                let len = match op.as_ref() {
+                    UnOp::Passthrough => { 0 },
+                    UnOp::ArithmeticalNegate => { self.code.push(Instruction::ArithmeticalNegate); 1 }
+                    UnOp::LogicalNegate => { self.code.push(Instruction::LogicalNegate); 1 }
+                };
+
+                if len > 0 {
+                    self.actions.push((loc, loc + len, op.span(), Action::Evaluate));
+                }
+                Ok(len)
             }
 
             Transform::BinOp(operator, operand) => {
@@ -689,6 +729,8 @@ impl Compiler {
                 }
 
                 let len = self.emit(operand.as_ref())?;
+                let loc = self.code.len();
+
                 match operator.as_ref() {
                     BinOp::Power => { self.code.push(Instruction::Power); }
                     BinOp::Multiply => { self.code.push(Instruction::Multiply); }
@@ -705,8 +747,9 @@ impl Compiler {
                     BinOp::Contains => { self.code.push(Instruction::Contains); }
                     BinOp::Index => { self.code.push(Instruction::Index); }
                     BinOp::Or | BinOp::And => {}
-                }
+                };
 
+                self.actions.push((loc, loc + 1, operator.span(), Action::Evaluate));
                 Ok(len + 1)
             }
 
@@ -719,7 +762,9 @@ impl Compiler {
                     len += self.emit_arg_element(arg)?;
                 }
 
+                let loc = self.code.len();
                 self.instruction(Instruction::Call);
+                self.actions.push((loc, loc + 1, args.span(), Action::Evaluate));
                 Ok(len + 3)
             }
         }
@@ -741,7 +786,9 @@ impl Compiler {
 
             ArgElement::Splat(expr) => {
                 let len = self.emit(expr)?;
+                let loc = self.code.len();
                 self.instruction(Instruction::IntArgSplat);
+                self.actions.push((loc, loc+1, expr.span(), Action::Splat));
                 Ok(len + 1)
             }
         }
@@ -780,12 +827,53 @@ impl Compiler {
         r
     }
 
+    fn build_trace(&mut self) -> IntervalTree<usize, (Span, Action), Reason> {
+        let mut endpoints: HashSet<usize> = HashSet::new();
+        for (left, right, ..) in &self.actions {
+            endpoints.insert(*left);
+            endpoints.insert(*right);
+        }
+        for (left, right, ..) in &self.reasons {
+            endpoints.insert(*left);
+            endpoints.insert(*right);
+        }
+
+        let mut endpoints: Vec<usize> = endpoints.iter().copied().collect();
+        endpoints.sort();
+
+        let mut tree: IntervalTree<usize, (Span, Action), Reason> = IntervalTree::new(endpoints);
+
+        while !self.actions.is_empty() {
+            let (left, right, span, action) = self.actions.pop().unwrap();
+            tree.insert_first(left, right, (span, action));
+        }
+
+        while !self.reasons.is_empty() {
+            let (left, right, reason) = self.reasons.pop().unwrap();
+            tree.insert_second(left, right, reason);
+        }
+
+        tree
+    }
+
     pub fn require_enclosed(&mut self, key: Key) {
         self.names.require_enclosed(key);
     }
 
     pub fn finalize(mut self) -> Function {
         self.code.push(Instruction::Return);
+
+        for action in &self.actions {
+            println!(">>> {:?}", action);
+        }
+        println!();
+        for (i, instruction) in self.code.iter().enumerate() {
+            println!(">>> {:?} {:?}", i, instruction);
+        }
+
+        let trace = self.build_trace();
+        // let reasons = self.build_reasons();
+
         Function {
             functions: self.funcs,
             constants: self.constants,
@@ -793,6 +881,8 @@ impl Compiler {
             fmt_specs: self.fmt_specs,
             num_locals: self.num_locals,
             num_cells: self.num_cells,
+            trace,
+            // reasons,
         }
     }
 }

@@ -991,7 +991,7 @@ fn funcall() {
                         binding: "y".bid(7),
                         default: None
                     }.tag(7),
-                ]),
+                ]).tag(4..9),
                 keywords: None,
                 expression: "x".id(10).add("y".id(12), 11).tag(10..13).to_box(),
             }.tag(1..13).funcall(vec![
@@ -1190,7 +1190,7 @@ fn functions() {
     assert_eq!(
         parse("fn () 1"),
         Ok(Expr::Function {
-            positional: ListBinding(vec![]),
+            positional: ListBinding(vec![]).tag(3..5),
             keywords: None,
             expression: 1.expr(6).to_box(),
         }.tag(0..7)),
@@ -1199,8 +1199,8 @@ fn functions() {
     assert_eq!(
         parse("fn (;) 1"),
         Ok(Expr::Function {
-            positional: ListBinding(vec![]),
-            keywords: Some(MapBinding(vec![])),
+            positional: ListBinding(vec![]).tag(3..5),
+            keywords: Some(MapBinding(vec![]).tag(4..6)),
             expression: 1.expr(7).to_box(),
         }.tag(0..8)),
     );
@@ -1208,8 +1208,8 @@ fn functions() {
     assert_eq!(
         parse("fn {} 1"),
         Ok(Expr::Function {
-            positional: ListBinding(vec![]),
-            keywords: Some(MapBinding(vec![])),
+            positional: ListBinding(vec![]).tag(3..4),
+            keywords: Some(MapBinding(vec![]).tag(3..5)),
             expression: 1.expr(6).to_box(),
         }.tag(0..7)),
     );
@@ -1222,7 +1222,7 @@ fn functions() {
                     binding: "a".bid(4),
                     default: None
                 }.tag(4),
-            ]),
+            ]).tag(3..6),
             keywords: None,
             expression: Box::new(Expr::Let {
                 bindings: vec![
@@ -1239,7 +1239,7 @@ fn functions() {
     assert_eq!(
         parse("fn {x=1, y=2} x + y"),
         Ok(Expr::Function {
-            positional: ListBinding(vec![]),
+            positional: ListBinding(vec![]).tag(3..4),
             keywords: Some(MapBinding(vec![
                 MapBindingElement::Binding {
                     key: "x".key(4),
@@ -1251,7 +1251,7 @@ fn functions() {
                     binding: "y".bid(9),
                     default: Some(2.expr(11)),
                 }.tag(9..12),
-            ])),
+            ]).tag(3..13)),
             expression: "x".id(14).add("y".id(18), 16).tag(14..19).to_box(),
         }.tag(0..19)),
     );

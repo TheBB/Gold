@@ -35,8 +35,8 @@ fn main() {
             eprintln!("{}", e);
             exit(1);
         },
-        Err(_) => {
-            eprintln!("Error: unknown");
+        Err(e) => {
+            eprintln!("Error: {:?}", e);
             exit(1);
         }
     }

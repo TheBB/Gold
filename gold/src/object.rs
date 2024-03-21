@@ -36,7 +36,7 @@ use crate::compile::Function;
 use crate::traits::{Peek, ToMap, ToVec};
 
 use crate::ast::{ListBinding, MapBinding, Expr, BinOp, UnOp, FormatSpec, StringAlignSpec, AlignSpec, IntegerFormatType, GroupingSpec, SignSpec, UppercaseSpec, FloatFormatType};
-use crate::error::{Error, Tagged, TypeMismatch, Value, Reason};
+use crate::error::{Error, Internal, Reason, Tagged, TypeMismatch, Value};
 use crate::eval::Namespace;
 use crate::util;
 use crate::wrappers::{WBigInt, OrderedMap, GcCell};
@@ -56,7 +56,7 @@ const SERIALIZE_VERSION: i32 = 1;
 
 
 /// Enumerates all the possible Gold object types.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Type {
     /// IntVariant
     Integer,
@@ -1248,6 +1248,8 @@ impl ObjectVariant {
                 Ok(())
             }
 
+            (Self::List(_), _) => Err(Error::new(TypeMismatch::SplatList(other.type_of()))),
+
             (Self::Map(x), Self::Map(y)) => {
                 let mut xx = x.borrow_mut();
                 let yy = y.borrow();
@@ -1257,7 +1259,9 @@ impl ObjectVariant {
                 Ok(())
             }
 
-            _ => Err(Error::new(Reason::None))
+            (Self::Map(_), _) => Err(Error::new(TypeMismatch::SplatMap(other.type_of()))),
+
+            _ => Err(Error::new(Internal::SplatToNonCollection))
         }
     }
 
@@ -1575,7 +1579,7 @@ impl Object {
         if let Object(ObjectVariant::List(l)) = obj {
             Ok(Object(ObjectVariant::ListIter(Gc::new(GcCell::new(0)), l.clone())))
         } else {
-            Err(Error::new(Reason::None))
+            Err(Error::new(TypeMismatch::Iterate(obj.type_of())))
         }
     }
 
@@ -1867,7 +1871,7 @@ impl Object {
 
     /// Wrap [`ObjectVariant::push_to_map`]
     pub(crate) fn push_to_map(&self, key: Self, value: Self) -> Result<(), Error> {
-        self.0.push_to_map(key.get_key().ok_or_else(|| Error::new(Reason::None))?, value)
+        self.0.push_to_map(key.get_key().ok_or_else(|| Error::new(TypeMismatch::MapKey(key.type_of())))?, value)
     }
 
     /// Wrap [`ObjectVariant::push_to_map`]

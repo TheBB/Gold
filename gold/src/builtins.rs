@@ -3,8 +3,8 @@ use std::str::FromStr;
 use std::collections::HashMap;
 
 use crate::error::Value;
-use crate::object::{Object, List, Map, Builtin, Type, IntVariant};
-use crate::error::{Error, TypeMismatch};
+use crate::object::{Object, List, Map, Key, Builtin, Type, IntVariant};
+use crate::error::{Error, Types, TypeMismatch};
 
 
 /// Convert a function by name to a [`Builtin`] object and append it to a
@@ -83,9 +83,7 @@ macro_rules! expected_pos {
     ($index:expr, $name:ident, $($types:ident),*) => {
         return Err(Error::new(TypeMismatch::ExpectedPosArg {
             index: $index,
-            allowed: vec![
-                $(Type::$types),*
-            ],
+            allowed: Types::from(($(Type::$types),*)),
             received: $name.type_of(),
         }))
     };
@@ -103,11 +101,9 @@ macro_rules! expected_pos {
 /// ```
 macro_rules! expected_kw {
     ($name:expr, $kwargs:ident, $($types:ident),*) => {
-        return Err(Error::new(TypeMismatch::ExpectedKwArg {
-            name: stringify!(name).to_string(),
-            allowed: vec![
-                $(Type::$types),*
-            ],
+        return Err(Error::new(TypeMismatch::ExpectedKwarg {
+            name: Key::new(stringify!(name)),
+            allowed: Types::from(($(Type::$types),*)),
             received: $name.type_of(),
         }))
     };

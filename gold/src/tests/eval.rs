@@ -1,5 +1,5 @@
 use crate::ast::{BinOp, UnOp};
-use crate::error::{Error, Reason, Unpack, Span, Action, BindingType, TypeMismatch};
+use crate::error::{Action, BindingType, Error, Reason, Span, TypeMismatch, Types, Unpack};
 use crate::eval_raw;
 use crate::object::{Object, Key, Type};
 
@@ -9,7 +9,7 @@ fn eval(input: &str) -> Result<Object, Error> {
 }
 
 fn eval_errstr(input: &str) -> Option<String> {
-    eval_raw(input).err().map(|x| x.rendered).flatten()
+    eval_raw(input).err().map(|x| x.render(Some(input)).rendered).flatten()
 }
 
 
@@ -732,100 +732,101 @@ fn builtins() {
 }
 
 
-// macro_rules! loc {
-//     ($loc:expr, $act:ident) => {
-//         (Span::from($loc), Action::$act)
-//     };
-// }
+macro_rules! loc {
+    ($loc:expr, $act:ident) => {
+        (Span::from($loc), Action::$act)
+    };
+}
 
 
-// macro_rules! err {
-//     ($reason:expr, $($locs:expr),*) => {
-//         Err(Error {
-//             locations: Some(vec![$($locs),*]),
-//             reason: Some(Reason::from($reason)),
-//             rendered: None,
-//         })
-//     }
-// }
+macro_rules! err {
+    ($reason:expr, $($locs:expr),*) => {
+        Err(Error {
+            locations: Some(vec![$($locs),*]),
+            reason: Some(Reason::from($reason)),
+            rendered: None,
+        })
+    }
+}
 
 
-// #[test]
-// fn errors() {
-//     assert_eq!(eval("a"), err!(Reason::Unbound("a".key()), loc!(0, LookupName)));
-//     assert_eq!(eval("let [a] = [] in a"), err!(Unpack::ListTooShort, loc!(5, Bind), loc!(4..7, Bind)));
-//     assert_eq!(eval("let [a] = [1, 2] in a"), err!(Unpack::ListTooLong, loc!(4..7, Bind)));
-//     assert_eq!(eval("let {a} = {} in a"), err!(Unpack::KeyMissing("a".key()), loc!(5, Bind), loc!(4..7, Bind)));
-//     assert_eq!(eval("let [a] = 1 in a"), err!(Unpack::TypeMismatch(BindingType::List, Type::Integer), loc!(4..7, Bind)));
-//     assert_eq!(eval("let {a} = true in a"), err!(Unpack::TypeMismatch(BindingType::Map, Type::Boolean), loc!(4..7, Bind)));
-//     assert_eq!(eval("[...1]"), err!(TypeMismatch::SplatList(Type::Integer), loc!(4, Splat)));
-//     assert_eq!(eval("[for x in 1: x]"), err!(TypeMismatch::Iterate(Type::Integer), loc!(10, Iterate)));
-//     assert_eq!(eval("{$null: 1}"), err!(TypeMismatch::MapKey(Type::Null), loc!(2..6, Assign)));
-//     assert_eq!(eval("{...[]}"), err!(TypeMismatch::SplatMap(Type::List), loc!(4..6, Splat)));
-//     assert_eq!(eval("{for x in 2.2: a: x}"), err!(TypeMismatch::Iterate(Type::Float), loc!(10..13, Iterate)));
-//     assert_eq!(eval("(fn (...x) 1)(...true)"), err!(TypeMismatch::SplatArg(Type::Boolean), loc!(17..21, Splat)));
-//     assert_eq!(eval("1 + true"), err!(TypeMismatch::BinOp(Type::Integer, Type::Boolean, BinOp::Add), loc!(2, Evaluate)));
-//     assert_eq!(eval("\"t\" - 9"), err!(TypeMismatch::BinOp(Type::String, Type::Integer, BinOp::Subtract), loc!(4, Evaluate)));
-//     assert_eq!(eval("[] * 9"), err!(TypeMismatch::BinOp(Type::List, Type::Integer, BinOp::Multiply), loc!(3, Evaluate)));
-//     assert_eq!(eval("9 / {}"), err!(TypeMismatch::BinOp(Type::Integer, Type::Map, BinOp::Divide), loc!(2, Evaluate)));
-//     assert_eq!(eval("null // {}"), err!(TypeMismatch::BinOp(Type::Null, Type::Map, BinOp::IntegerDivide), loc!(5..7, Evaluate)));
-//     assert_eq!(eval("null < true"), err!(TypeMismatch::BinOp(Type::Null, Type::Boolean, BinOp::Less), loc!(5, Evaluate)));
-//     assert_eq!(eval("1 > \"\""), err!(TypeMismatch::BinOp(Type::Integer, Type::String, BinOp::Greater), loc!(2, Evaluate)));
-//     assert_eq!(eval("[] <= 2.1"), err!(TypeMismatch::BinOp(Type::List, Type::Float, BinOp::LessEqual), loc!(3..5, Evaluate)));
-//     assert_eq!(eval("{} >= false"), err!(TypeMismatch::BinOp(Type::Map, Type::Boolean, BinOp::GreaterEqual), loc!(3..5, Evaluate)));
-//     assert_eq!(eval("\"${[]}\""), err!(TypeMismatch::Interpolate(Type::List), loc!(3..5, Format)));
-//     assert_eq!(eval("\"${{}}\""), err!(TypeMismatch::Interpolate(Type::Map), loc!(3..5, Format)));
-//     assert_eq!(eval("-null"), err!(TypeMismatch::UnOp(Type::Null, UnOp::ArithmeticalNegate), loc!(0, Evaluate)));
-//     assert_eq!(eval("null[2]"), err!(TypeMismatch::BinOp(Type::Null, Type::Integer, BinOp::Index), loc!(4..7, Evaluate)));
-//     assert_eq!(eval("2[null]"), err!(TypeMismatch::BinOp(Type::Integer, Type::Null, BinOp::Index), loc!(1..7, Evaluate)));
-//     assert_eq!(eval("(2).x"), err!(TypeMismatch::BinOp(Type::Integer, Type::String, BinOp::Index), loc!(3, Evaluate)));
-//     assert_eq!(eval("{a: 1}.b"), err!(Reason::Unassigned("b".key()), loc!(6, Evaluate)));
-//     assert_eq!(
-//         eval("{a: 1}[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]"),
-//         err!(Reason::Unassigned("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".key()), loc!(6..66, Evaluate))
-//     );
-//     assert_eq!(eval("[]()"), err!(TypeMismatch::Call(Type::List), loc!(2..4, Evaluate)));
-//     assert_eq!(eval("true(1)"), err!(TypeMismatch::Call(Type::Boolean), loc!(4..7, Evaluate)));
+#[test]
+fn errors() {
+    assert_eq!(eval("a"), err!(Reason::Unbound("a".key()), loc!(0, LookupName)));
+    assert_eq!(eval("let [a] = [] in a"), err!(Unpack::ListTooShort, loc!(4..7, Bind)));
+    assert_eq!(eval("let [a] = [1, 2] in a"), err!(Unpack::ListTooLong, loc!(4..7, Bind)));
+    assert_eq!(eval("let {a} = {} in a"), err!(Unpack::KeyMissing("a".key()), loc!(5, Bind), loc!(4..7, Bind)));
+    assert_eq!(eval("let [a] = 1 in a"), err!(Unpack::TypeMismatch(BindingType::List, Type::Integer), loc!(4..7, Bind)));
+    assert_eq!(eval("let {a} = true in a"), err!(Unpack::TypeMismatch(BindingType::Map, Type::Boolean), loc!(4..7, Bind)));
+    assert_eq!(eval("[...1]"), err!(TypeMismatch::SplatList(Type::Integer), loc!(4, Splat)));
+    assert_eq!(eval("[for x in 1: x]"), err!(TypeMismatch::Iterate(Type::Integer), loc!(10, Iterate)));
+    assert_eq!(eval("{$null: 1}"), err!(TypeMismatch::MapKey(Type::Null), loc!(2..6, Assign)));
+    assert_eq!(eval("{...[]}"), err!(TypeMismatch::SplatMap(Type::List), loc!(4..6, Splat)));
+    assert_eq!(eval("{for x in 2.2: a: x}"), err!(TypeMismatch::Iterate(Type::Float), loc!(10..13, Iterate)));
+    assert_eq!(eval("(fn (...x) 1)(...true)"), err!(TypeMismatch::SplatArg(Type::Boolean), loc!(17..21, Splat)));
+    assert_eq!(eval("1 + true"), err!(TypeMismatch::BinOp(Type::Integer, Type::Boolean, BinOp::Add), loc!(2, Evaluate)));
+    assert_eq!(eval("\"t\" - 9"), err!(TypeMismatch::BinOp(Type::String, Type::Integer, BinOp::Subtract), loc!(4, Evaluate)));
+    assert_eq!(eval("[] * 9"), err!(TypeMismatch::BinOp(Type::List, Type::Integer, BinOp::Multiply), loc!(3, Evaluate)));
+    assert_eq!(eval("9 / {}"), err!(TypeMismatch::BinOp(Type::Integer, Type::Map, BinOp::Divide), loc!(2, Evaluate)));
+    assert_eq!(eval("null // {}"), err!(TypeMismatch::BinOp(Type::Null, Type::Map, BinOp::IntegerDivide), loc!(5..7, Evaluate)));
+    assert_eq!(eval("null < true"), err!(TypeMismatch::BinOp(Type::Null, Type::Boolean, BinOp::Less), loc!(5, Evaluate)));
+    assert_eq!(eval("1 > \"\""), err!(TypeMismatch::BinOp(Type::Integer, Type::String, BinOp::Greater), loc!(2, Evaluate)));
+    assert_eq!(eval("[] <= 2.1"), err!(TypeMismatch::BinOp(Type::List, Type::Float, BinOp::LessEqual), loc!(3..5, Evaluate)));
+    assert_eq!(eval("{} >= false"), err!(TypeMismatch::BinOp(Type::Map, Type::Boolean, BinOp::GreaterEqual), loc!(3..5, Evaluate)));
+    assert_eq!(eval("1 has 2"), err!(TypeMismatch::BinOp(Type::Integer, Type::Integer, BinOp::Contains), loc!(2..5, Evaluate)));
+    assert_eq!(eval("\"${[]}\""), err!(TypeMismatch::Interpolate(Type::List), loc!(3..5, Format)));
+    assert_eq!(eval("\"${{}}\""), err!(TypeMismatch::Interpolate(Type::Map), loc!(3..5, Format)));
+    assert_eq!(eval("-null"), err!(TypeMismatch::UnOp(Type::Null, UnOp::ArithmeticalNegate), loc!(0, Evaluate)));
+    assert_eq!(eval("null[2]"), err!(TypeMismatch::BinOp(Type::Null, Type::Integer, BinOp::Index), loc!(4..7, Evaluate)));
+    assert_eq!(eval("2[null]"), err!(TypeMismatch::BinOp(Type::Integer, Type::Null, BinOp::Index), loc!(1..7, Evaluate)));
+    assert_eq!(eval("(2).x"), err!(TypeMismatch::BinOp(Type::Integer, Type::String, BinOp::Index), loc!(3, Evaluate)));
+    assert_eq!(eval("{a: 1}.b"), err!(Reason::Unassigned("b".key()), loc!(6, Evaluate)));
+    assert_eq!(
+        eval("{a: 1}[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]"),
+        err!(Reason::Unassigned("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".key()), loc!(6..66, Evaluate))
+    );
+    assert_eq!(eval("[]()"), err!(TypeMismatch::Call(Type::List), loc!(2..4, Evaluate)));
+    assert_eq!(eval("true(1)"), err!(TypeMismatch::Call(Type::Boolean), loc!(4..7, Evaluate)));
 
-//     assert_eq!(eval("range()"), err!(TypeMismatch::ArgCount { low: 1, high: 2, received: 0 }, loc!(5..7, Evaluate)));
-//     assert_eq!(eval("range(1, 2, 3)"), err!(TypeMismatch::ArgCount { low: 1, high: 2, received: 3 }, loc!(5..14, Evaluate)));
+    assert_eq!(eval("range()"), err!(TypeMismatch::ArgCount { low: 1, high: 2, received: 0 }, loc!(5..7, Evaluate)));
+    assert_eq!(eval("range(1, 2, 3)"), err!(TypeMismatch::ArgCount { low: 1, high: 2, received: 3 }, loc!(5..14, Evaluate)));
 
-//     assert_eq!(eval("len(1)"), err!(TypeMismatch::ExpectedPosArg{
-//         index: 0,
-//         allowed: vec![Type::String, Type::List, Type::Map],
-//         received: Type::Integer
-//     }, loc!(3..6, Evaluate)));
+    assert_eq!(eval("len(1)"), err!(TypeMismatch::ExpectedPosArg{
+        index: 0,
+        allowed: Types::Three(Type::String, Type::List, Type::Map),
+        received: Type::Integer,
+    }, loc!(3..6, Evaluate)));
 
-//     assert_eq!(eval("len(true)"), err!(TypeMismatch::ExpectedPosArg{
-//         index: 0,
-//         allowed: vec![Type::String, Type::List, Type::Map],
-//         received: Type::Boolean
-//     }, loc!(3..9, Evaluate)));
+    assert_eq!(eval("len(true)"), err!(TypeMismatch::ExpectedPosArg{
+        index: 0,
+        allowed: Types::Three(Type::String, Type::List, Type::Map),
+        received: Type::Boolean
+    }, loc!(3..9, Evaluate)));
 
-//     assert!(eval_errstr("a").is_some_and(|x| x.contains("\na\n^\n")));
-//     assert!(eval_errstr("\n\na\n").is_some_and(|x| x.contains("\na\n^\n")));
-//     assert!(eval_errstr("  a  \n").is_some_and(|x| x.contains("\n  a  \n  ^\n")));
-//     assert!(eval_errstr("\n  a  \n").is_some_and(|x| x.contains("\n  a  \n  ^\n")));
-//     assert!(eval_errstr("\n  bingbong  \n").is_some_and(|x| x.contains("\n  bingbong  \n  ^^^^^^^^\n")));
+    assert!(eval_errstr("a").is_some_and(|x| x.contains("\na\n^\n")));
+    assert!(eval_errstr("\n\na\n").is_some_and(|x| x.contains("\na\n^\n")));
+    assert!(eval_errstr("  a  \n").is_some_and(|x| x.contains("\n  a  \n  ^\n")));
+    assert!(eval_errstr("\n  a  \n").is_some_and(|x| x.contains("\n  a  \n  ^\n")));
+    assert!(eval_errstr("\n  bingbong  \n").is_some_and(|x| x.contains("\n  bingbong  \n  ^^^^^^^^\n")));
 
-//     assert!(eval_errstr(concat!(
-//         "let f = fn (x) x + 1\n",
-//         "let g = fn (x) f(x)\n",
-//         "let h = fn (x) g(x)\n",
-//         "in h(null)",
-//     )).is_some_and(|x|
-//         x.contains(concat!(
-//             "let f = fn (x) x + 1\n",
-//             "                 ^",
-//         )) && x.contains(concat!(
-//             "let g = fn (x) f(x)\n",
-//             "                ^^^",
-//         )) && x.contains(concat!(
-//             "let h = fn (x) g(x)\n",
-//             "                ^^^",
-//         )) && x.contains(concat!(
-//             "in h(null)\n",
-//             "    ^^^^^",
-//         ))
-//     ));
-// }
+    assert!(eval_errstr(concat!(
+        "let f = fn (x) x + 1\n",
+        "let g = fn (x) f(x)\n",
+        "let h = fn (x) g(x)\n",
+        "in h(null)",
+    )).is_some_and(|x|
+        x.contains(concat!(
+            "let f = fn (x) x + 1\n",
+            "                 ^",
+        )) && x.contains(concat!(
+            "let g = fn (x) f(x)\n",
+            "                ^^^",
+        )) && x.contains(concat!(
+            "let h = fn (x) g(x)\n",
+            "                ^^^",
+        )) && x.contains(concat!(
+            "in h(null)\n",
+            "    ^^^^^",
+        ))
+    ));
+}

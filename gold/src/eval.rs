@@ -10,7 +10,7 @@ use crate::compile::{Function, Instruction};
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::builtins::BUILTINS;
-use crate::error::{Error, Internal, Tagged, Unpack, TypeMismatch, Action, Reason};
+use crate::error::{Action, BindingType, Error, Internal, Reason, Tagged, TypeMismatch, Unpack};
 use crate::object::{Builtin, Closure, FuncVariant, Key, List, Map, Object, Type};
 use crate::traits::{Bound__, Free__};
 use crate::wrappers::GcCell;
@@ -740,6 +740,14 @@ impl Vm {
         self.cur_frame().stack.push(obj)
     }
 
+    fn err(&self) -> Error {
+        let mut err = self.frames[self.fp].function.trace.error(self.frames[self.fp].ip - 1);
+        for fp in (0..self.fp).rev() {
+            err = err.add_locations(self.frames[fp].function.trace.error(self.frames[fp].ip - 1));
+        }
+        err
+    }
+
     fn eval_impl(&mut self) -> Result<Object, Error> {
         loop {
             let instruction = self.cur_frame().next_instruction();
@@ -851,14 +859,14 @@ impl Vm {
                         Some(FuncVariant::Closure(Closure(f))) => {
                             let x = args.get_list().ok_or_else(|| Error::new(Reason::None))?;
                             let y = kwargs.get_map().ok_or_else(|| Error::new(Reason::None))?;
-                            let result = f(x.borrow(), Some(y.borrow()))?;
+                            let result = f(x.borrow(), Some(y.borrow())).map_err(|e| e.with_locations(self.err()))?;
                             self.push(result);
                         }
 
                         Some(FuncVariant::Builtin(Builtin { func: f, .. })) => {
                             let x = args.get_list().ok_or_else(|| Error::new(Reason::None))?;
                             let y = kwargs.get_map().ok_or_else(|| Error::new(Reason::None))?;
-                            let result = f(x.borrow(), Some(y.borrow()))?;
+                            let result = f(x.borrow(), Some(y.borrow())).map_err(|e| e.with_locations(self.err()))?;
                             self.push(result);
                         }
 
@@ -869,13 +877,13 @@ impl Vm {
                             self.push(args);
                         }
 
-                        None => { return Err(Error::new(Reason::None)); }
+                        None => { return Err(self.err().with_reason(TypeMismatch::Call(func.type_of()))) }
                     }
                 }
 
                 Instruction::Noop => {}
 
-                Instruction::ListMinLength(len) => {
+                Instruction::AssertListMinLength(len) => {
                     let obj = self.peek();
                     match obj.get_list() {
                         None => { return Err(Error::new(Reason::None)) }
@@ -887,24 +895,32 @@ impl Vm {
                     }
                 }
 
-                Instruction::ListMinMaxLength(min, max) => {
+                Instruction::AssertListMinMaxLength(min, max) => {
                     let obj = self.peek();
                     match obj.get_list() {
-                        None => { return Err(Error::new(Reason::None)) }
+                        None => { return Err(self.err().with_reason(Unpack::TypeMismatch(BindingType::List, obj.type_of()))) }
                         Some(l) => {
                             if l.borrow().len() < min {
-                                return Err(Error::new(Reason::None))
+                                return Err(self.err().with_reason(Unpack::ListTooShort));
                             }
                             if l.borrow().len() > max {
-                                return Err(Error::new(Reason::None))
+                                return Err(self.err().with_reason(Unpack::ListTooLong));
                             }
                         }
                     }
                 }
 
+                Instruction::AssertMap => {
+                    let obj = self.peek();
+                    match obj.get_map() {
+                        None => { return Err(self.err().with_reason(Unpack::TypeMismatch(BindingType::Map, obj.type_of()))) }
+                        Some(_) => { }
+                    }
+                }
+
                 Instruction::ArithmeticalNegate => {
                     let obj = self.pop();
-                    self.push(obj.neg()?);
+                    self.push(obj.neg().map_err(|e| e.with_locations(self.err()))?);
                 }
 
                 Instruction::LogicalNegate => {
@@ -914,44 +930,44 @@ impl Vm {
 
                 Instruction::Format(i) => {
                     let obj = self.pop();
-                    let result = Object::str(obj.format(self.cur_frame().function.fmt_specs[i])?);
+                    let result = Object::str(obj.format(self.cur_frame().function.fmt_specs[i]).map_err(|e| e.with_locations(self.err()))?);
                     self.push(result);
                 }
 
                 Instruction::Add => {
                     let rhs = self.pop();
                     let lhs = self.pop();
-                    self.push(lhs.add(&rhs)?);
+                    self.push(lhs.add(&rhs).map_err(|e| e.with_locations(self.err()))?);
                 }
 
                 Instruction::Subtract => {
                     let rhs = self.pop();
                     let lhs = self.pop();
-                    self.push(lhs.sub(&rhs)?);
+                    self.push(lhs.sub(&rhs).map_err(|e| e.with_locations(self.err()))?);
                 }
 
                 Instruction::Multiply => {
                     let rhs = self.pop();
                     let lhs = self.pop();
-                    self.push(lhs.mul(&rhs)?);
+                    self.push(lhs.mul(&rhs).map_err(|e| e.with_locations(self.err()))?);
                 }
 
                 Instruction::IntegerDivide => {
                     let rhs = self.pop();
                     let lhs = self.pop();
-                    self.push(lhs.idiv(&rhs)?);
+                    self.push(lhs.idiv(&rhs).map_err(|e| e.with_locations(self.err()))?);
                 }
 
                 Instruction::Divide => {
                     let rhs = self.pop();
                     let lhs = self.pop();
-                    self.push(lhs.div(&rhs)?);
+                    self.push(lhs.div(&rhs).map_err(|e| e.with_locations(self.err()))?);
                 }
 
                 Instruction::Power => {
                     let rhs = self.pop();
                     let lhs = self.pop();
-                    self.push(lhs.pow(&rhs)?);
+                    self.push(lhs.pow(&rhs).map_err(|e| e.with_locations(self.err()))?);
                 }
 
                 Instruction::Less => {
@@ -959,7 +975,7 @@ impl Vm {
                     let lhs = self.pop();
                     let res = lhs
                         .cmp_bool(&rhs, Ordering::Less)
-                        .ok_or_else(|| Error::new(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::Less)))
+                        .ok_or_else(|| self.err().with_reason(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::Less)))
                         .map(Object::bool)?;
                     self.push(res);
                 }
@@ -969,7 +985,7 @@ impl Vm {
                     let lhs = self.pop();
                     let res = lhs
                         .cmp_bool(&rhs, Ordering::Greater)
-                        .ok_or_else(|| Error::new(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::Greater)))
+                        .ok_or_else(|| self.err().with_reason(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::Greater)))
                         .map(Object::bool)?;
                     self.push(res);
                 }
@@ -979,7 +995,7 @@ impl Vm {
                     let lhs = self.pop();
                     let res = lhs
                         .cmp_bool(&rhs, Ordering::Greater)
-                        .ok_or_else(|| Error::new(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::LessEqual)))
+                        .ok_or_else(|| self.err().with_reason(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::LessEqual)))
                         .map(|x| Object::bool(!x))?;
                     self.push(res);
                 }
@@ -989,7 +1005,7 @@ impl Vm {
                     let lhs = self.pop();
                     let res = lhs
                         .cmp_bool(&rhs, Ordering::Less)
-                        .ok_or_else(|| Error::new(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::GreaterEqual)))
+                        .ok_or_else(|| self.err().with_reason(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::GreaterEqual)))
                         .map(|x| Object::bool(!x))?;
                     self.push(res);
                 }
@@ -1009,13 +1025,13 @@ impl Vm {
                 Instruction::Contains => {
                     let rhs = self.pop();
                     let lhs = self.pop();
-                    self.push(Object::bool(lhs.contains(&rhs)?));
+                    self.push(Object::bool(lhs.contains(&rhs).map_err(|e| e.with_locations(self.err()))?));
                 }
 
                 Instruction::Index => {
                     let rhs = self.pop();
                     let lhs = self.pop();
-                    self.push(lhs.index(&rhs)?);
+                    self.push(lhs.index(&rhs).map_err(|e| e.with_locations(self.err()))?);
                 }
 
                 Instruction::NewList => {
@@ -1028,7 +1044,7 @@ impl Vm {
 
                 Instruction::NewIterator => {
                     let obj = self.pop();
-                    self.push(Object::iterator(&obj)?);
+                    self.push(Object::iterator(&obj).map_err(|e| e.with_locations(self.err()))?);
                 }
 
                 Instruction::PushToList => {
@@ -1039,12 +1055,12 @@ impl Vm {
                 Instruction::PushToMap => {
                     let value = self.pop();
                     let key = self.pop();
-                    self.peek().push_to_map(key, value)?;
+                    self.peek().push_to_map(key, value).map_err(|e| e.with_locations(self.err()))?;
                 }
 
                 Instruction::SplatToCollection => {
                     let obj = self.pop();
-                    self.peek().splat_into(obj)?;
+                    self.peek().splat_into(obj).map_err(|e| e.with_locations(self.err()))?;
                 }
 
                 Instruction::DelKeyIfExists(key) => {
@@ -1139,7 +1155,7 @@ impl Vm {
                 Instruction::IntIndexM(key) => {
                     let obj = {
                         let l = self.peek().get_map().ok_or_else(|| Error::new(Reason::None))?;
-                        l.borrow().get(&key).ok_or_else(|| Error::new(Reason::None))?.clone()
+                        l.borrow().get(&key).ok_or_else(|| self.err())?.clone()
                     };
                     self.push(obj);
                 }
@@ -1165,8 +1181,10 @@ impl Vm {
                     let value = self.pop();
                     if value.type_of() == Type::List {
                         self.peek().splat_into(value)?;
-                    } else {
+                    } else if value.type_of() == Type::Map {
                         self.peek_back().splat_into(value)?;
+                    } else {
+                        return Err(Error::new(TypeMismatch::SplatArg(value.type_of())).with_locations(self.err()));
                     }
                 }
             }

@@ -1277,10 +1277,10 @@ pub enum Expr {
     /// A function definition.
     Function {
         /// Positional function parameters.
-        positional: ListBinding,
+        positional: Tagged<ListBinding>,
 
         /// Optional keyword parameters.
-        keywords: Option<MapBinding>,
+        keywords: Option<Tagged<MapBinding>>,
 
         /// The expression to evaluate when called.
         expression: Box<Tagged<Expr>>,
@@ -1609,7 +1609,7 @@ impl Validatable for Expr {
             },
             Expr::Function { positional, keywords, expression } => {
                 positional.validate()?;
-                keywords.as_ref().map(MapBinding::validate).transpose()?;
+                keywords.as_ref().map(|b| b.validate()).transpose()?;
                 expression.validate()?;
             },
             Expr::Branch { condition, true_branch, false_branch } => {
