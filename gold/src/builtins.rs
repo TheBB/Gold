@@ -5,7 +5,7 @@ use std::str::FromStr;
 use crate::error::Value;
 use crate::error::{Error, TypeMismatch, Types};
 use crate::object::function::Builtin;
-use crate::object::integer::IntVariant;
+use crate::object::integer::Integer;
 use crate::{Key, List, Map, Object, Type};
 
 /// Convert a function by name to a [`Builtin`] object and append it to a
@@ -157,7 +157,7 @@ fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: any, y: any] { expected_pos!(1, y, Integer) });
 
     signature!(args = [stop: int] {
-        return Ok((IntVariant::from(0)..stop.clone()).map(Object::int).collect())
+        return Ok((Integer::from(0)..stop.clone()).map(Object::int).collect())
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, Integer) });

@@ -37,7 +37,7 @@ use crate::wrappers::GcCell;
 use crate::{ast, Key, List, Map, Type};
 
 use function::FuncVariant;
-use integer::IntVariant;
+use integer::Integer;
 use string::StrVariant;
 
 /// The current serialization format version.
@@ -52,7 +52,7 @@ const SERIALIZE_VERSION: i32 = 1;
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
 pub(crate) enum ObjV {
     /// Integers
-    Int(IntVariant),
+    Int(Integer),
 
     /// Floating-point numbers
     Float(f64),
@@ -269,7 +269,7 @@ impl Object {
                     Ok(str_spec.format(s))
                 } else if let Some(int_spec) = spec.integer_spec() {
                     let i = if *x { 1 } else { 0 };
-                    int_spec.format(&IntVariant::Small(i))
+                    int_spec.format(&Integer::from(i))
                 } else if let Some(float_spec) = spec.float_spec() {
                     let f = if *x { 1.0 } else { 0.0 };
                     Ok(float_spec.format(f))
@@ -338,9 +338,9 @@ impl Object {
     /// Construct an integer.
     pub(crate) fn int<T>(val: T) -> Self
     where
-        IntVariant: From<T>,
+        Integer: From<T>,
     {
-        Self(ObjV::Int(IntVariant::from(val)))
+        Self(ObjV::Int(Integer::from(val)))
     }
 
     /// Construct a big integer from a decimal string representation.
@@ -556,7 +556,7 @@ impl Object {
     }
 
     /// Extract the integer variant if applicable.
-    pub(crate) fn get_int(&self) -> Option<&IntVariant> {
+    pub(crate) fn get_int(&self) -> Option<&Integer> {
         match &self.0 {
             ObjV::Int(x) => Some(x),
             _ => None,
@@ -805,7 +805,7 @@ impl Object {
     fn operate<S, T>(
         &self,
         other: &Self,
-        ixi: impl Fn(&IntVariant, &IntVariant) -> S,
+        ixi: impl Fn(&Integer, &Integer) -> S,
         fxf: impl Fn(f64, f64) -> T,
         op: ast::BinOp,
     ) -> Result<Self, Error>
@@ -841,30 +841,30 @@ impl Object {
                     .collect::<List>(),
             )),
             (ObjV::Str(x), ObjV::Str(y)) => Ok(Self(ObjV::Str(x.add(y)))),
-            _ => self.operate(other, IntVariant::add, |x, y| x + y, ast::BinOp::Add),
+            _ => self.operate(other, Integer::add, |x, y| x + y, ast::BinOp::Add),
         }
     }
 
     /// The minus operator: mathematical subtraction.
     pub fn sub(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, IntVariant::sub, |x, y| x - y, ast::BinOp::Subtract)
+        self.operate(other, Integer::sub, |x, y| x - y, ast::BinOp::Subtract)
     }
 
     /// The asterisk operator: mathematical multiplication.
     pub fn mul(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, IntVariant::mul, |x, y| x * y, ast::BinOp::Multiply)
+        self.operate(other, Integer::mul, |x, y| x * y, ast::BinOp::Multiply)
     }
 
     /// The slash operator: mathematical division.
     pub fn div(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, IntVariant::div, |x, y| x / y, ast::BinOp::Divide)
+        self.operate(other, Integer::div, |x, y| x / y, ast::BinOp::Divide)
     }
 
     /// The double slash operator: integer division.
     pub fn idiv(&self, other: &Self) -> Result<Self, Error> {
         self.operate(
             other,
-            IntVariant::idiv,
+            Integer::idiv,
             |x, y| (x / y).floor() as f64,
             ast::BinOp::IntegerDivide,
         )
@@ -977,10 +977,10 @@ impl From<Key> for Object {
 
 impl<T> From<T> for Object
 where
-    IntVariant: From<T>,
+    Integer: From<T>,
 {
     fn from(value: T) -> Self {
-        Self(ObjV::Int(IntVariant::from(value)))
+        Self(ObjV::Int(Integer::from(value)))
     }
 }
 

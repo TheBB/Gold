@@ -14,9 +14,7 @@ use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 use crate::error::{Error, Reason};
 use crate::eval::ImportConfig as GoldImportConfig;
 use crate::object::function::{Closure, FuncVariant};
-use crate::object::integer::IntVariant;
 use crate::object::ObjV;
-use crate::traits::Peek;
 use crate::{Key, List, Map, Object};
 
 /// Convert a Gold error to a Python error.
@@ -140,8 +138,7 @@ impl<'s> FromPyObject<'s> for Object {
 impl pyo3::IntoPy<PyObject> for Object {
     fn into_py(self, py: Python<'_>) -> PyObject {
         match &self.0 {
-            ObjV::Int(IntVariant::Small(x)) => x.into_py(py),
-            ObjV::Int(IntVariant::Big(x)) => x.peek().clone().into_py(py),
+            ObjV::Int(x) => x.into_py(py),
             ObjV::Float(x) => x.into_py(py),
             ObjV::Str(x) => x.as_str().into_py(py),
             ObjV::Boolean(x) => x.into_py(py),

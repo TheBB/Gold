@@ -18,38 +18,41 @@ use crate::formatting::{
     AlignSpec, GroupingSpec, IntegerFormatSpec, IntegerFormatType, SignSpec, UppercaseSpec,
 };
 
-/// The integer variant represents all possible Gold integers.
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Trace, Finalize)]
-pub(crate) enum IntVariant {
-    /// Machine integers.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Trace, Finalize)]
+enum IntV {
     Small(i64),
-
-    /// Bignums.
     Big(Gc<WBigInt>),
 }
 
-impl PartialOrd<IntVariant> for IntVariant {
-    fn partial_cmp(&self, other: &IntVariant) -> Option<Ordering> {
-        match (self, other) {
-            (Self::Small(x), Self::Small(y)) => x.partial_cmp(y),
-            (Self::Small(x), Self::Big(y)) => BigInt::from(*x).partial_cmp(y),
-            (Self::Big(x), Self::Small(y)) => x.peek().partial_cmp(&BigInt::from(*y)),
-            (Self::Big(x), Self::Big(y)) => x.peek().partial_cmp(y.peek()),
+/// The integer variant represents all possible Gold integers.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Trace, Finalize)]
+pub(crate) struct Integer(IntV);
+
+impl PartialOrd<Integer> for Integer {
+    fn partial_cmp(&self, other: &Integer) -> Option<Ordering> {
+        let Self(this) = self;
+        let Self(that) = other;
+        match (this, that) {
+            (IntV::Small(x), IntV::Small(y)) => x.partial_cmp(y),
+            (IntV::Small(x), IntV::Big(y)) => BigInt::from(*x).partial_cmp(y),
+            (IntV::Big(x), IntV::Small(y)) => x.peek().partial_cmp(&BigInt::from(*y)),
+            (IntV::Big(x), IntV::Big(y)) => x.peek().partial_cmp(y.peek()),
         }
     }
 }
 
-impl PartialEq<f64> for IntVariant {
+impl PartialEq<f64> for Integer {
     fn eq(&self, other: &f64) -> bool {
         return self.partial_cmp(other) == Some(Ordering::Equal);
     }
 }
 
-impl PartialOrd<f64> for IntVariant {
+impl PartialOrd<f64> for Integer {
     fn partial_cmp(&self, other: &f64) -> Option<Ordering> {
-        match self {
-            Self::Small(x) => (*x as f64).partial_cmp(other),
-            Self::Big(x) => {
+        let Self(this) = self;
+        match this {
+            IntV::Small(x) => (*x as f64).partial_cmp(other),
+            IntV::Big(x) => {
                 // Unfortunately the bigint library doesn't perform comparison with floats.
                 // Compute the floor and ceil of the float in as bignums
                 let (lo, hi) = f64_to_bigs(*other);
@@ -68,75 +71,79 @@ impl PartialOrd<f64> for IntVariant {
     }
 }
 
-impl From<BigInt> for IntVariant {
+impl From<BigInt> for Integer {
     fn from(value: BigInt) -> Self {
-        Self::Big(Gc::new(WBigInt(value)))
+        Self(IntV::Big(Gc::new(WBigInt(value))))
     }
 }
 
-impl From<i64> for IntVariant {
+impl From<i64> for Integer {
     fn from(x: i64) -> Self {
-        Self::Small(x)
+        Self(IntV::Small(x))
     }
 }
 
-impl From<i32> for IntVariant {
+impl From<i32> for Integer {
     fn from(x: i32) -> Self {
-        Self::Small(x as i64)
+        Self(IntV::Small(x as i64))
     }
 }
 
-impl From<usize> for IntVariant {
+impl From<usize> for Integer {
     fn from(x: usize) -> Self {
         i64::try_from(x)
-            .map(IntVariant::from)
-            .unwrap_or_else(|_| IntVariant::from(BigInt::from(x)))
+            .map(Integer::from)
+            .unwrap_or_else(|_| Integer::from(BigInt::from(x)))
     }
 }
 
-impl TryFrom<&IntVariant> for u32 {
+impl TryFrom<&Integer> for u32 {
     type Error = ();
 
-    fn try_from(value: &IntVariant) -> Result<Self, Self::Error> {
-        match value {
-            IntVariant::Small(x) => Self::try_from(*x).map_err(|_| ()),
-            IntVariant::Big(x) => Self::try_from(x.peek()).map_err(|_| ()),
+    fn try_from(value: &Integer) -> Result<Self, Self::Error> {
+        let Integer(this) = value;
+        match this {
+            IntV::Small(x) => Self::try_from(*x).map_err(|_| ()),
+            IntV::Big(x) => Self::try_from(x.peek()).map_err(|_| ()),
         }
     }
 }
 
-impl TryFrom<&IntVariant> for i64 {
+impl TryFrom<&Integer> for i64 {
     type Error = ();
 
-    fn try_from(value: &IntVariant) -> Result<Self, Self::Error> {
-        match value {
-            IntVariant::Small(x) => Ok(*x),
-            IntVariant::Big(x) => Self::try_from(x.peek()).map_err(|_| ()),
+    fn try_from(value: &Integer) -> Result<Self, Self::Error> {
+        let Integer(this) = value;
+        match this {
+            IntV::Small(x) => Ok(*x),
+            IntV::Big(x) => Self::try_from(x.peek()).map_err(|_| ()),
         }
     }
 }
 
-impl TryFrom<&IntVariant> for usize {
+impl TryFrom<&Integer> for usize {
     type Error = ();
 
-    fn try_from(value: &IntVariant) -> Result<Self, Self::Error> {
-        match value {
-            IntVariant::Small(x) => Self::try_from(*x).map_err(|_| ()),
-            IntVariant::Big(x) => Self::try_from(x.peek()).map_err(|_| ()),
+    fn try_from(value: &Integer) -> Result<Self, Self::Error> {
+        let Integer(this) = value;
+        match this {
+            IntV::Small(x) => Self::try_from(*x).map_err(|_| ()),
+            IntV::Big(x) => Self::try_from(x.peek()).map_err(|_| ()),
         }
     }
 }
 
-impl Display for IntVariant {
+impl Display for Integer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Small(r) => f.write_fmt(format_args!("{}", r)),
-            Self::Big(r) => f.write_fmt(format_args!("{}", r.peek())),
+        let Self(this) = self;
+        match this {
+            IntV::Small(r) => f.write_fmt(format_args!("{}", r)),
+            IntV::Big(r) => f.write_fmt(format_args!("{}", r.peek())),
         }
     }
 }
 
-impl Step for IntVariant {
+impl Step for Integer {
     fn steps_between(start: &Self, end: &Self) -> Option<usize> {
         usize::try_from(&end.sub(start)).ok()
     }
@@ -150,24 +157,24 @@ impl Step for IntVariant {
     }
 }
 
-impl IntVariant {
+impl Integer {
     /// Sum of two integers. This implements the addition operator.
-    pub fn add(&self, other: &IntVariant) -> IntVariant {
-        IntVariant::normalize(&self.operate(other, i64::checked_add, |x, y| x + y))
+    pub fn add(&self, other: &Self) -> Self {
+        Self::normalize(&self.operate(other, i64::checked_add, |x, y| x + y))
     }
 
     /// Difference of two integers. This implements the subtraaction operator.
-    pub fn sub(&self, other: &IntVariant) -> IntVariant {
-        IntVariant::normalize(&self.operate(other, i64::checked_sub, |x, y| x - y))
+    pub fn sub(&self, other: &Self) -> Self {
+        Self::normalize(&self.operate(other, i64::checked_sub, |x, y| x - y))
     }
 
     /// Product of two integers. This implements the multiplication operator.
-    pub fn mul(&self, other: &IntVariant) -> IntVariant {
-        IntVariant::normalize(&self.operate(other, i64::checked_mul, |x, y| x * y))
+    pub fn mul(&self, other: &Self) -> Self {
+        Self::normalize(&self.operate(other, i64::checked_mul, |x, y| x * y))
     }
 
     /// Mathematical ratio of two integers. This implements the division operator.
-    pub fn div(&self, other: &IntVariant) -> f64 {
+    pub fn div(&self, other: &Self) -> f64 {
         self.operate(
             other,
             |x, y| Some((x as f64) / (y as f64)),
@@ -176,8 +183,8 @@ impl IntVariant {
     }
 
     /// Integer division.
-    pub fn idiv(&self, other: &IntVariant) -> IntVariant {
-        IntVariant::normalize(&self.operate(other, i64::checked_div, |x, y| x / y))
+    pub fn idiv(&self, other: &Self) -> Self {
+        Self::normalize(&self.operate(other, i64::checked_div, |x, y| x / y))
     }
 
     /// Universal utility method for implementing operators.
@@ -191,41 +198,46 @@ impl IntVariant {
     /// responsibility of the caller.
     fn operate<S, T, U>(
         &self,
-        other: &IntVariant,
+        other: &Integer,
         ixi: impl Fn(i64, i64) -> Option<S>,
         bxb: impl Fn(&BigInt, &BigInt) -> T,
     ) -> U
     where
         U: From<S> + From<T>,
     {
-        match (self, other) {
-            (Self::Small(xx), Self::Small(yy)) => ixi(*xx, *yy)
+        let Self(this) = self;
+        let Self(that) = other;
+        match (this, that) {
+            (IntV::Small(xx), IntV::Small(yy)) => ixi(*xx, *yy)
                 .map(U::from)
                 .unwrap_or_else(|| U::from(bxb(&BigInt::from(*xx), &BigInt::from(*yy)))),
-            (Self::Small(xx), Self::Big(yy)) => U::from(bxb(&BigInt::from(*xx), yy.peek())),
-            (Self::Big(xx), Self::Small(yy)) => U::from(bxb(xx.peek(), &BigInt::from(*yy))),
-            (Self::Big(xx), Self::Big(yy)) => U::from(bxb(xx.peek(), yy.peek())),
+            (IntV::Small(xx), IntV::Big(yy)) => U::from(bxb(&BigInt::from(*xx), yy.peek())),
+            (IntV::Big(xx), IntV::Small(yy)) => U::from(bxb(xx.peek(), &BigInt::from(*yy))),
+            (IntV::Big(xx), IntV::Big(yy)) => U::from(bxb(xx.peek(), yy.peek())),
         }
     }
 
     /// Unary (mathematical) negation.
-    pub fn neg(&self) -> IntVariant {
-        match self {
-            Self::Small(x) => {
+    pub fn neg(&self) -> Self {
+        let Self(this) = self;
+        match this {
+            IntV::Small(x) => {
                 if let Some(y) = x.checked_neg() {
-                    Self::Small(y)
+                    Self::from(y)
                 } else {
                     Self::from(-BigInt::from(*x)).normalize()
                 }
             }
-            Self::Big(x) => Self::from(-x.peek()).normalize(),
+            IntV::Big(x) => Self::from(-x.peek()).normalize(),
         }
     }
 
     /// Attempt 'small' exponentiation: if the exponent fits into `usize` and
     /// the result fits into `i64`.
-    fn small_pow(&self, other: &IntVariant) -> Option<IntVariant> {
-        if let (Self::Small(x), Self::Small(y)) = (self, other) {
+    fn small_pow(&self, other: &Self) -> Option<Self> {
+        let Self(this) = self;
+        let Self(that) = other;
+        if let (IntV::Small(x), IntV::Small(y)) = (this, that) {
             let yy: usize = (*y).try_into().ok()?;
             checked_pow(*x, yy).map(Self::from)
         } else {
@@ -235,31 +247,34 @@ impl IntVariant {
 
     /// Attempt 'medium' exponentiation: if the exponent fits into `u32`.
     /// This uses the `BigInt::pow` method.
-    fn medium_pow(&self, other: &IntVariant) -> Option<IntVariant> {
+    fn medium_pow(&self, other: &Self) -> Option<Self> {
         let yy: u32 = other.try_into().ok()?;
-
-        match self {
-            Self::Big(x) => Some(Self::from(x.pow(yy))),
-            Self::Small(x) => Some(Self::from(BigInt::from(*x).pow(yy))),
+        let Self(this) = self;
+        match this {
+            IntV::Big(x) => Some(Self::from(x.pow(yy))),
+            IntV::Small(x) => Some(Self::from(BigInt::from(*x).pow(yy))),
         }
     }
 
     /// Attempt 'large' exponentiation: brute force multiplication of bignums.
     /// Almost certainly pointless if `medium_pow` fails, but included for
     /// completeness.
-    fn big_pow(&self, other: &IntVariant) -> Option<IntVariant> {
-        if other.eq(&IntVariant::from(0)) {
-            return Some(IntVariant::from(1));
+    fn big_pow(&self, other: &Self) -> Option<Self> {
+        if other.eq(&Self::from(0)) {
+            return Some(Self::from(1));
         }
 
-        let mut exp = match other {
-            Self::Small(x) => BigUint::try_from(*x).ok()?,
-            Self::Big(x) => BigUint::try_from(x.peek().clone()).ok()?,
+        let Self(this) = self;
+        let Self(that) = other;
+
+        let mut exp = match that {
+            IntV::Small(x) => BigUint::try_from(*x).ok()?,
+            IntV::Big(x) => BigUint::try_from(x.peek().clone()).ok()?,
         };
 
-        let mut base = match self {
-            Self::Small(x) => BigInt::from(*x),
-            Self::Big(x) => x.peek().clone(),
+        let mut base = match this {
+            IntV::Small(x) => BigInt::from(*x),
+            IntV::Big(x) => x.peek().clone(),
         };
 
         let one = BigUint::from(1u8);
@@ -271,7 +286,7 @@ impl IntVariant {
         }
 
         if exp == one {
-            return Some(IntVariant::from(base));
+            return Some(Integer::from(base));
         }
 
         let mut acc = base.clone();
@@ -283,13 +298,13 @@ impl IntVariant {
             }
         }
 
-        Some(IntVariant::from(acc))
+        Some(Self::from(acc))
     }
 
     /// Attempt exponentiation. This will try, in order, three different
     /// algorithms, from fast for small numbers to slow for large numbers.
     /// Should only return None if the exponent is negative.
-    pub fn pow(&self, other: &IntVariant) -> Option<IntVariant> {
+    pub fn pow(&self, other: &Integer) -> Option<Integer> {
         self.small_pow(other)
             .or_else(|| self.medium_pow(other))
             .or_else(|| self.big_pow(other))
@@ -298,11 +313,12 @@ impl IntVariant {
 
     /// Normalize self by converting bignums to machine integers when possible.
     /// Used as a postprocesssing step for most arithmetic operations.
-    pub fn normalize(&self) -> IntVariant {
-        if let Self::Big(x) = &self {
+    pub fn normalize(&self) -> Self {
+        let Self(this) = self;
+        if let IntV::Big(x) = this {
             x.peek()
                 .to_i64()
-                .map(IntVariant::Small)
+                .map(Self::from)
                 .unwrap_or_else(|| self.clone())
         } else {
             self.clone()
@@ -311,17 +327,19 @@ impl IntVariant {
 
     /// Convert to a float.
     pub fn to_f64(&self) -> f64 {
-        match self {
-            Self::Small(x) => *x as f64,
-            Self::Big(x) => big_to_f64(x.as_ref()),
+        let Self(this) = self;
+        match this {
+            IntV::Small(x) => *x as f64,
+            IntV::Big(x) => big_to_f64(x.as_ref()),
         }
     }
 
     /// Return true if this number is nonzero.
     pub fn nonzero(&self) -> bool {
-        match self {
-            Self::Small(x) => *x != 0,
-            Self::Big(x) => x.peek() != &BigInt::from(0),
+        let Self(this) = self;
+        match this {
+            IntV::Small(x) => *x != 0,
+            IntV::Big(x) => x.peek() != &BigInt::from(0),
         }
     }
 
@@ -329,34 +347,39 @@ impl IntVariant {
     /// and machine integers, even though it should be impossible to create two
     /// distinct representations of the same number, as all arithmetic uses
     /// [`IntVariant::normalize`] as a postprocessing step.
-    pub fn user_eq(&self, other: &IntVariant) -> bool {
-        match (self, other) {
-            (Self::Small(x), Self::Small(y)) => x.eq(y),
-            (Self::Small(x), Self::Big(y)) => y.peek().eq(&BigInt::from(*x)),
-            (Self::Big(x), Self::Small(y)) => x.peek().eq(&BigInt::from(*y)),
-            (Self::Big(x), Self::Big(y)) => x.eq(y),
+    pub fn user_eq(&self, other: &Integer) -> bool {
+        let Self(this) = self;
+        let Self(that) = other;
+
+        match (this, that) {
+            (IntV::Small(x), IntV::Small(y)) => x.eq(y),
+            (IntV::Small(x), IntV::Big(y)) => y.peek().eq(&BigInt::from(*x)),
+            (IntV::Big(x), IntV::Small(y)) => x.peek().eq(&BigInt::from(*y)),
+            (IntV::Big(x), IntV::Big(y)) => x.eq(y),
         }
     }
 
     pub fn format(&self, spec: &IntegerFormatSpec) -> Result<String, Error> {
-        let base = match (spec.fmt_type, self) {
+        let Self(this) = self;
+
+        let base = match (spec.fmt_type, this) {
             (IntegerFormatType::Character, _) => {
                 let codepoint = u32::try_from(self).map_err(|_| Error::new(Value::OutOfRange))?;
                 let c = char::try_from(codepoint).map_err(|_| Error::new(Value::OutOfRange))?;
                 return Ok(c.to_string());
             }
-            (IntegerFormatType::Binary, Self::Small(x)) => format!("{:+b}", x),
-            (IntegerFormatType::Binary, Self::Big(x)) => format!("{:+b}", x.peek()),
-            (IntegerFormatType::Decimal, Self::Small(x)) => format!("{:+}", x),
-            (IntegerFormatType::Decimal, Self::Big(x)) => format!("{:+}", x.peek()),
-            (IntegerFormatType::Octal, Self::Small(x)) => format!("{:+o}", x),
-            (IntegerFormatType::Octal, Self::Big(x)) => format!("{:+o}", x.peek()),
-            (IntegerFormatType::Hex(UppercaseSpec::Lower), Self::Small(x)) => format!("{:+x}", x),
-            (IntegerFormatType::Hex(UppercaseSpec::Lower), Self::Big(x)) => {
+            (IntegerFormatType::Binary, IntV::Small(x)) => format!("{:+b}", x),
+            (IntegerFormatType::Binary, IntV::Big(x)) => format!("{:+b}", x.peek()),
+            (IntegerFormatType::Decimal, IntV::Small(x)) => format!("{:+}", x),
+            (IntegerFormatType::Decimal, IntV::Big(x)) => format!("{:+}", x.peek()),
+            (IntegerFormatType::Octal, IntV::Small(x)) => format!("{:+o}", x),
+            (IntegerFormatType::Octal, IntV::Big(x)) => format!("{:+o}", x.peek()),
+            (IntegerFormatType::Hex(UppercaseSpec::Lower), IntV::Small(x)) => format!("{:+x}", x),
+            (IntegerFormatType::Hex(UppercaseSpec::Lower), IntV::Big(x)) => {
                 format!("{:+x}", x.peek())
             }
-            (IntegerFormatType::Hex(UppercaseSpec::Upper), Self::Small(x)) => format!("{:+X}", x),
-            (IntegerFormatType::Hex(UppercaseSpec::Upper), Self::Big(x)) => {
+            (IntegerFormatType::Hex(UppercaseSpec::Upper), IntV::Small(x)) => format!("{:+X}", x),
+            (IntegerFormatType::Hex(UppercaseSpec::Upper), IntV::Big(x)) => {
                 format!("{:+X}", x.peek())
             }
         };
@@ -364,7 +387,7 @@ impl IntVariant {
         let mut base_digits = &base[1..];
         let mut buffer = String::new();
 
-        match (spec.sign, self < &Self::Small(0)) {
+        match (spec.sign, self < &Self::from(0)) {
             (_, true) => {
                 buffer.push('-');
             }
@@ -468,6 +491,16 @@ fn f64_to_bigs(x: f64) -> (BigInt, BigInt) {
         let b = BigInt::from_str(&s).unwrap();
         let c = b.clone();
         (b, c)
+    }
+}
+
+#[cfg(feature = "python")]
+impl pyo3::IntoPy<pyo3::PyObject> for &Integer {
+    fn into_py(self, py: pyo3::prelude::Python<'_>) -> pyo3::PyObject {
+        match &self.0 {
+            IntV::Small(x) => x.into_py(py),
+            IntV::Big(x) => x.peek().clone().into_py(py),
+        }
     }
 }
 
