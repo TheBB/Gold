@@ -13,7 +13,7 @@ use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 
 use crate::error::{Error, Reason};
 use crate::eval::ImportConfig as GoldImportConfig;
-use crate::object::function::{Closure, FuncVariant};
+use crate::object::function::{NativeClosure, Func};
 use crate::object::ObjV;
 use crate::{Key, List, Map, Object};
 
@@ -43,7 +43,7 @@ pub fn err_to_py(err: Error) -> PyErr {
 /// This type represents all kinds of callable objects.
 #[pyclass(unsendable)]
 #[derive(Clone)]
-pub struct Function(FuncVariant);
+pub struct Function(Func);
 
 #[pymethods]
 impl Function {
@@ -110,7 +110,7 @@ impl<'s> FromPyObject<'s> for Object {
             Ok(Object::null())
         } else if obj.is_callable() {
             let func: Py<PyAny> = obj.into();
-            let closure = Closure(Rc::new(move |args: &List, kwargs: Option<&Map>| {
+            let closure = NativeClosure(Rc::new(move |args: &List, kwargs: Option<&Map>| {
                 let result = Python::with_gil(|py| {
                     let a = PyTuple::new(py, args.iter().map(|x| x.clone().into_py(py)));
                     let b = PyDict::new(py);

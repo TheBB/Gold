@@ -36,7 +36,7 @@ use crate::formatting::FormatSpec;
 use crate::wrappers::GcCell;
 use crate::{ast, Key, List, Map, Type};
 
-use function::FuncVariant;
+use function::Func;
 use integer::Int;
 use string::Str;
 
@@ -70,7 +70,7 @@ pub(crate) enum ObjV {
     Map(Gc<GcCell<Map>>),
 
     /// Functions
-    Func(FuncVariant),
+    Func(Func),
 
     /// Iterator
     ListIter(Gc<GcCell<usize>>, Gc<GcCell<List>>),
@@ -324,10 +324,7 @@ impl Object {
     }
 
     pub(crate) fn closure(val: Function) -> Self {
-        Self(ObjV::Func(FuncVariant::Func(
-            Gc::new(val),
-            Gc::new(GcCell::new(vec![])),
-        )))
+        Self(ObjV::Func(Func::closure(val)))
     }
 
     /// Construct a string directly from an interned symbol.
@@ -379,9 +376,9 @@ impl Object {
     /// Construct a function.
     pub(crate) fn func<T>(val: T) -> Self
     where
-        FuncVariant: From<T>,
+        Func: From<T>,
     {
-        Self(ObjV::Func(FuncVariant::from(val)))
+        Self(ObjV::Func(Func::from(val)))
     }
 
     /// Construct a list.
@@ -604,7 +601,7 @@ impl Object {
     }
 
     /// Extract the function variant if applicable.
-    pub(crate) fn get_func_variant<'a>(&'a self) -> Option<&'a FuncVariant> {
+    pub(crate) fn get_func_variant<'a>(&'a self) -> Option<&'a Func> {
         match &self.0 {
             ObjV::Func(func) => Some(func),
             _ => None,
@@ -620,7 +617,7 @@ impl Object {
     }
 
     /// Extract the function variant if applicable.
-    pub(crate) fn get_func(&self) -> Option<&FuncVariant> {
+    pub(crate) fn get_func(&self) -> Option<&Func> {
         match &self.0 {
             ObjV::Func(x) => Some(x),
             _ => None,
@@ -642,6 +639,22 @@ impl Object {
         match &self.0 {
             ObjV::Null => true,
             _ => false,
+        }
+    }
+
+    pub(crate) fn native_callable(&self) -> Option<&dyn Fn(&List, Option<&Map>) -> Result<Object, Error>> {
+        let Self(this) = self;
+        match this {
+            ObjV::Func(func) => func.native_callable(),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn get_closure(&self) -> Option<(Gc<Function>, Gc<GcCell<Vec<Gc<GcCell<Object>>>>>)> {
+        let Self(this) = self;
+        match this {
+            ObjV::Func(func) => func.get_closure(),
+            _ => None,
         }
     }
 
@@ -786,11 +799,7 @@ impl Object {
     pub(crate) fn push_to_closure(&self, other: Gc<GcCell<Object>>) -> Result<(), Error> {
         let Self(this) = self;
         match this {
-            ObjV::Func(FuncVariant::Func(_, enclosed)) => {
-                let mut e = enclosed.borrow_mut();
-                e.push(other);
-                Ok(())
-            }
+            ObjV::Func(func) => func.push_to_closure(other),
             _ => Err(Error::new(Reason::None)),
         }
     }

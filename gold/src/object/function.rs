@@ -10,7 +10,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use super::{Key, List, Map, Object};
 use crate::builtins::BUILTINS;
 use crate::compile::Function;
-use crate::error::Error;
+use crate::error::{Error, Reason};
 use crate::eval::Vm;
 use crate::wrappers::GcCell;
 use crate::ImportConfig;
@@ -28,7 +28,6 @@ pub(crate) struct Builtin {
 }
 
 // Custom serialization and deserialization logic.
-
 impl Serialize for Builtin {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.name.as_str())
@@ -65,68 +64,103 @@ impl<'a> Deserialize<'a> for Builtin {
 /// necessary for implementing Gold-callable functions in other languages like
 /// Python. This also makes them inherently non-serializable.
 #[derive(Clone)]
-pub(crate) struct Closure(pub(crate) Rc<dyn Fn(&List, Option<&Map>) -> Result<Object, Error>>);
+pub(crate) struct NativeClosure(pub(crate) Rc<dyn Fn(&List, Option<&Map>) -> Result<Object, Error>>);
 
-/// The function variant represents all possible forms of callable objects in
-/// Gold.
 #[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
-pub(crate) enum FuncVariant {
-    /// Function implemented in Gold.
-    Func(Gc<Function>, Gc<GcCell<Vec<Gc<GcCell<Object>>>>>),
-
-    /// Static (serializable) function implemented in Rust.
+enum FuncV {
+    Closure(Gc<Function>, Gc<GcCell<Vec<Gc<GcCell<Object>>>>>),
     Builtin(#[unsafe_ignore_trace] Builtin),
 
-    /// Dynamic (unserializable) function implemented in Rust.
     #[serde(skip)]
-    Closure(#[unsafe_ignore_trace] Closure),
+    NativeClosure(#[unsafe_ignore_trace] NativeClosure),
 }
 
-impl Debug for FuncVariant {
+impl Debug for FuncV {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Func(x, e) => f
-                .debug_tuple("FuncVariant::Func")
+            Self::Closure(x, e) => f
+                .debug_tuple("Func::Closure")
                 .field(x)
                 .field(e)
                 .finish(),
-            Self::Builtin(_) => f.debug_tuple("FuncVariant::Builtin").finish(),
-            Self::Closure(_) => f.debug_tuple("FuncVariant::Closure").finish(),
+            Self::Builtin(b) => f.debug_tuple("Func::Builtin").field(&b.name).finish(),
+            Self::NativeClosure(_) => f.debug_tuple("Func::NativeClosure").finish(),
         }
     }
 }
 
-impl From<Builtin> for FuncVariant {
+/// The function variant represents all possible forms of callable objects in
+/// Gold.
+#[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
+pub(crate) struct Func(FuncV);
+
+impl From<Builtin> for Func {
     fn from(value: Builtin) -> Self {
-        FuncVariant::Builtin(value)
+        Self(FuncV::Builtin(value))
     }
 }
 
-impl From<Closure> for FuncVariant {
-    fn from(value: Closure) -> Self {
-        FuncVariant::Closure(value)
+impl From<NativeClosure> for Func {
+    fn from(value: NativeClosure) -> Self {
+        Self(FuncV::NativeClosure(value))
     }
 }
 
-impl FuncVariant {
+impl Func {
+    pub fn closure(val: Function) -> Self {
+        Self(FuncV::Closure(Gc::new(val), Gc::new(GcCell::new(vec![]))))
+    }
+
     /// All functions in Gold compare different to each other except built-ins.
-    pub fn user_eq(&self, other: &FuncVariant) -> bool {
-        match (self, other) {
-            (FuncVariant::Builtin(x), FuncVariant::Builtin(y)) => x.name == y.name,
+    pub fn user_eq(&self, other: &Func) -> bool {
+        let Self(this) = self;
+        let Self(that) = other;
+        match (this, that) {
+            (FuncV::Builtin(x), FuncV::Builtin(y)) => x.name == y.name,
             _ => false,
         }
     }
 
     /// The function call operator.
     pub(crate) fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
-        match self {
-            FuncVariant::Closure(Closure(f)) => f(args, kwargs),
-            FuncVariant::Builtin(Builtin { func: f, .. }) => f(args, kwargs),
-            FuncVariant::Func(f, e) => {
+        let Self(this) = self;
+        match this {
+            FuncV::NativeClosure(NativeClosure(f)) => f(args, kwargs),
+            FuncV::Builtin(Builtin { func: f, .. }) => f(args, kwargs),
+            FuncV::Closure(f, e) => {
                 let importer = ImportConfig::default();
                 let mut vm = Vm::new(&importer);
                 vm.eval_with_args(f.as_ref().clone(), e.clone(), args, kwargs)
             }
+        }
+    }
+
+    pub(crate) fn push_to_closure(&self, other: Gc<GcCell<Object>>) -> Result<(), Error> {
+        let Self(this) = self;
+        match this {
+            FuncV::Closure(_, enclosed) => {
+                let mut e = enclosed.borrow_mut();
+                e.push(other);
+                Ok(())
+            }
+            _ => Err(Error::new(Reason::None)),
+        }
+    }
+
+    pub(crate) fn native_callable(&self) -> Option<&dyn Fn(&List, Option<&Map>) -> Result<Object, Error>> {
+        let Self(this) = self;
+        match this {
+            FuncV::NativeClosure(closure) => Some(closure.0.as_ref()),
+            FuncV::Builtin(Builtin { func, .. }) => Some(func),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn get_closure(&self) -> Option<(Gc<Function>, Gc<GcCell<Vec<Gc<GcCell<Object>>>>>)> {
+        let Self(this) = self;
+        match this {
+            FuncV::Closure(f, e) => Some((f.clone(), e.clone())),
+            _ => None,
         }
     }
 }

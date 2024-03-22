@@ -8,7 +8,6 @@ use crate::ast::*;
 use crate::builtins::BUILTINS;
 use crate::compile::{Function, Instruction};
 use crate::error::{BindingType, Error, Reason, TypeMismatch, Unpack};
-use crate::object::function::{Builtin, Closure, FuncVariant};
 use crate::wrappers::GcCell;
 use crate::{eval_file, eval_raw as eval_str};
 use crate::{List, Map, Object, Type};
@@ -289,33 +288,18 @@ impl<'a> Vm<'a> {
                     let kwargs = self.pop();
                     let func = self.pop();
 
-                    match func.get_func_variant() {
-                        Some(FuncVariant::Closure(Closure(f))) => {
-                            let x = args.get_list().ok_or_else(|| Error::new(Reason::None))?;
-                            let y = kwargs.get_map().ok_or_else(|| Error::new(Reason::None))?;
-                            let result =
-                                f(&x, Some(&y)).map_err(|e| e.with_locations(self.err()))?;
-                            self.push(result);
-                        }
-
-                        Some(FuncVariant::Builtin(Builtin { func: f, .. })) => {
-                            let x = args.get_list().ok_or_else(|| Error::new(Reason::None))?;
-                            let y = kwargs.get_map().ok_or_else(|| Error::new(Reason::None))?;
-                            let result =
-                                f(&x, Some(&y)).map_err(|e| e.with_locations(self.err()))?;
-                            self.push(result);
-                        }
-
-                        Some(FuncVariant::Func(f, e)) => {
-                            self.frames.push(Frame::new(f.as_ref().clone(), e.clone()));
-                            self.fp += 1;
-                            self.push(kwargs);
-                            self.push(args);
-                        }
-
-                        None => {
-                            return Err(self.err().with_reason(TypeMismatch::Call(func.type_of())))
-                        }
+                    if let Some(f) = func.native_callable() {
+                        let x = args.get_list().ok_or_else(|| Error::new(Reason::None))?;
+                        let y = kwargs.get_map().ok_or_else(|| Error::new(Reason::None))?;
+                        let result = f(&x, Some(&y)).map_err(|e| e.with_locations(self.err()))?;
+                        self.push(result);
+                    } else if let Some((f, e)) = func.get_closure() {
+                        self.frames.push(Frame::new(f.as_ref().clone(), e.clone()));
+                        self.fp += 1;
+                        self.push(kwargs);
+                        self.push(args);
+                    } else {
+                        return Err(self.err().with_reason(TypeMismatch::Call(func.type_of())))
                     }
                 }
 
