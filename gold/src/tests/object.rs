@@ -44,44 +44,44 @@ fn to_string() {
 #[test]
 fn format() {
     assert_eq!(
-        Object::str("alpha").format(Default::default()),
+        Object::str("alpha").format(&Default::default()),
         Ok("alpha".to_string())
     );
     assert_eq!(
-        Object::str("\"alpha\"").format(Default::default()),
+        Object::str("\"alpha\"").format(&Default::default()),
         Ok("\"alpha\"".to_string())
     );
     assert_eq!(
-        Object::str("\"al\\pha\"").format(Default::default()),
+        Object::str("\"al\\pha\"").format(&Default::default()),
         Ok("\"al\\pha\"".to_string())
     );
     assert_eq!(
-        Object::bool(true).format(Default::default()),
+        Object::bool(true).format(&Default::default()),
         Ok("true".to_string())
     );
     assert_eq!(
-        Object::bool(false).format(Default::default()),
+        Object::bool(false).format(&Default::default()),
         Ok("false".to_string())
     );
     assert_eq!(
-        Object::null().format(Default::default()),
+        Object::null().format(&Default::default()),
         Ok("null".to_string())
     );
     assert_eq!(
-        Object::int(0).format(Default::default()),
+        Object::int(0).format(&Default::default()),
         Ok("0".to_string())
     );
     assert_eq!(
-        Object::int(-2).format(Default::default()),
+        Object::int(-2).format(&Default::default()),
         Ok("-2".to_string())
     );
     assert_eq!(
-        Object::int(5).format(Default::default()),
+        Object::int(5).format(&Default::default()),
         Ok("5".to_string())
     );
 
     assert_eq!(
-        Object::str("dong").format(FormatSpec {
+        Object::str("dong").format(&FormatSpec {
             fill: ' ',
             width: Some(10),
             ..Default::default()
@@ -90,7 +90,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::str("dong").format(FormatSpec {
+        Object::str("dong").format(&FormatSpec {
             fill: ' ',
             width: Some(2),
             ..Default::default()
@@ -99,7 +99,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::str("dong").format(FormatSpec {
+        Object::str("dong").format(&FormatSpec {
             fill: ' ',
             width: Some(12),
             align: Some(AlignSpec::left()),
@@ -109,7 +109,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::str("dong").format(FormatSpec {
+        Object::str("dong").format(&FormatSpec {
             fill: ' ',
             width: Some(8),
             align: Some(AlignSpec::right()),
@@ -119,7 +119,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::str("dong").format(FormatSpec {
+        Object::str("dong").format(&FormatSpec {
             fill: ' ',
             width: Some(8),
             align: Some(AlignSpec::center()),
@@ -129,7 +129,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::str("dong").format(FormatSpec {
+        Object::str("dong").format(&FormatSpec {
             fill: ' ',
             width: Some(7),
             align: Some(AlignSpec::center()),
@@ -139,7 +139,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::str("dong").format(FormatSpec {
+        Object::str("dong").format(&FormatSpec {
             fill: '~',
             width: Some(8),
             align: Some(AlignSpec::center()),
@@ -149,7 +149,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::bool(true).format(FormatSpec {
+        Object::bool(true).format(&FormatSpec {
             fill: '~',
             width: Some(8),
             align: Some(AlignSpec::center()),
@@ -159,7 +159,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::bool(false).format(FormatSpec {
+        Object::bool(false).format(&FormatSpec {
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Decimal)),
             ..Default::default()
         }),
@@ -167,7 +167,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::bool(true).format(FormatSpec {
+        Object::bool(true).format(&FormatSpec {
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Decimal)),
             ..Default::default()
         }),
@@ -175,7 +175,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::bool(false).format(FormatSpec {
+        Object::bool(false).format(&FormatSpec {
             fill: ' ',
             width: Some(6),
             align: Some(AlignSpec::right()),
@@ -185,7 +185,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::null().format(FormatSpec {
+        Object::null().format(&FormatSpec {
             fill: ' ',
             width: Some(6),
             align: Some(AlignSpec::center()),
@@ -195,7 +195,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(0).format(FormatSpec {
+        Object::int(0).format(&FormatSpec {
             sign: Some(SignSpec::Plus),
             ..Default::default()
         }),
@@ -203,7 +203,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(15).format(FormatSpec {
+        Object::int(15).format(&FormatSpec {
             sign: Some(SignSpec::Space),
             ..Default::default()
         }),
@@ -211,7 +211,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(11).format(FormatSpec {
+        Object::int(11).format(&FormatSpec {
             sign: Some(SignSpec::Minus),
             ..Default::default()
         }),
@@ -219,7 +219,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(-1).format(FormatSpec {
+        Object::int(-1).format(&FormatSpec {
             sign: Some(SignSpec::Plus),
             ..Default::default()
         }),
@@ -227,7 +227,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(-13).format(FormatSpec {
+        Object::int(-13).format(&FormatSpec {
             sign: Some(SignSpec::Space),
             ..Default::default()
         }),
@@ -235,7 +235,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(-10).format(FormatSpec {
+        Object::int(-10).format(&FormatSpec {
             sign: Some(SignSpec::Minus),
             ..Default::default()
         }),
@@ -243,7 +243,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(15).format(FormatSpec {
+        Object::int(15).format(&FormatSpec {
             align: Some(AlignSpec::left()),
             width: Some(10),
             ..Default::default()
@@ -252,7 +252,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(15).format(FormatSpec {
+        Object::int(15).format(&FormatSpec {
             align: Some(AlignSpec::center()),
             width: Some(10),
             ..Default::default()
@@ -261,7 +261,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(15).format(FormatSpec {
+        Object::int(15).format(&FormatSpec {
             align: Some(AlignSpec::right()),
             width: Some(10),
             ..Default::default()
@@ -270,7 +270,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(-15).format(FormatSpec {
+        Object::int(-15).format(&FormatSpec {
             align: Some(AlignSpec::left()),
             width: Some(10),
             ..Default::default()
@@ -279,7 +279,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(-15).format(FormatSpec {
+        Object::int(-15).format(&FormatSpec {
             align: Some(AlignSpec::center()),
             width: Some(10),
             ..Default::default()
@@ -288,7 +288,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(-15).format(FormatSpec {
+        Object::int(-15).format(&FormatSpec {
             align: Some(AlignSpec::right()),
             width: Some(10),
             ..Default::default()
@@ -297,7 +297,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(-15).format(FormatSpec {
+        Object::int(-15).format(&FormatSpec {
             align: Some(AlignSpec::AfterSign),
             width: Some(10),
             ..Default::default()
@@ -306,7 +306,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(15).format(FormatSpec {
+        Object::int(15).format(&FormatSpec {
             align: Some(AlignSpec::AfterSign),
             width: Some(10),
             ..Default::default()
@@ -315,7 +315,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(23).format(FormatSpec {
+        Object::int(23).format(&FormatSpec {
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Decimal)),
             ..Default::default()
         }),
@@ -323,7 +323,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(23).format(FormatSpec {
+        Object::int(23).format(&FormatSpec {
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Binary)),
             ..Default::default()
         }),
@@ -331,7 +331,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(23).format(FormatSpec {
+        Object::int(23).format(&FormatSpec {
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Octal)),
             ..Default::default()
         }),
@@ -339,7 +339,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(42).format(FormatSpec {
+        Object::int(42).format(&FormatSpec {
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
                 UppercaseSpec::Lower
             ))),
@@ -349,7 +349,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(42).format(FormatSpec {
+        Object::int(42).format(&FormatSpec {
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
                 UppercaseSpec::Upper
             ))),
@@ -359,7 +359,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(23).format(FormatSpec {
+        Object::int(23).format(&FormatSpec {
             alternate: true,
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Decimal)),
             ..Default::default()
@@ -368,7 +368,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(23).format(FormatSpec {
+        Object::int(23).format(&FormatSpec {
             alternate: true,
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Binary)),
             ..Default::default()
@@ -377,7 +377,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(23).format(FormatSpec {
+        Object::int(23).format(&FormatSpec {
             alternate: true,
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Octal)),
             ..Default::default()
@@ -386,7 +386,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(42).format(FormatSpec {
+        Object::int(42).format(&FormatSpec {
             alternate: true,
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
                 UppercaseSpec::Lower
@@ -397,7 +397,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(42).format(FormatSpec {
+        Object::int(42).format(&FormatSpec {
             alternate: true,
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
                 UppercaseSpec::Upper
@@ -408,7 +408,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(12738912).format(FormatSpec {
+        Object::int(12738912).format(&FormatSpec {
             grouping: Some(GroupingSpec::Comma),
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Decimal)),
             ..Default::default()
@@ -417,7 +417,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(12738912).format(FormatSpec {
+        Object::int(12738912).format(&FormatSpec {
             grouping: Some(GroupingSpec::Underscore),
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Binary)),
             ..Default::default()
@@ -426,7 +426,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(12738912).format(FormatSpec {
+        Object::int(12738912).format(&FormatSpec {
             grouping: Some(GroupingSpec::Underscore),
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Octal)),
             ..Default::default()
@@ -435,7 +435,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(12738912).format(FormatSpec {
+        Object::int(12738912).format(&FormatSpec {
             grouping: Some(GroupingSpec::Comma),
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
                 UppercaseSpec::Lower
@@ -446,7 +446,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(12738912).format(FormatSpec {
+        Object::int(12738912).format(&FormatSpec {
             width: Some(12),
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
                 UppercaseSpec::Lower
@@ -457,7 +457,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(12738912).format(FormatSpec {
+        Object::int(12738912).format(&FormatSpec {
             sign: Some(SignSpec::Plus),
             width: Some(12),
             fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
@@ -469,7 +469,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(12738912).format(FormatSpec {
+        Object::int(12738912).format(&FormatSpec {
             align: Some(AlignSpec::AfterSign),
             sign: Some(SignSpec::Plus),
             width: Some(12),
@@ -482,7 +482,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(12738912).format(FormatSpec {
+        Object::int(12738912).format(&FormatSpec {
             align: Some(AlignSpec::AfterSign),
             sign: Some(SignSpec::Plus),
             alternate: true,
@@ -496,7 +496,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::int(12738912).format(FormatSpec {
+        Object::int(12738912).format(&FormatSpec {
             align: Some(AlignSpec::AfterSign),
             sign: Some(SignSpec::Plus),
             alternate: true,
@@ -511,7 +511,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(1.234).format(FormatSpec {
+        Object::float(1.234).format(&FormatSpec {
             precision: Some(1),
             ..Default::default()
         }),
@@ -519,7 +519,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(1.234).format(FormatSpec {
+        Object::float(1.234).format(&FormatSpec {
             precision: Some(6),
             ..Default::default()
         }),
@@ -527,7 +527,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(1.234).format(FormatSpec {
+        Object::float(1.234).format(&FormatSpec {
             fmt_type: Some(FormatType::Float(FloatFormatType::Fixed)),
             ..Default::default()
         }),
@@ -535,7 +535,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(1.234).format(FormatSpec {
+        Object::float(1.234).format(&FormatSpec {
             precision: Some(9),
             fmt_type: Some(FormatType::Float(FloatFormatType::Fixed)),
             ..Default::default()
@@ -544,7 +544,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(12.34).format(FormatSpec {
+        Object::float(12.34).format(&FormatSpec {
             precision: Some(5),
             fmt_type: Some(FormatType::Float(FloatFormatType::Sci(
                 UppercaseSpec::Lower
@@ -555,7 +555,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(12.34).format(FormatSpec {
+        Object::float(12.34).format(&FormatSpec {
             fmt_type: Some(FormatType::Float(FloatFormatType::Sci(
                 UppercaseSpec::Upper
             ))),
@@ -565,7 +565,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(12.34).format(FormatSpec {
+        Object::float(12.34).format(&FormatSpec {
             fmt_type: Some(FormatType::Float(FloatFormatType::General)),
             ..Default::default()
         }),
@@ -573,7 +573,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(12.34).format(FormatSpec {
+        Object::float(12.34).format(&FormatSpec {
             align: Some(AlignSpec::AfterSign),
             width: Some(8),
             ..Default::default()
@@ -582,7 +582,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(-12.34).format(FormatSpec {
+        Object::float(-12.34).format(&FormatSpec {
             align: Some(AlignSpec::AfterSign),
             width: Some(8),
             ..Default::default()
@@ -591,7 +591,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(12.34).format(FormatSpec {
+        Object::float(12.34).format(&FormatSpec {
             align: Some(AlignSpec::AfterSign),
             sign: Some(SignSpec::Plus),
             width: Some(8),
@@ -601,7 +601,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(12.34).format(FormatSpec {
+        Object::float(12.34).format(&FormatSpec {
             align: Some(AlignSpec::left()),
             sign: Some(SignSpec::Plus),
             width: Some(8),
@@ -611,7 +611,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(12.34).format(FormatSpec {
+        Object::float(12.34).format(&FormatSpec {
             align: Some(AlignSpec::center()),
             sign: Some(SignSpec::Plus),
             width: Some(8),
@@ -621,7 +621,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(1000000.0).format(FormatSpec {
+        Object::float(1000000.0).format(&FormatSpec {
             grouping: Some(GroupingSpec::Underscore),
             ..Default::default()
         }),
@@ -629,7 +629,7 @@ fn format() {
     );
 
     assert_eq!(
-        Object::float(1000000.0).format(FormatSpec {
+        Object::float(1000000.0).format(&FormatSpec {
             grouping: Some(GroupingSpec::Underscore),
             precision: Some(8),
             ..Default::default()

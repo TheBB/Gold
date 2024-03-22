@@ -379,7 +379,7 @@ impl<'a> Vm<'a> {
                 Instruction::Format(i) => {
                     let obj = self.pop();
                     let result = Object::str(
-                        obj.format(self.cur_frame().function.fmt_specs[i])
+                        obj.format(&self.cur_frame().function.fmt_specs[i])
                             .map_err(|e| e.with_locations(self.err()))?,
                     );
                     self.push(result);

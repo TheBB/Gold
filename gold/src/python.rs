@@ -15,7 +15,7 @@ use crate::error::{Error, Reason};
 use crate::eval::ImportConfig as GoldImportConfig;
 use crate::object::function::{Closure, FuncVariant};
 use crate::object::integer::IntVariant;
-use crate::object::ObjectVariant;
+use crate::object::ObjV;
 use crate::traits::Peek;
 use crate::{Key, List, Map, Object};
 
@@ -140,24 +140,24 @@ impl<'s> FromPyObject<'s> for Object {
 impl pyo3::IntoPy<PyObject> for Object {
     fn into_py(self, py: Python<'_>) -> PyObject {
         match &self.0 {
-            ObjectVariant::Int(IntVariant::Small(x)) => x.into_py(py),
-            ObjectVariant::Int(IntVariant::Big(x)) => x.peek().clone().into_py(py),
-            ObjectVariant::Float(x) => x.into_py(py),
-            ObjectVariant::Str(x) => x.as_str().into_py(py),
-            ObjectVariant::Boolean(x) => x.into_py(py),
-            ObjectVariant::List(x) => {
+            ObjV::Int(IntVariant::Small(x)) => x.into_py(py),
+            ObjV::Int(IntVariant::Big(x)) => x.peek().clone().into_py(py),
+            ObjV::Float(x) => x.into_py(py),
+            ObjV::Str(x) => x.as_str().into_py(py),
+            ObjV::Boolean(x) => x.into_py(py),
+            ObjV::List(x) => {
                 PyList::new(py, x.borrow().iter().map(|x| x.clone().into_py(py))).into()
             }
-            ObjectVariant::Map(x) => {
+            ObjV::Map(x) => {
                 let r = PyDict::new(py);
                 for (k, v) in x.borrow().iter() {
                     r.set_item(k.as_str(), v.clone().into_py(py)).unwrap();
                 }
                 r.into()
             }
-            ObjectVariant::Null => (None as Option<bool>).into_py(py),
-            ObjectVariant::ListIter(_, _) => 1.into_py(py), // TODO
-            ObjectVariant::Func(x) => Function(x.clone()).into_py(py),
+            ObjV::Null => (None as Option<bool>).into_py(py),
+            ObjV::ListIter(_, _) => 1.into_py(py), // TODO
+            ObjV::Func(x) => Function(x.clone()).into_py(py),
         }
     }
 }
