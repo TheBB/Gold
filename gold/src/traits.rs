@@ -119,11 +119,3 @@ where
         ret
     }
 }
-
-// Peek
-// ------------------------------------------------------------------------------------------------
-
-/// Utility trait for unwrapping wrappers
-pub(crate) trait Peek<T> {
-    fn peek(&self) -> &T;
-}

@@ -4,28 +4,26 @@ use std::cmp::Ordering;
 use std::fmt::Display;
 use std::iter::Step;
 use std::str::FromStr;
+use std::rc::Rc;
 
-use gc::{Finalize, Gc, Trace};
 use num_bigint::{BigInt, BigUint};
 use num_traits::{checked_pow, ToPrimitive};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Value};
-use crate::traits::Peek;
-use crate::wrappers::WBigInt;
 
 use crate::formatting::{
     AlignSpec, GroupingSpec, IntegerFormatSpec, IntegerFormatType, SignSpec, UppercaseSpec,
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Trace, Finalize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 enum IntV {
     Small(i64),
-    Big(Gc<WBigInt>),
+    Big(Rc<BigInt>),
 }
 
 /// The integer variant represents all possible Gold integers.
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Trace, Finalize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub(crate) struct Int(IntV);
 
 impl PartialOrd<Int> for Int {
@@ -35,8 +33,8 @@ impl PartialOrd<Int> for Int {
         match (this, that) {
             (IntV::Small(x), IntV::Small(y)) => x.partial_cmp(y),
             (IntV::Small(x), IntV::Big(y)) => BigInt::from(*x).partial_cmp(y),
-            (IntV::Big(x), IntV::Small(y)) => x.peek().partial_cmp(&BigInt::from(*y)),
-            (IntV::Big(x), IntV::Big(y)) => x.peek().partial_cmp(y.peek()),
+            (IntV::Big(x), IntV::Small(y)) => x.as_ref().partial_cmp(&BigInt::from(*y)),
+            (IntV::Big(x), IntV::Big(y)) => x.as_ref().partial_cmp(y),
         }
     }
 }
@@ -59,9 +57,9 @@ impl PartialOrd<f64> for Int {
 
                 // A bignum is equal to a float if the floor, ceil and bignum
                 // are all equal to each other.
-                if x.peek() < &lo || x.peek() == &lo && lo != hi {
+                if x.as_ref() < &lo || x.as_ref() == &lo && lo != hi {
                     Some(Ordering::Less)
-                } else if x.peek() > &hi || x.peek() == &hi && lo != hi {
+                } else if x.as_ref() > &hi || x.as_ref() == &hi && lo != hi {
                     Some(Ordering::Greater)
                 } else {
                     Some(Ordering::Equal)
@@ -73,7 +71,7 @@ impl PartialOrd<f64> for Int {
 
 impl From<BigInt> for Int {
     fn from(value: BigInt) -> Self {
-        Self(IntV::Big(Gc::new(WBigInt(value))))
+        Self(IntV::Big(Rc::new(value)))
     }
 }
 
@@ -104,7 +102,7 @@ impl TryFrom<&Int> for u32 {
         let Int(this) = value;
         match this {
             IntV::Small(x) => Self::try_from(*x).map_err(|_| ()),
-            IntV::Big(x) => Self::try_from(x.peek()).map_err(|_| ()),
+            IntV::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
         }
     }
 }
@@ -116,7 +114,7 @@ impl TryFrom<&Int> for i64 {
         let Int(this) = value;
         match this {
             IntV::Small(x) => Ok(*x),
-            IntV::Big(x) => Self::try_from(x.peek()).map_err(|_| ()),
+            IntV::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
         }
     }
 }
@@ -128,7 +126,7 @@ impl TryFrom<&Int> for usize {
         let Int(this) = value;
         match this {
             IntV::Small(x) => Self::try_from(*x).map_err(|_| ()),
-            IntV::Big(x) => Self::try_from(x.peek()).map_err(|_| ()),
+            IntV::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
         }
     }
 }
@@ -138,7 +136,7 @@ impl Display for Int {
         let Self(this) = self;
         match this {
             IntV::Small(r) => f.write_fmt(format_args!("{}", r)),
-            IntV::Big(r) => f.write_fmt(format_args!("{}", r.peek())),
+            IntV::Big(r) => f.write_fmt(format_args!("{}", r)),
         }
     }
 }
@@ -211,9 +209,9 @@ impl Int {
             (IntV::Small(xx), IntV::Small(yy)) => ixi(*xx, *yy)
                 .map(U::from)
                 .unwrap_or_else(|| U::from(bxb(&BigInt::from(*xx), &BigInt::from(*yy)))),
-            (IntV::Small(xx), IntV::Big(yy)) => U::from(bxb(&BigInt::from(*xx), yy.peek())),
-            (IntV::Big(xx), IntV::Small(yy)) => U::from(bxb(xx.peek(), &BigInt::from(*yy))),
-            (IntV::Big(xx), IntV::Big(yy)) => U::from(bxb(xx.peek(), yy.peek())),
+            (IntV::Small(xx), IntV::Big(yy)) => U::from(bxb(&BigInt::from(*xx), yy.as_ref())),
+            (IntV::Big(xx), IntV::Small(yy)) => U::from(bxb(xx.as_ref(), &BigInt::from(*yy))),
+            (IntV::Big(xx), IntV::Big(yy)) => U::from(bxb(xx.as_ref(), yy.as_ref())),
         }
     }
 
@@ -228,7 +226,7 @@ impl Int {
                     Self::from(-BigInt::from(*x)).normalize()
                 }
             }
-            IntV::Big(x) => Self::from(-x.peek()).normalize(),
+            IntV::Big(x) => Self::from(-x.as_ref()).normalize(),
         }
     }
 
@@ -269,12 +267,12 @@ impl Int {
 
         let mut exp = match that {
             IntV::Small(x) => BigUint::try_from(*x).ok()?,
-            IntV::Big(x) => BigUint::try_from(x.peek().clone()).ok()?,
+            IntV::Big(x) => BigUint::try_from(x.as_ref().clone()).ok()?,
         };
 
         let mut base = match this {
             IntV::Small(x) => BigInt::from(*x),
-            IntV::Big(x) => x.peek().clone(),
+            IntV::Big(x) => x.as_ref().clone(),
         };
 
         let one = BigUint::from(1u8);
@@ -316,7 +314,7 @@ impl Int {
     pub fn normalize(&self) -> Self {
         let Self(this) = self;
         if let IntV::Big(x) = this {
-            x.peek()
+            x.as_ref()
                 .to_i64()
                 .map(Self::from)
                 .unwrap_or_else(|| self.clone())
@@ -339,7 +337,7 @@ impl Int {
         let Self(this) = self;
         match this {
             IntV::Small(x) => *x != 0,
-            IntV::Big(x) => x.peek() != &BigInt::from(0),
+            IntV::Big(x) => x.as_ref() != &BigInt::from(0),
         }
     }
 
@@ -353,8 +351,8 @@ impl Int {
 
         match (this, that) {
             (IntV::Small(x), IntV::Small(y)) => x.eq(y),
-            (IntV::Small(x), IntV::Big(y)) => y.peek().eq(&BigInt::from(*x)),
-            (IntV::Big(x), IntV::Small(y)) => x.peek().eq(&BigInt::from(*y)),
+            (IntV::Small(x), IntV::Big(y)) => y.as_ref().eq(&BigInt::from(*x)),
+            (IntV::Big(x), IntV::Small(y)) => x.as_ref().eq(&BigInt::from(*y)),
             (IntV::Big(x), IntV::Big(y)) => x.eq(y),
         }
     }
@@ -369,18 +367,18 @@ impl Int {
                 return Ok(c.to_string());
             }
             (IntegerFormatType::Binary, IntV::Small(x)) => format!("{:+b}", x),
-            (IntegerFormatType::Binary, IntV::Big(x)) => format!("{:+b}", x.peek()),
+            (IntegerFormatType::Binary, IntV::Big(x)) => format!("{:+b}", x.as_ref()),
             (IntegerFormatType::Decimal, IntV::Small(x)) => format!("{:+}", x),
-            (IntegerFormatType::Decimal, IntV::Big(x)) => format!("{:+}", x.peek()),
+            (IntegerFormatType::Decimal, IntV::Big(x)) => format!("{:+}", x.as_ref()),
             (IntegerFormatType::Octal, IntV::Small(x)) => format!("{:+o}", x),
-            (IntegerFormatType::Octal, IntV::Big(x)) => format!("{:+o}", x.peek()),
+            (IntegerFormatType::Octal, IntV::Big(x)) => format!("{:+o}", x.as_ref()),
             (IntegerFormatType::Hex(UppercaseSpec::Lower), IntV::Small(x)) => format!("{:+x}", x),
             (IntegerFormatType::Hex(UppercaseSpec::Lower), IntV::Big(x)) => {
-                format!("{:+x}", x.peek())
+                format!("{:+x}", x.as_ref())
             }
             (IntegerFormatType::Hex(UppercaseSpec::Upper), IntV::Small(x)) => format!("{:+X}", x),
             (IntegerFormatType::Hex(UppercaseSpec::Upper), IntV::Big(x)) => {
-                format!("{:+X}", x.peek())
+                format!("{:+X}", x.as_ref())
             }
         };
 
@@ -499,7 +497,7 @@ impl pyo3::IntoPy<pyo3::PyObject> for &Int {
     fn into_py(self, py: pyo3::prelude::Python<'_>) -> pyo3::PyObject {
         match &self.0 {
             IntV::Small(x) => x.into_py(py),
-            IntV::Big(x) => x.peek().clone().into_py(py),
+            IntV::Big(x) => x.as_ref().clone().into_py(py),
         }
     }
 }

@@ -52,7 +52,7 @@ const SERIALIZE_VERSION: i32 = 1;
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
 pub(crate) enum ObjV {
     /// Integers
-    Int(Int),
+    Int(#[unsafe_ignore_trace] Int),
 
     /// Floating-point numbers
     Float(f64),

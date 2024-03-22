@@ -1,35 +1,8 @@
 use std::hash::Hash;
-use std::ops::Deref;
 
-use gc::{custom_trace, Finalize, Gc, Trace};
+use gc::{custom_trace, Finalize, Trace};
 use indexmap::{map::Iter, IndexMap};
-use num_bigint::BigInt;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-use crate::traits::Peek;
-
-#[derive(Clone, Serialize, Deserialize, PartialEq, PartialOrd, Debug, Trace, Finalize)]
-pub(crate) struct WBigInt(#[unsafe_ignore_trace] pub(crate) BigInt);
-
-impl Peek<BigInt> for Gc<WBigInt> {
-    fn peek(&self) -> &BigInt {
-        &**self
-    }
-}
-
-impl AsRef<BigInt> for WBigInt {
-    fn as_ref(&self) -> &BigInt {
-        &self.0
-    }
-}
-
-impl Deref for WBigInt {
-    type Target = BigInt;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
 
 #[derive(Clone, Debug)]
 pub(crate) struct OrderedMap<K, V>(pub(crate) IndexMap<K, V>);
