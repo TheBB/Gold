@@ -1,6 +1,7 @@
 use core::cmp::Ordering;
 
-use crate::{object::Object, ast::{FormatSpec, AlignSpec, SignSpec, IntegerFormatType, FormatType, UppercaseSpec, GroupingSpec, FloatFormatType}};
+use crate::Object;
+use crate::formatting::{FormatSpec, AlignSpec, SignSpec, IntegerFormatType, FormatType, UppercaseSpec, GroupingSpec, FloatFormatType};
 
 
 #[test]

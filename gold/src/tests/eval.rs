@@ -1,7 +1,7 @@
+use crate::{Type, Object, Key};
 use crate::ast::{BinOp, UnOp};
 use crate::error::{Action, BindingType, Error, Reason, Span, TypeMismatch, Types, Unpack};
 use crate::eval_raw;
-use crate::object::{Object, Key, Type};
 
 
 fn eval(input: &str) -> Result<Object, Error> {

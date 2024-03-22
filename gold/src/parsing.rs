@@ -13,10 +13,11 @@ use nom::{
     sequence::{delimited, preceded, terminated, tuple},
 };
 
+use crate::{Object, Key};
 use crate::ast::*;
 use crate::error::{Error, Span, Tagged, Syntax, SyntaxError, SyntaxElement};
+use crate::formatting::{AlignSpec, FloatFormatType, FormatSpec, FormatType, GroupingSpec, IntegerFormatType, SignSpec, StringAlignSpec, UppercaseSpec};
 use crate::lexing::{Lexer, TokenType, CachedLexer, CachedLexResult};
-use crate::object::{Object, Key};
 use crate::traits::{Boxable, Taggable, Validatable};
 
 

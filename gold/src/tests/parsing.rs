@@ -1,7 +1,8 @@
+use crate::{Object, Key};
 use crate::ast::*;
 use crate::error::{Span, Tagged, Error, Reason, Syntax, SyntaxElement as S, Action};
+use crate::formatting::{AlignSpec, FormatSpec, FormatType, GroupingSpec, SignSpec, StringAlignSpec};
 use crate::lexing::TokenType as T;
-use crate::object::{Object, Key};
 use crate::parsing::parse as parse_file;
 use crate::traits::{Boxable, Taggable};
 

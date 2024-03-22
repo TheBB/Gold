@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::compile::{Compiler, Function};
 use crate::error::{BindingType, Span, Syntax};
-use crate::object::{StringFormatSpec, IntegerFormatSpec, FloatFormatSpec};
+use crate::formatting::FormatSpec;
 
-use super::error::{Error, Tagged, Action};
-use super::object::{Object, Key};
-use super::traits::{Boxable, Free__, FreeImpl__, FreeAndBound__, Validatable, Taggable, ToVec};
+use crate::{Object, Key};
+use crate::error::{Error, Tagged, Action};
+use crate::traits::{Boxable, Validatable, Taggable, ToVec};
 
 
 
@@ -188,25 +188,6 @@ impl<'a> Iterator for BindingClassifierIterator<'a> {
 }
 
 
-/// Utility function for collecting free and bound names from a binding element
-/// with a potential default value.
-fn binding_element_free_and_bound(
-    binding: &impl FreeAndBound__,
-    default: Option<&impl Free__>,
-    free: &mut HashSet<Key>,
-    bound: &mut HashSet<Key>,
-) {
-    if let Some(expr) = default {
-        for ident in expr.free() {
-            if !bound.contains(&ident) {
-                free.insert(ident);
-            }
-        }
-    }
-    binding.free_and_bound(free, bound)
-}
-
-
 // ListBindingElement
 // ----------------------------------------------------------------
 
@@ -256,18 +237,6 @@ impl Validatable for ListBindingElement {
     }
 }
 
-impl FreeAndBound__ for ListBindingElement {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
-        match self {
-            ListBindingElement::Binding { binding, default } => {
-                binding_element_free_and_bound(binding, default.as_ref(), free, bound);
-            },
-            ListBindingElement::SlurpTo(name) => { bound.insert(**name); },
-            _ => {},
-        }
-    }
-}
-
 
 // MapBindingElement
 // ----------------------------------------------------------------
@@ -300,17 +269,6 @@ impl Visitable for MapBindingElement {
                 binding.visit(visitor);
             }
             Self::SlurpTo(name) => { visitor.bound(**name); }
-        }
-    }
-}
-
-impl FreeAndBound__ for MapBindingElement {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
-        match self {
-            MapBindingElement::Binding { key: _, binding, default } => {
-                binding_element_free_and_bound(binding, default.as_ref(), free, bound);
-            },
-            MapBindingElement::SlurpTo(name) => { bound.insert(**name); },
         }
     }
 }
@@ -377,14 +335,6 @@ impl<'a> ListBinding {
     }
 }
 
-impl FreeAndBound__ for ListBinding {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
-        for element in &self.0 {
-            element.free_and_bound(free, bound);
-        }
-    }
-}
-
 impl Visitable for ListBinding {
     fn visit<T: Visitor>(&self, visitor: &mut T) {
         for element in self.0.iter() {
@@ -430,14 +380,6 @@ impl Validatable for ListBinding {
 /// keys.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub struct MapBinding(pub Vec<Tagged<MapBindingElement>>);
-
-impl FreeAndBound__ for MapBinding {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
-        for element in &self.0 {
-            element.free_and_bound(free, bound);
-        }
-    }
-}
 
 impl Visitable for MapBinding {
     fn visit<T: Visitor>(&self, visitor: &mut T) {
@@ -490,16 +432,6 @@ impl Binding {
     }
 }
 
-impl FreeAndBound__ for Binding {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
-        match self {
-            Binding::Identifier(name) => { bound.insert(**name); },
-            Binding::List(elements) => elements.free_and_bound(free, bound),
-            Binding::Map(elements) => elements.free_and_bound(free, bound),
-        }
-    }
-}
-
 impl Visitable for Binding {
     fn visit<T: Visitor>(&self, visitor: &mut T) {
         match self {
@@ -523,180 +455,6 @@ impl Validatable for Binding {
 
 // StringElement
 // ----------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum StringAlignSpec {
-    Left,
-    Right,
-    Center,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum AlignSpec {
-    AfterSign,
-    String(StringAlignSpec),
-}
-
-impl Default for AlignSpec {
-    fn default() -> Self {
-        Self::left()
-    }
-}
-
-impl AlignSpec {
-    pub fn left() -> Self {
-        Self::String(StringAlignSpec::Left)
-    }
-
-    pub fn right() -> Self {
-        Self::String(StringAlignSpec::Right)
-    }
-
-    pub fn center() -> Self {
-        Self::String(StringAlignSpec::Center)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum SignSpec {
-    Plus,
-    Minus,
-    Space,
-}
-
-impl Default for SignSpec {
-    fn default() -> Self {
-        Self::Minus
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum GroupingSpec {
-    Comma,
-    Underscore,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum UppercaseSpec {
-    Upper,
-    Lower,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum IntegerFormatType {
-    Binary,
-    Character,
-    Decimal,
-    Octal,
-    Hex(UppercaseSpec),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum FloatFormatType {
-    Sci(UppercaseSpec),
-    Fixed,
-    General,
-    Percentage,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum FormatType {
-    String,
-    Integer(IntegerFormatType),
-    Float(FloatFormatType),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct FormatSpec {
-    pub fill: char,
-    pub align: Option<AlignSpec>,
-    pub sign: Option<SignSpec>,
-    pub alternate: bool,
-    pub width: Option<usize>,
-    pub grouping: Option<GroupingSpec>,
-    pub precision: Option<usize>,
-    pub fmt_type: Option<FormatType>,
-}
-
-impl FormatSpec {
-    pub(crate) fn string_spec(&self) -> Option<StringFormatSpec> {
-        if self.sign.is_some() ||
-           self.alternate ||
-           self.grouping.is_some() ||
-           self.precision.is_some() ||
-           self.fmt_type.is_some_and(|x| x != FormatType::String)
-        {
-            return None;
-        }
-
-        let align = match self.align {
-            Some(AlignSpec::AfterSign) => { return None; },
-            Some(AlignSpec::String(x)) => x,
-            None => StringAlignSpec::Left,
-        };
-
-        Some(StringFormatSpec {
-            fill: self.fill,
-            width: self.width,
-            align,
-        })
-    }
-
-    pub(crate) fn integer_spec(&self) -> Option<IntegerFormatSpec> {
-        if self.precision.is_some() {
-            return None;
-        }
-
-        let fmt_type = match self.fmt_type {
-            None => IntegerFormatType::Decimal,
-            Some(FormatType::Integer(x)) => x,
-            _ => { return None; },
-        };
-
-        Some(IntegerFormatSpec {
-            fill: self.fill,
-            align: self.align.unwrap_or_else(AlignSpec::right),
-            sign: self.sign.unwrap_or_default(),
-            alternate: self.alternate,
-            width: self.width,
-            grouping: self.grouping,
-            fmt_type,
-        })
-    }
-
-    pub(crate) fn float_spec(&self) -> Option<FloatFormatSpec> {
-        let fmt_type = match self.fmt_type {
-            Some(FormatType::Float(x)) => x,
-            None => if self.precision.is_some() { FloatFormatType::Fixed } else { FloatFormatType::General },
-            _ => { return None; },
-        };
-
-        Some(FloatFormatSpec {
-            fill: self.fill,
-            align: self.align.unwrap_or_else(AlignSpec::right),
-            sign: self.sign.unwrap_or_default(),
-            width: self.width,
-            grouping: self.grouping,
-            precision: self.precision.unwrap_or(6),
-            fmt_type,
-        })
-    }
-}
-
-impl Default for FormatSpec{
-    fn default() -> Self {
-        Self {
-            fill: ' ',
-            align: None,
-            sign: None,
-            alternate: false,
-            width: None,
-            grouping: None,
-            precision: None,
-            fmt_type: None,
-        }
-    }
-}
 
 /// A string element is anything that is legal in a string: either raw string
 /// data or an interpolated expression. A string is represented as a li of
@@ -755,29 +513,6 @@ pub enum ListElement {
         condition: Tagged<Expr>,
         element: Box<Tagged<ListElement>>,
     },
-}
-
-impl FreeImpl__ for ListElement {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
-        match self {
-            ListElement::Singleton(expr) => expr.free_impl(free),
-            ListElement::Splat(expr) => expr.free_impl(free),
-            ListElement::Cond { condition, element } => {
-                condition.free_impl(free);
-                element.free_impl(free);
-            },
-            ListElement::Loop { binding, iterable, element } => {
-                iterable.free_impl(free);
-                let mut bound: HashSet<Key> = HashSet::new();
-                binding.free_and_bound(free, &mut bound);
-                for ident in element.free() {
-                    if !bound.contains(&ident) {
-                        free.insert(ident);
-                    }
-                }
-            }
-        }
-    }
 }
 
 impl Visitable for ListElement {
@@ -845,32 +580,6 @@ pub enum MapElement {
     },
 }
 
-impl FreeImpl__ for MapElement {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
-        match self {
-            MapElement::Singleton { key, value } => {
-                key.free_impl(free);
-                value.free_impl(free);
-            },
-            MapElement::Splat(expr) => expr.free_impl(free),
-            MapElement::Cond { condition, element } => {
-                condition.free_impl(free);
-                element.free_impl(free);
-            },
-            MapElement::Loop { binding, iterable, element } => {
-                iterable.free_impl(free);
-                let mut bound: HashSet<Key> = HashSet::new();
-                binding.free_and_bound(free, &mut bound);
-                for ident in element.free() {
-                    if !bound.contains(&ident) {
-                        free.insert(ident);
-                    }
-                }
-            }
-        }
-    }
-}
-
 impl Visitable for MapElement {
     fn visit<T: Visitor>(&self, visitor: &mut T) {
         match self {
@@ -930,16 +639,6 @@ pub enum ArgElement {
     Singleton(Tagged<Expr>),
     Keyword(#[unsafe_ignore_trace] Tagged<Key>, Tagged<Expr>),
     Splat(Tagged<Expr>),
-}
-
-impl FreeImpl__ for ArgElement {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
-        match self {
-            ArgElement::Singleton(expr) => { expr.free_impl(free); },
-            ArgElement::Splat(expr) => { expr.free_impl(free); },
-            ArgElement::Keyword(_, expr) => { expr.free_impl(free); },
-        }
-    }
 }
 
 impl Visitable for ArgElement {
@@ -1499,75 +1198,6 @@ impl Visitable for Expr {
                     kw.visit(&mut shield);
                 }
                 expression.visit(&mut shield);
-            }
-        }
-    }
-}
-
-impl FreeImpl__ for Expr {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
-        match self {
-            Expr::Literal(_) => {},
-            Expr::String(elements) => {
-                for element in elements {
-                    if let StringElement::Interpolate(expr, _) = element {
-                        expr.free_impl(free);
-                    }
-                }
-            },
-            Expr::Identifier(name) => { free.insert(**name); },
-            Expr::List(elements) => {
-                for element in elements {
-                    element.free_impl(free);
-                }
-            },
-            Expr::Map(elements) => {
-                for element in elements {
-                    element.free_impl(free);
-                }
-            },
-            Expr::Let { bindings, expression } => {
-                let mut bound: HashSet<Key> = HashSet::new();
-                for (binding, expr) in bindings {
-                    for id in expr.free() {
-                        if !bound.contains(&id) {
-                            free.insert(id);
-                        }
-                    }
-                    binding.free_and_bound(free, &mut bound);
-                }
-                for id in expression.free() {
-                    if !bound.contains(&id) {
-                        free.insert(id);
-                    }
-                }
-            },
-            Expr::Transformed { operand, transform: operator } => {
-                operand.free_impl(free);
-                match operator {
-                    Transform::BinOp(_, expr) => expr.free_impl(free),
-                    Transform::FunCall(elements) => {
-                        for element in elements.as_ref() {
-                            element.free_impl(free);
-                        }
-                    }
-                    _ => {},
-                }
-            },
-            Expr::Branch { condition, true_branch, false_branch } => {
-                condition.free_impl(free);
-                true_branch.free_impl(free);
-                false_branch.free_impl(free);
-            },
-            Expr::Function { positional, keywords, expression } => {
-                let mut bound: HashSet<Key> = HashSet::new();
-                positional.free_and_bound(free, &mut bound);
-                keywords.as_ref().map(|x| x.free_and_bound(free, &mut bound));
-                for id in expression.free() {
-                    if !bound.contains(&id) {
-                        free.insert(id);
-                    }
-                }
             }
         }
     }

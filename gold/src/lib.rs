@@ -23,6 +23,8 @@ mod builtins;
 /// Core evaluation routines.
 mod eval;
 
+mod formatting;
+
 /// The Gold language lexer, which functions as input to the parser.
 mod lexing;
 
@@ -35,14 +37,13 @@ mod compile;
 /// Utility traits.
 mod traits;
 
-/// Utility functions.
-mod util;
-
 /// Wrappers for various types (to be able to add traits).
 mod wrappers;
 
 #[cfg(test)]
 mod tests;
+
+mod types;
 
 /// This module defines Python bindings for the Gold language (but not the
 /// actual module - see the goldpy crate).
@@ -58,6 +59,9 @@ use error::{Error, FileSystem};
 pub use object::Object;
 pub use parsing::parse;
 pub use eval::ImportConfig;
+pub use types::Type;
+
+pub(crate) use types::{Key, List, Map};
 
 
 /// Evaluate Gold code and return the result.

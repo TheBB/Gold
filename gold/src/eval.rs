@@ -4,12 +4,13 @@ use std::rc::Rc;
 
 use gc::Gc;
 
+use crate::{Type, List, Map, Object};
 use crate::compile::{Function, Instruction};
 use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::builtins::BUILTINS;
 use crate::error::{BindingType, Error, Reason, TypeMismatch, Unpack};
-use crate::object::{Builtin, Closure, FuncVariant, List, Map, Object, Type};
+use crate::object::function::{Builtin, Closure, FuncVariant};
 use crate::wrappers::GcCell;
 
 
@@ -164,8 +165,6 @@ impl<'a> Vm<'a> {
     fn eval_impl(&mut self) -> Result<Object, Error> {
         loop {
             let instruction = self.cur_frame().next_instruction();
-            // println!("Instruction: {:?}", instruction);
-            // println!("Stack before: {:?}", self.cur_frame().stack);
             match instruction {
                 Instruction::LoadConst(i) => {
                     let obj = self.cur_frame().function.constants[i].clone();
@@ -604,7 +603,6 @@ impl<'a> Vm<'a> {
                     }
                 }
             }
-            // println!("Stack after: {:?}\n", self.cur_frame().stack);
         }
     }
 }

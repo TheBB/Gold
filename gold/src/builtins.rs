@@ -2,8 +2,10 @@ use std::borrow::Borrow;
 use std::str::FromStr;
 use std::collections::HashMap;
 
+use crate::{Type, Object, List, Map, Key};
 use crate::error::Value;
-use crate::object::{Object, List, Map, Key, Builtin, Type, IntVariant};
+use crate::object::integer::IntVariant;
+use crate::object::function::Builtin;
 use crate::error::{Error, Types, TypeMismatch};
 
 
@@ -23,14 +25,9 @@ macro_rules! builtin {
         let index = $t.len();
         $t.push(Builtin {
             func: $e,
-            name: $crate::object::Key::new(stringify!($e).to_string()),
+            name: $crate::Key::new(stringify!($e).to_string()),
         });
         $m.insert(stringify!($e), index);
-        //     Builtin {
-        //         func: $e,
-        //         name: $crate::object::Key::new(stringify!($e).to_string()),
-        //     },
-        // )
     };
 }
 

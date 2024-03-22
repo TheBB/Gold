@@ -8,9 +8,9 @@ use std::path::PathBuf;
 use gc::{custom_trace, Finalize, Trace};
 use serde::{Deserialize, Serialize};
 
+use crate::{Key, Type};
 use crate::ast::{BinOp, UnOp};
 use crate::lexing::TokenType;
-use crate::object::{Key, Type};
 
 
 /// Marks a position in a text buffer.

@@ -3,10 +3,11 @@ use std::collections::{HashMap, HashSet};
 use gc::{Trace, Finalize};
 use serde::{Serialize, Deserialize};
 
-use crate::ast::{ArgElement, BinOp, Binding, BindingClassifier, BindingMode, BindingShield, Expr, File, FormatSpec, FreeNames, ListBinding, ListBindingElement, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, TopLevel, Transform, UnOp, Visitable};
+use crate::{Key, Object};
+use crate::ast::{ArgElement, BinOp, Binding, BindingClassifier, BindingMode, BindingShield, Expr, File, FreeNames, ListBinding, ListBindingElement, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, TopLevel, Transform, UnOp, Visitable};
 use crate::builtins::BUILTINS;
 use crate::error::{Action, Error, IntervalTree, Reason, Span, Tagged, Unpack};
-use crate::object::{Key, Object};
+use crate::formatting::FormatSpec;
 
 
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]

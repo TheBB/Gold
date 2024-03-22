@@ -1,9 +1,6 @@
-use std::collections::HashSet;
-
 use symbol_table::GlobalSymbol;
 
 use crate::error::{Error, Span, Tagged};
-use crate::object::Key;
 use crate::wrappers::OrderedMap;
 
 
@@ -18,72 +15,6 @@ pub trait Boxable<T> where T: Sized {
 
 impl<T> Boxable<T> for T {
     fn to_box(self) -> Box<T> { Box::new(self) }
-}
-
-
-// Free
-// ------------------------------------------------------------------------------------------------
-
-/// Utility trait for traversing the AST to find free names.
-///
-/// A free name is a name in an expression that also isn't bound to a value in
-/// that expression. Thus, when evaluating such an expression, free names must
-/// be bound to values externally, prior to evaluation.
-///
-/// When evaluating (not calling) a function, free names must be captured from
-/// the surrounding environment into a closure.
-///
-/// A well-formed top level expression has no free names except those imported.
-///
-/// Most nodes should implement [`FreeImpl`] instead of [`Free`], relying on the
-/// default implementation of [`Free`].
-pub(crate) trait Free__ {
-    /// Return a set of all free names in this AST node.
-    fn free(&self) -> HashSet<Key>;
-}
-
-/// Utility trait for implementing [`Free`] by mutating an existing set instead
-/// of creating new ones at each AST node.
-pub trait FreeImpl__ {
-    /// Add all free names in this AST node to the set `free`.
-    fn free_impl(&self, free: &mut HashSet<Key>);
-}
-
-/// Since almost all AST nodes occur only as tagged objects, provide a
-/// pass-through implementation.
-impl<T: FreeImpl__> FreeImpl__ for Tagged<T> {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
-        self.as_ref().free_impl(free)
-    }
-}
-
-/// Default implementation of [`Free`] for anything that implements [`FreeImpl`].
-impl<T: FreeImpl__> Free__ for T {
-    fn free(&self) -> HashSet<Key> {
-        let mut free = HashSet::new();
-        self.free_impl(&mut free);
-        free
-    }
-}
-
-/// Utility trait for traversing the AST to find free and bound names.
-///
-/// This is used for AST nodes that may both bind new names and refer to
-/// existing names, such as binding patterns with default values. Such defaults
-/// may rely on previously-bound names in the same pattern, thus necessitating
-/// computing both free and bound names in the same traversal.
-pub trait FreeAndBound__ {
-    /// Add all free names in this AST node to the set `free`, and all bound
-    /// names to the set `bound`.
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>);
-}
-
-/// Since almost all AST nodes occur only as tagged objects, provide a
-/// pass-through implementation.
-impl<T: FreeAndBound__> FreeAndBound__ for Tagged<T> {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
-        self.as_ref().free_and_bound(free, bound)
-    }
 }
 
 

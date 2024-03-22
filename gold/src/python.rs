@@ -8,9 +8,12 @@ use pyo3::types::{PyList, PyDict, PyTuple, PyString};
 use pyo3::prelude::*;
 use pyo3::exceptions::{PyTypeError, PyValueError, PyException, PySyntaxError, PyNameError, PyKeyError, PyOSError, PyImportError};
 
+use crate::{Object, Key, List, Map};
 use crate::error::{Error, Reason};
 use crate::eval::ImportConfig as GoldImportConfig;
-use crate::object::{Object, FuncVariant, List, Map, Key, Closure, ObjectVariant, IntVariant};
+use crate::object::ObjectVariant;
+use crate::object::function::{FuncVariant, Closure};
+use crate::object::integer::IntVariant;
 use crate::traits::Peek;
 
 
