@@ -26,10 +26,10 @@ enum IntV {
 
 /// The integer variant represents all possible Gold integers.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Trace, Finalize)]
-pub(crate) struct Integer(IntV);
+pub(crate) struct Int(IntV);
 
-impl PartialOrd<Integer> for Integer {
-    fn partial_cmp(&self, other: &Integer) -> Option<Ordering> {
+impl PartialOrd<Int> for Int {
+    fn partial_cmp(&self, other: &Int) -> Option<Ordering> {
         let Self(this) = self;
         let Self(that) = other;
         match (this, that) {
@@ -41,13 +41,13 @@ impl PartialOrd<Integer> for Integer {
     }
 }
 
-impl PartialEq<f64> for Integer {
+impl PartialEq<f64> for Int {
     fn eq(&self, other: &f64) -> bool {
         return self.partial_cmp(other) == Some(Ordering::Equal);
     }
 }
 
-impl PartialOrd<f64> for Integer {
+impl PartialOrd<f64> for Int {
     fn partial_cmp(&self, other: &f64) -> Option<Ordering> {
         let Self(this) = self;
         match this {
@@ -71,37 +71,37 @@ impl PartialOrd<f64> for Integer {
     }
 }
 
-impl From<BigInt> for Integer {
+impl From<BigInt> for Int {
     fn from(value: BigInt) -> Self {
         Self(IntV::Big(Gc::new(WBigInt(value))))
     }
 }
 
-impl From<i64> for Integer {
+impl From<i64> for Int {
     fn from(x: i64) -> Self {
         Self(IntV::Small(x))
     }
 }
 
-impl From<i32> for Integer {
+impl From<i32> for Int {
     fn from(x: i32) -> Self {
         Self(IntV::Small(x as i64))
     }
 }
 
-impl From<usize> for Integer {
+impl From<usize> for Int {
     fn from(x: usize) -> Self {
         i64::try_from(x)
-            .map(Integer::from)
-            .unwrap_or_else(|_| Integer::from(BigInt::from(x)))
+            .map(Int::from)
+            .unwrap_or_else(|_| Int::from(BigInt::from(x)))
     }
 }
 
-impl TryFrom<&Integer> for u32 {
+impl TryFrom<&Int> for u32 {
     type Error = ();
 
-    fn try_from(value: &Integer) -> Result<Self, Self::Error> {
-        let Integer(this) = value;
+    fn try_from(value: &Int) -> Result<Self, Self::Error> {
+        let Int(this) = value;
         match this {
             IntV::Small(x) => Self::try_from(*x).map_err(|_| ()),
             IntV::Big(x) => Self::try_from(x.peek()).map_err(|_| ()),
@@ -109,11 +109,11 @@ impl TryFrom<&Integer> for u32 {
     }
 }
 
-impl TryFrom<&Integer> for i64 {
+impl TryFrom<&Int> for i64 {
     type Error = ();
 
-    fn try_from(value: &Integer) -> Result<Self, Self::Error> {
-        let Integer(this) = value;
+    fn try_from(value: &Int) -> Result<Self, Self::Error> {
+        let Int(this) = value;
         match this {
             IntV::Small(x) => Ok(*x),
             IntV::Big(x) => Self::try_from(x.peek()).map_err(|_| ()),
@@ -121,11 +121,11 @@ impl TryFrom<&Integer> for i64 {
     }
 }
 
-impl TryFrom<&Integer> for usize {
+impl TryFrom<&Int> for usize {
     type Error = ();
 
-    fn try_from(value: &Integer) -> Result<Self, Self::Error> {
-        let Integer(this) = value;
+    fn try_from(value: &Int) -> Result<Self, Self::Error> {
+        let Int(this) = value;
         match this {
             IntV::Small(x) => Self::try_from(*x).map_err(|_| ()),
             IntV::Big(x) => Self::try_from(x.peek()).map_err(|_| ()),
@@ -133,7 +133,7 @@ impl TryFrom<&Integer> for usize {
     }
 }
 
-impl Display for Integer {
+impl Display for Int {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self(this) = self;
         match this {
@@ -143,7 +143,7 @@ impl Display for Integer {
     }
 }
 
-impl Step for Integer {
+impl Step for Int {
     fn steps_between(start: &Self, end: &Self) -> Option<usize> {
         usize::try_from(&end.sub(start)).ok()
     }
@@ -157,7 +157,7 @@ impl Step for Integer {
     }
 }
 
-impl Integer {
+impl Int {
     /// Sum of two integers. This implements the addition operator.
     pub fn add(&self, other: &Self) -> Self {
         Self::normalize(&self.operate(other, i64::checked_add, |x, y| x + y))
@@ -198,7 +198,7 @@ impl Integer {
     /// responsibility of the caller.
     fn operate<S, T, U>(
         &self,
-        other: &Integer,
+        other: &Int,
         ixi: impl Fn(i64, i64) -> Option<S>,
         bxb: impl Fn(&BigInt, &BigInt) -> T,
     ) -> U
@@ -286,7 +286,7 @@ impl Integer {
         }
 
         if exp == one {
-            return Some(Integer::from(base));
+            return Some(Int::from(base));
         }
 
         let mut acc = base.clone();
@@ -304,7 +304,7 @@ impl Integer {
     /// Attempt exponentiation. This will try, in order, three different
     /// algorithms, from fast for small numbers to slow for large numbers.
     /// Should only return None if the exponent is negative.
-    pub fn pow(&self, other: &Integer) -> Option<Integer> {
+    pub fn pow(&self, other: &Int) -> Option<Int> {
         self.small_pow(other)
             .or_else(|| self.medium_pow(other))
             .or_else(|| self.big_pow(other))
@@ -347,7 +347,7 @@ impl Integer {
     /// and machine integers, even though it should be impossible to create two
     /// distinct representations of the same number, as all arithmetic uses
     /// [`IntVariant::normalize`] as a postprocessing step.
-    pub fn user_eq(&self, other: &Integer) -> bool {
+    pub fn user_eq(&self, other: &Int) -> bool {
         let Self(this) = self;
         let Self(that) = other;
 
@@ -495,7 +495,7 @@ fn f64_to_bigs(x: f64) -> (BigInt, BigInt) {
 }
 
 #[cfg(feature = "python")]
-impl pyo3::IntoPy<pyo3::PyObject> for &Integer {
+impl pyo3::IntoPy<pyo3::PyObject> for &Int {
     fn into_py(self, py: pyo3::prelude::Python<'_>) -> pyo3::PyObject {
         match &self.0 {
             IntV::Small(x) => x.into_py(py),

@@ -30,74 +30,71 @@ fn escape(s: &str) -> String {
     r
 }
 
-/// The string variant represents all possible Gold strings.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Trace, Finalize)]
-pub enum StrVariant {
-    /// Interned string. All strings that fall in the following categories are interned:
-    /// - identifiers
-    /// - map keys
-    /// - strings no more than 20 characters long
-    ///
-    /// Note that Gold does not garbage-collect interned strings.
+enum StrV {
     Interned(#[unsafe_ignore_trace] Key),
-
-    /// Natural (non-interned) string. If a string is not interned, or if it
-    /// requires runtime evaluation (e.g. it is interpolated, or is the result
-    /// of concatenation), then it is not interned.
     Natural(Gc<String>),
 }
 
-impl PartialOrd<StrVariant> for StrVariant {
-    fn partial_cmp(&self, other: &StrVariant) -> Option<Ordering> {
+/// The string variant represents all possible Gold strings.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Trace, Finalize)]
+pub(crate) struct Str(StrV);
+
+impl PartialOrd<Str> for Str {
+    fn partial_cmp(&self, other: &Str) -> Option<Ordering> {
         self.as_str().partial_cmp(other.as_str())
     }
 }
 
-impl From<&StrVariant> for Key {
-    fn from(value: &StrVariant) -> Self {
-        match value {
-            StrVariant::Interned(x) => *x,
-            StrVariant::Natural(x) => Key::new(x.as_ref()),
+impl From<&Str> for Key {
+    fn from(value: &Str) -> Self {
+        let Str(this) = value;
+        match this {
+            StrV::Interned(x) => *x,
+            StrV::Natural(x) => Key::new(x.as_ref()),
         }
     }
 }
 
-impl Display for StrVariant {
+impl Display for Str {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("\"{}\"", escape(self.as_str())))
     }
 }
 
-impl StrVariant {
+impl Str {
     /// Construct a new interned string.
-    pub fn interned<T: AsRef<str>>(x: T) -> Self {
-        Self::Interned(Key::new(x))
+    pub fn interned<T>(x: T) -> Self where Key: From<T> {
+        Self(StrV::Interned(Key::from(x)))
     }
 
     /// Construct a new natural (non-interned string).
     pub fn natural<T: AsRef<str>>(x: T) -> Self {
-        Self::Natural(Gc::new(x.as_ref().to_string()))
+        Self(StrV::Natural(Gc::new(x.as_ref().to_string())))
     }
 
     /// Access the internal string slice.
     pub fn as_str(&self) -> &str {
-        match self {
-            Self::Interned(x) => x.as_str(),
-            Self::Natural(x) => x.as_str(),
+        let Self(this) = self;
+        match this {
+            StrV::Interned(x) => x.as_str(),
+            StrV::Natural(x) => x.as_str(),
         }
     }
 
     /// User (non-structural) equality does not differentiate between interned
     /// or non-interned strings.
-    pub fn user_eq(&self, other: &StrVariant) -> bool {
-        match (self, other) {
-            (Self::Interned(x), Self::Interned(y)) => x == y,
+    pub fn user_eq(&self, other: &Str) -> bool {
+        let Self(this) = self;
+        let Self(that) = other;
+        match (this, that) {
+            (StrV::Interned(x), StrV::Interned(y)) => x == y,
             _ => self.as_str() == other.as_str(),
         }
     }
 
     /// Concatenate two string variants (the + operator for strings).
-    pub fn add(&self, other: &StrVariant) -> StrVariant {
+    pub fn add(&self, other: &Str) -> Str {
         Self::natural(format!("{}{}", self.as_str(), other.as_str()))
     }
 }

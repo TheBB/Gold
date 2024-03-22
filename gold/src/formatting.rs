@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{error::Error, object::integer::Integer};
+use crate::{error::Error, object::integer::Int};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum StringAlignSpec {
@@ -252,7 +252,7 @@ impl IntegerFormatSpec {
         }
     }
 
-    pub(crate) fn format(&self, value: &Integer) -> Result<String, Error> {
+    pub(crate) fn format(&self, value: &Int) -> Result<String, Error> {
         value.format(self)
     }
 }

@@ -37,8 +37,8 @@ use crate::wrappers::GcCell;
 use crate::{ast, Key, List, Map, Type};
 
 use function::FuncVariant;
-use integer::Integer;
-use string::StrVariant;
+use integer::Int;
+use string::Str;
 
 /// The current serialization format version.
 const SERIALIZE_VERSION: i32 = 1;
@@ -52,13 +52,13 @@ const SERIALIZE_VERSION: i32 = 1;
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
 pub(crate) enum ObjV {
     /// Integers
-    Int(Integer),
+    Int(Int),
 
     /// Floating-point numbers
     Float(f64),
 
     /// Strings
-    Str(StrVariant),
+    Str(Str),
 
     /// Booleans
     Boolean(bool),
@@ -269,7 +269,7 @@ impl Object {
                     Ok(str_spec.format(s))
                 } else if let Some(int_spec) = spec.integer_spec() {
                     let i = if *x { 1 } else { 0 };
-                    int_spec.format(&Integer::from(i))
+                    int_spec.format(&Int::from(i))
                 } else if let Some(float_spec) = spec.float_spec() {
                     let f = if *x { 1.0 } else { 0.0 };
                     Ok(float_spec.format(f))
@@ -305,17 +305,17 @@ impl Object {
     }
 
     /// Construct an interned string.
-    pub fn str_interned(val: impl AsRef<str>) -> Self {
-        Self(ObjV::Str(StrVariant::interned(val)))
+    pub fn str_interned<T>(val: T) -> Self where Key: From<T> {
+        Self(ObjV::Str(Str::interned(val)))
     }
 
     /// Construct a non-interned string.
     pub fn str_natural(val: impl AsRef<str>) -> Self {
-        Self(ObjV::Str(StrVariant::natural(val)))
+        Self(ObjV::Str(Str::natural(val)))
     }
 
     /// Construct a string, deciding based on length whether to intern or not.
-    pub fn str(val: impl AsRef<str>) -> Self {
+    pub fn str<T>(val: T) -> Self where Key: From<T>, T: AsRef<str> {
         if val.as_ref().len() < 20 {
             Self::str_interned(val)
         } else {
@@ -332,15 +332,15 @@ impl Object {
 
     /// Construct a string directly from an interned symbol.
     pub fn key(val: Key) -> Self {
-        Self(ObjV::Str(StrVariant::Interned(val)))
+        Self(ObjV::Str(Str::interned(val)))
     }
 
     /// Construct an integer.
     pub(crate) fn int<T>(val: T) -> Self
     where
-        Integer: From<T>,
+        Int: From<T>,
     {
-        Self(ObjV::Int(Integer::from(val)))
+        Self(ObjV::Int(Int::from(val)))
     }
 
     /// Construct a big integer from a decimal string representation.
@@ -556,7 +556,7 @@ impl Object {
     }
 
     /// Extract the integer variant if applicable.
-    pub(crate) fn get_int(&self) -> Option<&Integer> {
+    pub(crate) fn get_int(&self) -> Option<&Int> {
         match &self.0 {
             ObjV::Int(x) => Some(x),
             _ => None,
@@ -805,7 +805,7 @@ impl Object {
     fn operate<S, T>(
         &self,
         other: &Self,
-        ixi: impl Fn(&Integer, &Integer) -> S,
+        ixi: impl Fn(&Int, &Int) -> S,
         fxf: impl Fn(f64, f64) -> T,
         op: ast::BinOp,
     ) -> Result<Self, Error>
@@ -841,30 +841,30 @@ impl Object {
                     .collect::<List>(),
             )),
             (ObjV::Str(x), ObjV::Str(y)) => Ok(Self(ObjV::Str(x.add(y)))),
-            _ => self.operate(other, Integer::add, |x, y| x + y, ast::BinOp::Add),
+            _ => self.operate(other, Int::add, |x, y| x + y, ast::BinOp::Add),
         }
     }
 
     /// The minus operator: mathematical subtraction.
     pub fn sub(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, Integer::sub, |x, y| x - y, ast::BinOp::Subtract)
+        self.operate(other, Int::sub, |x, y| x - y, ast::BinOp::Subtract)
     }
 
     /// The asterisk operator: mathematical multiplication.
     pub fn mul(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, Integer::mul, |x, y| x * y, ast::BinOp::Multiply)
+        self.operate(other, Int::mul, |x, y| x * y, ast::BinOp::Multiply)
     }
 
     /// The slash operator: mathematical division.
     pub fn div(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, Integer::div, |x, y| x / y, ast::BinOp::Divide)
+        self.operate(other, Int::div, |x, y| x / y, ast::BinOp::Divide)
     }
 
     /// The double slash operator: integer division.
     pub fn idiv(&self, other: &Self) -> Result<Self, Error> {
         self.operate(
             other,
-            Integer::idiv,
+            Int::idiv,
             |x, y| (x / y).floor() as f64,
             ast::BinOp::IntegerDivide,
         )
@@ -977,10 +977,10 @@ impl From<Key> for Object {
 
 impl<T> From<T> for Object
 where
-    Integer: From<T>,
+    Int: From<T>,
 {
     fn from(value: T) -> Self {
-        Self(ObjV::Int(Integer::from(value)))
+        Self(ObjV::Int(Int::from(value)))
     }
 }
 
