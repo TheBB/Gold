@@ -2,10 +2,9 @@ use std::path::PathBuf;
 use std::process::exit;
 
 use clap::Parser;
-use json::{JsonValue, stringify_pretty};
+use json::{stringify_pretty, JsonValue};
 
 use gold::{eval_file, eval_raw};
-
 
 #[derive(Parser)]
 struct Cli {
@@ -14,7 +13,6 @@ struct Cli {
 
     path: Option<PathBuf>,
 }
-
 
 fn main() {
     let args = Cli::parse();
@@ -31,8 +29,14 @@ fn main() {
     match obj.and_then(JsonValue::try_from) {
         Ok(val) => println!("{}", stringify_pretty(val, 4)),
         Err(error) => match error.rendered() {
-            Some(e) => { eprintln!("{}", e); exit(1); }
-            _ => { eprintln!("Error: {:?}", error); exit(1); }
-        }
+            Some(e) => {
+                eprintln!("{}", e);
+                exit(1);
+            }
+            _ => {
+                eprintln!("Error: {:?}", error);
+                exit(1);
+            }
+        },
     }
 }

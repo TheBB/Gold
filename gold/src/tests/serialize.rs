@@ -1,16 +1,19 @@
 use crate::object::Object;
 
-
 fn check(x: Object) {
-    assert_eq!(x.serialize().map(|y| Object::deserialize(&y)).flatten().map(|x| x.0), Some(x))
+    assert_eq!(
+        x.serialize()
+            .map(|y| Object::deserialize(&y))
+            .flatten()
+            .map(|x| x.0),
+        Some(x)
+    )
 }
-
 
 #[test]
 fn nulls() {
     check(Object::null());
 }
-
 
 #[test]
 fn integers() {
@@ -20,7 +23,6 @@ fn integers() {
     check(Object::bigint("9223372036854775808").unwrap());
 }
 
-
 #[test]
 fn strings() {
     check(Object::str(""));
@@ -28,19 +30,16 @@ fn strings() {
     check(Object::str("ding\"bob"));
 }
 
-
 #[test]
 fn bools() {
     check(Object::bool(true));
     check(Object::bool(false));
 }
 
-
 #[test]
 fn floats() {
     check(Object::float(1.2234));
 }
-
 
 #[test]
 fn maps() {
@@ -50,7 +49,6 @@ fn maps() {
         ("c", Object::str("zomg")),
     ]));
 }
-
 
 #[test]
 fn lists() {

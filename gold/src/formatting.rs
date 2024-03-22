@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{error::Error, object::integer::IntVariant};
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum StringAlignSpec {
     Left,
@@ -99,17 +98,19 @@ pub struct FormatSpec {
 
 impl FormatSpec {
     pub fn string_spec(&self) -> Option<StringFormatSpec> {
-        if self.sign.is_some() ||
-           self.alternate ||
-           self.grouping.is_some() ||
-           self.precision.is_some() ||
-           self.fmt_type.is_some_and(|x| x != FormatType::String)
+        if self.sign.is_some()
+            || self.alternate
+            || self.grouping.is_some()
+            || self.precision.is_some()
+            || self.fmt_type.is_some_and(|x| x != FormatType::String)
         {
             return None;
         }
 
         let align = match self.align {
-            Some(AlignSpec::AfterSign) => { return None; },
+            Some(AlignSpec::AfterSign) => {
+                return None;
+            }
             Some(AlignSpec::String(x)) => x,
             None => StringAlignSpec::Left,
         };
@@ -129,7 +130,9 @@ impl FormatSpec {
         let fmt_type = match self.fmt_type {
             None => IntegerFormatType::Decimal,
             Some(FormatType::Integer(x)) => x,
-            _ => { return None; },
+            _ => {
+                return None;
+            }
         };
 
         Some(IntegerFormatSpec {
@@ -146,8 +149,16 @@ impl FormatSpec {
     pub fn float_spec(&self) -> Option<FloatFormatSpec> {
         let fmt_type = match self.fmt_type {
             Some(FormatType::Float(x)) => x,
-            None => if self.precision.is_some() { FloatFormatType::Fixed } else { FloatFormatType::General },
-            _ => { return None; },
+            None => {
+                if self.precision.is_some() {
+                    FloatFormatType::Fixed
+                } else {
+                    FloatFormatType::General
+                }
+            }
+            _ => {
+                return None;
+            }
         };
 
         Some(FloatFormatSpec {
@@ -176,7 +187,6 @@ impl Default for FormatSpec {
         }
     }
 }
-
 
 pub struct StringFormatSpec {
     pub fill: char,
@@ -215,7 +225,6 @@ impl StringFormatSpec {
     }
 }
 
-
 pub struct IntegerFormatSpec {
     pub fill: char,
     pub align: AlignSpec,
@@ -229,11 +238,17 @@ pub struct IntegerFormatSpec {
 impl IntegerFormatSpec {
     pub fn string_spec(&self) -> Option<StringFormatSpec> {
         match (self.align, self.width) {
-            (AlignSpec::AfterSign, _) => { return None; },
-            (_, None) => { return None; }
-            (AlignSpec::String(align), Some(width)) => Some(
-                StringFormatSpec { fill: self.fill, align, width: Some(width) }
-            ),
+            (AlignSpec::AfterSign, _) => {
+                return None;
+            }
+            (_, None) => {
+                return None;
+            }
+            (AlignSpec::String(align), Some(width)) => Some(StringFormatSpec {
+                fill: self.fill,
+                align,
+                width: Some(width),
+            }),
         }
     }
 
@@ -241,7 +256,6 @@ impl IntegerFormatSpec {
         value.format(self)
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct FloatFormatSpec {
@@ -257,34 +271,59 @@ pub struct FloatFormatSpec {
 impl FloatFormatSpec {
     pub fn string_spec(&self) -> Option<StringFormatSpec> {
         match (self.align, self.width) {
-            (AlignSpec::AfterSign, _) => { return None; },
-            (_, None) => { return None; }
-            (AlignSpec::String(align), Some(width)) => Some(
-                StringFormatSpec { fill: self.fill, align, width: Some(width) }
-            ),
+            (AlignSpec::AfterSign, _) => {
+                return None;
+            }
+            (_, None) => {
+                return None;
+            }
+            (AlignSpec::String(align), Some(width)) => Some(StringFormatSpec {
+                fill: self.fill,
+                align,
+                width: Some(width),
+            }),
         }
     }
 
     pub fn format(&self, value: f64) -> String {
         let base = match self.fmt_type {
-            FloatFormatType::Fixed => format!("{number:+.precision$}", number = value, precision = self.precision),
+            FloatFormatType::Fixed => format!(
+                "{number:+.precision$}",
+                number = value,
+                precision = self.precision
+            ),
             FloatFormatType::General => format!("{:+}", value),
-            FloatFormatType::Sci(UppercaseSpec::Lower) =>
-                format!("{number:+.precision$e}", number = value, precision = self.precision),
-            FloatFormatType::Sci(UppercaseSpec::Upper) =>
-                format!("{number:+.precision$E}", number = value, precision = self.precision),
-            FloatFormatType::Percentage =>
-                format!("{number:+.precision$}%", number = 100.0*value, precision = self.precision),
+            FloatFormatType::Sci(UppercaseSpec::Lower) => format!(
+                "{number:+.precision$e}",
+                number = value,
+                precision = self.precision
+            ),
+            FloatFormatType::Sci(UppercaseSpec::Upper) => format!(
+                "{number:+.precision$E}",
+                number = value,
+                precision = self.precision
+            ),
+            FloatFormatType::Percentage => format!(
+                "{number:+.precision$}%",
+                number = 100.0 * value,
+                precision = self.precision
+            ),
         };
 
         let mut base_digits = &base[1..];
         let mut buffer = String::new();
 
         match (self.sign, value < 0.0) {
-            (_, true) => { buffer.push('-'); },
-            (SignSpec::Plus, false) => { buffer.push('+'); }
-            (SignSpec::Space, false) => { buffer.push(' '); }
-            _ => {},
+            (_, true) => {
+                buffer.push('-');
+            }
+            (SignSpec::Plus, false) => {
+                buffer.push('+');
+            }
+            (SignSpec::Space, false) => {
+                buffer.push(' ');
+            }
+            _ => {}
         }
 
         if let Some(group_spec) = self.grouping {
@@ -297,8 +336,11 @@ impl FloatFormatSpec {
             let mut num_digits: usize = base_digits.len();
             for (i, c) in base_digits.char_indices() {
                 match c {
-                    '0'..='9' => {},
-                    _ => { num_digits = i; break; }
+                    '0'..='9' => {}
+                    _ => {
+                        num_digits = i;
+                        break;
+                    }
                 }
             }
 

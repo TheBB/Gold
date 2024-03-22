@@ -8,10 +8,9 @@ use std::path::PathBuf;
 use gc::{custom_trace, Finalize, Trace};
 use serde::{Deserialize, Serialize};
 
-use crate::{Key, Type};
 use crate::ast::{BinOp, UnOp};
 use crate::lexing::TokenType;
-
+use crate::{Key, Type};
 
 /// Marks a position in a text buffer.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -24,7 +23,11 @@ pub struct Position {
 impl Position {
     /// Construct a new position from offset, line and column (all 0-indexed).
     pub fn new(offset: usize, line: u32, column: u32) -> Position {
-        Position { offset, line, column }
+        Position {
+            offset,
+            line,
+            column,
+        }
     }
 
     /// Construct a new position pointing to the beginning of a buffer.
@@ -47,7 +50,11 @@ impl Position {
         Position {
             offset: self.offset + offset,
             line: self.line + delta_line,
-            column: if delta_line > 0 { 0 } else { self.column + offset as u32 }
+            column: if delta_line > 0 {
+                0
+            } else {
+                self.column + offset as u32
+            },
         }
     }
 
@@ -68,7 +75,10 @@ impl Position {
 
     /// Return a new span starting at this position with a certain length.
     pub fn with_length(&self, length: usize) -> Span {
-        Span { start: *self, length }
+        Span {
+            start: *self,
+            length,
+        }
     }
 
     /// Return a new position by changing the line number.
@@ -98,7 +108,6 @@ impl Sub<Position> for Position {
         rhs.with_length(self.offset - rhs.offset)
     }
 }
-
 
 /// Mark an interval of text in a buffer starting at a `Position` with a length.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -137,7 +146,7 @@ impl Span {
     pub(crate) fn with_line(self, line: u32) -> Self {
         Span {
             start: self.start.with_line(line),
-            length: self.length
+            length: self.length,
         }
     }
 
@@ -145,7 +154,7 @@ impl Span {
     pub(crate) fn with_column(self, col: u32) -> Self {
         Span {
             start: self.start.with_column(col),
-            length: self.length
+            length: self.length,
         }
     }
 
@@ -183,7 +192,6 @@ impl From<usize> for Span {
         }
     }
 }
-
 
 /// A wrapper for marking any object with a text span pointing to its origin in
 /// a source file.
@@ -240,8 +248,7 @@ impl<T> Tagged<T> {
     }
 
     /// Map the wrapped object and return a new tagged wrapper.
-    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Tagged<U>
-    {
+    pub fn map<U>(self, f: impl FnOnce(T) -> U) -> Tagged<U> {
         Tagged::<U> {
             span: self.span,
             contents: f(self.contents),
@@ -251,8 +258,7 @@ impl<T> Tagged<T> {
     /// Map the whole tagged object and return a new tagged wrapper.
     ///
     /// Useful for creating longer layers of tagged objects.
-    pub fn wrap<U>(self, f: impl FnOnce(Tagged<T>) -> U) -> Tagged<U>
-    {
+    pub fn wrap<U>(self, f: impl FnOnce(Tagged<T>) -> U) -> Tagged<U> {
         Tagged::<U> {
             span: self.span,
             contents: f(self),
@@ -272,7 +278,9 @@ impl<T> Tagged<T> {
 }
 
 unsafe impl<T: Trace> Trace for Tagged<T> {
-    custom_trace!(this, { mark(&this.contents); });
+    custom_trace!(this, {
+        mark(&this.contents);
+    });
 }
 
 impl<T: Finalize> Finalize for Tagged<T> {
@@ -285,7 +293,13 @@ impl<T: Debug> Debug for Tagged<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.contents.fmt(f)?;
         let span = self.span;
-        f.write_fmt(format_args!(".tag({}:{}, {}..{})", span.line() + 1, span.column() + 1, span.offset(), span.offset() + span.length()))
+        f.write_fmt(format_args!(
+            ".tag({}:{}, {}..{})",
+            span.line() + 1,
+            span.column() + 1,
+            span.offset(),
+            span.offset() + span.length()
+        ))
     }
 }
 
@@ -317,7 +331,6 @@ impl From<Range<Span>> for Span {
     }
 }
 
-
 /// General error type used by both parsing and lexing.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SyntaxError {
@@ -341,7 +354,6 @@ impl SyntaxError {
         }
     }
 }
-
 
 /// A complete enumeration of all grammatical elements in the Gold language,
 /// including tokens as well as composite structures.
@@ -419,7 +431,6 @@ impl From<TokenType> for SyntaxElement {
     }
 }
 
-
 /// Enumerates all the possible reasons for a syntax error.
 ///
 /// These reasons can be sourced from three different phases:
@@ -451,30 +462,45 @@ pub enum Syntax {
     DefaultSequence,
 }
 
-impl<T> From<T> for Syntax where SyntaxElement: From<T> {
+impl<T> From<T> for Syntax
+where
+    SyntaxElement: From<T>,
+{
     fn from(value: T) -> Self {
         Self::ExpectedOne(SyntaxElement::from(value))
     }
 }
 
-impl<T> From<(T,)> for Syntax where SyntaxElement: From<T> {
+impl<T> From<(T,)> for Syntax
+where
+    SyntaxElement: From<T>,
+{
     fn from((value,): (T,)) -> Self {
         Self::ExpectedOne(SyntaxElement::from(value))
     }
 }
 
-impl<T,U> From<(T,U)> for Syntax where SyntaxElement: From<T> + From<U> {
-    fn from((x,y): (T,U)) -> Self {
+impl<T, U> From<(T, U)> for Syntax
+where
+    SyntaxElement: From<T> + From<U>,
+{
+    fn from((x, y): (T, U)) -> Self {
         Self::ExpectedTwo(SyntaxElement::from(x), SyntaxElement::from(y))
     }
 }
 
-impl<T,U,V> From<(T,U,V)> for Syntax where SyntaxElement: From<T> + From<U> + From<V> {
-    fn from((x,y,z): (T,U,V)) -> Self {
-        Self::ExpectedThree(SyntaxElement::from(x), SyntaxElement::from(y), SyntaxElement::from(z))
+impl<T, U, V> From<(T, U, V)> for Syntax
+where
+    SyntaxElement: From<T> + From<U> + From<V>,
+{
+    fn from((x, y, z): (T, U, V)) -> Self {
+        Self::ExpectedThree(
+            SyntaxElement::from(x),
+            SyntaxElement::from(y),
+            SyntaxElement::from(z),
+        )
     }
 }
-
 
 /// Enumerates possible reasons for internal errors (which shouldn't happen).
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -500,7 +526,6 @@ impl Internal {
     }
 }
 
-
 /// Enumerates possible binding types.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum BindingType {
@@ -513,7 +538,6 @@ pub enum BindingType {
     /// Bind a mapping of values to a list of named patterns.
     Map,
 }
-
 
 /// Enumerates different reasons why unpacking might fail.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -529,9 +553,8 @@ pub enum Unpack {
 
     /// The binding type did not correspond to the object type (e.g. a list
     /// binding with a map object).
-    TypeMismatch(BindingType, Type)
+    TypeMismatch(BindingType, Type),
 }
-
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) enum Types {
@@ -581,7 +604,6 @@ impl From<(Type, Type, Type, Type)> for Types {
         Types::Four(x, y, z, a)
     }
 }
-
 
 /// Enumerates different type mismatch reasons.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -656,7 +678,6 @@ pub(crate) enum TypeMismatch {
     },
 }
 
-
 /// Enumerates different value-based error reasons.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
@@ -673,7 +694,6 @@ pub enum Value {
     Convert(Type),
 }
 
-
 /// Enumerates different file system error reasons.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum FileSystem {
@@ -684,7 +704,6 @@ pub enum FileSystem {
     /// Unable to read from file.
     Read(PathBuf),
 }
-
 
 /// Grand enumeration of all possible error reasons.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -760,7 +779,6 @@ impl From<Value> for Reason {
     }
 }
 
-
 /// Enumerates all different 'actions' - things that Gold might try to do which
 /// can cause an error.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -796,7 +814,6 @@ pub(crate) enum Action {
     Format,
 }
 
-
 /// The general error type of Gold.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Error {
@@ -813,10 +830,17 @@ pub struct Error {
 impl Error {
     /// Append a location to the stack. Takes ownership and returns the same
     /// object, for ease of use with `Result::map_err`.
-    pub(crate) fn tag<T>(mut self, loc: T, action: Action) -> Self where Span: From<T> {
+    pub(crate) fn tag<T>(mut self, loc: T, action: Action) -> Self
+    where
+        Span: From<T>,
+    {
         match &mut self.locations {
-            None => { self.locations = Some(vec![(Span::from(loc), action)]); },
-            Some(vec) => { vec.push((Span::from(loc), action)); },
+            None => {
+                self.locations = Some(vec![(Span::from(loc), action)]);
+            }
+            Some(vec) => {
+                vec.push((Span::from(loc), action));
+            }
         }
         self
     }
@@ -831,7 +855,10 @@ impl Error {
         self.rendered.as_ref().map(String::as_str)
     }
 
-    pub(crate) fn with_reason<T>(mut self, reason: T) -> Self where Reason: From<T> {
+    pub(crate) fn with_reason<T>(mut self, reason: T) -> Self
+    where
+        Reason: From<T>,
+    {
         self.reason = Some(Reason::from(reason));
         self
     }
@@ -849,14 +876,20 @@ impl Error {
 
     pub(crate) fn add_locations(mut self, other: Self) -> Self {
         self.locations = match (self.locations, other.locations) {
-            (Some(mut v), Some(mut w)) => { v.append(&mut w); Some(v) }
+            (Some(mut v), Some(mut w)) => {
+                v.append(&mut w);
+                Some(v)
+            }
             (_, w) => w,
         };
         self
     }
 
     /// Construct a new error with an empty stack.
-    pub(crate) fn new<T>(reason: T) -> Self where Reason: From<T> {
+    pub(crate) fn new<T>(reason: T) -> Self
+    where
+        Reason: From<T>,
+    {
         Self {
             locations: None,
             reason: Some(Reason::from(reason)),
@@ -915,13 +948,25 @@ impl Display for BindingType {
     }
 }
 
-fn fmt_expected_arg(f: &mut std::fmt::Formatter, name: impl Display, allowed: &Vec<Type>, received: &Type) -> std::fmt::Result {
-    f.write_fmt(format_args!("unsuitable type for parameter {} - expected ", name))?;
+fn fmt_expected_arg(
+    f: &mut std::fmt::Formatter,
+    name: impl Display,
+    allowed: &Vec<Type>,
+    received: &Type,
+) -> std::fmt::Result {
+    f.write_fmt(format_args!(
+        "unsuitable type for parameter {} - expected ",
+        name
+    ))?;
     match allowed[..] {
-        [] => {},
+        [] => {}
         [t] => f.write_fmt(format_args!("{}", t))?,
         _ => {
-            let s = allowed[0..allowed.len() - 1].iter().map(|t| format!("{}", t)).collect::<Vec<String>>().join(", ");
+            let s = allowed[0..allowed.len() - 1]
+                .iter()
+                .map(|t| format!("{}", t))
+                .collect::<Vec<String>>()
+                .join(", ");
             f.write_fmt(format_args!("{} or {}", s, allowed.last().unwrap()))?
         }
     }
@@ -931,59 +976,123 @@ fn fmt_expected_arg(f: &mut std::fmt::Formatter, name: impl Display, allowed: &V
 impl Display for Reason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::None => f.write_str("unknown reason - this should not happen, please file a bug report"),
+            Self::None => {
+                f.write_str("unknown reason - this should not happen, please file a bug report")
+            }
 
             Self::Syntax(Syntax::UnexpectedEof) => f.write_str("unexpected end of input"),
-            Self::Syntax(Syntax::UnexpectedChar(c)) => f.write_fmt(format_args!("unexpected {}", c)),
+            Self::Syntax(Syntax::UnexpectedChar(c)) => {
+                f.write_fmt(format_args!("unexpected {}", c))
+            }
             Self::Syntax(Syntax::ExpectedOne(x)) => f.write_fmt(format_args!("expected {}", x)),
-            Self::Syntax(Syntax::ExpectedTwo(x, y)) => f.write_fmt(format_args!("expected {} or {}", x, y)),
-            Self::Syntax(Syntax::ExpectedThree(x, y, z)) => f.write_fmt(format_args!("expected {}, {} or {}", x, y, z)),
-            Self::Syntax(Syntax::MultiSlurp) => f.write_str("only one slurp allowed in this context"),
-            Self::Syntax(Syntax::DefaultSequence) => f.write_str("binding without default value follows binding with default value"),
+            Self::Syntax(Syntax::ExpectedTwo(x, y)) => {
+                f.write_fmt(format_args!("expected {} or {}", x, y))
+            }
+            Self::Syntax(Syntax::ExpectedThree(x, y, z)) => {
+                f.write_fmt(format_args!("expected {}, {} or {}", x, y, z))
+            }
+            Self::Syntax(Syntax::MultiSlurp) => {
+                f.write_str("only one slurp allowed in this context")
+            }
+            Self::Syntax(Syntax::DefaultSequence) => {
+                f.write_str("binding without default value follows binding with default value")
+            }
 
             Self::Unbound(key) => f.write_fmt(format_args!("unbound name '{}'", key)),
 
             Self::Unassigned(key) => f.write_fmt(format_args!("unbound key '{}'", key)),
 
-            Self::Unpack(Unpack::KeyMissing(key)) => f.write_fmt(format_args!("unbound key '{}'", key)),
+            Self::Unpack(Unpack::KeyMissing(key)) => {
+                f.write_fmt(format_args!("unbound key '{}'", key))
+            }
             Self::Unpack(Unpack::ListTooLong) => f.write_str("list too long"),
             Self::Unpack(Unpack::ListTooShort) => f.write_str("list too short"),
-            Self::Unpack(Unpack::TypeMismatch(x, y)) => f.write_fmt(format_args!("expected {}, found {}", x, y)),
+            Self::Unpack(Unpack::TypeMismatch(x, y)) => {
+                f.write_fmt(format_args!("expected {}, found {}", x, y))
+            }
 
-            Self::Internal(reason) => f.write_fmt(format_args!("internal error {:03} - this should not happen, please file a bug report", reason.error_code())),
+            Self::Internal(reason) => f.write_fmt(format_args!(
+                "internal error {:03} - this should not happen, please file a bug report",
+                reason.error_code()
+            )),
 
             Self::External(reason) => f.write_fmt(format_args!("external error: {}", reason)),
 
-            Self::TypeMismatch(TypeMismatch::ArgCount{ low, high, received }) => {
+            Self::TypeMismatch(TypeMismatch::ArgCount {
+                low,
+                high,
+                received,
+            }) => {
                 if low == high && *high == 1 {
                     f.write_fmt(format_args!("expected 1 argument, got {}", received))
                 } else if low == high {
                     f.write_fmt(format_args!("expected {} arguments, got {}", low, received))
                 } else {
-                    f.write_fmt(format_args!("expected {} to {} arguments, got {}", low, high, received))
+                    f.write_fmt(format_args!(
+                        "expected {} to {} arguments, got {}",
+                        low, high, received
+                    ))
                 }
-            },
-            Self::TypeMismatch(TypeMismatch::BinOp(l, r, op)) => f.write_fmt(format_args!("unsuitable types for '{}': {} and {}", op, l, r)),
-            Self::TypeMismatch(TypeMismatch::Call(x)) => f.write_fmt(format_args!("unsuitable type for function call: {}", x)),
-            Self::TypeMismatch(TypeMismatch::ExpectedPosArg { index, allowed, received }) => fmt_expected_arg(f, index + 1, &allowed.vec(), received),
-            Self::TypeMismatch(TypeMismatch::ExpectedKwarg { name, allowed, received }) => fmt_expected_arg(f, name, &allowed.vec(), received),
-            Self::TypeMismatch(TypeMismatch::Interpolate(x)) => f.write_fmt(format_args!("unsuitable type for interpolation: {}", x)),
-            Self::TypeMismatch(TypeMismatch::InterpolateSpec(x)) => f.write_fmt(format_args!("unsuitable type for format spec: {}", x)),
-            Self::TypeMismatch(TypeMismatch::Iterate(x)) => f.write_fmt(format_args!("non-iterable type: {}", x)),
-            Self::TypeMismatch(TypeMismatch::Json(x)) => f.write_fmt(format_args!("unsuitable type for JSON-like conversion: {}", x)),
-            Self::TypeMismatch(TypeMismatch::MapKey(x)) => f.write_fmt(format_args!("unsuitable type for map key: {}", x)),
-            Self::TypeMismatch(TypeMismatch::SplatArg(x)) => f.write_fmt(format_args!("unsuitable type for splatting: {}", x)),
-            Self::TypeMismatch(TypeMismatch::SplatList(x)) => f.write_fmt(format_args!("unsuitable type for splatting: {}", x)),
-            Self::TypeMismatch(TypeMismatch::SplatMap(x)) => f.write_fmt(format_args!("unsuitable type for splatting: {}", x)),
-            Self::TypeMismatch(TypeMismatch::UnOp(x, op)) => f.write_fmt(format_args!("unsuitable type for '{}': {}", op, x)),
+            }
+            Self::TypeMismatch(TypeMismatch::BinOp(l, r, op)) => f.write_fmt(format_args!(
+                "unsuitable types for '{}': {} and {}",
+                op, l, r
+            )),
+            Self::TypeMismatch(TypeMismatch::Call(x)) => {
+                f.write_fmt(format_args!("unsuitable type for function call: {}", x))
+            }
+            Self::TypeMismatch(TypeMismatch::ExpectedPosArg {
+                index,
+                allowed,
+                received,
+            }) => fmt_expected_arg(f, index + 1, &allowed.vec(), received),
+            Self::TypeMismatch(TypeMismatch::ExpectedKwarg {
+                name,
+                allowed,
+                received,
+            }) => fmt_expected_arg(f, name, &allowed.vec(), received),
+            Self::TypeMismatch(TypeMismatch::Interpolate(x)) => {
+                f.write_fmt(format_args!("unsuitable type for interpolation: {}", x))
+            }
+            Self::TypeMismatch(TypeMismatch::InterpolateSpec(x)) => {
+                f.write_fmt(format_args!("unsuitable type for format spec: {}", x))
+            }
+            Self::TypeMismatch(TypeMismatch::Iterate(x)) => {
+                f.write_fmt(format_args!("non-iterable type: {}", x))
+            }
+            Self::TypeMismatch(TypeMismatch::Json(x)) => f.write_fmt(format_args!(
+                "unsuitable type for JSON-like conversion: {}",
+                x
+            )),
+            Self::TypeMismatch(TypeMismatch::MapKey(x)) => {
+                f.write_fmt(format_args!("unsuitable type for map key: {}", x))
+            }
+            Self::TypeMismatch(TypeMismatch::SplatArg(x)) => {
+                f.write_fmt(format_args!("unsuitable type for splatting: {}", x))
+            }
+            Self::TypeMismatch(TypeMismatch::SplatList(x)) => {
+                f.write_fmt(format_args!("unsuitable type for splatting: {}", x))
+            }
+            Self::TypeMismatch(TypeMismatch::SplatMap(x)) => {
+                f.write_fmt(format_args!("unsuitable type for splatting: {}", x))
+            }
+            Self::TypeMismatch(TypeMismatch::UnOp(x, op)) => {
+                f.write_fmt(format_args!("unsuitable type for '{}': {}", op, x))
+            }
 
             Self::Value(Value::TooLarge) => f.write_str("value too large"),
             Self::Value(Value::TooLong) => f.write_str("value too long"),
             Self::Value(Value::OutOfRange) => f.write_str("value out of range"),
-            Self::Value(Value::Convert(t)) => f.write_fmt(format_args!("couldn't convert to {}", t)),
+            Self::Value(Value::Convert(t)) => {
+                f.write_fmt(format_args!("couldn't convert to {}", t))
+            }
 
-            Self::FileSystem(FileSystem::NoParent(p)) => f.write_fmt(format_args!("path has no parent: {}", p.display())),
-            Self::FileSystem(FileSystem::Read(p)) => f.write_fmt(format_args!("couldn't read file: {}", p.display())),
+            Self::FileSystem(FileSystem::NoParent(p)) => {
+                f.write_fmt(format_args!("path has no parent: {}", p.display()))
+            }
+            Self::FileSystem(FileSystem::Read(p)) => {
+                f.write_fmt(format_args!("couldn't read file: {}", p.display()))
+            }
 
             Self::UnknownImport(p) => f.write_fmt(format_args!("unknown import: '{}'", p)),
         }
@@ -1007,7 +1116,6 @@ impl Display for Action {
     }
 }
 
-
 /// Utility struct for facilitating error rendering.
 ///
 /// Has access to both the error and the code, so that it can just implement the
@@ -1018,7 +1126,10 @@ impl<'a> Display for ErrorRenderer<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let ErrorRenderer(err, code) = self;
 
-        f.write_fmt(format_args!("Error: {}", err.reason.as_ref().unwrap_or(&Reason::None)))?;
+        f.write_fmt(format_args!(
+            "Error: {}",
+            err.reason.as_ref().unwrap_or(&Reason::None)
+        ))?;
         if let Some(locs) = err.locations.as_ref() {
             for (loc, act) in locs.iter() {
                 if let Some(code) = code {
@@ -1026,7 +1137,10 @@ impl<'a> Display for ErrorRenderer<'a> {
                     let bol = loc.offset() - loc.column() as usize;
 
                     // Offset of the end of the line
-                    let eol = code[bol+1..].find('\n').map(|x| x + bol + 1).unwrap_or(code.len());
+                    let eol = code[bol + 1..]
+                        .find('\n')
+                        .map(|x| x + bol + 1)
+                        .unwrap_or(code.len());
 
                     // Offset of the end of the span to be displayed: either the end
                     // of the line (if longer than a line), or the end of the span
@@ -1042,15 +1156,18 @@ impl<'a> Display for ErrorRenderer<'a> {
                         f.write_char('^')?;
                     }
                 }
-                f.write_fmt(format_args!("\nwhile {} at {}:{}", act, loc.line() + 1, loc.column() + 1))?;
+                f.write_fmt(format_args!(
+                    "\nwhile {} at {}:{}",
+                    act,
+                    loc.line() + 1,
+                    loc.column() + 1
+                ))?;
             }
         }
 
         Ok(())
     }
 }
-
-
 
 // Interval tree
 // ------------------------------------------------------------------------------------------------
@@ -1063,7 +1180,7 @@ pub(crate) struct IntervalTree<I, S, T> {
 impl<I: Debug + Copy + PartialOrd, S: Debug, T: Debug> IntervalTree<I, S, T> {
     pub fn new(mut endpoints: Vec<I>) -> Self {
         if endpoints.len() == 0 {
-            return IntervalTree { root: None }
+            return IntervalTree { root: None };
         }
 
         assert!(endpoints.len() > 1);
@@ -1088,7 +1205,7 @@ impl<I: Debug + Copy + PartialOrd, S: Debug, T: Debug> IntervalTree<I, S, T> {
         leaves_p2.append(&mut leaves);
 
         while leaves_p2.len() > 1 {
-            for _ in 0..leaves_p2.len()/2 {
+            for _ in 0..leaves_p2.len() / 2 {
                 let left = leaves_p2.pop_front().unwrap();
                 let right = leaves_p2.pop_front().unwrap();
                 let node = Node::combine(left, right);
@@ -1096,7 +1213,9 @@ impl<I: Debug + Copy + PartialOrd, S: Debug, T: Debug> IntervalTree<I, S, T> {
             }
         }
 
-        IntervalTree { root: leaves_p2.pop_front() }
+        IntervalTree {
+            root: leaves_p2.pop_front(),
+        }
     }
 
     pub fn insert_first(&mut self, left: I, right: I, value: S) {
@@ -1110,7 +1229,6 @@ impl<I: Debug + Copy + PartialOrd, S: Debug, T: Debug> IntervalTree<I, S, T> {
             root.insert_second(left, right, value);
         }
     }
-
 }
 
 impl<I: Copy + PartialOrd> IntervalTree<I, (Span, Action), Reason> {
@@ -1119,7 +1237,11 @@ impl<I: Copy + PartialOrd> IntervalTree<I, (Span, Action), Reason> {
             None => Error::new(Internal::UnknownError),
 
             Some(root) => {
-                let mut err = Error::new(root.most_specific_second(loc).cloned().unwrap_or(Reason::from(Internal::UnknownError)));
+                let mut err = Error::new(
+                    root.most_specific_second(loc)
+                        .cloned()
+                        .unwrap_or(Reason::from(Internal::UnknownError)),
+                );
 
                 let mut locations: Vec<(Span, Action)> = Vec::new();
                 root.all_first(loc, &mut locations);
@@ -1155,7 +1277,8 @@ impl<I: Copy + PartialOrd, S, T> Node<I, S, T> {
         let left_end = left.left_end;
         let right_end = right.right_end;
         Node {
-            left_end, right_end,
+            left_end,
+            right_end,
             nodes: Some(Box::new((left, right))),
             data_s: Vec::new(),
             data_t: Vec::new(),
@@ -1211,7 +1334,6 @@ impl<I: Copy + PartialOrd, S, T> Node<I, S, T> {
         }
     }
 }
-
 
 impl<I: Copy + PartialOrd, S: Copy, T> Node<I, S, T> {
     fn all_first(&self, loc: I, target: &mut Vec<S>) {

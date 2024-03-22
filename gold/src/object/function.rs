@@ -4,17 +4,16 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 use gc::{Finalize, Gc, Trace};
-use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::Visitor;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::ImportConfig;
+use super::{Key, List, Map, Object};
 use crate::builtins::BUILTINS;
 use crate::compile::Function;
 use crate::error::Error;
 use crate::eval::Vm;
 use crate::wrappers::GcCell;
-use super::{Object, List, Map, Key};
-
+use crate::ImportConfig;
 
 /// A builtin function is a 'pure' function implemented in Rust associated with
 /// a name. The name is used for serializing. When deserializing, the name is
@@ -46,7 +45,11 @@ impl<'a> Visitor<'a> for BuiltinVisitor {
     }
 
     fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        BUILTINS.0.get(v).map(|i| BUILTINS.1[*i]).ok_or(E::custom("unknown builtin name"))
+        BUILTINS
+            .0
+            .get(v)
+            .map(|i| BUILTINS.1[*i])
+            .ok_or(E::custom("unknown builtin name"))
     }
 }
 
@@ -56,7 +59,6 @@ impl<'a> Deserialize<'a> for Builtin {
     }
 }
 
-
 /// A 'pure' function implemented in Rust. Unlike [`Builtin`], this form of
 /// function is backed by a dynamic callable object, which can be anything, such
 /// as a closure. Such objects can be created dynamically, and are thus
@@ -64,7 +66,6 @@ impl<'a> Deserialize<'a> for Builtin {
 /// Python. This also makes them inherently non-serializable.
 #[derive(Clone)]
 pub(crate) struct Closure(pub(crate) Rc<dyn Fn(&List, Option<&Map>) -> Result<Object, Error>>);
-
 
 /// The function variant represents all possible forms of callable objects in
 /// Gold.
@@ -84,7 +85,11 @@ pub(crate) enum FuncVariant {
 impl Debug for FuncVariant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Func(x, e) => f.debug_tuple("FuncVariant::Func").field(x).field(e).finish(),
+            Self::Func(x, e) => f
+                .debug_tuple("FuncVariant::Func")
+                .field(x)
+                .field(e)
+                .finish(),
             Self::Builtin(_) => f.debug_tuple("FuncVariant::Builtin").finish(),
             Self::Closure(_) => f.debug_tuple("FuncVariant::Closure").finish(),
         }

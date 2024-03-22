@@ -3,20 +3,23 @@ use symbol_table::GlobalSymbol;
 use crate::error::{Error, Span, Tagged};
 use crate::wrappers::OrderedMap;
 
-
 // Boxable
 // ------------------------------------------------------------------------------------------------
 
 /// Utility trait for converting any value to a boxed value.
-pub trait Boxable<T> where T: Sized {
+pub trait Boxable<T>
+where
+    T: Sized,
+{
     /// Convert self to a boxed value.
     fn to_box(self) -> Box<T>;
 }
 
 impl<T> Boxable<T> for T {
-    fn to_box(self) -> Box<T> { Box::new(self) }
+    fn to_box(self) -> Box<T> {
+        Box::new(self)
+    }
 }
-
 
 // Taggable
 // ------------------------------------------------------------------------------------------------
@@ -28,15 +31,22 @@ impl<T> Boxable<T> for T {
 /// There's no need to implement this trait beyond the blanket implementation.
 pub trait Taggable: Sized {
     /// Wrap this object in a tagged wrapper.
-    fn tag<T>(self, loc: T) -> Tagged<Self> where Span: From<T>;
+    fn tag<T>(self, loc: T) -> Tagged<Self>
+    where
+        Span: From<T>;
 }
 
-impl<T> Taggable for T where T: Sized {
-    fn tag<U>(self, loc: U) -> Tagged<Self> where Span: From<U> {
+impl<T> Taggable for T
+where
+    T: Sized,
+{
+    fn tag<U>(self, loc: U) -> Tagged<Self>
+    where
+        Span: From<U>,
+    {
         Tagged::new(Span::from(loc), self)
     }
 }
-
 
 // Validatable
 // ------------------------------------------------------------------------------------------------
@@ -55,7 +65,6 @@ impl<T: Validatable> Validatable for Tagged<T> {
         self.as_ref().validate()
     }
 }
-
 
 // ToVec
 // ------------------------------------------------------------------------------------------------
@@ -77,33 +86,32 @@ impl<T> ToVec<T> for Vec<T> {
     }
 }
 
-
 // ToMap
 // ------------------------------------------------------------------------------------------------
 
 /// Utility trait for converting things to maps. This is used by the Object::map constructor.
-pub(crate) trait ToMap<K,V> {
-    fn to_map(self) -> OrderedMap<K,V>;
+pub(crate) trait ToMap<K, V> {
+    fn to_map(self) -> OrderedMap<K, V>;
 }
 
-impl<K,V> ToMap<K,V> for OrderedMap<K,V> {
-    fn to_map(self) -> OrderedMap<K,V> {
+impl<K, V> ToMap<K, V> for OrderedMap<K, V> {
+    fn to_map(self) -> OrderedMap<K, V> {
         self
     }
 }
 
-impl<K,V> ToMap<K,V> for () {
-    fn to_map(self) -> OrderedMap<K,V> {
+impl<K, V> ToMap<K, V> for () {
+    fn to_map(self) -> OrderedMap<K, V> {
         OrderedMap::new()
     }
 }
 
-impl<V,A,B> ToMap<GlobalSymbol,V> for Vec<(A,B)>
+impl<V, A, B> ToMap<GlobalSymbol, V> for Vec<(A, B)>
 where
     A: AsRef<str>,
     V: From<B>,
 {
-    fn to_map(self) -> OrderedMap<GlobalSymbol,V> {
+    fn to_map(self) -> OrderedMap<GlobalSymbol, V> {
         let mut ret = OrderedMap::new();
         for (k, v) in self {
             ret.insert(GlobalSymbol::new(k.as_ref()), V::from(v));
@@ -111,7 +119,6 @@ where
         ret
     }
 }
-
 
 // Peek
 // ------------------------------------------------------------------------------------------------

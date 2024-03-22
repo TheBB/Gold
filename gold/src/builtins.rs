@@ -1,13 +1,12 @@
 use std::borrow::Borrow;
-use std::str::FromStr;
 use std::collections::HashMap;
+use std::str::FromStr;
 
-use crate::{Type, Object, List, Map, Key};
 use crate::error::Value;
-use crate::object::integer::IntVariant;
+use crate::error::{Error, TypeMismatch, Types};
 use crate::object::function::Builtin;
-use crate::error::{Error, Types, TypeMismatch};
-
+use crate::object::integer::IntVariant;
+use crate::{Key, List, Map, Object, Type};
 
 /// Convert a function by name to a [`Builtin`] object and append it to a
 /// mapping.
@@ -30,7 +29,6 @@ macro_rules! builtin {
         $m.insert(stringify!($e), index);
     };
 }
-
 
 lazy_static! {
     /// Table of all builtin functions.
@@ -66,7 +64,6 @@ lazy_static! {
     };
 }
 
-
 /// Return an error indicating wrong type of positional parameter.
 ///
 /// ```ignore
@@ -86,7 +83,6 @@ macro_rules! expected_pos {
     };
 }
 
-
 /// Return an error indicating wrong type of keyword parameter.
 ///
 /// ```ignore
@@ -105,7 +101,6 @@ macro_rules! expected_kw {
         }))
     };
 }
-
 
 /// Return an error indicating wrong number of arguments.
 ///
@@ -133,7 +128,6 @@ macro_rules! argcount {
     };
 }
 
-
 /// Return the size of a collection or the length of a string.
 fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
@@ -153,7 +147,6 @@ fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     argcount!(1, args)
 }
 
-
 /// Works similarly to Python's function of the same name.
 fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [start: int, stop: int] {
@@ -171,7 +164,6 @@ fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
     argcount!(1, 2, args)
 }
-
 
 /// Convert the argument to an integer
 fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
@@ -198,7 +190,6 @@ fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     argcount!(1, args)
 }
 
-
 /// Convert the argument to a float
 fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
@@ -224,7 +215,6 @@ fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     argcount!(1, args)
 }
 
-
 /// Convert the argument to a bool (this never fails, see Gold's truthiness rules)
 fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: any] {
@@ -233,7 +223,6 @@ fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
     argcount!(1, args)
 }
-
 
 /// Convert the argument to a string
 fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
@@ -247,7 +236,6 @@ fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
     argcount!(1, args)
 }
-
 
 /// Map a function over a list. This can also be achieved in Gold with
 ///
@@ -269,7 +257,6 @@ fn map(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
     argcount!(2, args)
 }
-
 
 /// Filter a list through a function. This can also be achieved in Gold with
 ///
@@ -294,7 +281,6 @@ fn filter(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     argcount!(2, args)
 }
 
-
 /// Return a list of key-value pairs from a map.
 fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: map] {
@@ -312,7 +298,6 @@ fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
     argcount!(1, args)
 }
-
 
 /// Compute the exponential function. This supports two signatures:
 ///
@@ -334,7 +319,6 @@ fn exp(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
     argcount!(1, args)
 }
 
-
 /// Compute the logaritm. This supports two signatures:
 ///
 /// `log(x)` is equivalent to `log(x, base: 2.71828...)` (the natural logarithm),
@@ -355,7 +339,6 @@ fn log(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
     argcount!(1, args)
 }
 
-
 /// Return the unicode codepoint corresponding to a single-character string.
 fn ord(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
@@ -372,7 +355,6 @@ fn ord(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     argcount!(1, args)
 }
 
-
 /// Return the character (as a single-character string) that corresponds to
 /// a unicode codepoint.
 fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
@@ -387,14 +369,12 @@ fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     argcount!(1, args)
 }
 
-
 /// Check whether the argument is an integer.
 fn isint(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: int] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
 }
-
 
 /// Check whether the argument is a string.
 fn isstr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
@@ -403,14 +383,12 @@ fn isstr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     argcount!(1, args)
 }
 
-
 /// Check whether the argument is null.
 fn isnull(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: null] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
 }
-
 
 /// Check whether the argument is a boolean.
 fn isbool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
@@ -419,14 +397,12 @@ fn isbool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     argcount!(1, args)
 }
 
-
 /// Check whether the argument is a float.
 fn isfloat(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: float] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
 }
-
 
 /// Check whether the argument is a number (integer or float).
 fn isnumber(args: &List, _: Option<&Map>) -> Result<Object, Error> {
@@ -436,7 +412,6 @@ fn isnumber(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     argcount!(1, args)
 }
 
-
 /// Check whether the argument is an object (a mapping).
 fn isobject(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: map] { return Ok(Object::bool(true)); });
@@ -444,14 +419,12 @@ fn isobject(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     argcount!(1, args)
 }
 
-
 /// Check whether the argument is a list.
 fn islist(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [_x: list] { return Ok(Object::bool(true)); });
     signature!(args = [_x: any] { return Ok(Object::bool(false)); });
     argcount!(1, args)
 }
-
 
 /// Check whether the argument is a function.
 fn isfunc(args: &List, _: Option<&Map>) -> Result<Object, Error> {

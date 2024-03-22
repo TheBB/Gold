@@ -1,22 +1,18 @@
 use std::fmt::Display;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use symbol_table::GlobalSymbol;
 
 use crate::{wrappers::OrderedMap, Object};
 
-
 /// Type used for all interned strings, map keys, variable names, etc.
 pub type Key = GlobalSymbol;
-
 
 /// Type used for lists.
 pub type List = Vec<Object>;
 
-
 /// Type used for mapping of strings (that is, [`Key`]) to objects.
 pub type Map = OrderedMap<Key, Object>;
-
 
 /// Enumeration of all the different types a Gold object can have.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

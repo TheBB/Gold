@@ -1,9 +1,9 @@
 //! Integer implementation.
 
-use std::iter::Step;
 use std::cmp::Ordering;
-use std::str::FromStr;
 use std::fmt::Display;
+use std::iter::Step;
+use std::str::FromStr;
 
 use gc::{Finalize, Gc, Trace};
 use num_bigint::{BigInt, BigUint};
@@ -11,11 +11,12 @@ use num_traits::{checked_pow, ToPrimitive};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Value};
-use crate::wrappers::WBigInt;
 use crate::traits::Peek;
+use crate::wrappers::WBigInt;
 
-use crate::formatting::{AlignSpec, SignSpec, GroupingSpec, IntegerFormatType, UppercaseSpec, IntegerFormatSpec};
-
+use crate::formatting::{
+    AlignSpec, GroupingSpec, IntegerFormatSpec, IntegerFormatType, SignSpec, UppercaseSpec,
+};
 
 /// The integer variant represents all possible Gold integers.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Trace, Finalize)]
@@ -62,7 +63,7 @@ impl PartialOrd<f64> for IntVariant {
                 } else {
                     Some(Ordering::Equal)
                 }
-            },
+            }
         }
     }
 }
@@ -87,9 +88,9 @@ impl From<i32> for IntVariant {
 
 impl From<usize> for IntVariant {
     fn from(x: usize) -> Self {
-        i64::try_from(x).map(IntVariant::from).unwrap_or_else(
-            |_| IntVariant::from(BigInt::from(x))
-        )
+        i64::try_from(x)
+            .map(IntVariant::from)
+            .unwrap_or_else(|_| IntVariant::from(BigInt::from(x)))
     }
 }
 
@@ -152,31 +153,31 @@ impl Step for IntVariant {
 impl IntVariant {
     /// Sum of two integers. This implements the addition operator.
     pub fn add(&self, other: &IntVariant) -> IntVariant {
-        IntVariant::normalize(&self.operate(other, i64::checked_add, |x,y| x + y))
+        IntVariant::normalize(&self.operate(other, i64::checked_add, |x, y| x + y))
     }
 
     /// Difference of two integers. This implements the subtraaction operator.
     pub fn sub(&self, other: &IntVariant) -> IntVariant {
-        IntVariant::normalize(&self.operate(other, i64::checked_sub, |x,y| x - y))
+        IntVariant::normalize(&self.operate(other, i64::checked_sub, |x, y| x - y))
     }
 
     /// Product of two integers. This implements the multiplication operator.
     pub fn mul(&self, other: &IntVariant) -> IntVariant {
-        IntVariant::normalize(&self.operate(other, i64::checked_mul, |x,y| x * y))
+        IntVariant::normalize(&self.operate(other, i64::checked_mul, |x, y| x * y))
     }
 
     /// Mathematical ratio of two integers. This implements the division operator.
     pub fn div(&self, other: &IntVariant) -> f64 {
         self.operate(
             other,
-            |x,y| Some((x as f64) / (y as f64)),
-            |x,y| big_to_f64(x) / big_to_f64(y),
+            |x, y| Some((x as f64) / (y as f64)),
+            |x, y| big_to_f64(x) / big_to_f64(y),
         )
     }
 
     /// Integer division.
     pub fn idiv(&self, other: &IntVariant) -> IntVariant {
-        IntVariant::normalize(&self.operate(other, i64::checked_div, |x,y| x / y))
+        IntVariant::normalize(&self.operate(other, i64::checked_div, |x, y| x / y))
     }
 
     /// Universal utility method for implementing operators.
@@ -188,18 +189,19 @@ impl IntVariant {
     ///
     /// This method does not apply normalization to the result. That is the
     /// responsibility of the caller.
-    fn operate<S,T,U>(
+    fn operate<S, T, U>(
         &self,
         other: &IntVariant,
         ixi: impl Fn(i64, i64) -> Option<S>,
         bxb: impl Fn(&BigInt, &BigInt) -> T,
-    ) -> U where
+    ) -> U
+    where
         U: From<S> + From<T>,
     {
         match (self, other) {
-            (Self::Small(xx), Self::Small(yy)) => ixi(*xx, *yy).map(U::from).unwrap_or_else(
-                || U::from(bxb(&BigInt::from(*xx), &BigInt::from(*yy)))
-            ),
+            (Self::Small(xx), Self::Small(yy)) => ixi(*xx, *yy)
+                .map(U::from)
+                .unwrap_or_else(|| U::from(bxb(&BigInt::from(*xx), &BigInt::from(*yy)))),
             (Self::Small(xx), Self::Big(yy)) => U::from(bxb(&BigInt::from(*xx), yy.peek())),
             (Self::Big(xx), Self::Small(yy)) => U::from(bxb(xx.peek(), &BigInt::from(*yy))),
             (Self::Big(xx), Self::Big(yy)) => U::from(bxb(xx.peek(), yy.peek())),
@@ -215,7 +217,7 @@ impl IntVariant {
                 } else {
                     Self::from(-BigInt::from(*x)).normalize()
                 }
-            },
+            }
             Self::Big(x) => Self::from(-x.peek()).normalize(),
         }
     }
@@ -269,7 +271,7 @@ impl IntVariant {
         }
 
         if exp == one {
-            return Some(IntVariant::from(base))
+            return Some(IntVariant::from(base));
         }
 
         let mut acc = base.clone();
@@ -298,7 +300,10 @@ impl IntVariant {
     /// Used as a postprocesssing step for most arithmetic operations.
     pub fn normalize(&self) -> IntVariant {
         if let Self::Big(x) = &self {
-            x.peek().to_i64().map(IntVariant::Small).unwrap_or_else(|| self.clone())
+            x.peek()
+                .to_i64()
+                .map(IntVariant::Small)
+                .unwrap_or_else(|| self.clone())
         } else {
             self.clone()
         }
@@ -339,7 +344,7 @@ impl IntVariant {
                 let codepoint = u32::try_from(self).map_err(|_| Error::new(Value::OutOfRange))?;
                 let c = char::try_from(codepoint).map_err(|_| Error::new(Value::OutOfRange))?;
                 return Ok(c.to_string());
-            },
+            }
             (IntegerFormatType::Binary, Self::Small(x)) => format!("{:+b}", x),
             (IntegerFormatType::Binary, Self::Big(x)) => format!("{:+b}", x.peek()),
             (IntegerFormatType::Decimal, Self::Small(x)) => format!("{:+}", x),
@@ -347,28 +352,46 @@ impl IntVariant {
             (IntegerFormatType::Octal, Self::Small(x)) => format!("{:+o}", x),
             (IntegerFormatType::Octal, Self::Big(x)) => format!("{:+o}", x.peek()),
             (IntegerFormatType::Hex(UppercaseSpec::Lower), Self::Small(x)) => format!("{:+x}", x),
-            (IntegerFormatType::Hex(UppercaseSpec::Lower), Self::Big(x)) => format!("{:+x}", x.peek()),
+            (IntegerFormatType::Hex(UppercaseSpec::Lower), Self::Big(x)) => {
+                format!("{:+x}", x.peek())
+            }
             (IntegerFormatType::Hex(UppercaseSpec::Upper), Self::Small(x)) => format!("{:+X}", x),
-            (IntegerFormatType::Hex(UppercaseSpec::Upper), Self::Big(x)) => format!("{:+X}", x.peek()),
+            (IntegerFormatType::Hex(UppercaseSpec::Upper), Self::Big(x)) => {
+                format!("{:+X}", x.peek())
+            }
         };
 
         let mut base_digits = &base[1..];
         let mut buffer = String::new();
 
         match (spec.sign, self < &Self::Small(0)) {
-            (_, true) => { buffer.push('-'); },
-            (SignSpec::Plus, false) => { buffer.push('+'); }
-            (SignSpec::Space, false) => { buffer.push(' '); }
-            _ => {},
+            (_, true) => {
+                buffer.push('-');
+            }
+            (SignSpec::Plus, false) => {
+                buffer.push('+');
+            }
+            (SignSpec::Space, false) => {
+                buffer.push(' ');
+            }
+            _ => {}
         }
 
         if spec.alternate {
             match spec.fmt_type {
-                IntegerFormatType::Binary => { buffer += "0b"; },
-                IntegerFormatType::Octal => { buffer += "0o"; },
-                IntegerFormatType::Hex(UppercaseSpec::Lower) => { buffer += "0x"; },
-                IntegerFormatType::Hex(UppercaseSpec::Upper) => { buffer += "0X"; },
-                _ => {},
+                IntegerFormatType::Binary => {
+                    buffer += "0b";
+                }
+                IntegerFormatType::Octal => {
+                    buffer += "0o";
+                }
+                IntegerFormatType::Hex(UppercaseSpec::Lower) => {
+                    buffer += "0x";
+                }
+                IntegerFormatType::Hex(UppercaseSpec::Upper) => {
+                    buffer += "0X";
+                }
+                _ => {}
             }
         }
 
@@ -426,7 +449,6 @@ impl IntVariant {
     }
 }
 
-
 fn big_to_f64(x: &BigInt) -> f64 {
     f64::from_str(x.to_string().as_str()).unwrap()
 }
@@ -449,13 +471,11 @@ fn f64_to_bigs(x: f64) -> (BigInt, BigInt) {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use num_bigint::BigInt;
 
     use super::f64_to_bigs;
-
 
     #[test]
     fn to_bigs() {

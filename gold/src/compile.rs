@@ -1,14 +1,17 @@
 use std::collections::{HashMap, HashSet};
 
-use gc::{Trace, Finalize};
-use serde::{Serialize, Deserialize};
+use gc::{Finalize, Trace};
+use serde::{Deserialize, Serialize};
 
-use crate::{Key, Object};
-use crate::ast::{ArgElement, BinOp, Binding, BindingClassifier, BindingMode, BindingShield, Expr, File, FreeNames, ListBinding, ListBindingElement, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, TopLevel, Transform, UnOp, Visitable};
+use crate::ast::{
+    ArgElement, BinOp, Binding, BindingClassifier, BindingMode, BindingShield, Expr, File,
+    FreeNames, ListBinding, ListBindingElement, ListElement, MapBinding, MapBindingElement,
+    MapElement, StringElement, TopLevel, Transform, UnOp, Visitable,
+};
 use crate::builtins::BUILTINS;
 use crate::error::{Action, Error, IntervalTree, Reason, Span, Tagged, Unpack};
 use crate::formatting::FormatSpec;
-
+use crate::{Key, Object};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
 pub(crate) struct Function {
@@ -30,7 +33,6 @@ pub(crate) struct Function {
     #[unsafe_ignore_trace]
     pub trace: IntervalTree<usize, (Span, Action), Reason>,
 }
-
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub(crate) enum Instruction {
@@ -105,16 +107,33 @@ pub(crate) enum Instruction {
 
     // Shortcuts for internal use
     IntIndexL(usize),
-    IntIndexLAndJump { index: usize, jump: usize },
-    IntIndexFromEnd { index: usize, root_front: usize, root_back: usize },
-    IntIndexFromEndAndJump { index: usize, root_front: usize, root_back: usize, jump: usize },
-    IntSlice { start: usize, from_end: usize },
+    IntIndexLAndJump {
+        index: usize,
+        jump: usize,
+    },
+    IntIndexFromEnd {
+        index: usize,
+        root_front: usize,
+        root_back: usize,
+    },
+    IntIndexFromEndAndJump {
+        index: usize,
+        root_front: usize,
+        root_back: usize,
+        jump: usize,
+    },
+    IntSlice {
+        start: usize,
+        from_end: usize,
+    },
     IntIndexM(Key),
-    IntIndexMAndJump { key: Key, jump: usize },
+    IntIndexMAndJump {
+        key: Key,
+        jump: usize,
+    },
     IntPushToKwargs(Key),
     IntArgSplat,
 }
-
 
 #[derive(Debug)]
 enum BindingSlot {
@@ -154,20 +173,24 @@ impl Namespace {
         match self.types.get(&key) {
             Some(BindingSlot::Local(i)) => Instruction::StoreLocal(*i),
             Some(BindingSlot::Cell(i)) => Instruction::StoreCell(*i),
-            Some(BindingSlot::Enclosed(_)) => { panic!("storing in an enclosed slot"); },
+            Some(BindingSlot::Enclosed(_)) => {
+                panic!("storing in an enclosed slot");
+            }
             None => {
                 self.types.insert(key, BindingSlot::Local(self.next_local));
                 self.next_local += 1;
                 Instruction::StoreLocal(self.next_local - 1)
-            },
+            }
         }
     }
 
     pub fn mark_cell(&mut self, key: Key) {
         match self.types.get(&key) {
-            Some(BindingSlot::Local(_)) => { panic!("mark as cell but already local"); }
-            Some(BindingSlot::Cell(_)) => { }
-            Some(BindingSlot::Enclosed(_)) => { }
+            Some(BindingSlot::Local(_)) => {
+                panic!("mark as cell but already local");
+            }
+            Some(BindingSlot::Cell(_)) => {}
+            Some(BindingSlot::Enclosed(_)) => {}
             None => {
                 self.types.insert(key, BindingSlot::Cell(self.next_cell));
                 self.next_cell += 1;
@@ -177,16 +200,18 @@ impl Namespace {
 
     pub fn require_enclosed(&mut self, key: Key) {
         match self.types.get(&key) {
-            Some(BindingSlot::Enclosed(_)) => { }
-            Some(_) => { panic!("marking as enclosed a binding that already exists"); }
+            Some(BindingSlot::Enclosed(_)) => {}
+            Some(_) => {
+                panic!("marking as enclosed a binding that already exists");
+            }
             None => {
-                self.types.insert(key, BindingSlot::Enclosed(self.next_enclosed));
+                self.types
+                    .insert(key, BindingSlot::Enclosed(self.next_enclosed));
                 self.next_enclosed += 1;
             }
         }
     }
 }
-
 
 struct NamespaceStack {
     namespaces: Vec<Namespace>,
@@ -194,7 +219,9 @@ struct NamespaceStack {
 
 impl NamespaceStack {
     pub fn new() -> NamespaceStack {
-        NamespaceStack { namespaces: vec![Namespace::new(None)] }
+        NamespaceStack {
+            namespaces: vec![Namespace::new(None)],
+        }
     }
 
     pub fn push(&mut self) {
@@ -212,7 +239,10 @@ impl NamespaceStack {
             }
         }
 
-        BUILTINS.0.get(key.as_str()).map(|i| Instruction::LoadBuiltin(*i))
+        BUILTINS
+            .0
+            .get(key.as_str())
+            .map(|i| Instruction::LoadBuiltin(*i))
     }
 
     pub fn store_instruction(&mut self, key: Key) -> Instruction {
@@ -227,7 +257,6 @@ impl NamespaceStack {
         self.namespaces.last_mut().unwrap().require_enclosed(key);
     }
 }
-
 
 pub(crate) struct Compiler {
     constants: Vec<Object>,
@@ -259,7 +288,7 @@ impl Compiler {
             num_cells: 0,
             actions: Vec::new(),
             reasons: Vec::new(),
-         }
+        }
     }
 
     pub fn emit_file(&mut self, file: &File) -> Result<usize, Error> {
@@ -285,7 +314,8 @@ impl Compiler {
                 let index = self.import_path(path.as_ref().clone());
                 let loc = self.code.len();
                 self.instruction(Instruction::Import(index));
-                self.actions.push((loc, loc + 1, path.span(), Action::Import));
+                self.actions
+                    .push((loc, loc + 1, path.span(), Action::Import));
                 let len = self.emit_binding(binding)?;
                 Ok(len + 1)
             }
@@ -326,7 +356,11 @@ impl Compiler {
                 Ok(len + 1)
             }
 
-            Expr::Branch { condition, true_branch, false_branch } => {
+            Expr::Branch {
+                condition,
+                true_branch,
+                false_branch,
+            } => {
                 let cond_len = self.emit_expression(condition)?;
                 let cjump_index = self.instruction(Instruction::Noop);
                 let false_len = self.emit_expression(false_branch)?;
@@ -359,7 +393,10 @@ impl Compiler {
                 Ok(len + 1)
             }
 
-            Expr::Let { bindings, expression } => {
+            Expr::Let {
+                bindings,
+                expression,
+            } => {
                 self.names.push();
 
                 let mut classifier = BindingClassifier::new();
@@ -385,7 +422,11 @@ impl Compiler {
                 Ok(len)
             }
 
-            Expr::Function { positional, keywords, expression } => {
+            Expr::Function {
+                positional,
+                keywords,
+                expression,
+            } => {
                 let load_index = self.instruction(Instruction::Noop);
                 let mut len = 1;
 
@@ -409,7 +450,10 @@ impl Compiler {
                         self.instruction(Instruction::PushEnclosedToClosure(i));
                         len += 1;
                     } else {
-                        panic!("failed to look up name that must be provided to closure: {:?}", name);
+                        panic!(
+                            "failed to look up name that must be provided to closure: {:?}",
+                            name
+                        );
                     }
                 }
 
@@ -472,10 +516,15 @@ impl Compiler {
         let solution = binding.solution();
 
         if solution.slurp.is_some() {
-            self.instruction(Instruction::AssertListMinLength(solution.num_front + solution.num_back));
+            self.instruction(Instruction::AssertListMinLength(
+                solution.num_front + solution.num_back,
+            ));
             len += 1;
         } else {
-            self.instruction(Instruction::AssertListMinMaxLength(solution.num_front, solution.num_front + solution.def_front));
+            self.instruction(Instruction::AssertListMinMaxLength(
+                solution.num_front,
+                solution.num_front + solution.def_front,
+            ));
             len += 1;
         }
 
@@ -495,7 +544,10 @@ impl Compiler {
                     if let Some(d) = default {
                         let index = self.instruction(Instruction::Noop);
                         let default_len = self.emit_expression(d.as_ref())?;
-                        self.code[index] = Instruction::IntIndexLAndJump { index: i, jump: default_len };
+                        self.code[index] = Instruction::IntIndexLAndJump {
+                            index: i,
+                            jump: default_len,
+                        };
                         len += default_len + 1;
                     } else {
                         self.instruction(Instruction::IntIndexL(i));
@@ -547,7 +599,11 @@ impl Compiler {
 
         for element in binding.0.iter() {
             match element.as_ref() {
-                MapBindingElement::Binding { key, binding: sub_binding, default } => {
+                MapBindingElement::Binding {
+                    key,
+                    binding: sub_binding,
+                    default,
+                } => {
                     if let Some(d) = default {
                         let index = self.instruction(Instruction::Noop);
                         let default_len = self.emit_expression(d.as_ref())?;
@@ -559,8 +615,9 @@ impl Compiler {
                     } else {
                         let loc = self.code.len();
                         self.instruction(Instruction::IntIndexM(*key.as_ref()));
-                        self.actions.push((loc, loc+1, key.span(), Action::Bind));
-                        self.reasons.push((loc, loc+1, Reason::from(Unpack::KeyMissing(**key))));
+                        self.actions.push((loc, loc + 1, key.span(), Action::Bind));
+                        self.reasons
+                            .push((loc, loc + 1, Reason::from(Unpack::KeyMissing(**key))));
                     }
                     len += self.emit_binding(sub_binding)?;
                 }
@@ -601,7 +658,8 @@ impl Compiler {
                 let index = self.fmt_spec(spec.unwrap_or_default());
                 let loc = self.code.len();
                 self.instruction(Instruction::Format(index));
-                self.actions.push((loc, loc + 1, expr.span(), Action::Format));
+                self.actions
+                    .push((loc, loc + 1, expr.span(), Action::Format));
                 self.instruction(Instruction::Add);
                 Ok(len + 2)
             }
@@ -620,7 +678,8 @@ impl Compiler {
                 let len = self.emit_expression(expr)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::SplatToCollection);
-                self.actions.push((loc, loc + 1, expr.span(), Action::Splat));
+                self.actions
+                    .push((loc, loc + 1, expr.span(), Action::Splat));
                 Ok(len + 1)
             }
 
@@ -633,11 +692,16 @@ impl Compiler {
                 Ok(condition_len + element_len + 2)
             }
 
-            ListElement::Loop { binding, iterable, element } => {
+            ListElement::Loop {
+                binding,
+                iterable,
+                element,
+            } => {
                 let iterable_len = self.emit_expression(iterable)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::NewIterator);
-                self.actions.push((loc, loc+1, iterable.span(), Action::Iterate));
+                self.actions
+                    .push((loc, loc + 1, iterable.span(), Action::Iterate));
 
                 self.names.push();
 
@@ -669,7 +733,8 @@ impl Compiler {
             MapElement::Singleton { key, value } => {
                 let loc = self.code.len();
                 let mut len = self.emit_expression(key)?;
-                self.actions.push((loc, self.code.len(), key.span(), Action::Assign));
+                self.actions
+                    .push((loc, self.code.len(), key.span(), Action::Assign));
                 len += self.emit_expression(value)?;
                 self.instruction(Instruction::PushToMap);
                 Ok(len + 1)
@@ -679,7 +744,8 @@ impl Compiler {
                 let len = self.emit_expression(expr)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::SplatToCollection);
-                self.actions.push((loc, loc + 1, expr.span(), Action::Splat));
+                self.actions
+                    .push((loc, loc + 1, expr.span(), Action::Splat));
                 Ok(len + 1)
             }
 
@@ -692,11 +758,16 @@ impl Compiler {
                 Ok(condition_len + element_len + 2)
             }
 
-            MapElement::Loop { binding, iterable, element } => {
+            MapElement::Loop {
+                binding,
+                iterable,
+                element,
+            } => {
                 let iterable_len = self.emit_expression(iterable)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::NewIterator);
-                self.actions.push((loc, loc+1, iterable.span(), Action::Iterate));
+                self.actions
+                    .push((loc, loc + 1, iterable.span(), Action::Iterate));
 
                 self.names.push();
 
@@ -728,13 +799,20 @@ impl Compiler {
             Transform::UnOp(op) => {
                 let loc = self.code.len();
                 let len = match op.as_ref() {
-                    UnOp::Passthrough => { 0 },
-                    UnOp::ArithmeticalNegate => { self.code.push(Instruction::ArithmeticalNegate); 1 }
-                    UnOp::LogicalNegate => { self.code.push(Instruction::LogicalNegate); 1 }
+                    UnOp::Passthrough => 0,
+                    UnOp::ArithmeticalNegate => {
+                        self.code.push(Instruction::ArithmeticalNegate);
+                        1
+                    }
+                    UnOp::LogicalNegate => {
+                        self.code.push(Instruction::LogicalNegate);
+                        1
+                    }
                 };
 
                 if len > 0 {
-                    self.actions.push((loc, loc + len, op.span(), Action::Evaluate));
+                    self.actions
+                        .push((loc, loc + len, op.span(), Action::Evaluate));
                 }
                 Ok(len)
             }
@@ -765,24 +843,53 @@ impl Compiler {
                 let loc = self.code.len();
 
                 match operator.as_ref() {
-                    BinOp::Power => { self.code.push(Instruction::Power); }
-                    BinOp::Multiply => { self.code.push(Instruction::Multiply); }
-                    BinOp::IntegerDivide => { self.code.push(Instruction::IntegerDivide); }
-                    BinOp::Divide => { self.code.push(Instruction::Divide); }
-                    BinOp::Add => { self.code.push(Instruction::Add); }
-                    BinOp::Subtract => { self.code.push(Instruction::Subtract); }
-                    BinOp::Less => { self.code.push(Instruction::Less); }
-                    BinOp::Greater => { self.code.push(Instruction::Greater); }
-                    BinOp::LessEqual => { self.code.push(Instruction::LessEqual); }
-                    BinOp::GreaterEqual => { self.code.push(Instruction::GreaterEqual); }
-                    BinOp::Equal => { self.code.push(Instruction::Equal); }
-                    BinOp::NotEqual => { self.code.push(Instruction::NotEqual); }
-                    BinOp::Contains => { self.code.push(Instruction::Contains); }
-                    BinOp::Index => { self.code.push(Instruction::Index); }
+                    BinOp::Power => {
+                        self.code.push(Instruction::Power);
+                    }
+                    BinOp::Multiply => {
+                        self.code.push(Instruction::Multiply);
+                    }
+                    BinOp::IntegerDivide => {
+                        self.code.push(Instruction::IntegerDivide);
+                    }
+                    BinOp::Divide => {
+                        self.code.push(Instruction::Divide);
+                    }
+                    BinOp::Add => {
+                        self.code.push(Instruction::Add);
+                    }
+                    BinOp::Subtract => {
+                        self.code.push(Instruction::Subtract);
+                    }
+                    BinOp::Less => {
+                        self.code.push(Instruction::Less);
+                    }
+                    BinOp::Greater => {
+                        self.code.push(Instruction::Greater);
+                    }
+                    BinOp::LessEqual => {
+                        self.code.push(Instruction::LessEqual);
+                    }
+                    BinOp::GreaterEqual => {
+                        self.code.push(Instruction::GreaterEqual);
+                    }
+                    BinOp::Equal => {
+                        self.code.push(Instruction::Equal);
+                    }
+                    BinOp::NotEqual => {
+                        self.code.push(Instruction::NotEqual);
+                    }
+                    BinOp::Contains => {
+                        self.code.push(Instruction::Contains);
+                    }
+                    BinOp::Index => {
+                        self.code.push(Instruction::Index);
+                    }
                     BinOp::Or | BinOp::And => {}
                 };
 
-                self.actions.push((loc, loc + 1, operator.span(), Action::Evaluate));
+                self.actions
+                    .push((loc, loc + 1, operator.span(), Action::Evaluate));
                 Ok(len + 1)
             }
 
@@ -797,7 +904,8 @@ impl Compiler {
 
                 let loc = self.code.len();
                 self.instruction(Instruction::Call);
-                self.actions.push((loc, loc + 1, args.span(), Action::Evaluate));
+                self.actions
+                    .push((loc, loc + 1, args.span(), Action::Evaluate));
                 Ok(len + 3)
             }
         }
@@ -821,7 +929,8 @@ impl Compiler {
                 let len = self.emit_expression(expr)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::IntArgSplat);
-                self.actions.push((loc, loc+1, expr.span(), Action::Splat));
+                self.actions
+                    .push((loc, loc + 1, expr.span(), Action::Splat));
                 Ok(len + 1)
             }
         }
@@ -832,11 +941,19 @@ impl Compiler {
         self.code.push(instruction);
 
         match instruction {
-            Instruction::StoreLocal(i) => { self.num_locals = self.num_locals.max(i + 1); }
-            Instruction::LoadLocal(i) => { self.num_locals = self.num_locals.max(i + 1); }
-            Instruction::StoreCell(i) => { self.num_cells = self.num_cells.max(i + 1); }
-            Instruction::LoadCell(i) => { self.num_cells = self.num_cells.max(i + 1); }
-            _ => { }
+            Instruction::StoreLocal(i) => {
+                self.num_locals = self.num_locals.max(i + 1);
+            }
+            Instruction::LoadLocal(i) => {
+                self.num_locals = self.num_locals.max(i + 1);
+            }
+            Instruction::StoreCell(i) => {
+                self.num_cells = self.num_cells.max(i + 1);
+            }
+            Instruction::LoadCell(i) => {
+                self.num_cells = self.num_cells.max(i + 1);
+            }
+            _ => {}
         }
 
         r

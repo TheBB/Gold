@@ -21,29 +21,27 @@ use std::io::{Read, Write};
 use std::str::FromStr;
 use std::time::SystemTime;
 
-use json::JsonValue;
 use gc::{Finalize, Gc, GcCellRef, GcCellRefMut, Trace};
+use json::JsonValue;
 use num_bigint::BigInt;
 use rmp_serde::{decode, encode};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use symbol_table::GlobalSymbol;
 
 use crate::compile::Function;
 use crate::traits::{ToMap, ToVec};
 
-use crate::{ast, Type, Key, List, Map};
 use crate::error::{Error, Internal, Reason, TypeMismatch, Value};
 use crate::formatting::FormatSpec;
 use crate::wrappers::GcCell;
+use crate::{ast, Key, List, Map, Type};
 
 use function::FuncVariant;
 use integer::IntVariant;
 use string::StrVariant;
 
-
 /// The current serialization format version.
 const SERIALIZE_VERSION: i32 = 1;
-
 
 // Object variant
 // ------------------------------------------------------------------------------------------------
@@ -127,12 +125,18 @@ impl ObjectVariant {
     }
 
     /// Construct a list.
-    pub fn list<T>(x: T) -> Self where T: ToVec<Object> {
+    pub fn list<T>(x: T) -> Self
+    where
+        T: ToVec<Object>,
+    {
         Self::List(Gc::new(GcCell::new(x.to_vec())))
     }
 
     /// Construct a map.
-    pub fn map<T>(x: T) -> Self where T: ToMap<Key, Object> {
+    pub fn map<T>(x: T) -> Self
+    where
+        T: ToMap<Key, Object>,
+    {
         Self::Map(Gc::new(GcCell::new(x.to_map())))
     }
 
@@ -155,7 +159,7 @@ impl ObjectVariant {
                 } else {
                     Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
                 }
-            },
+            }
             Self::Boolean(x) => {
                 if let Some(str_spec) = spec.string_spec() {
                     let s = if *x { "true" } else { "false" };
@@ -169,14 +173,14 @@ impl ObjectVariant {
                 } else {
                     Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
                 }
-            },
+            }
             Self::Null => {
                 if let Some(str_spec) = spec.string_spec() {
                     Ok(str_spec.format("null"))
                 } else {
                     Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
                 }
-            },
+            }
             Self::Int(r) => {
                 if let Some(int_spec) = spec.integer_spec() {
                     int_spec.format(r)
@@ -185,14 +189,14 @@ impl ObjectVariant {
                 } else {
                     Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
                 }
-            },
+            }
             Self::Float(r) => {
                 if let Some(float_spec) = spec.float_spec() {
                     Ok(float_spec.format(*r))
                 } else {
                     Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
                 }
-            },
+            }
             _ => Err(Error::new(TypeMismatch::Interpolate(self.type_of()))),
         }
     }
@@ -202,37 +206,51 @@ impl ObjectVariant {
         match self {
             Self::Int(x) => Ok(Self::Int(x.neg())),
             Self::Float(x) => Ok(Self::Float(-x)),
-            _ => Err(Error::new(TypeMismatch::UnOp(self.type_of(), ast::UnOp::ArithmeticalNegate))),
+            _ => Err(Error::new(TypeMismatch::UnOp(
+                self.type_of(),
+                ast::UnOp::ArithmeticalNegate,
+            ))),
         }
     }
 
     /// The plus operator: concatenate strings and lists, or delegate to mathematical addition.
     pub fn add(&self, other: &Self) -> Result<Self, Error> {
         match (&self, &other) {
-            (Self::List(x), Self::List(y)) => Ok(Self::list(x.borrow().iter().chain(y.borrow().iter()).map(Object::clone).collect::<List>())),
+            (Self::List(x), Self::List(y)) => Ok(Self::list(
+                x.borrow()
+                    .iter()
+                    .chain(y.borrow().iter())
+                    .map(Object::clone)
+                    .collect::<List>(),
+            )),
             (Self::Str(x), Self::Str(y)) => Ok(Self::Str(x.add(y))),
-            _ => self.operate(other, IntVariant::add, |x,y| x + y, ast::BinOp::Add),
+            _ => self.operate(other, IntVariant::add, |x, y| x + y, ast::BinOp::Add),
         }
     }
 
     /// The minus operator: mathematical subtraction.
     pub fn sub(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, IntVariant::sub, |x,y| x - y, ast::BinOp::Subtract)
+        self.operate(other, IntVariant::sub, |x, y| x - y, ast::BinOp::Subtract)
     }
 
     /// The asterisk operator: mathematical multiplication.
     pub fn mul(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, IntVariant::mul, |x,y| x * y, ast::BinOp::Multiply)
+        self.operate(other, IntVariant::mul, |x, y| x * y, ast::BinOp::Multiply)
     }
 
     /// The slash operator: mathematical division.
     pub fn div(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, IntVariant::div, |x,y| x / y, ast::BinOp::Divide)
+        self.operate(other, IntVariant::div, |x, y| x / y, ast::BinOp::Divide)
     }
 
     /// The double slash operator: integer division.
     pub fn idiv(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, IntVariant::idiv, |x,y| (x / y).floor() as f64, ast::BinOp::IntegerDivide)
+        self.operate(
+            other,
+            IntVariant::idiv,
+            |x, y| (x / y).floor() as f64,
+            ast::BinOp::IntegerDivide,
+        )
     }
 
     /// Universal utility method for implementing mathematical operators.
@@ -242,13 +260,14 @@ impl ObjectVariant {
     /// and the `fxf` function is applied.
     ///
     /// In case of type mismatch, an error is reported using `op`.
-    fn operate<S,T>(
+    fn operate<S, T>(
         &self,
         other: &Self,
         ixi: impl Fn(&IntVariant, &IntVariant) -> S,
         fxf: impl Fn(f64, f64) -> T,
         op: ast::BinOp,
-    ) -> Result<Self, Error> where
+    ) -> Result<Self, Error>
+    where
         Self: From<S> + From<T>,
     {
         match (self, other) {
@@ -257,7 +276,11 @@ impl ObjectVariant {
             (Self::Float(xx), Self::Int(yy)) => Ok(Self::from(fxf(*xx, yy.to_f64()))),
             (Self::Float(xx), Self::Float(yy)) => Ok(Self::from(fxf(*xx, *yy))),
 
-            _ => Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), op))),
+            _ => Err(Error::new(TypeMismatch::BinOp(
+                self.type_of(),
+                other.type_of(),
+                op,
+            ))),
         }
     }
 
@@ -271,9 +294,16 @@ impl ObjectVariant {
             }
         }
 
-        let (xx, yy) = self.to_f64()
+        let (xx, yy) = self
+            .to_f64()
             .and_then(|x| other.to_f64().map(|y| (x, y)))
-            .ok_or_else(|| Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), ast::BinOp::Power)))?;
+            .ok_or_else(|| {
+                Error::new(TypeMismatch::BinOp(
+                    self.type_of(),
+                    other.type_of(),
+                    ast::BinOp::Power,
+                ))
+            })?;
         Ok(Self::from(xx.powf(yy)))
     }
 
@@ -287,7 +317,11 @@ impl ObjectVariant {
             return Ok(haystack.as_str().contains(needle.as_str()));
         }
 
-        Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), ast::BinOp::Contains)))
+        Err(Error::new(TypeMismatch::BinOp(
+            self.type_of(),
+            other.type_of(),
+            ast::BinOp::Contains,
+        )))
     }
 
     /// Convert to f64 if possible.
@@ -314,7 +348,7 @@ impl ObjectVariant {
                 xx.push(other);
                 Ok(())
             }
-            _ => Err(Error::new(Reason::None))
+            _ => Err(Error::new(Reason::None)),
         }
     }
 
@@ -325,7 +359,7 @@ impl ObjectVariant {
                 xx.insert(key, value);
                 Ok(())
             }
-            _ => Err(Error::new(Reason::None))
+            _ => Err(Error::new(Reason::None)),
         }
     }
 
@@ -351,7 +385,7 @@ impl ObjectVariant {
 
             (Self::Map(_), _) => Err(Error::new(TypeMismatch::SplatMap(other.type_of()))),
 
-            _ => Err(Error::new(Internal::SplatToNonCollection))
+            _ => Err(Error::new(Internal::SplatToNonCollection)),
         }
     }
 
@@ -362,19 +396,24 @@ impl ObjectVariant {
                 e.push(other);
                 Ok(())
             }
-            _ => { Err(Error::new(Reason::None)) }
+            _ => Err(Error::new(Reason::None)),
         }
     }
 }
 
-impl<T> From<T> for ObjectVariant where IntVariant: From<T> {
+impl<T> From<T> for ObjectVariant
+where
+    IntVariant: From<T>,
+{
     fn from(value: T) -> Self {
         Self::Int(IntVariant::from(value))
     }
 }
 
 impl From<f64> for ObjectVariant {
-    fn from(x: f64) -> Self { Self::Float(x) }
+    fn from(x: f64) -> Self {
+        Self::Float(x)
+    }
 }
 
 impl Display for ObjectVariant {
@@ -423,7 +462,9 @@ impl TryFrom<&ObjectVariant> for JsonValue {
 
     fn try_from(value: &ObjectVariant) -> Result<Self, Self::Error> {
         match value {
-            ObjectVariant::Int(x) => i64::try_from(x).map_err(|_| Error::new(Value::TooLarge)).map(JsonValue::from),
+            ObjectVariant::Int(x) => i64::try_from(x)
+                .map_err(|_| Error::new(Value::TooLarge))
+                .map(JsonValue::from),
             ObjectVariant::Float(x) => Ok(JsonValue::from(*x)),
             ObjectVariant::Str(x) => Ok(JsonValue::from(x.as_str())),
             ObjectVariant::Boolean(x) => Ok(JsonValue::from(*x)),
@@ -433,21 +474,19 @@ impl TryFrom<&ObjectVariant> for JsonValue {
                     val.push(JsonValue::try_from(element.clone())?).unwrap();
                 }
                 Ok(val)
-            },
+            }
             ObjectVariant::Map(x) => {
                 let mut val = JsonValue::new_object();
                 for (key, element) in x.borrow().iter() {
                     val[key.as_str()] = JsonValue::try_from(element.clone())?;
                 }
                 Ok(val)
-            },
+            }
             ObjectVariant::Null => Ok(JsonValue::Null),
             _ => Err(Error::new(TypeMismatch::Json(value.type_of()))),
         }
     }
 }
-
-
 
 // Utility macro for wrapping a unary operator.
 macro_rules! wrap1 {
@@ -459,7 +498,6 @@ macro_rules! wrap1 {
     };
 }
 
-
 // Utility macro for wrapping a binary operator.
 macro_rules! wrap2 {
     ($name:ident) => {
@@ -470,42 +508,61 @@ macro_rules! wrap2 {
     };
 }
 
-
 // Utility macro for extracting a certain type from an object variant. Used for
 // facilitating writing Gold functions in Rust.
 macro_rules! extract {
-    ($index:expr , $args:ident , str) => { $args.get($index).and_then(|x| x.get_str()) };
-    ($index:expr , $args:ident , int) => { $args.get($index).and_then(|x| x.get_int()) };
-    ($index:expr , $args:ident , float) => { $args.get($index).and_then(|x| x.get_float()) };
-    ($index:expr , $args:ident , bool) => { $args.get($index).and_then(|x| x.get_bool()) };
-    ($index:expr , $args:ident , list) => { $args.get($index).and_then(|x| x.get_list()) };
-    ($index:expr , $args:ident , map) => { $args.get($index).and_then(|x| x.get_map()) };
-    ($index:expr , $args:ident , func) => { $args.get($index).and_then(|x| x.get_func()) };
-    ($index:expr , $args:ident , null) => { $args.get($index).and_then(|x| x.get_null()) };
+    ($index:expr , $args:ident , str) => {
+        $args.get($index).and_then(|x| x.get_str())
+    };
+    ($index:expr , $args:ident , int) => {
+        $args.get($index).and_then(|x| x.get_int())
+    };
+    ($index:expr , $args:ident , float) => {
+        $args.get($index).and_then(|x| x.get_float())
+    };
+    ($index:expr , $args:ident , bool) => {
+        $args.get($index).and_then(|x| x.get_bool())
+    };
+    ($index:expr , $args:ident , list) => {
+        $args.get($index).and_then(|x| x.get_list())
+    };
+    ($index:expr , $args:ident , map) => {
+        $args.get($index).and_then(|x| x.get_map())
+    };
+    ($index:expr , $args:ident , func) => {
+        $args.get($index).and_then(|x| x.get_func())
+    };
+    ($index:expr , $args:ident , null) => {
+        $args.get($index).and_then(|x| x.get_null())
+    };
 
-    ($index:expr , $args:ident , any) => { $args.get($index) };
+    ($index:expr , $args:ident , any) => {
+        $args.get($index)
+    };
 
     ($index:expr , $args:ident , tofloat) => {
-        $args.get($index).and_then(|x| x.get_float()).or_else(
-            || $args.get($index).and_then(|x| x.get_int().map(|x| x.to_f64()))
-        )
+        $args.get($index).and_then(|x| x.get_float()).or_else(|| {
+            $args
+                .get($index)
+                .and_then(|x| x.get_int().map(|x| x.to_f64()))
+        })
     };
 }
 
-
 macro_rules! extractkw {
-    ($kwargs:ident , $key:ident , any) => { $kwargs.and_then(|kws| kws.get(&$crate::Key::from(stringify!($key)))) };
+    ($kwargs:ident , $key:ident , any) => {
+        $kwargs.and_then(|kws| kws.get(&$crate::Key::from(stringify!($key))))
+    };
 
     ($kwargs:ident , $key:ident , tofloat) => {{
         let key = $crate::Key::from(stringify!($key));
-        $kwargs.and_then(
-            |kws| kws.get(&key).and_then(|x| x.get_float()).or_else(
-                || kws.get(&key).and_then(|x| x.get_int().map(|x| x.to_f64()))
-            )
-        )
+        $kwargs.and_then(|kws| {
+            kws.get(&key)
+                .and_then(|x| x.get_float())
+                .or_else(|| kws.get(&key).and_then(|x| x.get_int().map(|x| x.to_f64())))
+        })
     }};
 }
-
 
 /// Utility macro for capturing a certain calling convention. Used for writing
 /// Gold functions in Rust.
@@ -564,8 +621,6 @@ macro_rules! signature {
 
 pub use signature;
 
-
-
 // Object
 // ------------------------------------------------------------------------------------------------
 
@@ -600,7 +655,10 @@ impl Object {
     }
 
     pub(crate) fn closure(val: Function) -> Self {
-        Self(ObjectVariant::Func(FuncVariant::Func(Gc::new(val), Gc::new(GcCell::new(vec![])))))
+        Self(ObjectVariant::Func(FuncVariant::Func(
+            Gc::new(val),
+            Gc::new(GcCell::new(vec![])),
+        )))
     }
 
     /// Construct a string directly from an interned symbol.
@@ -611,14 +669,16 @@ impl Object {
     /// Construct an integer.
     pub(crate) fn int<T>(val: T) -> Self
     where
-        IntVariant: From<T>
+        IntVariant: From<T>,
     {
         Self(ObjectVariant::Int(IntVariant::from(val)))
     }
 
     /// Construct a big integer from a decimal string representation.
     pub fn bigint(x: impl AsRef<str>) -> Option<Self> {
-        BigInt::from_str(x.as_ref()).ok().map(|x| Self(ObjectVariant::from(x).numeric_normalize()))
+        BigInt::from_str(x.as_ref())
+            .ok()
+            .map(|x| Self(ObjectVariant::from(x).numeric_normalize()))
     }
 
     /// Construct a float.
@@ -639,7 +699,7 @@ impl Object {
     /// Construct a function.
     pub(crate) fn func<T>(val: T) -> Self
     where
-        FuncVariant: From<T>
+        FuncVariant: From<T>,
     {
         Self(ObjectVariant::Func(FuncVariant::from(val)))
     }
@@ -667,7 +727,10 @@ impl Object {
     /// Construct an iterator
     pub fn iterator(obj: &Object) -> Result<Self, Error> {
         if let Object(ObjectVariant::List(l)) = obj {
-            Ok(Object(ObjectVariant::ListIter(Gc::new(GcCell::new(0)), l.clone())))
+            Ok(Object(ObjectVariant::ListIter(
+                Gc::new(GcCell::new(0)),
+                l.clone(),
+            )))
         } else {
             Err(Error::new(TypeMismatch::Iterate(obj.type_of())))
         }
@@ -704,7 +767,8 @@ impl Object {
 
     /// Deserialize an object from a byte vector.
     pub fn deserialize(data: &Vec<u8>) -> Option<(Self, SystemTime)> {
-        let (version, time, retval) = decode::from_slice::<(i32, SystemTime, Self)>(data.as_slice()).ok()?;
+        let (version, time, retval) =
+            decode::from_slice::<(i32, SystemTime, Self)>(data.as_slice()).ok()?;
         if version < SERIALIZE_VERSION {
             None
         } else {
@@ -756,29 +820,29 @@ impl Object {
                 }
                 for (xx, yy) in xx.iter().zip(yy.iter()) {
                     if !xx.user_eq(yy) {
-                        return false
+                        return false;
                     }
                 }
                 true
-            },
+            }
 
             (ObjectVariant::Map(x), ObjectVariant::Map(y)) => {
                 let xx = x.borrow();
                 let yy = y.borrow();
                 if xx.len() != yy.len() {
-                    return false
+                    return false;
                 }
                 for (xk, xv) in xx.iter() {
                     if let Some(yv) = yy.get(xk) {
                         if !xv.user_eq(yv) {
-                            return false
+                            return false;
                         }
                     } else {
-                        return false
+                        return false;
                     }
                 }
                 true
-            },
+            }
 
             // Different types generally mean not equal
             _ => false,
@@ -821,7 +885,7 @@ impl Object {
     pub fn get_list<'a>(&'a self) -> Option<GcCellRef<'_, List>> {
         match &self.0 {
             ObjectVariant::List(x) => Some(x.borrow()),
-            _ => None
+            _ => None,
         }
     }
 
@@ -829,7 +893,7 @@ impl Object {
     pub(crate) fn get_map<'a>(&'a self) -> Option<GcCellRef<'_, Map>> {
         match &self.0 {
             ObjectVariant::Map(x) => Some(x.borrow()),
-            _ => None
+            _ => None,
         }
     }
 
@@ -837,7 +901,7 @@ impl Object {
     pub(crate) fn get_map_mut<'a>(&'a self) -> Option<GcCellRefMut<'_, Map>> {
         match &self.0 {
             ObjectVariant::Map(x) => Some(x.borrow_mut()),
-            _ => None
+            _ => None,
         }
     }
 
@@ -887,7 +951,7 @@ impl Object {
     pub(crate) fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
         match self.get_func_variant() {
             Some(func) => func.call(args, kwargs),
-            None => { return Err(Error::new(TypeMismatch::Call(self.type_of()))) }
+            None => return Err(Error::new(TypeMismatch::Call(self.type_of()))),
         }
     }
 
@@ -928,9 +992,15 @@ impl Object {
             (ObjectVariant::Map(x), ObjectVariant::Str(y)) => {
                 let xx = x.borrow();
                 let yy = GlobalSymbol::from(y);
-                xx.get(&yy).ok_or_else(|| Error::new(Reason::Unassigned(yy))).map(Object::clone)
+                xx.get(&yy)
+                    .ok_or_else(|| Error::new(Reason::Unassigned(yy)))
+                    .map(Object::clone)
             }
-            _ => Err(Error::new(TypeMismatch::BinOp(self.type_of(), other.type_of(), ast::BinOp::Index))),
+            _ => Err(Error::new(TypeMismatch::BinOp(
+                self.type_of(),
+                other.type_of(),
+                ast::BinOp::Index,
+            ))),
         }
     }
 
@@ -961,7 +1031,11 @@ impl Object {
 
     /// Wrap [`ObjectVariant::push_to_map`]
     pub(crate) fn push_to_map(&self, key: Self, value: Self) -> Result<(), Error> {
-        self.0.push_to_map(key.get_key().ok_or_else(|| Error::new(TypeMismatch::MapKey(key.type_of())))?, value)
+        self.0.push_to_map(
+            key.get_key()
+                .ok_or_else(|| Error::new(TypeMismatch::MapKey(key.type_of())))?,
+            value,
+        )
     }
 
     /// Wrap [`ObjectVariant::push_to_map`]
@@ -979,18 +1053,20 @@ impl Object {
     }
 
     // Auto-wrap some unary and binary operators.
-    wrap1!{neg}
-    wrap2!{add}
-    wrap2!{sub}
-    wrap2!{mul}
-    wrap2!{div}
-    wrap2!{idiv}
-    wrap2!{pow}
+    wrap1! {neg}
+    wrap2! {add}
+    wrap2! {sub}
+    wrap2! {mul}
+    wrap2! {div}
+    wrap2! {idiv}
+    wrap2! {pow}
 }
 
 impl FromIterator<Object> for Object {
     fn from_iter<T: IntoIterator<Item = Object>>(iter: T) -> Self {
-        Object(ObjectVariant::List(Gc::new(GcCell::new(iter.into_iter().collect()))))
+        Object(ObjectVariant::List(Gc::new(GcCell::new(
+            iter.into_iter().collect(),
+        ))))
     }
 }
 

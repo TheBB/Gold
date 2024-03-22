@@ -4,25 +4,31 @@ use std::cmp::Ordering;
 use std::fmt::Display;
 
 use gc::{Finalize, Gc, Trace};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use super::Key;
-
 
 /// Convert a string to a displayable representation by adding escape sequences.
 fn escape(s: &str) -> String {
     let mut r = String::with_capacity(s.len());
     for c in s.chars() {
         match c {
-            '"' => { r.push_str("\\\""); }
-            '\\' => { r.push_str("\\\\"); }
-            '$' => { r.push_str("\\$"); }
-            _ => { r.push(c); }
+            '"' => {
+                r.push_str("\\\"");
+            }
+            '\\' => {
+                r.push_str("\\\\");
+            }
+            '$' => {
+                r.push_str("\\$");
+            }
+            _ => {
+                r.push(c);
+            }
         }
     }
     r
 }
-
 
 /// The string variant represents all possible Gold strings.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Trace, Finalize)]
@@ -95,4 +101,3 @@ impl StrVariant {
         Self::natural(format!("{}{}", self.as_str(), other.as_str()))
     }
 }
-

@@ -2,12 +2,11 @@ use std::hash::Hash;
 use std::ops::Deref;
 
 use gc::{custom_trace, Finalize, Gc, GcCell as GcCellOrig, GcCellRef, GcCellRefMut, Trace};
-use indexmap::{IndexMap, map::Iter};
+use indexmap::{map::Iter, IndexMap};
 use num_bigint::BigInt;
-use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::traits::Peek;
-
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, PartialOrd, Debug, Trace, Finalize)]
 pub(crate) struct WBigInt(#[unsafe_ignore_trace] pub(crate) BigInt);
@@ -31,7 +30,6 @@ impl Deref for WBigInt {
         &self.0
     }
 }
-
 
 #[derive(Clone, Debug)]
 pub(crate) struct OrderedMap<K, V>(pub(crate) IndexMap<K, V>);
@@ -107,7 +105,6 @@ impl<K: Eq + Hash, V> OrderedMap<K, V> {
         self.0.insert(key, value)
     }
 }
-
 
 #[derive(Clone, Trace, Finalize, Debug, PartialEq)]
 pub(crate) struct GcCell<T: ?Sized + 'static>(GcCellOrig<T>);

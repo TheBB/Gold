@@ -1,7 +1,6 @@
 //! The Gold language - a programmable configuration language inspired by Dhall.
 
 #![feature(step_trait)]
-
 #![warn(missing_docs)]
 
 #[macro_use]
@@ -53,16 +52,15 @@ pub mod python;
 use std::fs::read_to_string;
 use std::path::Path;
 
-use eval::Vm;
 use error::{Error, FileSystem};
+use eval::Vm;
 
+pub use eval::ImportConfig;
 pub use object::Object;
 pub use parsing::parse;
-pub use eval::ImportConfig;
 pub use types::Type;
 
 pub(crate) use types::{Key, List, Map};
-
 
 /// Evaluate Gold code and return the result.
 ///
@@ -76,7 +74,6 @@ pub fn eval(input: &str, importer: &ImportConfig) -> Result<Object, Error> {
     vm.eval(code)
 }
 
-
 /// Evaluate Gold code and return the result.
 ///
 /// This is equivalent to calling [`eval`] with no path and an import resolver that always fails.
@@ -84,14 +81,16 @@ pub fn eval_raw(input: &str) -> Result<Object, Error> {
     eval(input, &ImportConfig::default())
 }
 
-
 /// Evaluate a Gold file and return the result.
 ///
 /// This is equivalent to reading the file and calling [`eval`] with the source
 /// code, the file's path and an import resolver that always fails. Relative
 /// path imports will succeed.
 pub fn eval_file(input: &Path) -> Result<Object, Error> {
-    let contents = read_to_string(input).map_err(|_| Error::new(FileSystem::Read(input.to_owned())))?;
-    let parent = input.parent().ok_or_else(|| Error::new(FileSystem::NoParent(input.to_owned())))?;
+    let contents =
+        read_to_string(input).map_err(|_| Error::new(FileSystem::Read(input.to_owned())))?;
+    let parent = input
+        .parent()
+        .ok_or_else(|| Error::new(FileSystem::NoParent(input.to_owned())))?;
     eval(&contents, &ImportConfig::with_path(parent.to_owned()))
 }

@@ -4,19 +4,17 @@ use std::rc::Rc;
 
 use gc::Gc;
 
-use crate::{Type, List, Map, Object};
-use crate::compile::{Function, Instruction};
-use crate::{eval_file, eval_raw as eval_str};
 use crate::ast::*;
 use crate::builtins::BUILTINS;
+use crate::compile::{Function, Instruction};
 use crate::error::{BindingType, Error, Reason, TypeMismatch, Unpack};
 use crate::object::function::{Builtin, Closure, FuncVariant};
 use crate::wrappers::GcCell;
-
+use crate::{eval_file, eval_raw as eval_str};
+use crate::{List, Map, Object, Type};
 
 /// Source code of the standard library (imported under the name 'std')
 const STDLIB: &str = include_str!("std.gold");
-
 
 /// Configure the import behavior when evaluating Gold code.
 #[derive(Clone, Default)]
@@ -49,13 +47,13 @@ impl ImportConfig {
         if path.starts_with("std") {
             match path {
                 "std" => eval_str(STDLIB),
-                _ => Err(Error::new(Reason::UnknownImport(path.to_owned())))
+                _ => Err(Error::new(Reason::UnknownImport(path.to_owned()))),
             }
         } else {
             // The custom import resolver has precedence over paths
             if let Some(resolver) = &self.custom {
                 if let Some(result) = resolver(path)? {
-                    return Ok(result)
+                    return Ok(result);
                 }
             }
 
@@ -69,7 +67,6 @@ impl ImportConfig {
         }
     }
 }
-
 
 pub(crate) struct Frame {
     pub function: Function,
@@ -106,7 +103,6 @@ impl Frame {
     }
 }
 
-
 pub(crate) struct Vm<'a> {
     frames: Vec<Frame>,
     fp: usize,
@@ -115,19 +111,35 @@ pub(crate) struct Vm<'a> {
 
 impl<'a> Vm<'a> {
     pub fn new(importer: &'a ImportConfig) -> Self {
-        Self { frames: vec![], fp: 0, importer }
+        Self {
+            frames: vec![],
+            fp: 0,
+            importer,
+        }
     }
 
     pub fn eval(&mut self, function: Function) -> Result<Object, Error> {
-        self.frames.push(Frame::new(function, Gc::new(GcCell::new(vec![]))));
+        self.frames
+            .push(Frame::new(function, Gc::new(GcCell::new(vec![]))));
         self.fp = 0;
         self.eval_impl()
     }
 
-    pub fn eval_with_args(&mut self, function: Function, enclosed: Gc<GcCell<Vec<Gc<GcCell<Object>>>>>, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+    pub fn eval_with_args(
+        &mut self,
+        function: Function,
+        enclosed: Gc<GcCell<Vec<Gc<GcCell<Object>>>>>,
+        args: &List,
+        kwargs: Option<&Map>,
+    ) -> Result<Object, Error> {
         self.frames.push(Frame::new(function, enclosed));
         self.fp = 0;
-        self.push(kwargs.cloned().map(Object::map).unwrap_or_else(|| Object::new_map()));
+        self.push(
+            kwargs
+                .cloned()
+                .map(Object::map)
+                .unwrap_or_else(|| Object::new_map()),
+        );
         self.push(Object::list(args.clone()));
         self.eval_impl()
     }
@@ -155,7 +167,10 @@ impl<'a> Vm<'a> {
     }
 
     fn err(&self) -> Error {
-        let mut err = self.frames[self.fp].function.trace.error(self.frames[self.fp].ip - 1);
+        let mut err = self.frames[self.fp]
+            .function
+            .trace
+            .error(self.frames[self.fp].ip - 1);
         for fp in (0..self.fp).rev() {
             err = err.add_locations(self.frames[fp].function.trace.error(self.frames[fp].ip - 1));
         }
@@ -197,13 +212,14 @@ impl<'a> Vm<'a> {
                     self.push(obj);
                 }
 
-                Instruction::LoadBuiltin(i) => {
-                    self.push(Object::func(BUILTINS.1[i].clone()))
-                }
+                Instruction::LoadBuiltin(i) => self.push(Object::func(BUILTINS.1[i].clone())),
 
                 Instruction::Import(i) => {
                     let path = self.frames[self.fp].function.import_paths.get(i).unwrap();
-                    let object = self.importer.resolve(path.as_ref()).map_err(|e| e.add_locations(self.err()))?;
+                    let object = self
+                        .importer
+                        .resolve(path.as_ref())
+                        .map_err(|e| e.add_locations(self.err()))?;
                     self.push(object);
                 }
 
@@ -222,7 +238,7 @@ impl<'a> Vm<'a> {
                     let obj = self.pop();
                     self.frames.pop();
                     if self.fp == 0 {
-                        return Ok(obj)
+                        return Ok(obj);
                     } else {
                         self.fp -= 1;
                         self.push(obj);
@@ -277,14 +293,16 @@ impl<'a> Vm<'a> {
                         Some(FuncVariant::Closure(Closure(f))) => {
                             let x = args.get_list().ok_or_else(|| Error::new(Reason::None))?;
                             let y = kwargs.get_map().ok_or_else(|| Error::new(Reason::None))?;
-                            let result = f(&x, Some(&y)).map_err(|e| e.with_locations(self.err()))?;
+                            let result =
+                                f(&x, Some(&y)).map_err(|e| e.with_locations(self.err()))?;
                             self.push(result);
                         }
 
                         Some(FuncVariant::Builtin(Builtin { func: f, .. })) => {
                             let x = args.get_list().ok_or_else(|| Error::new(Reason::None))?;
                             let y = kwargs.get_map().ok_or_else(|| Error::new(Reason::None))?;
-                            let result = f(&x, Some(&y)).map_err(|e| e.with_locations(self.err()))?;
+                            let result =
+                                f(&x, Some(&y)).map_err(|e| e.with_locations(self.err()))?;
                             self.push(result);
                         }
 
@@ -295,7 +313,9 @@ impl<'a> Vm<'a> {
                             self.push(args);
                         }
 
-                        None => { return Err(self.err().with_reason(TypeMismatch::Call(func.type_of()))) }
+                        None => {
+                            return Err(self.err().with_reason(TypeMismatch::Call(func.type_of())))
+                        }
                     }
                 }
 
@@ -304,10 +324,10 @@ impl<'a> Vm<'a> {
                 Instruction::AssertListMinLength(len) => {
                     let obj = self.peek();
                     match obj.get_list() {
-                        None => { return Err(Error::new(Reason::None)) }
+                        None => return Err(Error::new(Reason::None)),
                         Some(l) => {
                             if l.len() < len {
-                                return Err(Error::new(Reason::None))
+                                return Err(Error::new(Reason::None));
                             }
                         }
                     }
@@ -316,7 +336,12 @@ impl<'a> Vm<'a> {
                 Instruction::AssertListMinMaxLength(min, max) => {
                     let obj = self.peek();
                     match obj.get_list() {
-                        None => { return Err(self.err().with_reason(Unpack::TypeMismatch(BindingType::List, obj.type_of()))) }
+                        None => {
+                            return Err(self.err().with_reason(Unpack::TypeMismatch(
+                                BindingType::List,
+                                obj.type_of(),
+                            )))
+                        }
                         Some(l) => {
                             if l.len() < min {
                                 return Err(self.err().with_reason(Unpack::ListTooShort));
@@ -331,8 +356,13 @@ impl<'a> Vm<'a> {
                 Instruction::AssertMap => {
                     let obj = self.peek();
                     match obj.get_map() {
-                        None => { return Err(self.err().with_reason(Unpack::TypeMismatch(BindingType::Map, obj.type_of()))) }
-                        Some(_) => { }
+                        None => {
+                            return Err(self.err().with_reason(Unpack::TypeMismatch(
+                                BindingType::Map,
+                                obj.type_of(),
+                            )))
+                        }
+                        Some(_) => {}
                     }
                 }
 
@@ -348,7 +378,10 @@ impl<'a> Vm<'a> {
 
                 Instruction::Format(i) => {
                     let obj = self.pop();
-                    let result = Object::str(obj.format(self.cur_frame().function.fmt_specs[i]).map_err(|e| e.with_locations(self.err()))?);
+                    let result = Object::str(
+                        obj.format(self.cur_frame().function.fmt_specs[i])
+                            .map_err(|e| e.with_locations(self.err()))?,
+                    );
                     self.push(result);
                 }
 
@@ -393,7 +426,13 @@ impl<'a> Vm<'a> {
                     let lhs = self.pop();
                     let res = lhs
                         .cmp_bool(&rhs, Ordering::Less)
-                        .ok_or_else(|| self.err().with_reason(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::Less)))
+                        .ok_or_else(|| {
+                            self.err().with_reason(TypeMismatch::BinOp(
+                                lhs.type_of(),
+                                rhs.type_of(),
+                                BinOp::Less,
+                            ))
+                        })
                         .map(Object::bool)?;
                     self.push(res);
                 }
@@ -403,7 +442,13 @@ impl<'a> Vm<'a> {
                     let lhs = self.pop();
                     let res = lhs
                         .cmp_bool(&rhs, Ordering::Greater)
-                        .ok_or_else(|| self.err().with_reason(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::Greater)))
+                        .ok_or_else(|| {
+                            self.err().with_reason(TypeMismatch::BinOp(
+                                lhs.type_of(),
+                                rhs.type_of(),
+                                BinOp::Greater,
+                            ))
+                        })
                         .map(Object::bool)?;
                     self.push(res);
                 }
@@ -413,7 +458,13 @@ impl<'a> Vm<'a> {
                     let lhs = self.pop();
                     let res = lhs
                         .cmp_bool(&rhs, Ordering::Greater)
-                        .ok_or_else(|| self.err().with_reason(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::LessEqual)))
+                        .ok_or_else(|| {
+                            self.err().with_reason(TypeMismatch::BinOp(
+                                lhs.type_of(),
+                                rhs.type_of(),
+                                BinOp::LessEqual,
+                            ))
+                        })
                         .map(|x| Object::bool(!x))?;
                     self.push(res);
                 }
@@ -423,7 +474,13 @@ impl<'a> Vm<'a> {
                     let lhs = self.pop();
                     let res = lhs
                         .cmp_bool(&rhs, Ordering::Less)
-                        .ok_or_else(|| self.err().with_reason(TypeMismatch::BinOp(lhs.type_of(), rhs.type_of(), BinOp::GreaterEqual)))
+                        .ok_or_else(|| {
+                            self.err().with_reason(TypeMismatch::BinOp(
+                                lhs.type_of(),
+                                rhs.type_of(),
+                                BinOp::GreaterEqual,
+                            ))
+                        })
                         .map(|x| Object::bool(!x))?;
                     self.push(res);
                 }
@@ -443,7 +500,10 @@ impl<'a> Vm<'a> {
                 Instruction::Contains => {
                     let rhs = self.pop();
                     let lhs = self.pop();
-                    self.push(Object::bool(lhs.contains(&rhs).map_err(|e| e.with_locations(self.err()))?));
+                    self.push(Object::bool(
+                        lhs.contains(&rhs)
+                            .map_err(|e| e.with_locations(self.err()))?,
+                    ));
                 }
 
                 Instruction::Index => {
@@ -473,16 +533,23 @@ impl<'a> Vm<'a> {
                 Instruction::PushToMap => {
                     let value = self.pop();
                     let key = self.pop();
-                    self.peek().push_to_map(key, value).map_err(|e| e.with_locations(self.err()))?;
+                    self.peek()
+                        .push_to_map(key, value)
+                        .map_err(|e| e.with_locations(self.err()))?;
                 }
 
                 Instruction::SplatToCollection => {
                     let obj = self.pop();
-                    self.peek().splat_into(obj).map_err(|e| e.with_locations(self.err()))?;
+                    self.peek()
+                        .splat_into(obj)
+                        .map_err(|e| e.with_locations(self.err()))?;
                 }
 
                 Instruction::DelKeyIfExists(key) => {
-                    let mut l = self.peek().get_map_mut().ok_or_else(|| Error::new(Reason::None))?;
+                    let mut l = self
+                        .peek()
+                        .get_map_mut()
+                        .ok_or_else(|| Error::new(Reason::None))?;
                     l.remove(&key);
                 }
 
@@ -502,14 +569,21 @@ impl<'a> Vm<'a> {
                 Instruction::NextOrJump(usize) => {
                     let obj = self.peek().next()?;
                     match obj {
-                        None => { self.cur_frame().ip += usize; }
-                        Some(x) => { self.push(x); }
+                        None => {
+                            self.cur_frame().ip += usize;
+                        }
+                        Some(x) => {
+                            self.push(x);
+                        }
                     }
                 }
 
                 Instruction::IntIndexL(i) => {
                     let obj = {
-                        let l = self.peek().get_list().ok_or_else(|| Error::new(Reason::None))?;
+                        let l = self
+                            .peek()
+                            .get_list()
+                            .ok_or_else(|| Error::new(Reason::None))?;
                         l.get(i).ok_or_else(|| Error::new(Reason::None))?.clone()
                     };
                     self.push(obj);
@@ -517,7 +591,10 @@ impl<'a> Vm<'a> {
 
                 Instruction::IntIndexLAndJump { index, jump } => {
                     let obj = {
-                        let l = self.peek().get_list().ok_or_else(|| Error::new(Reason::None))?;
+                        let l = self
+                            .peek()
+                            .get_list()
+                            .ok_or_else(|| Error::new(Reason::None))?;
                         l.get(index).cloned()
                     };
 
@@ -527,19 +604,38 @@ impl<'a> Vm<'a> {
                     }
                 }
 
-                Instruction::IntIndexFromEnd { index, root_front, root_back } => {
+                Instruction::IntIndexFromEnd {
+                    index,
+                    root_front,
+                    root_back,
+                } => {
                     let obj = {
-                        let l = self.peek().get_list().ok_or_else(|| Error::new(Reason::None))?;
+                        let l = self
+                            .peek()
+                            .get_list()
+                            .ok_or_else(|| Error::new(Reason::None))?;
                         let i = (l.len() - root_back).max(root_front) + index;
                         l.get(i).ok_or_else(|| Error::new(Reason::None))?.clone()
                     };
                     self.push(obj);
                 }
 
-                Instruction::IntIndexFromEndAndJump { index, root_front, root_back, jump } => {
+                Instruction::IntIndexFromEndAndJump {
+                    index,
+                    root_front,
+                    root_back,
+                    jump,
+                } => {
                     let obj = {
-                        let l = self.peek().get_list().ok_or_else(|| Error::new(Reason::None))?;
-                        let root = if root_back > l.len() { root_front } else { (l.len() - root_back).max(root_front) };
+                        let l = self
+                            .peek()
+                            .get_list()
+                            .ok_or_else(|| Error::new(Reason::None))?;
+                        let root = if root_back > l.len() {
+                            root_front
+                        } else {
+                            (l.len() - root_back).max(root_front)
+                        };
                         l.get(root + index).cloned()
                     };
 
@@ -550,26 +646,30 @@ impl<'a> Vm<'a> {
                 }
 
                 Instruction::IntSlice { start, from_end } => {
-                    let obj = self.peek().get_list()
+                    let obj = self
+                        .peek()
+                        .get_list()
                         .map(|l| {
                             if from_end > l.len() {
                                 return Object::new_list();
                             }
                             let end = l.len() - from_end;
                             if start < end {
-                                Object::list(l[start .. end].to_vec())
+                                Object::list(l[start..end].to_vec())
                             } else {
                                 Object::new_list()
                             }
-                        }).ok_or_else(
-                            || Error::new(Reason::None)
-                        )?;
+                        })
+                        .ok_or_else(|| Error::new(Reason::None))?;
                     self.push(obj);
                 }
 
                 Instruction::IntIndexM(key) => {
                     let obj = {
-                        let l = self.peek().get_map().ok_or_else(|| Error::new(Reason::None))?;
+                        let l = self
+                            .peek()
+                            .get_map()
+                            .ok_or_else(|| Error::new(Reason::None))?;
                         l.get(&key).ok_or_else(|| self.err())?.clone()
                     };
                     self.push(obj);
@@ -577,7 +677,10 @@ impl<'a> Vm<'a> {
 
                 Instruction::IntIndexMAndJump { key, jump } => {
                     let obj = {
-                        let l = self.peek().get_map().ok_or_else(|| Error::new(Reason::None))?;
+                        let l = self
+                            .peek()
+                            .get_map()
+                            .ok_or_else(|| Error::new(Reason::None))?;
                         l.get(&key).cloned()
                     };
 
@@ -599,7 +702,8 @@ impl<'a> Vm<'a> {
                     } else if value.type_of() == Type::Map {
                         self.peek_back().splat_into(value)?;
                     } else {
-                        return Err(Error::new(TypeMismatch::SplatArg(value.type_of())).with_locations(self.err()));
+                        return Err(Error::new(TypeMismatch::SplatArg(value.type_of()))
+                            .with_locations(self.err()));
                     }
                 }
             }
