@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
-use serde::{Deserialize, Serialize};
+pub use gc::Gc;
+use serde::{Deserialize, Serialize, Serializer, Deserializer};
 use symbol_table::GlobalSymbol;
 
 use crate::{wrappers::OrderedMap, Object};
@@ -61,5 +62,36 @@ impl Display for Type {
             Self::Iterator => f.write_str("iterator"),
             Self::Null => f.write_str("null"),
         }
+    }
+}
+
+#[derive(Clone, gc::Trace, gc::Finalize, Debug, PartialEq)]
+pub struct GcCell<T: ?Sized + 'static>(gc::Gc<gc::GcCell<T>>);
+
+impl<T: gc::Trace> GcCell<T> {
+    pub fn new(obj: T) -> GcCell<T> {
+        GcCell(gc::Gc::new(gc::GcCell::new(obj)))
+    }
+
+    pub fn borrow(&self) -> gc::GcCellRef<'_, T> {
+        self.0.borrow()
+    }
+}
+
+impl<T: gc::Trace> GcCell<T> {
+    pub fn borrow_mut(&self) -> gc::GcCellRefMut<'_, T> {
+        self.0.borrow_mut()
+    }
+}
+
+impl<T: gc::Trace + Serialize> Serialize for GcCell<T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.borrow().serialize(serializer)
+    }
+}
+
+impl<'a, T: gc::Trace + Deserialize<'a>> Deserialize<'a> for GcCell<T> {
+    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(GcCell::new(T::deserialize(deserializer)?))
     }
 }

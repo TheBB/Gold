@@ -2,13 +2,11 @@ use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use gc::Gc;
-
 use crate::ast::*;
 use crate::builtins::BUILTINS;
 use crate::compile::{Function, Instruction};
 use crate::error::{BindingType, Error, Reason, TypeMismatch, Unpack};
-use crate::wrappers::GcCell;
+use crate::types::GcCell;
 use crate::{eval_file, eval_raw as eval_str};
 use crate::{List, Map, Object, Type};
 
@@ -71,19 +69,19 @@ pub(crate) struct Frame {
     pub function: Function,
     pub stack: Vec<Object>,
     pub locals: Vec<Object>,
-    pub cells: Vec<Gc<GcCell<Object>>>,
-    pub enclosed: Gc<GcCell<Vec<Gc<GcCell<Object>>>>>,
+    pub cells: Vec<GcCell<Object>>,
+    pub enclosed: GcCell<Vec<GcCell<Object>>>,
     pub ip: usize,
 }
 
 impl Frame {
-    pub fn new(function: Function, enclosed: Gc<GcCell<Vec<Gc<GcCell<Object>>>>>) -> Frame {
+    pub fn new(function: Function, enclosed: GcCell<Vec<GcCell<Object>>>) -> Frame {
         let num_locals = function.num_locals;
         let num_cells = function.num_cells;
 
         let mut cells = Vec::with_capacity(num_cells);
         for _ in 0..num_cells {
-            cells.push(Gc::new(GcCell::new(Object::null())));
+            cells.push(GcCell::new(Object::null()));
         }
 
         Frame {
@@ -118,8 +116,7 @@ impl<'a> Vm<'a> {
     }
 
     pub fn eval(&mut self, function: Function) -> Result<Object, Error> {
-        self.frames
-            .push(Frame::new(function, Gc::new(GcCell::new(vec![]))));
+        self.frames.push(Frame::new(function, GcCell::new(vec![])));
         self.fp = 0;
         self.eval_impl()
     }
@@ -127,7 +124,7 @@ impl<'a> Vm<'a> {
     pub fn eval_with_args(
         &mut self,
         function: Function,
-        enclosed: Gc<GcCell<Vec<Gc<GcCell<Object>>>>>,
+        enclosed: GcCell<Vec<GcCell<Object>>>,
         args: &List,
         kwargs: Option<&Map>,
     ) -> Result<Object, Error> {
@@ -191,15 +188,15 @@ impl<'a> Vm<'a> {
                 }
 
                 Instruction::LoadCell(i) => {
-                    let cell = self.cur_frame().cells[i].as_ref();
+                    let cell = &self.cur_frame().cells[i];
                     let obj = cell.borrow().clone();
                     self.push(obj);
                 }
 
                 Instruction::LoadEnclosed(i) => {
                     let obj = {
-                        let e = self.cur_frame().enclosed.as_ref().borrow();
-                        let f = e[i].as_ref().borrow();
+                        let e = self.cur_frame().enclosed.borrow();
+                        let f = e[i].borrow();
                         f.clone()
                     };
                     self.push(obj);
@@ -229,7 +226,7 @@ impl<'a> Vm<'a> {
 
                 Instruction::StoreCell(i) => {
                     let obj = self.pop();
-                    let cell = self.cur_frame().cells[i].as_ref();
+                    let cell = &self.cur_frame().cells[i];
                     *cell.borrow_mut() = obj;
                 }
 
@@ -544,7 +541,7 @@ impl<'a> Vm<'a> {
 
                 Instruction::PushEnclosedToClosure(i) => {
                     let cell = {
-                        let cells = self.cur_frame().enclosed.as_ref().borrow();
+                        let cells = self.cur_frame().enclosed.borrow();
                         cells[i].clone()
                     };
                     self.peek().push_to_closure(cell)?;

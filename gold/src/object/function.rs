@@ -12,7 +12,7 @@ use crate::builtins::BUILTINS;
 use crate::compile::Function;
 use crate::error::{Error, Reason};
 use crate::eval::Vm;
-use crate::wrappers::GcCell;
+use crate::types::GcCell;
 use crate::ImportConfig;
 
 /// A builtin function is a 'pure' function implemented in Rust associated with
@@ -68,7 +68,7 @@ pub(crate) struct NativeClosure(pub(crate) Rc<dyn Fn(&List, Option<&Map>) -> Res
 
 #[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
 enum FuncV {
-    Closure(Gc<Function>, Gc<GcCell<Vec<Gc<GcCell<Object>>>>>),
+    Closure(Gc<Function>, GcCell<Vec<GcCell<Object>>>),
     Builtin(#[unsafe_ignore_trace] Builtin),
 
     #[serde(skip)]
@@ -108,7 +108,7 @@ impl From<NativeClosure> for Func {
 
 impl Func {
     pub fn closure(val: Function) -> Self {
-        Self(FuncV::Closure(Gc::new(val), Gc::new(GcCell::new(vec![]))))
+        Self(FuncV::Closure(Gc::new(val), GcCell::new(vec![])))
     }
 
     /// All functions in Gold compare different to each other except built-ins.
@@ -135,7 +135,7 @@ impl Func {
         }
     }
 
-    pub(crate) fn push_to_closure(&self, other: Gc<GcCell<Object>>) -> Result<(), Error> {
+    pub(crate) fn push_to_closure(&self, other: GcCell<Object>) -> Result<(), Error> {
         let Self(this) = self;
         match this {
             FuncV::Closure(_, enclosed) => {
@@ -156,7 +156,7 @@ impl Func {
         }
     }
 
-    pub(crate) fn get_closure(&self) -> Option<(Gc<Function>, Gc<GcCell<Vec<Gc<GcCell<Object>>>>>)> {
+    pub(crate) fn get_closure(&self) -> Option<(Gc<Function>, GcCell<Vec<GcCell<Object>>>)> {
         let Self(this) = self;
         match this {
             FuncV::Closure(f, e) => Some((f.clone(), e.clone())),

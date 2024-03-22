@@ -21,7 +21,7 @@ use std::io::{Read, Write};
 use std::str::FromStr;
 use std::time::SystemTime;
 
-use gc::{Finalize, Gc, GcCellRef, GcCellRefMut, Trace};
+use gc::{Finalize, GcCellRef, GcCellRefMut, Trace};
 use json::JsonValue;
 use num_bigint::BigInt;
 use rmp_serde::{decode, encode};
@@ -33,7 +33,7 @@ use crate::traits::{ToMap, ToVec};
 
 use crate::error::{Error, Internal, Reason, TypeMismatch, Value};
 use crate::formatting::FormatSpec;
-use crate::wrappers::GcCell;
+use crate::types::{Gc, GcCell};
 use crate::{ast, Key, List, Map, Type};
 
 use function::Func;
@@ -64,16 +64,16 @@ pub(crate) enum ObjV {
     Boolean(bool),
 
     /// Lists
-    List(Gc<GcCell<List>>),
+    List(GcCell<List>),
 
     /// Mappings
-    Map(Gc<GcCell<Map>>),
+    Map(GcCell<Map>),
 
     /// Functions
     Func(Func),
 
     /// Iterator
-    ListIter(Gc<GcCell<usize>>, Gc<GcCell<List>>),
+    ListIter(GcCell<usize>, GcCell<List>),
 
     /// Null
     Null,
@@ -386,12 +386,12 @@ impl Object {
     where
         T: ToVec<Object>,
     {
-        Self(ObjV::List(Gc::new(GcCell::new(x.to_vec()))))
+        Self(ObjV::List(GcCell::new(x.to_vec())))
     }
 
     /// Construct an empty list.
     pub fn new_list() -> Self {
-        Self(ObjV::List(Gc::new(GcCell::new(vec![]))))
+        Self(ObjV::List(GcCell::new(vec![])))
     }
 
     /// Construct a map.
@@ -399,20 +399,20 @@ impl Object {
     where
         T: ToMap<Key, Object>,
     {
-        Self(ObjV::Map(Gc::new(GcCell::new(x.to_map()))))
+        Self(ObjV::Map(GcCell::new(x.to_map())))
     }
 
 
     /// Construct an empty map.
     pub fn new_map() -> Self {
-        Self(ObjV::Map(Gc::new(GcCell::new(Map::new()))))
+        Self(ObjV::Map(GcCell::new(Map::new())))
     }
 
     /// Construct an iterator
     pub fn iterator(obj: &Object) -> Result<Self, Error> {
         if let Object(ObjV::List(l)) = obj {
             Ok(Object(ObjV::ListIter(
-                Gc::new(GcCell::new(0)),
+                GcCell::new(0),
                 l.clone(),
             )))
         } else {
@@ -423,8 +423,8 @@ impl Object {
     /// Get next value from an iterator
     pub fn next(&self) -> Result<Option<Self>, Error> {
         if let Object(ObjV::ListIter(index_cell, list)) = self {
-            let mut index_cell_ref = index_cell.as_ref().borrow_mut();
-            let l = list.as_ref().borrow();
+            let mut index_cell_ref = index_cell.borrow_mut();
+            let l = list.borrow();
             if *index_cell_ref < l.len() {
                 let obj = l[*index_cell_ref].clone();
                 *index_cell_ref += 1;
@@ -650,7 +650,7 @@ impl Object {
         }
     }
 
-    pub(crate) fn get_closure(&self) -> Option<(Gc<Function>, Gc<GcCell<Vec<Gc<GcCell<Object>>>>>)> {
+    pub(crate) fn get_closure(&self) -> Option<(Gc<Function>, GcCell<Vec<GcCell<Object>>>)> {
         let Self(this) = self;
         match this {
             ObjV::Func(func) => func.get_closure(),
@@ -796,7 +796,7 @@ impl Object {
         }
     }
 
-    pub(crate) fn push_to_closure(&self, other: Gc<GcCell<Object>>) -> Result<(), Error> {
+    pub(crate) fn push_to_closure(&self, other: GcCell<Object>) -> Result<(), Error> {
         let Self(this) = self;
         match this {
             ObjV::Func(func) => func.push_to_closure(other),
@@ -918,9 +918,9 @@ impl Object {
 
 impl FromIterator<Object> for Object {
     fn from_iter<T: IntoIterator<Item = Object>>(iter: T) -> Self {
-        Object(ObjV::List(Gc::new(GcCell::new(
+        Object(ObjV::List(GcCell::new(
             iter.into_iter().collect(),
-        ))))
+        )))
     }
 }
 

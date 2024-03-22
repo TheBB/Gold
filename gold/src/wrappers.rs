@@ -1,7 +1,7 @@
 use std::hash::Hash;
 use std::ops::Deref;
 
-use gc::{custom_trace, Finalize, Gc, GcCell as GcCellOrig, GcCellRef, GcCellRefMut, Trace};
+use gc::{custom_trace, Finalize, Gc, Trace};
 use indexmap::{map::Iter, IndexMap};
 use num_bigint::BigInt;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -103,36 +103,5 @@ impl<'a, K, V> IntoIterator for &'a OrderedMap<K, V> {
 impl<K: Eq + Hash, V> OrderedMap<K, V> {
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
         self.0.insert(key, value)
-    }
-}
-
-#[derive(Clone, Trace, Finalize, Debug, PartialEq)]
-pub(crate) struct GcCell<T: ?Sized + 'static>(GcCellOrig<T>);
-
-impl<T> GcCell<T> {
-    pub fn new(obj: T) -> GcCell<T> {
-        GcCell(GcCellOrig::new(obj))
-    }
-
-    pub fn borrow(&self) -> GcCellRef<'_, T> {
-        self.0.borrow()
-    }
-}
-
-impl<T: Trace> GcCell<T> {
-    pub fn borrow_mut(&self) -> GcCellRefMut<'_, T> {
-        self.0.borrow_mut()
-    }
-}
-
-impl<T: Serialize> Serialize for GcCell<T> {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        self.0.borrow().serialize(serializer)
-    }
-}
-
-impl<'a, T: Deserialize<'a>> Deserialize<'a> for GcCell<T> {
-    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
-        Ok(GcCell::new(T::deserialize(deserializer)?))
     }
 }
