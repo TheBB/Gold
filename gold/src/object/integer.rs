@@ -16,6 +16,9 @@ use crate::formatting::{
     AlignSpec, GroupingSpec, IntegerFormatSpec, IntegerFormatType, SignSpec, UppercaseSpec,
 };
 
+#[cfg(feature="python")]
+use pyo3::{IntoPy, PyObject, Python};
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 enum IntV {
     Small(i64),
@@ -69,68 +72,6 @@ impl PartialOrd<f64> for Int {
     }
 }
 
-impl From<BigInt> for Int {
-    fn from(value: BigInt) -> Self {
-        Self(IntV::Big(Rc::new(value)))
-    }
-}
-
-impl From<i64> for Int {
-    fn from(x: i64) -> Self {
-        Self(IntV::Small(x))
-    }
-}
-
-impl From<i32> for Int {
-    fn from(x: i32) -> Self {
-        Self(IntV::Small(x as i64))
-    }
-}
-
-impl From<usize> for Int {
-    fn from(x: usize) -> Self {
-        i64::try_from(x)
-            .map(Int::from)
-            .unwrap_or_else(|_| Int::from(BigInt::from(x)))
-    }
-}
-
-impl TryFrom<&Int> for u32 {
-    type Error = ();
-
-    fn try_from(value: &Int) -> Result<Self, Self::Error> {
-        let Int(this) = value;
-        match this {
-            IntV::Small(x) => Self::try_from(*x).map_err(|_| ()),
-            IntV::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
-        }
-    }
-}
-
-impl TryFrom<&Int> for i64 {
-    type Error = ();
-
-    fn try_from(value: &Int) -> Result<Self, Self::Error> {
-        let Int(this) = value;
-        match this {
-            IntV::Small(x) => Ok(*x),
-            IntV::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
-        }
-    }
-}
-
-impl TryFrom<&Int> for usize {
-    type Error = ();
-
-    fn try_from(value: &Int) -> Result<Self, Self::Error> {
-        let Int(this) = value;
-        match this {
-            IntV::Small(x) => Self::try_from(*x).map_err(|_| ()),
-            IntV::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
-        }
-    }
-}
-
 impl Display for Int {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self(this) = self;
@@ -156,19 +97,29 @@ impl Step for Int {
 }
 
 impl Int {
+    pub fn small(value: i64) -> Self {
+        Self(IntV::Small(value))
+    }
+
+    pub fn big(value: BigInt) -> Self {
+        let mut r = Self(IntV::Big(Rc::new(value)));
+        r.normalize();
+        r
+    }
+
     /// Sum of two integers. This implements the addition operator.
     pub fn add(&self, other: &Self) -> Self {
-        Self::normalize(&self.operate(other, i64::checked_add, |x, y| x + y))
+        self.operate(other, i64::checked_add, |x, y| x + y)
     }
 
     /// Difference of two integers. This implements the subtraaction operator.
     pub fn sub(&self, other: &Self) -> Self {
-        Self::normalize(&self.operate(other, i64::checked_sub, |x, y| x - y))
+        self.operate(other, i64::checked_sub, |x, y| x - y)
     }
 
     /// Product of two integers. This implements the multiplication operator.
     pub fn mul(&self, other: &Self) -> Self {
-        Self::normalize(&self.operate(other, i64::checked_mul, |x, y| x * y))
+        self.operate(other, i64::checked_mul, |x, y| x * y)
     }
 
     /// Mathematical ratio of two integers. This implements the division operator.
@@ -182,7 +133,7 @@ impl Int {
 
     /// Integer division.
     pub fn idiv(&self, other: &Self) -> Self {
-        Self::normalize(&self.operate(other, i64::checked_div, |x, y| x / y))
+        self.operate(other, i64::checked_div, |x, y| x / y)
     }
 
     /// Universal utility method for implementing operators.
@@ -223,10 +174,10 @@ impl Int {
                 if let Some(y) = x.checked_neg() {
                     Self::from(y)
                 } else {
-                    Self::from(-BigInt::from(*x)).normalize()
+                    Self::from(-BigInt::from(*x))
                 }
             }
-            IntV::Big(x) => Self::from(-x.as_ref()).normalize(),
+            IntV::Big(x) => Self::from(-x.as_ref()),
         }
     }
 
@@ -303,23 +254,21 @@ impl Int {
     /// algorithms, from fast for small numbers to slow for large numbers.
     /// Should only return None if the exponent is negative.
     pub fn pow(&self, other: &Int) -> Option<Int> {
-        self.small_pow(other)
+        let mut r = self.small_pow(other)
             .or_else(|| self.medium_pow(other))
-            .or_else(|| self.big_pow(other))
-            .map(|x| x.normalize())
+            .or_else(|| self.big_pow(other))?;
+        r.normalize();
+        Some(r)
     }
 
     /// Normalize self by converting bignums to machine integers when possible.
     /// Used as a postprocesssing step for most arithmetic operations.
-    pub fn normalize(&self) -> Self {
+    pub fn normalize(&mut self) {
         let Self(this) = self;
         if let IntV::Big(x) = this {
-            x.as_ref()
-                .to_i64()
-                .map(Self::from)
-                .unwrap_or_else(|| self.clone())
-        } else {
-            self.clone()
+            if let Some(y) = x.as_ref().to_i64() {
+                *self = Self(IntV::Small(y));
+            }
         }
     }
 
@@ -470,6 +419,68 @@ impl Int {
     }
 }
 
+impl From<BigInt> for Int {
+    fn from(value: BigInt) -> Self {
+        Self::big(value)
+    }
+}
+
+impl From<i64> for Int {
+    fn from(value: i64) -> Self {
+        Self::small(value)
+    }
+}
+
+impl From<i32> for Int {
+    fn from(value: i32) -> Self {
+        Self::small(value as i64)
+    }
+}
+
+impl From<usize> for Int {
+    fn from(x: usize) -> Self {
+        i64::try_from(x)
+            .map(Int::small)
+            .unwrap_or_else(|_| Int::big(BigInt::from(x)))
+    }
+}
+
+impl TryFrom<&Int> for u32 {
+    type Error = ();
+
+    fn try_from(value: &Int) -> Result<Self, Self::Error> {
+        let Int(this) = value;
+        match this {
+            IntV::Small(x) => Self::try_from(*x).map_err(|_| ()),
+            IntV::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
+        }
+    }
+}
+
+impl TryFrom<&Int> for i64 {
+    type Error = ();
+
+    fn try_from(value: &Int) -> Result<Self, Self::Error> {
+        let Int(this) = value;
+        match this {
+            IntV::Small(x) => Ok(*x),
+            IntV::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
+        }
+    }
+}
+
+impl TryFrom<&Int> for usize {
+    type Error = ();
+
+    fn try_from(value: &Int) -> Result<Self, Self::Error> {
+        let Int(this) = value;
+        match this {
+            IntV::Small(x) => Self::try_from(*x).map_err(|_| ()),
+            IntV::Big(x) => Self::try_from(x.as_ref()).map_err(|_| ()),
+        }
+    }
+}
+
 fn big_to_f64(x: &BigInt) -> f64 {
     f64::from_str(x.to_string().as_str()).unwrap()
 }
@@ -493,8 +504,8 @@ fn f64_to_bigs(x: f64) -> (BigInt, BigInt) {
 }
 
 #[cfg(feature = "python")]
-impl pyo3::IntoPy<pyo3::PyObject> for &Int {
-    fn into_py(self, py: pyo3::prelude::Python<'_>) -> pyo3::PyObject {
+impl IntoPy<PyObject> for &Int {
+    fn into_py(self, py: Python<'_>) -> PyObject {
         match &self.0 {
             IntV::Small(x) => x.into_py(py),
             IntV::Big(x) => x.as_ref().clone().into_py(py),

@@ -1,4 +1,5 @@
 //! A Gold object is represented by the [`Object`] type. Internally an Object
+//!
 //! just wraps the [`ObjectVariant`] enumeration, which is hidden for
 //! encapsulation purposes.
 //!
@@ -21,6 +22,12 @@ use std::io::{Read, Write};
 use std::str::FromStr;
 use std::time::SystemTime;
 
+#[cfg(feature = "python")]
+use std::collections::HashMap;
+
+#[cfg(feature = "python")]
+use std::rc::Rc;
+
 use gc::{Finalize, GcCellRef, GcCellRefMut, Trace};
 use json::JsonValue;
 use num_bigint::BigInt;
@@ -29,22 +36,30 @@ use serde::{Deserialize, Serialize};
 use symbol_table::GlobalSymbol;
 
 use crate::compile::Function;
-use crate::traits::{ToMap, ToVec};
-
 use crate::error::{Error, Internal, Reason, TypeMismatch, Value};
 use crate::formatting::FormatSpec;
 use crate::types::{Gc, GcCell};
 use crate::{ast, Key, List, Map, Type};
 
+#[cfg(feature = "python")]
+use crate::types::NativeClosure;
+
 use function::Func;
 use integer::Int;
 use string::Str;
 
+#[cfg(feature="python")]
+use pyo3::{IntoPy, PyObject, Python, FromPyObject, PyAny, PyResult, PyErr, Py};
+
+#[cfg(feature="python")]
+use pyo3::types::{PyList, PyDict, PyTuple};
+
+#[cfg(feature = "python")]
+use pyo3::exceptions::PyTypeError;
+
 /// The current serialization format version.
 const SERIALIZE_VERSION: i32 = 1;
 
-// Object variant
-// ------------------------------------------------------------------------------------------------
 
 /// The object variant implements all possible variants of Gold objects,
 /// although it's not the user-facing type, which is [`Object`], an opaque
@@ -192,9 +207,6 @@ macro_rules! signature {
 
 pub use signature;
 
-// Object
-// ------------------------------------------------------------------------------------------------
-
 /// The general type of Gold objects.
 ///
 /// While this type wraps [`ObjectVariant`], a fact which can be revealed using
@@ -239,6 +251,114 @@ impl PartialOrd<Object> for Object {
 }
 
 impl Object {
+    // Constructors
+    // ------------------------------------------------------------------------------------------------
+
+    /// Construct an interned string.
+    pub fn new_str_interned<T>(val: T) -> Self where Key: From<T> {
+        Self(ObjV::Str(Str::interned(val)))
+    }
+
+    /// Construct a non-interned string.
+    pub fn new_str_natural(val: impl AsRef<str>) -> Self {
+        Self(ObjV::Str(Str::natural(val)))
+    }
+
+    /// Construct a string, deciding based on length whether to intern or not.
+    pub fn new_str<T>(val: T) -> Self where Key: From<T>, T: AsRef<str> {
+        if val.as_ref().len() < 20 {
+            Self::new_str_interned(val)
+        } else {
+            Self::new_str_natural(val)
+        }
+    }
+
+    /// Construct an integer.
+    pub(crate) fn new_int<T>(val: T) -> Self where Int: From<T> {
+        Self(ObjV::Int(Int::from(val)))
+    }
+
+    /// Construct a big integer from a decimal string representation.
+    pub fn new_int_from_str(x: impl AsRef<str>) -> Option<Self> {
+        i64::from_str(x.as_ref()).ok().map(Self::from).or_else(
+            || BigInt::from_str(x.as_ref()).ok().map(Self::from)
+        )
+    }
+
+    /// Construct an empty list.
+    pub fn new_list() -> Self {
+        Self(ObjV::List(GcCell::new(vec![])))
+    }
+
+    /// Construct an empty map.
+    pub fn new_map() -> Self {
+        Self(ObjV::Map(GcCell::new(Map::new())))
+    }
+
+    // Mutation
+    // ------------------------------------------------------------------------------------------------
+
+    pub(crate) fn push(&self, other: Object) -> Result<(), Error> {
+        let Self(this) = self;
+        match this {
+            ObjV::List(x) => {
+                let mut xx = x.borrow_mut();
+                xx.push(other);
+                Ok(())
+            }
+            _ => Err(Error::new(Reason::None)),
+        }
+    }
+
+    pub(crate) fn push_unchecked(&self, other: Object) {
+        self.push(other).unwrap();
+    }
+
+    pub(crate) fn push_cell(&self, other: GcCell<Object>) -> Result<(), Error> {
+        let Self(this) = self;
+        match this {
+            ObjV::Func(func) => { func.push_cell(other) },
+            _ => Err(Error::new(Reason::None)),
+        }
+    }
+
+    pub(crate) fn insert(&self, key: Self, value: Self) -> Result<(), Error> {
+        self.insert_key(
+            key.get_key()
+                .ok_or_else(|| Error::new(TypeMismatch::MapKey(key.type_of())))?,
+            value,
+        )
+    }
+
+    pub(crate) fn insert_key(&self, key: Key, value: Object) -> Result<(), Error> {
+        let Self(this) = self;
+        match this {
+            ObjV::Map(x) => {
+                let mut xx = x.borrow_mut();
+                xx.insert(key, value);
+                Ok(())
+            }
+            _ => Err(Error::new(Reason::None)),
+        }
+    }
+
+    pub(crate) fn append(&self, mut it: impl Iterator<Item = Object>) -> Result<(), Error> {
+        let Self(this) = self;
+        match this {
+            ObjV::List(x) => {
+                let mut xx = x.borrow_mut();
+                while let Some(obj) = it.next() {
+                    xx.push(obj);
+                }
+                Ok(())
+            }
+            _ => Err(Error::new(Reason::None)),
+        }
+    }
+
+    // Unchecked functions
+    // ------------------------------------------------------------------------------------------------
+
     /// Mathematical negation.
     pub fn neg(&self) -> Result<Self, Error> {
         let Self(this) = self;
@@ -304,25 +424,6 @@ impl Object {
         }
     }
 
-    /// Construct an interned string.
-    pub fn str_interned<T>(val: T) -> Self where Key: From<T> {
-        Self(ObjV::Str(Str::interned(val)))
-    }
-
-    /// Construct a non-interned string.
-    pub fn str_natural(val: impl AsRef<str>) -> Self {
-        Self(ObjV::Str(Str::natural(val)))
-    }
-
-    /// Construct a string, deciding based on length whether to intern or not.
-    pub fn str<T>(val: T) -> Self where Key: From<T>, T: AsRef<str> {
-        if val.as_ref().len() < 20 {
-            Self::str_interned(val)
-        } else {
-            Self::str_natural(val)
-        }
-    }
-
     pub(crate) fn closure(val: Function) -> Self {
         Self(ObjV::Func(Func::closure(val)))
     }
@@ -330,32 +431,6 @@ impl Object {
     /// Construct a string directly from an interned symbol.
     pub fn key(val: Key) -> Self {
         Self(ObjV::Str(Str::interned(val)))
-    }
-
-    /// Construct an integer.
-    pub(crate) fn int<T>(val: T) -> Self
-    where
-        Int: From<T>,
-    {
-        Self(ObjV::Int(Int::from(val)))
-    }
-
-    /// Construct a big integer from a decimal string representation.
-    pub fn bigint(x: impl AsRef<str>) -> Option<Self> {
-        BigInt::from_str(x.as_ref())
-            .ok()
-            .map(|x| Self::from(x).numeric_normalize())
-    }
-
-    /// Normalize an integer variant, converting bignums to machine integers if
-    /// they fit.
-    pub fn numeric_normalize(&self) -> Self {
-        let Self(this) = self;
-        if let ObjV::Int(x) = this {
-            Self(ObjV::Int(x.normalize()))
-        } else {
-            self.clone()
-        }
     }
 
     /// Construct a float.
@@ -379,33 +454,6 @@ impl Object {
         Func: From<T>,
     {
         Self(ObjV::Func(Func::from(val)))
-    }
-
-    /// Construct a list.
-    pub fn list<T>(x: T) -> Self
-    where
-        T: ToVec<Object>,
-    {
-        Self(ObjV::List(GcCell::new(x.to_vec())))
-    }
-
-    /// Construct an empty list.
-    pub fn new_list() -> Self {
-        Self(ObjV::List(GcCell::new(vec![])))
-    }
-
-    /// Construct a map.
-    pub(crate) fn map<T>(x: T) -> Self
-    where
-        T: ToMap<Key, Object>,
-    {
-        Self(ObjV::Map(GcCell::new(x.to_map())))
-    }
-
-
-    /// Construct an empty map.
-    pub fn new_map() -> Self {
-        Self(ObjV::Map(GcCell::new(Map::new())))
     }
 
     /// Construct an iterator
@@ -601,6 +649,7 @@ impl Object {
     }
 
     /// Extract the function variant if applicable.
+    #[cfg(feature = "python")]
     pub(crate) fn get_func_variant<'a>(&'a self) -> Option<&'a Func> {
         match &self.0 {
             ObjV::Func(func) => Some(func),
@@ -659,6 +708,7 @@ impl Object {
     }
 
     /// The function call operator.
+    #[cfg(feature = "python")]
     pub(crate) fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
         match self.get_func_variant() {
             Some(func) => func.call(args, kwargs),
@@ -735,39 +785,6 @@ impl Object {
         )))
     }
 
-    pub(crate) fn push_to_list(&self, other: Object) -> Result<(), Error> {
-        let Self(this) = self;
-        match this {
-            ObjV::List(x) => {
-                let mut xx = x.borrow_mut();
-                xx.push(other);
-                Ok(())
-            }
-            _ => Err(Error::new(Reason::None)),
-        }
-    }
-
-    /// Wrap [`ObjectVariant::push_to_map`]
-    pub(crate) fn push_to_map(&self, key: Self, value: Self) -> Result<(), Error> {
-        self.push_to_map_key(
-            key.get_key()
-                .ok_or_else(|| Error::new(TypeMismatch::MapKey(key.type_of())))?,
-            value,
-        )
-    }
-
-    pub(crate) fn push_to_map_key(&self, key: Key, value: Object) -> Result<(), Error> {
-        let Self(this) = self;
-        match this {
-            ObjV::Map(x) => {
-                let mut xx = x.borrow_mut();
-                xx.insert(key, value);
-                Ok(())
-            }
-            _ => Err(Error::new(Reason::None)),
-        }
-    }
-
     pub(crate) fn splat_into(&self, other: Object) -> Result<(), Error> {
         let Self(this) = self;
         let Self(that) = &other;
@@ -793,14 +810,6 @@ impl Object {
             (ObjV::Map(_), _) => Err(Error::new(TypeMismatch::SplatMap(other.type_of()))),
 
             _ => Err(Error::new(Internal::SplatToNonCollection)),
-        }
-    }
-
-    pub(crate) fn push_to_closure(&self, other: GcCell<Object>) -> Result<(), Error> {
-        let Self(this) = self;
-        match this {
-            ObjV::Func(func) => func.push_to_closure(other),
-            _ => Err(Error::new(Reason::None)),
         }
     }
 
@@ -842,13 +851,11 @@ impl Object {
         let Self(this) = self;
         let Self(that) = other;
         match (this, that) {
-            (ObjV::List(x), ObjV::List(y)) => Ok(Self::list(
-                x.borrow()
-                    .iter()
-                    .chain(y.borrow().iter())
-                    .map(Object::clone)
-                    .collect::<List>(),
-            )),
+            (ObjV::List(x), ObjV::List(y)) => {
+                let result = Self::new_list();
+                result.append(x.borrow().iter().chain(y.borrow().iter()).cloned())?;
+                Ok(result)
+            }
             (ObjV::Str(x), ObjV::Str(y)) => Ok(Self(ObjV::Str(x.add(y)))),
             _ => self.operate(other, Int::add, |x, y| x + y, ast::BinOp::Add),
         }
@@ -916,14 +923,6 @@ impl Object {
     }
 }
 
-impl FromIterator<Object> for Object {
-    fn from_iter<T: IntoIterator<Item = Object>>(iter: T) -> Self {
-        Object(ObjV::List(GcCell::new(
-            iter.into_iter().collect(),
-        )))
-    }
-}
-
 impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self(this) = self;
@@ -974,7 +973,7 @@ impl From<bool> for Object {
 
 impl From<&str> for Object {
     fn from(value: &str) -> Self {
-        Object::str(value)
+        Object::new_str(value)
     }
 }
 
@@ -996,6 +995,36 @@ where
 impl From<f64> for Object {
     fn from(x: f64) -> Self {
         Self(ObjV::Float(x))
+    }
+}
+
+impl From<List> for Object {
+    fn from(value: List) -> Self {
+        Self(ObjV::List(GcCell::new(value)))
+    }
+}
+
+impl From<Vec<(&str, Object)>> for Object {
+    fn from(value: Vec<(&str, Object)>) -> Self {
+        let ret = Self::new_map();
+        for (k, v) in value {
+            ret.insert_key(Key::new(k), v).unwrap();
+        }
+        ret
+    }
+}
+
+impl From<Map> for Object {
+    fn from(value: Map) -> Self {
+        Self(ObjV::Map(GcCell::new(value)))
+    }
+}
+
+impl FromIterator<Object> for Object {
+    fn from_iter<T: IntoIterator<Item = Object>>(iter: T) -> Self {
+        Object(ObjV::List(GcCell::new(
+            iter.into_iter().collect(),
+        )))
     }
 }
 
@@ -1035,6 +1064,79 @@ impl TryFrom<&Object> for JsonValue {
             }
             ObjV::Null => Ok(JsonValue::Null),
             _ => Err(Error::new(TypeMismatch::Json(value.type_of()))),
+        }
+    }
+}
+
+#[cfg(feature = "python")]
+impl<'s> FromPyObject<'s> for Object {
+    fn extract(obj: &'s PyAny) -> PyResult<Self> {
+        // Nothing magical here, just a prioritized list of possible Python types and their Gold equivalents
+        if let Ok(x) = obj.extract::<Func>() {
+            Ok(Object::func(x))
+        } else if let Ok(x) = obj.extract::<i64>() {
+            Ok(Object::new_int(x))
+        } else if let Ok(x) = obj.extract::<BigInt>() {
+            Ok(Object::new_int(x))
+        } else if let Ok(x) = obj.extract::<f64>() {
+            Ok(Object::from(x))
+        } else if let Ok(x) = obj.extract::<&str>() {
+            Ok(Object::from(x))
+        } else if let Ok(x) = obj.extract::<bool>() {
+            Ok(Object::from(x))
+        } else if let Ok(x) = obj.extract::<List>() {
+            Ok(Object::from(x))
+        } else if let Ok(x) = obj.extract::<HashMap<String, Object>>() {
+            Ok(Object::from(Map::from_iter(x.into_iter().map(|(k,v)| (Key::new(k), v)))))
+        } else if obj.is_none() {
+            Ok(Object::null())
+        } else if obj.is_callable() {
+            let func: Py<PyAny> = obj.into();
+            let closure: Rc<NativeClosure> = Rc::new(move |args: &List, kwargs: Option<&Map>| {
+                let result = Python::with_gil(|py| {
+                    let a = PyTuple::new(py, args.iter().map(|x| x.clone().into_py(py)));
+                    let b = PyDict::new(py);
+                    if let Some(kws) = kwargs {
+                        for (k, v) in kws {
+                            b.set_item(k.as_str(), v.clone().into_py(py))?;
+                        }
+                    }
+                    let result = func.call(py, a, Some(b))?.extract::<Object>(py)?;
+                    Ok(result)
+                });
+                result.map_err(|e: PyErr| Error::new(Reason::External(format!("{}", e))))
+            });
+            Ok(Object::func(closure))
+        } else {
+            Err(PyTypeError::new_err(format!(
+                "uncovertible type: {}",
+                obj.get_type().name().unwrap_or("unknown")
+            )))
+        }
+    }
+}
+
+#[cfg(feature = "python")]
+impl pyo3::IntoPy<PyObject> for Object {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        match &self.0 {
+            ObjV::Int(x) => x.into_py(py),
+            ObjV::Float(x) => x.into_py(py),
+            ObjV::Str(x) => x.as_str().into_py(py),
+            ObjV::Boolean(x) => x.into_py(py),
+            ObjV::List(x) => {
+                PyList::new(py, x.borrow().iter().map(|x| x.clone().into_py(py))).into()
+            }
+            ObjV::Map(x) => {
+                let r = PyDict::new(py);
+                for (k, v) in x.borrow().iter() {
+                    r.set_item(k.as_str(), v.clone().into_py(py)).unwrap();
+                }
+                r.into()
+            }
+            ObjV::Null => (None as Option<bool>).into_py(py),
+            ObjV::ListIter(_, _) => 1.into_py(py), // TODO
+            ObjV::Func(x) => x.into_py(py),
         }
     }
 }

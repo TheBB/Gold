@@ -98,3 +98,10 @@ impl Str {
         Self::natural(format!("{}{}", self.as_str(), other.as_str()))
     }
 }
+
+#[cfg(feature = "python")]
+impl pyo3::IntoPy<pyo3::PyObject> for &Str {
+    fn into_py(self, py: pyo3::prelude::Python<'_>) -> pyo3::PyObject {
+        self.as_str().into_py(py)
+    }
+}

@@ -8,6 +8,12 @@ use std::path::PathBuf;
 use gc::{custom_trace, Finalize, Trace};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "python")]
+use pyo3::PyErr;
+
+#[cfg(feature = "python")]
+use pyo3::exceptions::{PyException, PySyntaxError, PyNameError, PyKeyError, PyTypeError, PyOSError, PyImportError, PyValueError};
+
 use crate::ast::{BinOp, UnOp};
 use crate::lexing::TokenType;
 use crate::{Key, Type};
@@ -193,6 +199,21 @@ impl From<usize> for Span {
     }
 }
 
+impl<T> From<&Tagged<T>> for Span {
+    fn from(value: &Tagged<T>) -> Self {
+        value.span()
+    }
+}
+
+impl From<Range<Span>> for Span {
+    fn from(Range { start, end }: Range<Span>) -> Self {
+        Span {
+            start: start.start(),
+            length: end.offset() + end.length() - start.offset(),
+        }
+    }
+}
+
 /// A wrapper for marking any object with a text span pointing to its origin in
 /// a source file.
 ///
@@ -316,18 +337,27 @@ impl<T> AsRef<T> for Tagged<T> {
     }
 }
 
-impl<T> From<&Tagged<T>> for Span {
-    fn from(value: &Tagged<T>) -> Self {
-        value.span()
-    }
+/// This trait provides the `tag` method, for wrapping a value in a [`Tagged`]
+/// wrapper, which containts information about where in the source code this
+/// object originated. This is used to report error messages.
+///
+/// There's no need to implement this trait beyond the blanket implementation.
+pub trait Taggable: Sized {
+    /// Wrap this object in a tagged wrapper.
+    fn tag<T>(self, loc: T) -> Tagged<Self>
+    where
+        Span: From<T>;
 }
 
-impl From<Range<Span>> for Span {
-    fn from(Range { start, end }: Range<Span>) -> Self {
-        Span {
-            start: start.start(),
-            length: end.offset() + end.length() - start.offset(),
-        }
+impl<T> Taggable for T
+where
+    T: Sized,
+{
+    fn tag<U>(self, loc: U) -> Tagged<Self>
+    where
+        Span: From<U>,
+    {
+        Tagged::new(Span::from(loc), self)
     }
 }
 
@@ -846,6 +876,7 @@ impl Error {
     }
 
     /// Get the reason
+    #[cfg(feature = "python")]
     pub(crate) fn reason(&self) -> Option<&Reason> {
         self.reason.as_ref()
     }
@@ -905,8 +936,33 @@ impl Error {
 
     /// Add a human-friendly string representation.
     pub fn render(mut self, code: Option<&str>) -> Self {
-        self.rendered = Some(format!("{}", ErrorRenderer(&self, code)));
+        if self.rendered.is_none() {
+            self.rendered = Some(format!("{}", ErrorRenderer(&self, code)));
+        }
         self
+    }
+}
+
+#[cfg(feature = "python")]
+impl Error {
+    /// Convert this error to a Python equivalent.
+    pub fn to_py(mut self) -> PyErr {
+        self = self.render(None);
+        let pystr = format!("From Gold: {}", self.rendered().unwrap());
+        match self.reason() {
+            None => PyException::new_err(pystr),
+            Some(Reason::None) => PyException::new_err(pystr),
+            Some(Reason::Syntax(_)) => PySyntaxError::new_err(pystr),
+            Some(Reason::Unbound(_)) => PyNameError::new_err(pystr),
+            Some(Reason::Unassigned(_)) => PyKeyError::new_err(pystr),
+            Some(Reason::Unpack(_)) => PyTypeError::new_err(pystr),
+            Some(Reason::Internal(_)) => PyException::new_err(pystr),
+            Some(Reason::External(_)) => PyException::new_err(pystr),
+            Some(Reason::TypeMismatch(_)) => PyTypeError::new_err(pystr),
+            Some(Reason::Value(_)) => PyValueError::new_err(pystr),
+            Some(Reason::FileSystem(_)) => PyOSError::new_err(pystr),
+            Some(Reason::UnknownImport(_)) => PyImportError::new_err(pystr),
+        }
     }
 }
 

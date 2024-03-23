@@ -1,11 +1,10 @@
 use crate::ast::*;
-use crate::error::{Action, Error, Reason, Span, Syntax, SyntaxElement as S, Tagged};
+use crate::error::{Action, Error, Reason, Span, Syntax, SyntaxElement as S, Tagged, Taggable};
 use crate::formatting::{
     AlignSpec, FormatSpec, FormatType, GroupingSpec, SignSpec, StringAlignSpec,
 };
 use crate::lexing::TokenType as T;
 use crate::parsing::parse as parse_file;
-use crate::traits::{Boxable, Taggable};
 use crate::{Key, Object};
 
 fn parse(input: &str) -> Result<Tagged<Expr>, Error> {
@@ -141,6 +140,20 @@ where
     }
 }
 
+pub trait Boxable<T>
+where
+    T: Sized,
+{
+    /// Convert self to a boxed value.
+    fn to_box(self) -> Box<T>;
+}
+
+impl<T> Boxable<T> for T {
+    fn to_box(self) -> Box<T> {
+        Box::new(self)
+    }
+}
+
 #[test]
 fn booleans_and_null() {
     assert_eq!(parse("true"), Ok(true.expr(0..4)));
@@ -159,7 +172,7 @@ fn integers() {
     );
     assert_eq!(
         parse("9223372036854776000"),
-        Ok(Object::bigint("9223372036854776000").unwrap().expr(0..19))
+        Ok(Object::new_int_from_str("9223372036854776000").unwrap().expr(0..19))
     );
 }
 
@@ -296,9 +309,9 @@ fn identifiers() {
 
 #[test]
 fn lists() {
-    assert_eq!(parse("[]"), Ok(Expr::list(()).tag(0..2)),);
+    assert_eq!(parse("[]"), Ok(Expr::list(vec![]).tag(0..2)),);
 
-    assert_eq!(parse("[   ]"), Ok(Expr::list(()).tag(0..5)),);
+    assert_eq!(parse("[   ]"), Ok(Expr::list(vec![]).tag(0..5)),);
 
     assert_eq!(
         parse("[true]"),
@@ -422,7 +435,7 @@ fn lists() {
 fn nested_lists() {
     assert_eq!(
         parse("[[]]"),
-        Ok(Expr::list(vec![Expr::list(()).tag(1..3).wrap(ListElement::Singleton),]).tag(0..4)),
+        Ok(Expr::list(vec![Expr::list(vec![]).tag(1..3).wrap(ListElement::Singleton),]).tag(0..4)),
     );
 
     assert_eq!(
@@ -439,9 +452,9 @@ fn nested_lists() {
 
 #[test]
 fn maps() {
-    assert_eq!(parse("{}"), Ok(Expr::map(()).tag(0..2)),);
+    assert_eq!(parse("{}"), Ok(Expr::map(vec![]).tag(0..2)),);
 
-    assert_eq!(parse("{  }"), Ok(Expr::map(()).tag(0..4)),);
+    assert_eq!(parse("{  }"), Ok(Expr::map(vec![]).tag(0..4)),);
 
     assert_eq!(
         parse("{a: 1}"),

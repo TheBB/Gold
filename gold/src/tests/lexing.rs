@@ -1,5 +1,5 @@
+use crate::error::Taggable;
 use crate::lexing::{Lexer, Token, TokenType};
-use crate::traits::Taggable;
 
 macro_rules! tok {
     ($x:expr, $tok:expr) => {{

@@ -11,9 +11,23 @@ use crate::compile::{Compiler, Function};
 use crate::error::{BindingType, Span, Syntax};
 use crate::formatting::FormatSpec;
 
-use crate::error::{Action, Error, Tagged};
-use crate::traits::{Boxable, Taggable, ToVec, Validatable};
+use crate::error::{Action, Error, Tagged, Taggable};
 use crate::{Key, Object};
+
+/// This trait is implemented by all AST nodes that require a validation step,
+/// to catch integrity errors which the parser either can't or won't catch.
+trait Validatable {
+    /// Validate this node and return a suitable error if necessary.
+    ///
+    /// By the Anna Karenina rule, there's no distinction on success.
+    fn validate(&self) -> Result<(), Error>;
+}
+
+impl<T: Validatable> Validatable for Tagged<T> {
+    fn validate(&self) -> Result<(), Error> {
+        self.as_ref().validate()
+    }
+}
 
 pub(crate) trait Visitable {
     fn visit<T: Visitor>(&self, visitor: &mut T);
@@ -840,7 +854,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Index.tag(loc), subscript.to_box())
+        Transform::BinOp(BinOp::Index.tag(loc), Box::new(subscript))
     }
 
     /// Construct an exponentiation transform.
@@ -850,7 +864,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Power.tag(loc), exponent.to_box())
+        Transform::BinOp(BinOp::Power.tag(loc), Box::new(exponent))
     }
 
     /// Construct a multiplication transform.
@@ -860,7 +874,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Multiply.tag(loc), multiplicand.to_box())
+        Transform::BinOp(BinOp::Multiply.tag(loc), Box::new(multiplicand))
     }
 
     /// Construct an integer division transform.
@@ -870,7 +884,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::IntegerDivide.tag(loc), divisor.to_box())
+        Transform::BinOp(BinOp::IntegerDivide.tag(loc), Box::new(divisor))
     }
 
     /// Construct a mathematical division transform.
@@ -880,7 +894,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Divide.tag(loc), divisor.to_box())
+        Transform::BinOp(BinOp::Divide.tag(loc), Box::new(divisor))
     }
 
     /// Construct an addition transform.
@@ -890,7 +904,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Add.tag(loc), addend.to_box())
+        Transform::BinOp(BinOp::Add.tag(loc), Box::new(addend))
     }
 
     /// Construct a subtraction transform.
@@ -900,7 +914,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Subtract.tag(loc), subtrahend.to_box())
+        Transform::BinOp(BinOp::Subtract.tag(loc), Box::new(subtrahend))
     }
 
     /// Construct a less-than transform.
@@ -910,7 +924,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Less.tag(loc), rhs.to_box())
+        Transform::BinOp(BinOp::Less.tag(loc), Box::new(rhs))
     }
 
     /// Construct a greater-than transform.
@@ -920,7 +934,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Greater.tag(loc), rhs.to_box())
+        Transform::BinOp(BinOp::Greater.tag(loc), Box::new(rhs))
     }
 
     /// Construct a less-than-or-equal transform.
@@ -930,7 +944,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::LessEqual.tag(loc), rhs.to_box())
+        Transform::BinOp(BinOp::LessEqual.tag(loc), Box::new(rhs))
     }
 
     /// Construct a greater-than-or-equal transform.
@@ -940,7 +954,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::GreaterEqual.tag(loc), rhs.to_box())
+        Transform::BinOp(BinOp::GreaterEqual.tag(loc), Box::new(rhs))
     }
 
     /// Construct an equality check transform.
@@ -950,7 +964,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Equal.tag(loc), rhs.to_box())
+        Transform::BinOp(BinOp::Equal.tag(loc), Box::new(rhs))
     }
 
     /// Construct an inequality check transform.
@@ -960,7 +974,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::NotEqual.tag(loc), rhs.to_box())
+        Transform::BinOp(BinOp::NotEqual.tag(loc), Box::new(rhs))
     }
 
     /// Construct a containment check transform.
@@ -970,7 +984,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Contains.tag(loc), rhs.to_box())
+        Transform::BinOp(BinOp::Contains.tag(loc), Box::new(rhs))
     }
 
     /// Construct a logical conjunction transform.
@@ -980,7 +994,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::And.tag(loc), rhs.to_box())
+        Transform::BinOp(BinOp::And.tag(loc), Box::new(rhs))
     }
 
     /// Construct a logical disjunction transform.
@@ -990,7 +1004,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Or.tag(loc), rhs.to_box())
+        Transform::BinOp(BinOp::Or.tag(loc), Box::new(rhs))
     }
 }
 
@@ -1297,7 +1311,7 @@ impl Tagged<Expr> {
     /// Form the combined transformed expression from this operand and a transform.
     pub fn transform(self, op: Transform) -> Expr {
         Expr::Transformed {
-            operand: self.to_box(),
+            operand: Box::new(self),
             transform: op,
         }
     }
@@ -1306,23 +1320,23 @@ impl Tagged<Expr> {
     /// list of arguments.
     ///
     /// * `loc` - the location of the function call operator in the buffer.
-    pub fn funcall<U>(self, args: impl ToVec<Tagged<ArgElement>>, loc: U) -> Expr
+    pub fn funcall<U>(self, args: Vec<Tagged<ArgElement>>, loc: U) -> Expr
     where
         Span: From<U>,
     {
-        self.transform(Transform::FunCall(args.to_vec().tag(loc)))
+        self.transform(Transform::FunCall(args.tag(loc)))
     }
 }
 
 impl Expr {
     /// Construct a list expression.
-    pub fn list(elements: impl ToVec<Tagged<ListElement>>) -> Expr where {
-        Expr::List(elements.to_vec())
+    pub fn list(elements: Vec<Tagged<ListElement>>) -> Expr where {
+        Expr::List(elements)
     }
 
     /// Construct a map expression.
-    pub fn map(x: impl ToVec<Tagged<MapElement>>) -> Expr {
-        Expr::Map(x.to_vec())
+    pub fn map(x: Vec<Tagged<MapElement>>) -> Expr {
+        Expr::Map(x)
     }
 
     /// Construct a string expression.
@@ -1331,9 +1345,9 @@ impl Expr {
     /// string is empty) this will return a string literal.
     pub fn string(value: Vec<StringElement>) -> Expr {
         if value.len() == 0 {
-            Expr::Literal(Object::str_interned(""))
+            Expr::Literal(Object::new_str_interned(""))
         } else if let [StringElement::Raw(val)] = &value[..] {
-            Expr::Literal(Object::str(val.as_ref()))
+            Expr::Literal(Object::new_str(val.as_ref()))
         } else {
             Expr::String(value)
         }
@@ -1497,8 +1511,8 @@ pub struct File {
     pub expression: Tagged<Expr>,
 }
 
-impl Validatable for File {
-    fn validate(&self) -> Result<(), Error> {
+impl File {
+    pub fn validate(&self) -> Result<(), Error> {
         for statement in &self.statements {
             statement.validate()?;
         }

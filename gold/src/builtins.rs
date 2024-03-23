@@ -4,8 +4,8 @@ use std::str::FromStr;
 
 use crate::error::Value;
 use crate::error::{Error, TypeMismatch, Types};
-use crate::object::function::Builtin;
 use crate::object::integer::Int;
+use crate::types::Builtin;
 use crate::{Key, List, Map, Object, Type};
 
 /// Convert a function by name to a [`Builtin`] object and append it to a
@@ -22,10 +22,10 @@ use crate::{Key, List, Map, Object, Type};
 macro_rules! builtin {
     ($m: ident, $t: ident, $e: ident) => {
         let index = $t.len();
-        $t.push(Builtin {
-            func: $e,
-            name: $crate::Key::new(stringify!($e).to_string()),
-        });
+        $t.push(Builtin::new(
+            $e,
+            $crate::Key::new(stringify!($e).to_string()),
+        ));
         $m.insert(stringify!($e), index);
     };
 }
@@ -131,15 +131,15 @@ macro_rules! argcount {
 /// Return the size of a collection or the length of a string.
 fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
-        return Ok(Object::int(x.chars().count()))
+        return Ok(Object::new_int(x.chars().count()))
     });
 
     signature!(args = [x: list] {
-        return Ok(Object::int(x.len()))
+        return Ok(Object::new_int(x.len()))
     });
 
     signature!(args = [x: map] {
-        return Ok(Object::int(x.len()))
+        return Ok(Object::new_int(x.len()))
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, String, List, Map) });
@@ -150,14 +150,14 @@ fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// Works similarly to Python's function of the same name.
 fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [start: int, stop: int] {
-        return Ok((start.clone()..stop.clone()).map(Object::int).collect())
+        return Ok((start.clone()..stop.clone()).map(Object::new_int).collect())
     });
 
     signature!(args = [x: any, _y: int] { expected_pos!(0, x, Integer) });
     signature!(args = [_x: any, y: any] { expected_pos!(1, y, Integer) });
 
     signature!(args = [stop: int] {
-        return Ok((Int::from(0)..stop.clone()).map(Object::int).collect())
+        return Ok((Int::from(0)..stop.clone()).map(Object::new_int).collect())
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, Integer) });
@@ -168,21 +168,21 @@ fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// Convert the argument to an integer
 fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
-        return Ok(Object::int(x.clone()))
+        return Ok(Object::new_int(x.clone()))
     });
 
     signature!(args = [x: float] {
-        return Ok(Object::int(x.round() as i64))
+        return Ok(Object::new_int(x.round() as i64))
     });
 
     signature!(args = [x: bool] {
-        return Ok(Object::int(if x { 1 } else { 0 }))
+        return Ok(Object::new_int(if x { 1 } else { 0 }))
     });
 
     signature!(args = [x: str] {
-        return Object::bigint(x).ok_or_else(
+        return Object::new_int_from_str(x).ok_or_else(
             || Error::new(Value::Convert(Type::Integer))
-        ).map(|x| x.numeric_normalize())
+        );
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, Integer, Float, Boolean, String) });
@@ -227,11 +227,11 @@ fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// Convert the argument to a string
 fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
-        return Ok(Object::str(x))
+        return Ok(Object::new_str(x))
     });
 
     signature!(args = [x: any] {
-        return Ok(Object::str(x.to_string()))
+        return Ok(Object::new_str(x.to_string()))
     });
 
     argcount!(1, args)
@@ -244,12 +244,12 @@ fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// ```
 fn map(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [f: func, x: list] {
-        let mut ret = List::new();
+        let ret = Object::new_list();
         for obj in x.borrow().iter() {
             let elt = f.call(&vec![obj.clone()], None)?;
-            ret.push(elt);
+            ret.push_unchecked(elt);
         }
-        return Ok(Object::list(ret))
+        return Ok(ret)
     });
 
     signature!(args = [f: any, _x: list] { expected_pos!(0, f, Function) });
@@ -265,14 +265,14 @@ fn map(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// ```
 fn filter(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [f: func, x: list] {
-        let mut ret = List::new();
+        let ret = Object::new_list();
         for obj in x.borrow().iter() {
             let elt = f.call(&vec![obj.clone()], None)?;
             if elt.truthy() {
-                ret.push(obj.clone());
+                ret.push_unchecked(obj.clone());
             }
         }
-        return Ok(Object::list(ret))
+        return Ok(ret)
     });
 
     signature!(args = [f: any, _x: list] { expected_pos!(0, f, Function) });
@@ -284,14 +284,14 @@ fn filter(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// Return a list of key-value pairs from a map.
 fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: map] {
-        let mut ret = List::new();
+        let ret = Object::new_list();
         for (key, val) in x.borrow().iter() {
-            ret.push(Object::list(vec![
+            ret.push_unchecked(Object::from(vec![
                 Object::key(*key),
-                val.clone()
+                val.clone(),
             ]));
         }
-        return Ok(Object::list(ret))
+        return Ok(ret)
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, Map) });
@@ -347,7 +347,7 @@ fn ord(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         if c.is_none() || chars.next().is_some() {
             return Err(Error::new(Value::TooLong))
         }
-        return Ok(Object::int(c.unwrap() as i64))
+        return Ok(Object::new_int(c.unwrap() as i64))
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, String) });
@@ -361,7 +361,7 @@ fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
         let codepoint = u32::try_from(x).map_err(|_| Error::new(Value::OutOfRange))?;
         let c = char::try_from(codepoint).map_err(|_| Error::new(Value::OutOfRange))?;
-        return Ok(Object::str(c.to_string()))
+        return Ok(Object::new_str(c.to_string()))
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, Integer) });

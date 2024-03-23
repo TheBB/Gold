@@ -346,7 +346,7 @@ impl Compiler {
             }
 
             Expr::String(elements) => {
-                let index = self.constant(Object::str(""));
+                let index = self.constant(Object::new_str(""));
                 self.instruction(Instruction::LoadConst(index));
 
                 let mut len = 0;
@@ -647,7 +647,7 @@ impl Compiler {
     fn emit_string_element(&mut self, element: &StringElement) -> Result<usize, Error> {
         match element {
             StringElement::Raw(expr) => {
-                let index = self.constant(Object::str(expr.as_ref()));
+                let index = self.constant(Object::new_str(expr.as_ref()));
                 self.instruction(Instruction::LoadConst(index));
                 self.instruction(Instruction::Add);
                 Ok(2)

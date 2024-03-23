@@ -5,8 +5,7 @@ use std::fmt::Display;
 use nom::InputLength;
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Position, Syntax, SyntaxElement, SyntaxError, Tagged};
-use crate::traits::Taggable;
+use crate::error::{Position, Syntax, SyntaxElement, SyntaxError, Tagged, Taggable};
 
 /// Result type for calls to the lexer: either a new lexer and a token, or a syntax error.
 pub(crate) type LexResult<'a> = Result<(Lexer<'a>, Tagged<Token<'a>>), SyntaxError>;

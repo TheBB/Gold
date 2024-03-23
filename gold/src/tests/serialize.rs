@@ -17,17 +17,17 @@ fn nulls() {
 
 #[test]
 fn integers() {
-    check(Object::int(1));
-    check(Object::int(9223372036854775807_i64));
-    check(Object::int(-9223372036854775807_i64));
-    check(Object::bigint("9223372036854775808").unwrap());
+    check(Object::new_int(1));
+    check(Object::new_int(9223372036854775807_i64));
+    check(Object::new_int(-9223372036854775807_i64));
+    check(Object::new_int_from_str("9223372036854775808").unwrap());
 }
 
 #[test]
 fn strings() {
-    check(Object::str(""));
-    check(Object::str("dingbob"));
-    check(Object::str("ding\"bob"));
+    check(Object::new_str(""));
+    check(Object::new_str("dingbob"));
+    check(Object::new_str("ding\"bob"));
 }
 
 #[test]
@@ -43,18 +43,18 @@ fn floats() {
 
 #[test]
 fn maps() {
-    check(Object::map(vec![
-        ("a", Object::int(1)),
+    check(Object::from(vec![
+        ("a", Object::new_int(1)),
         ("b", Object::bool(true)),
-        ("c", Object::str("zomg")),
+        ("c", Object::new_str("zomg")),
     ]));
 }
 
 #[test]
 fn lists() {
-    check(Object::list(vec![
-        Object::int(1),
-        Object::str("dingbob"),
+    check(Object::from(vec![
+        Object::new_int(1),
+        Object::new_str("dingbob"),
         Object::float(-2.11),
         Object::bool(false),
     ]));

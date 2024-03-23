@@ -14,13 +14,12 @@ use nom::{
 };
 
 use crate::ast::*;
-use crate::error::{Error, Span, Syntax, SyntaxElement, SyntaxError, Tagged};
+use crate::error::{Error, Span, Syntax, SyntaxElement, SyntaxError, Tagged, Taggable};
 use crate::formatting::{
     AlignSpec, FloatFormatType, FormatSpec, FormatType, GroupingSpec, IntegerFormatType, SignSpec,
     StringAlignSpec, UppercaseSpec,
 };
 use crate::lexing::{CachedLexResult, CachedLexer, Lexer, TokenType};
-use crate::traits::{Boxable, Taggable, Validatable};
 use crate::{Key, Object};
 
 trait ExplainError {
@@ -518,8 +517,8 @@ fn number<'a>(input: In<'a>) -> Out<'a, PExpr> {
             let text = span.as_ref().replace('_', "");
             let y = text
                 .parse::<i64>()
-                .map(Object::int)
-                .or_else(|_| text.parse::<BigInt>().map(Object::int))
+                .map(Object::new_int)
+                .or_else(|_| text.parse::<BigInt>().map(Object::new_int))
                 .map(Expr::Literal);
             y.map(|x| x.tag(&span))
         }),
@@ -1073,7 +1072,7 @@ fn object_access<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
         |(dot, out)| {
             Transform::BinOp(
                 BinOp::Index.tag(&dot),
-                out.map(Object::key).map(Expr::Literal).to_box(),
+                Box::new(out.map(Object::key).map(Expr::Literal)),
             )
             .tag(dot.span()..out.span())
         },
@@ -1092,7 +1091,7 @@ fn object_index<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
         )),
         |(a, expr, b)| {
             let span = Span::from(a.span()..b.span());
-            Transform::BinOp(BinOp::Index.tag(span), expr.inner().to_box()).tag(span)
+            Transform::BinOp(BinOp::Index.tag(span), Box::new(expr.inner())).tag(span)
         },
     )(input)
 }
@@ -1702,7 +1701,7 @@ fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         Expr::Function {
             positional: args,
             keywords: kwargs,
-            expression: expr.inner().to_box(),
+            expression: Box::new(expr.inner()),
         }
         .tag(span),
     );

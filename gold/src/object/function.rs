@@ -4,67 +4,26 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 use gc::{Finalize, Gc, Trace};
-use serde::de::Visitor;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
-use super::{Key, List, Map, Object};
-use crate::builtins::BUILTINS;
+#[cfg(feature = "python")]
+use pyo3::FromPyObject;
+
+#[cfg(feature = "python")]
+use pyo3::{Py, PyAny, Python, pymethods, pyclass, PyObject, IntoPy};
+
+#[cfg(feature = "python")]
+use pyo3::types::{PyTuple, PyDict};
+
+#[cfg(feature = "python")]
+use pyo3::exceptions::PyTypeError;
+
+use super::{List, Map, Object};
 use crate::compile::Function;
 use crate::error::{Error, Reason};
 use crate::eval::Vm;
-use crate::types::GcCell;
+use crate::types::{GcCell, Builtin, NativeClosure};
 use crate::ImportConfig;
-
-/// A builtin function is a 'pure' function implemented in Rust associated with
-/// a name. The name is used for serializing. When deserializing, the name is
-/// looked up in the  mapping.
-#[derive(Copy, Clone)]
-pub(crate) struct Builtin {
-    /// The rust callable for evaluating the function.
-    pub func: fn(&List, Option<&Map>) -> Result<Object, Error>,
-
-    /// The name of the function.
-    pub name: Key,
-}
-
-// Custom serialization and deserialization logic.
-impl Serialize for Builtin {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.name.as_str())
-    }
-}
-
-struct BuiltinVisitor;
-
-impl<'a> Visitor<'a> for BuiltinVisitor {
-    type Value = Builtin;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        formatter.write_str("a string")
-    }
-
-    fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
-        BUILTINS
-            .0
-            .get(v)
-            .map(|i| BUILTINS.1[*i])
-            .ok_or(E::custom("unknown builtin name"))
-    }
-}
-
-impl<'a> Deserialize<'a> for Builtin {
-    fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> where {
-        deserializer.deserialize_str(BuiltinVisitor)
-    }
-}
-
-/// A 'pure' function implemented in Rust. Unlike [`Builtin`], this form of
-/// function is backed by a dynamic callable object, which can be anything, such
-/// as a closure. Such objects can be created dynamically, and are thus
-/// necessary for implementing Gold-callable functions in other languages like
-/// Python. This also makes them inherently non-serializable.
-#[derive(Clone)]
-pub(crate) struct NativeClosure(pub(crate) Rc<dyn Fn(&List, Option<&Map>) -> Result<Object, Error>>);
 
 #[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
 enum FuncV {
@@ -72,7 +31,7 @@ enum FuncV {
     Builtin(#[unsafe_ignore_trace] Builtin),
 
     #[serde(skip)]
-    NativeClosure(#[unsafe_ignore_trace] NativeClosure),
+    NativeClosure(#[unsafe_ignore_trace] Rc<NativeClosure>),
 }
 
 impl Debug for FuncV {
@@ -83,7 +42,7 @@ impl Debug for FuncV {
                 .field(x)
                 .field(e)
                 .finish(),
-            Self::Builtin(b) => f.debug_tuple("Func::Builtin").field(&b.name).finish(),
+            Self::Builtin(b) => f.debug_tuple("Func::Builtin").field(b).finish(),
             Self::NativeClosure(_) => f.debug_tuple("Func::NativeClosure").finish(),
         }
     }
@@ -100,8 +59,8 @@ impl From<Builtin> for Func {
     }
 }
 
-impl From<NativeClosure> for Func {
-    fn from(value: NativeClosure) -> Self {
+impl From<Rc<NativeClosure>> for Func {
+    fn from(value: Rc<NativeClosure>) -> Self {
         Self(FuncV::NativeClosure(value))
     }
 }
@@ -116,7 +75,7 @@ impl Func {
         let Self(this) = self;
         let Self(that) = other;
         match (this, that) {
-            (FuncV::Builtin(x), FuncV::Builtin(y)) => x.name == y.name,
+            (FuncV::Builtin(x), FuncV::Builtin(y)) => x.name() == y.name(),
             _ => false,
         }
     }
@@ -125,8 +84,8 @@ impl Func {
     pub(crate) fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
         let Self(this) = self;
         match this {
-            FuncV::NativeClosure(NativeClosure(f)) => f(args, kwargs),
-            FuncV::Builtin(Builtin { func: f, .. }) => f(args, kwargs),
+            FuncV::NativeClosure(f) => f(args, kwargs),
+            FuncV::Builtin(f) => f.call(args, kwargs),
             FuncV::Closure(f, e) => {
                 let importer = ImportConfig::default();
                 let mut vm = Vm::new(&importer);
@@ -135,7 +94,7 @@ impl Func {
         }
     }
 
-    pub(crate) fn push_to_closure(&self, other: GcCell<Object>) -> Result<(), Error> {
+    pub(crate) fn push_cell(&self, other: GcCell<Object>) -> Result<(), Error> {
         let Self(this) = self;
         match this {
             FuncV::Closure(_, enclosed) => {
@@ -147,11 +106,11 @@ impl Func {
         }
     }
 
-    pub(crate) fn native_callable(&self) -> Option<&dyn Fn(&List, Option<&Map>) -> Result<Object, Error>> {
+    pub(crate) fn native_callable(&self) -> Option<&NativeClosure> {
         let Self(this) = self;
         match this {
-            FuncV::NativeClosure(closure) => Some(closure.0.as_ref()),
-            FuncV::Builtin(Builtin { func, .. }) => Some(func),
+            FuncV::NativeClosure(closure) => Some(closure.as_ref()),
+            FuncV::Builtin(builtin) => Some(builtin.native_callable()),
             _ => None,
         }
     }
@@ -161,6 +120,69 @@ impl Func {
         match this {
             FuncV::Closure(f, e) => Some((f.clone(), e.clone())),
             _ => None,
+        }
+    }
+}
+
+#[cfg(feature = "python")]
+#[pyclass(unsendable)]
+#[derive(Clone)]
+struct PyFunction(Func);
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl PyFunction {
+    #[args(args = "*", kwargs = "**")]
+    fn __call__(
+        &self,
+        py: Python<'_>,
+        args: &PyTuple,
+        kwargs: Option<&PyDict>,
+    ) -> pyo3::PyResult<Py<PyAny>> {
+        let func = Object::func(self.0.clone());
+
+        let posargs_obj = args.extract::<Object>()?;
+        let posargs = posargs_obj.get_list().ok_or_else(|| {
+            pyo3::exceptions::PyTypeError::new_err(
+                "internal error py001 - this should not happen, please file a bug report",
+            )
+        })?;
+
+        // Extract keyword arguments
+        let kwargs_obj = kwargs.map(|x| x.extract::<Object>()).transpose()?;
+        let result = if let Some(x) = kwargs_obj {
+            let gkwargs = x.get_map().ok_or_else(|| {
+                pyo3::exceptions::PyTypeError::new_err(
+                    "internal error py002 - this should not happen, please file a bug report",
+                )
+            })?;
+            func.call(&*posargs, Some(&*gkwargs))
+        } else {
+            func.call(&*posargs, None)
+        }
+        .map_err(Error::to_py)?;
+
+        Ok(result.into_py(py))
+    }
+}
+
+#[cfg(feature = "python")]
+impl IntoPy<PyObject> for &Func {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        PyFunction(self.clone()).into_py(py)
+    }
+}
+
+#[cfg(feature = "python")]
+impl<'s> FromPyObject<'s> for Func {
+    fn extract(obj: &'s PyAny) -> pyo3::prelude::PyResult<Self> {
+        if let Ok(PyFunction(x)) = obj.extract::<PyFunction>() {
+            Ok(x)
+        } else {
+            Err(PyTypeError::new_err(format!(
+                "uncovertible type: {}",
+                obj.get_type().name().unwrap_or("unknown")
+            )))
         }
     }
 }

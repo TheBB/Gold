@@ -33,34 +33,27 @@ mod parsing;
 /// The compiler.
 mod compile;
 
-/// Utility traits.
-mod traits;
-
-/// Wrappers for various types (to be able to add traits).
-mod wrappers;
-
 #[cfg(test)]
 mod tests;
 
 mod types;
 
-/// This module defines Python bindings for the Gold language (but not the
-/// actual module - see the goldpy crate).
-#[cfg(feature = "python")]
-pub mod python;
-
 use std::fs::read_to_string;
 use std::path::Path;
 
-use error::{Error, FileSystem};
+use error::FileSystem;
 use eval::Vm;
 
+pub(crate) use types::{Key, List, Map};
+
 pub use eval::ImportConfig;
+pub use error::Error;
 pub use object::Object;
 pub use parsing::parse;
 pub use types::Type;
 
-pub(crate) use types::{Key, List, Map};
+#[cfg(feature = "python")]
+pub use eval::PyImportConfig;
 
 /// Evaluate Gold code and return the result.
 ///

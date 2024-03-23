@@ -2,6 +2,15 @@ use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+#[cfg(feature = "python")]
+use pyo3::{Py, FromPyObject, PyAny, PyResult, Python, pyclass, pymethods};
+
+#[cfg(feature = "python")]
+use pyo3::exceptions::PyTypeError;
+
+#[cfg(feature = "python")]
+use pyo3::types::{PyString, PyTuple};
+
 use crate::ast::*;
 use crate::builtins::BUILTINS;
 use crate::compile::{Function, Instruction};
@@ -12,6 +21,8 @@ use crate::{List, Map, Object, Type};
 
 /// Source code of the standard library (imported under the name 'std')
 const STDLIB: &str = include_str!("std.gold");
+
+type ImportCallable = dyn Fn(&str) -> Result<Option<Object>, Error>;
 
 /// Configure the import behavior when evaluating Gold code.
 #[derive(Clone, Default)]
@@ -25,7 +36,7 @@ pub struct ImportConfig {
     /// case, the importer will attempt to resolve the import to a path if
     /// possible. If the function returns an error, import resolution will be
     /// aborted.
-    pub custom: Option<Rc<dyn Fn(&str) -> Result<Option<Object>, Error>>>,
+    pub custom: Option<Rc<ImportCallable>>,
 }
 
 impl ImportConfig {
@@ -64,6 +75,66 @@ impl ImportConfig {
         }
     }
 }
+
+#[cfg(feature = "python")]
+#[derive(Clone)]
+struct PyImportCallable(Rc<ImportCallable>);
+
+#[cfg(feature = "python")]
+impl<'s> FromPyObject<'s> for PyImportCallable {
+    fn extract(obj: &'s PyAny) -> PyResult<Self> {
+        if obj.is_callable() {
+            let func: Py<PyAny> = obj.into();
+            let closure = move |path: &str| {
+                let result = Python::with_gil(|py| {
+                    let pypath = PyString::new(py, path);
+                    let pyargs = PyTuple::new(py, vec![pypath]);
+                    let result = func.call(py, pyargs, None)?;
+                    result.extract::<Option<Object>>(py)
+                });
+
+                result.map_err(|err| Error::new(Reason::External(err.to_string())))
+            };
+            Ok(PyImportCallable(Rc::new(closure)))
+        } else {
+            Err(PyTypeError::new_err(format!(
+                "got {}, expected callable",
+                obj.get_type().name().unwrap_or("unknown")
+            )))
+        }
+    }
+}
+
+#[cfg(feature = "python")]
+#[pyclass(unsendable, name = "ImportConfig")]
+#[derive(Clone)]
+/// Import config that can be constructed by Python code.
+pub struct PyImportConfig {
+    root_path: Option<String>,
+    custom: Option<PyImportCallable>,
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl PyImportConfig {
+    #[new]
+    #[args(root = "None", custom = "None")]
+    fn new(root: Option<String>, custom: Option<PyImportCallable>) -> Self {
+        PyImportConfig { root_path: root, custom: custom }
+    }
+}
+
+#[cfg(feature = "python")]
+impl PyImportConfig {
+    /// Convert a Python-defined import config object to the native Gold equivalent.
+    pub fn to_gold(&self) -> ImportConfig {
+        ImportConfig {
+            root_path: self.root_path.as_ref().map(PathBuf::from),
+            custom: self.custom.as_ref().map(|x| x.0.clone())
+        }
+    }
+}
+
 
 pub(crate) struct Frame {
     pub function: Function,
@@ -133,10 +204,10 @@ impl<'a> Vm<'a> {
         self.push(
             kwargs
                 .cloned()
-                .map(Object::map)
+                .map(Object::from)
                 .unwrap_or_else(|| Object::new_map()),
         );
-        self.push(Object::list(args.clone()));
+        self.push(Object::from(args.clone()));
         self.eval_impl()
     }
 
@@ -359,7 +430,7 @@ impl<'a> Vm<'a> {
 
                 Instruction::Format(i) => {
                     let obj = self.pop();
-                    let result = Object::str(
+                    let result = Object::new_str(
                         obj.format(&self.cur_frame().function.fmt_specs[i])
                             .map_err(|e| e.with_locations(self.err()))?,
                     );
@@ -508,14 +579,14 @@ impl<'a> Vm<'a> {
 
                 Instruction::PushToList => {
                     let obj = self.pop();
-                    self.peek().push_to_list(obj)?;
+                    self.peek().push(obj)?;
                 }
 
                 Instruction::PushToMap => {
                     let value = self.pop();
                     let key = self.pop();
                     self.peek()
-                        .push_to_map(key, value)
+                        .insert(key, value)
                         .map_err(|e| e.with_locations(self.err()))?;
                 }
 
@@ -536,7 +607,7 @@ impl<'a> Vm<'a> {
 
                 Instruction::PushCellToClosure(i) => {
                     let cell = self.cur_frame().cells[i].clone();
-                    self.peek().push_to_closure(cell)?;
+                    self.peek().push_cell(cell)?;
                 }
 
                 Instruction::PushEnclosedToClosure(i) => {
@@ -544,7 +615,7 @@ impl<'a> Vm<'a> {
                         let cells = self.cur_frame().enclosed.borrow();
                         cells[i].clone()
                     };
-                    self.peek().push_to_closure(cell)?;
+                    self.peek().push_cell(cell)?;
                 }
 
                 Instruction::NextOrJump(usize) => {
@@ -636,7 +707,7 @@ impl<'a> Vm<'a> {
                             }
                             let end = l.len() - from_end;
                             if start < end {
-                                Object::list(l[start..end].to_vec())
+                                Object::from(l[start..end].to_vec())
                             } else {
                                 Object::new_list()
                             }
@@ -673,7 +744,7 @@ impl<'a> Vm<'a> {
 
                 Instruction::IntPushToKwargs(key) => {
                     let value = self.pop();
-                    self.peek_back().push_to_map_key(key, value)?;
+                    self.peek_back().insert_key(key, value)?;
                 }
 
                 Instruction::IntArgSplat => {
