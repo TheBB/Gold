@@ -1,35 +1,225 @@
-use std::collections::HashSet;
+use std::collections::{
+    hash_map::{Iter, Keys},
+    HashMap, HashSet,
+};
 use std::fmt::Display;
 
-use gc::{Gc, Trace, Finalize};
+use gc::{Finalize, Gc, Trace};
 use serde::{Deserialize, Serialize};
 
+use crate::compile::{Compiler, Function};
 use crate::error::{BindingType, Span, Syntax};
-use crate::object::{StringFormatSpec, IntegerFormatSpec, FloatFormatSpec};
+use crate::formatting::FormatSpec;
 
-use super::error::{Error, Tagged, Action};
-use super::object::{Object, Key};
-use super::traits::{Boxable, Free, FreeImpl, FreeAndBound, Validatable, Taggable, ToVec};
+use crate::error::{Action, Error, Tagged, Taggable};
+use crate::{Key, Object};
 
+/// This trait is implemented by all AST nodes that require a validation step,
+/// to catch integrity errors which the parser either can't or won't catch.
+trait Validatable {
+    /// Validate this node and return a suitable error if necessary.
+    ///
+    /// By the Anna Karenina rule, there's no distinction on success.
+    fn validate(&self) -> Result<(), Error>;
+}
 
-/// Utility function for collecting free and bound names from a binding element
-/// with a potential default value.
-fn binding_element_free_and_bound(
-    binding: &impl FreeAndBound,
-    default: Option<&impl Free>,
-    free: &mut HashSet<Key>,
-    bound: &mut HashSet<Key>,
-) {
-    if let Some(expr) = default {
-        for ident in expr.free() {
-            if !bound.contains(&ident) {
-                free.insert(ident);
+impl<T: Validatable> Validatable for Tagged<T> {
+    fn validate(&self) -> Result<(), Error> {
+        self.as_ref().validate()
+    }
+}
+
+pub(crate) trait Visitable {
+    fn visit<T: Visitor>(&self, visitor: &mut T);
+}
+
+pub(crate) trait Visitor {
+    fn free(&mut self, name: Key);
+    fn bound(&mut self, name: Key);
+    fn captured(&mut self, name: Key);
+}
+
+pub(crate) enum NameStatus {
+    Free,
+    Captured,
+}
+
+pub(crate) struct FreeNames {
+    names: HashMap<Key, NameStatus>,
+}
+
+impl FreeNames {
+    pub fn new() -> FreeNames {
+        FreeNames {
+            names: HashMap::new(),
+        }
+    }
+
+    pub fn free_names<'a>(&'a self) -> Keys<'a, Key, NameStatus> {
+        self.names.keys()
+    }
+
+    pub fn captured_names<'a>(&'a self) -> CapturedNamesIterator<'a> {
+        CapturedNamesIterator {
+            iter: self.names.iter(),
+        }
+    }
+}
+
+impl Visitor for FreeNames {
+    fn free(&mut self, name: Key) {
+        match self.names.get(&name) {
+            Some(_) => {}
+            None => {
+                self.names.insert(name, NameStatus::Free);
             }
         }
     }
-    binding.free_and_bound(free, bound)
+
+    fn captured(&mut self, name: Key) {
+        self.names.insert(name, NameStatus::Captured);
+    }
+
+    fn bound(&mut self, _name: Key) {}
 }
 
+pub(crate) struct CapturedNamesIterator<'a> {
+    iter: Iter<'a, Key, NameStatus>,
+}
+
+impl<'a> Iterator for CapturedNamesIterator<'a> {
+    type Item = Key;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.iter.next() {
+                Some((key, NameStatus::Captured)) => {
+                    return Some(*key);
+                }
+                Some(_) => {}
+                None => {
+                    return None;
+                }
+            }
+        }
+    }
+}
+
+pub(crate) struct BindingShield<'a> {
+    bound: HashSet<Key>,
+    parent: &'a mut dyn Visitor,
+}
+
+impl<'a> BindingShield<'a> {
+    pub fn new(parent: &'a mut dyn Visitor) -> BindingShield<'a> {
+        BindingShield {
+            bound: HashSet::new(),
+            parent,
+        }
+    }
+}
+
+impl<'a> Visitor for BindingShield<'a> {
+    fn free(&mut self, name: Key) {
+        if !self.bound.contains(&name) {
+            self.parent.free(name);
+        }
+    }
+
+    fn captured(&mut self, name: Key) {
+        if !self.bound.contains(&name) {
+            self.parent.captured(name);
+        }
+    }
+
+    fn bound(&mut self, name: Key) {
+        self.bound.insert(name);
+    }
+}
+
+pub(crate) struct FunctionThreshold<'a> {
+    parent: &'a mut dyn Visitor,
+}
+
+impl<'a> FunctionThreshold<'a> {
+    pub fn new(parent: &'a mut dyn Visitor) -> FunctionThreshold<'a> {
+        FunctionThreshold { parent: parent }
+    }
+}
+
+impl<'a> Visitor for FunctionThreshold<'a> {
+    fn free(&mut self, name: Key) {
+        self.parent.captured(name);
+    }
+
+    fn captured(&mut self, name: Key) {
+        self.parent.captured(name);
+    }
+
+    fn bound(&mut self, _nmae: Key) {}
+}
+
+#[derive(PartialEq)]
+pub(crate) enum BindingMode {
+    Local,
+    Cell,
+}
+
+pub(crate) struct BindingClassifier {
+    bindings: HashMap<Key, BindingMode>,
+}
+
+impl BindingClassifier {
+    pub fn new() -> BindingClassifier {
+        BindingClassifier {
+            bindings: HashMap::new(),
+        }
+    }
+
+    pub fn names_with_mode(&self, mode: BindingMode) -> BindingClassifierIterator {
+        BindingClassifierIterator {
+            mode: mode,
+            iter: self.bindings.iter(),
+        }
+    }
+}
+
+impl Visitor for BindingClassifier {
+    fn free(&mut self, _name: Key) {}
+
+    fn bound(&mut self, name: Key) {
+        if !self.bindings.contains_key(&name) {
+            self.bindings.insert(name, BindingMode::Local);
+        }
+    }
+
+    fn captured(&mut self, name: Key) {
+        self.bindings.insert(name, BindingMode::Cell);
+    }
+}
+
+pub(crate) struct BindingClassifierIterator<'a> {
+    mode: BindingMode,
+    iter: Iter<'a, Key, BindingMode>,
+}
+
+impl<'a> Iterator for BindingClassifierIterator<'a> {
+    type Item = Key;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.iter.next() {
+                Some((key, mode)) if *mode == self.mode => {
+                    return Some(*key);
+                }
+                None => {
+                    return None;
+                }
+                Some(_) => {}
+            }
+        }
+    }
+}
 
 // ListBindingElement
 // ----------------------------------------------------------------
@@ -50,6 +240,23 @@ pub enum ListBindingElement {
     Slurp,
 }
 
+impl Visitable for ListBindingElement {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        match self {
+            Self::Binding { binding, default } => {
+                if let Some(d) = default {
+                    d.visit(visitor);
+                }
+                binding.visit(visitor);
+            }
+            Self::SlurpTo(name) => {
+                visitor.bound(**name);
+            }
+            Self::Slurp => {}
+        }
+    }
+}
+
 impl Validatable for ListBindingElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
@@ -58,25 +265,12 @@ impl Validatable for ListBindingElement {
                 if let Some(node) = default {
                     node.validate()?;
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
         Ok(())
     }
 }
-
-impl FreeAndBound for ListBindingElement {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
-        match self {
-            ListBindingElement::Binding { binding, default } => {
-                binding_element_free_and_bound(binding, default.as_ref(), free, bound);
-            },
-            ListBindingElement::SlurpTo(name) => { bound.insert(**name); },
-            _ => {},
-        }
-    }
-}
-
 
 // MapBindingElement
 // ----------------------------------------------------------------
@@ -99,13 +293,20 @@ pub enum MapBindingElement {
     SlurpTo(#[unsafe_ignore_trace] Tagged<Key>),
 }
 
-impl FreeAndBound for MapBindingElement {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+impl Visitable for MapBindingElement {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
         match self {
-            MapBindingElement::Binding { key: _, binding, default } => {
-                binding_element_free_and_bound(binding, default.as_ref(), free, bound);
-            },
-            MapBindingElement::SlurpTo(name) => { bound.insert(**name); },
+            Self::Binding {
+                binding, default, ..
+            } => {
+                if let Some(d) = default {
+                    d.visit(visitor);
+                }
+                binding.visit(visitor);
+            }
+            Self::SlurpTo(name) => {
+                visitor.bound(**name);
+            }
         }
     }
 }
@@ -113,18 +314,19 @@ impl FreeAndBound for MapBindingElement {
 impl Validatable for MapBindingElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            MapBindingElement::Binding { binding, default, .. } => {
+            MapBindingElement::Binding {
+                binding, default, ..
+            } => {
                 binding.validate()?;
                 if let Some(node) = default {
                     node.validate()?;
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
         Ok(())
     }
 }
-
 
 // ListBinding
 // ----------------------------------------------------------------
@@ -133,10 +335,62 @@ impl Validatable for MapBindingElement {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub struct ListBinding(pub Vec<Tagged<ListBindingElement>>);
 
-impl FreeAndBound for ListBinding {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+#[derive(Debug, Default)]
+pub struct ListBindingSolution<'a> {
+    pub num_front: usize,
+    pub num_back: usize,
+    pub def_front: usize,
+    pub def_back: usize,
+    pub slurp: Option<Option<Key>>,
+
+    pub front: &'a [Tagged<ListBindingElement>],
+    pub back: &'a [Tagged<ListBindingElement>],
+}
+
+impl<'a> ListBinding {
+    pub fn solution(&'a self) -> ListBindingSolution<'a> {
+        let mut ret = ListBindingSolution::default();
+
         for element in &self.0 {
-            element.free_and_bound(free, bound);
+            match element.as_ref() {
+                ListBindingElement::Slurp => {
+                    ret.slurp = Some(None);
+                    continue;
+                }
+                ListBindingElement::SlurpTo(key) => {
+                    ret.slurp = Some(Some(**key));
+                    continue;
+                }
+                _ => {}
+            }
+
+            let has_default = if let ListBindingElement::Binding {
+                default: Some(_), ..
+            } = **element
+            {
+                true
+            } else {
+                false
+            };
+            match (has_default, ret.slurp) {
+                (true, Some(_)) => ret.def_back += 1,
+                (true, None) => ret.def_front += 1,
+                (false, Some(_)) => ret.num_back += 1,
+                (false, None) => ret.num_front += 1,
+            }
+        }
+
+        ret.front = &self.0[..ret.num_front + ret.def_front];
+        ret.back = &self.0[self.0.len() - ret.num_back - ret.def_back..];
+
+        ret
+    }
+}
+
+impl Visitable for ListBinding {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        for element in self.0.iter() {
+            element.visit(visitor);
         }
     }
 }
@@ -144,22 +398,34 @@ impl FreeAndBound for ListBinding {
 impl Validatable for ListBinding {
     fn validate(&self) -> Result<(), Error> {
         let mut found_slurp = false;
+        let mut found_default = false;
         for element in &self.0 {
             element.validate()?;
 
             // It's illegal to have more than one slurp in a list binding.
-            if let ListBindingElement::Binding { .. } = **element { }
-            else {
+            if let ListBindingElement::Binding { .. } = **element {
+            } else {
                 if found_slurp {
-                    return Err(Error::new(Syntax::MultiSlurp).tag(element, Action::Parse))
+                    return Err(Error::new(Syntax::MultiSlurp).tag(element, Action::Parse));
                 }
                 found_slurp = true;
+            }
+
+            // It's illegal to have a non-default binding follow a default binding.
+            if let ListBindingElement::Binding {
+                default: Some(_), ..
+            } = **element
+            {
+                found_default = true;
+            } else if let ListBindingElement::Binding { default: None, .. } = **element {
+                if found_default {
+                    return Err(Error::new(Syntax::DefaultSequence).tag(element, Action::Parse));
+                }
             }
         }
         Ok(())
     }
 }
-
 
 // MapBinding
 // ----------------------------------------------------------------
@@ -169,10 +435,10 @@ impl Validatable for ListBinding {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
 pub struct MapBinding(pub Vec<Tagged<MapBindingElement>>);
 
-impl FreeAndBound for MapBinding {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
-        for element in &self.0 {
-            element.free_and_bound(free, bound);
+impl Visitable for MapBinding {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        for element in self.0.iter() {
+            element.visit(visitor);
         }
     }
 }
@@ -186,7 +452,7 @@ impl Validatable for MapBinding {
             // It's illegal to have more than one slurp in a map binding.
             if let MapBindingElement::SlurpTo(_) = **element {
                 if found_slurp {
-                    return Err(Error::new(Syntax::MultiSlurp).tag(element, Action::Parse))
+                    return Err(Error::new(Syntax::MultiSlurp).tag(element, Action::Parse));
                 }
                 found_slurp = true;
             }
@@ -194,7 +460,6 @@ impl Validatable for MapBinding {
         Ok(())
     }
 }
-
 
 // Binding
 // ----------------------------------------------------------------
@@ -220,12 +485,18 @@ impl Binding {
     }
 }
 
-impl FreeAndBound for Binding {
-    fn free_and_bound(&self, free: &mut HashSet<Key>, bound: &mut HashSet<Key>) {
+impl Visitable for Binding {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
         match self {
-            Binding::Identifier(name) => { bound.insert(**name); },
-            Binding::List(elements) => elements.free_and_bound(free, bound),
-            Binding::Map(elements) => elements.free_and_bound(free, bound),
+            Self::Identifier(name) => {
+                visitor.bound(**name);
+            }
+            Self::List(binding) => {
+                binding.visit(visitor);
+            }
+            Self::Map(binding) => {
+                binding.visit(visitor);
+            }
         }
     }
 }
@@ -240,183 +511,8 @@ impl Validatable for Binding {
     }
 }
 
-
 // StringElement
 // ----------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum StringAlignSpec {
-    Left,
-    Right,
-    Center,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum AlignSpec {
-    AfterSign,
-    String(StringAlignSpec),
-}
-
-impl Default for AlignSpec {
-    fn default() -> Self {
-        Self::left()
-    }
-}
-
-impl AlignSpec {
-    pub fn left() -> Self {
-        Self::String(StringAlignSpec::Left)
-    }
-
-    pub fn right() -> Self {
-        Self::String(StringAlignSpec::Right)
-    }
-
-    pub fn center() -> Self {
-        Self::String(StringAlignSpec::Center)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum SignSpec {
-    Plus,
-    Minus,
-    Space,
-}
-
-impl Default for SignSpec {
-    fn default() -> Self {
-        Self::Minus
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum GroupingSpec {
-    Comma,
-    Underscore,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum UppercaseSpec {
-    Upper,
-    Lower,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum IntegerFormatType {
-    Binary,
-    Character,
-    Decimal,
-    Octal,
-    Hex(UppercaseSpec),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum FloatFormatType {
-    Sci(UppercaseSpec),
-    Fixed,
-    General,
-    Percentage,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum FormatType {
-    String,
-    Integer(IntegerFormatType),
-    Float(FloatFormatType),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct FormatSpec {
-    pub fill: char,
-    pub align: Option<AlignSpec>,
-    pub sign: Option<SignSpec>,
-    pub alternate: bool,
-    pub width: Option<usize>,
-    pub grouping: Option<GroupingSpec>,
-    pub precision: Option<usize>,
-    pub fmt_type: Option<FormatType>,
-}
-
-impl FormatSpec {
-    pub(crate) fn string_spec(&self) -> Option<StringFormatSpec> {
-        if self.sign.is_some() ||
-           self.alternate ||
-           self.grouping.is_some() ||
-           self.precision.is_some() ||
-           self.fmt_type.is_some_and(|x| x != FormatType::String)
-        {
-            return None;
-        }
-
-        let align = match self.align {
-            Some(AlignSpec::AfterSign) => { return None; },
-            Some(AlignSpec::String(x)) => x,
-            None => StringAlignSpec::Left,
-        };
-
-        Some(StringFormatSpec {
-            fill: self.fill,
-            width: self.width,
-            align,
-        })
-    }
-
-    pub(crate) fn integer_spec(&self) -> Option<IntegerFormatSpec> {
-        if self.precision.is_some() {
-            return None;
-        }
-
-        let fmt_type = match self.fmt_type {
-            None => IntegerFormatType::Decimal,
-            Some(FormatType::Integer(x)) => x,
-            _ => { return None; },
-        };
-
-        Some(IntegerFormatSpec {
-            fill: self.fill,
-            align: self.align.unwrap_or_else(AlignSpec::right),
-            sign: self.sign.unwrap_or_default(),
-            alternate: self.alternate,
-            width: self.width,
-            grouping: self.grouping,
-            fmt_type,
-        })
-    }
-
-    pub(crate) fn float_spec(&self) -> Option<FloatFormatSpec> {
-        let fmt_type = match self.fmt_type {
-            Some(FormatType::Float(x)) => x,
-            None => if self.precision.is_some() { FloatFormatType::Fixed } else { FloatFormatType::General },
-            _ => { return None; },
-        };
-
-        Some(FloatFormatSpec {
-            fill: self.fill,
-            align: self.align.unwrap_or_else(AlignSpec::right),
-            sign: self.sign.unwrap_or_default(),
-            width: self.width,
-            grouping: self.grouping,
-            precision: self.precision.unwrap_or(6),
-            fmt_type,
-        })
-    }
-}
-
-impl Default for FormatSpec{
-    fn default() -> Self {
-        Self {
-            fill: ' ',
-            align: None,
-            sign: None,
-            alternate: false,
-            width: None,
-            grouping: None,
-            precision: None,
-            fmt_type: None,
-        }
-    }
-}
 
 /// A string element is anything that is legal in a string: either raw string
 /// data or an interpolated expression. A string is represented as a li of
@@ -434,16 +530,28 @@ impl StringElement {
     }
 }
 
+impl Visitable for StringElement {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        match self {
+            Self::Interpolate(expr, _) => {
+                expr.visit(visitor);
+            }
+            _ => {}
+        }
+    }
+}
+
 impl Validatable for StringElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            StringElement::Interpolate(node, _) => { node.validate()?; }
-            _ => {},
+            StringElement::Interpolate(node, _) => {
+                node.validate()?;
+            }
+            _ => {}
         }
         Ok(())
     }
 }
-
 
 // ListElement
 // ----------------------------------------------------------------
@@ -468,24 +576,28 @@ pub enum ListElement {
     },
 }
 
-impl FreeImpl for ListElement {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
+impl Visitable for ListElement {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
         match self {
-            ListElement::Singleton(expr) => expr.free_impl(free),
-            ListElement::Splat(expr) => expr.free_impl(free),
-            ListElement::Cond { condition, element } => {
-                condition.free_impl(free);
-                element.free_impl(free);
-            },
-            ListElement::Loop { binding, iterable, element } => {
-                iterable.free_impl(free);
-                let mut bound: HashSet<Key> = HashSet::new();
-                binding.free_and_bound(free, &mut bound);
-                for ident in element.free() {
-                    if !bound.contains(&ident) {
-                        free.insert(ident);
-                    }
-                }
+            Self::Singleton(expr) => {
+                expr.visit(visitor);
+            }
+            Self::Splat(expr) => {
+                expr.visit(visitor);
+            }
+            Self::Loop {
+                binding,
+                iterable,
+                element,
+            } => {
+                iterable.visit(visitor);
+                let mut shield = BindingShield::new(visitor);
+                binding.visit(&mut shield);
+                element.visit(&mut shield);
+            }
+            Self::Cond { condition, element } => {
+                condition.visit(visitor);
+                element.visit(visitor);
             }
         }
     }
@@ -494,22 +606,29 @@ impl FreeImpl for ListElement {
 impl Validatable for ListElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            ListElement::Singleton(node) => { node.validate()?; },
-            ListElement::Splat(node) => { node.validate()?; },
-            ListElement::Loop { binding, iterable, element } => {
+            ListElement::Singleton(node) => {
+                node.validate()?;
+            }
+            ListElement::Splat(node) => {
+                node.validate()?;
+            }
+            ListElement::Loop {
+                binding,
+                iterable,
+                element,
+            } => {
                 binding.validate()?;
                 iterable.validate()?;
                 element.validate()?;
-            },
+            }
             ListElement::Cond { condition, element } => {
                 condition.validate()?;
                 element.validate()?;
-            },
+            }
         }
         Ok(())
     }
 }
-
 
 // MapElement
 // ----------------------------------------------------------------
@@ -529,7 +648,7 @@ pub enum MapElement {
     Loop {
         binding: Tagged<Binding>,
         iterable: Tagged<Expr>,
-        element: Box<Tagged<MapElement>>
+        element: Box<Tagged<MapElement>>,
     },
     Cond {
         condition: Tagged<Expr>,
@@ -537,27 +656,29 @@ pub enum MapElement {
     },
 }
 
-impl FreeImpl for MapElement {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
+impl Visitable for MapElement {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
         match self {
-            MapElement::Singleton { key, value } => {
-                key.free_impl(free);
-                value.free_impl(free);
-            },
-            MapElement::Splat(expr) => expr.free_impl(free),
-            MapElement::Cond { condition, element } => {
-                condition.free_impl(free);
-                element.free_impl(free);
-            },
-            MapElement::Loop { binding, iterable, element } => {
-                iterable.free_impl(free);
-                let mut bound: HashSet<Key> = HashSet::new();
-                binding.free_and_bound(free, &mut bound);
-                for ident in element.free() {
-                    if !bound.contains(&ident) {
-                        free.insert(ident);
-                    }
-                }
+            Self::Singleton { key, value } => {
+                key.visit(visitor);
+                value.visit(visitor);
+            }
+            Self::Splat(expr) => {
+                expr.visit(visitor);
+            }
+            Self::Loop {
+                binding,
+                iterable,
+                element,
+            } => {
+                iterable.visit(visitor);
+                let mut shield = BindingShield::new(visitor);
+                binding.visit(&mut shield);
+                element.visit(&mut shield);
+            }
+            Self::Cond { condition, element } => {
+                condition.visit(visitor);
+                element.visit(visitor);
             }
         }
     }
@@ -569,22 +690,27 @@ impl Validatable for MapElement {
             MapElement::Singleton { key, value } => {
                 key.validate()?;
                 value.validate()?;
-            },
-            MapElement::Splat(node) => { node.validate()?; },
-            MapElement::Loop { binding, iterable, element } => {
+            }
+            MapElement::Splat(node) => {
+                node.validate()?;
+            }
+            MapElement::Loop {
+                binding,
+                iterable,
+                element,
+            } => {
                 binding.validate()?;
                 iterable.validate()?;
                 element.validate()?;
-            },
+            }
             MapElement::Cond { condition, element } => {
                 condition.validate()?;
                 element.validate()?;
-            },
+            }
         }
         Ok(())
     }
 }
-
 
 // ArgElement
 // ----------------------------------------------------------------
@@ -602,12 +728,18 @@ pub enum ArgElement {
     Splat(Tagged<Expr>),
 }
 
-impl FreeImpl for ArgElement {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
+impl Visitable for ArgElement {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
         match self {
-            ArgElement::Singleton(expr) => { expr.free_impl(free); },
-            ArgElement::Splat(expr) => { expr.free_impl(free); },
-            ArgElement::Keyword(_, expr) => { expr.free_impl(free); },
+            Self::Singleton(expr) => {
+                expr.visit(visitor);
+            }
+            Self::Keyword(_, expr) => {
+                expr.visit(visitor);
+            }
+            Self::Splat(expr) => {
+                expr.visit(visitor);
+            }
         }
     }
 }
@@ -615,14 +747,19 @@ impl FreeImpl for ArgElement {
 impl Validatable for ArgElement {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            ArgElement::Singleton(node) => { node.validate()?; },
-            ArgElement::Splat(node) => { node.validate()?; },
-            ArgElement::Keyword(_, value) => { value.validate()?; },
+            ArgElement::Singleton(node) => {
+                node.validate()?;
+            }
+            ArgElement::Splat(node) => {
+                node.validate()?;
+            }
+            ArgElement::Keyword(_, value) => {
+                value.validate()?;
+            }
         }
         Ok(())
     }
 }
-
 
 // Operator
 // ----------------------------------------------------------------
@@ -713,126 +850,192 @@ impl Transform {
     /// Construct an index/subscripting transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn index<U>(subscript: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::Index.tag(loc), subscript.to_box())
+    pub fn index<U>(subscript: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::Index.tag(loc), Box::new(subscript))
     }
 
     /// Construct an exponentiation transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn power<U>(exponent: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::Power.tag(loc), exponent.to_box())
+    pub fn power<U>(exponent: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::Power.tag(loc), Box::new(exponent))
     }
 
     /// Construct a multiplication transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn multiply<U>(multiplicand: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::Multiply.tag(loc), multiplicand.to_box())
+    pub fn multiply<U>(multiplicand: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::Multiply.tag(loc), Box::new(multiplicand))
     }
 
     /// Construct an integer division transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn integer_divide<U>(divisor: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::IntegerDivide.tag(loc), divisor.to_box())
+    pub fn integer_divide<U>(divisor: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::IntegerDivide.tag(loc), Box::new(divisor))
     }
 
     /// Construct a mathematical division transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn divide<U>(divisor: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::Divide.tag(loc), divisor.to_box())
+    pub fn divide<U>(divisor: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::Divide.tag(loc), Box::new(divisor))
     }
 
     /// Construct an addition transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn add<U>(addend: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::Add.tag(loc), addend.to_box())
+    pub fn add<U>(addend: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::Add.tag(loc), Box::new(addend))
     }
 
     /// Construct a subtraction transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn subtract<U>(subtrahend: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::Subtract.tag(loc), subtrahend.to_box())
+    pub fn subtract<U>(subtrahend: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::Subtract.tag(loc), Box::new(subtrahend))
     }
 
     /// Construct a less-than transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn less<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::Less.tag(loc), rhs.to_box())
+    pub fn less<U>(rhs: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::Less.tag(loc), Box::new(rhs))
     }
 
     /// Construct a greater-than transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn greater<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::Greater.tag(loc), rhs.to_box())
+    pub fn greater<U>(rhs: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::Greater.tag(loc), Box::new(rhs))
     }
 
     /// Construct a less-than-or-equal transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn less_equal<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::LessEqual.tag(loc), rhs.to_box())
+    pub fn less_equal<U>(rhs: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::LessEqual.tag(loc), Box::new(rhs))
     }
 
     /// Construct a greater-than-or-equal transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn greater_equal<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::GreaterEqual.tag(loc), rhs.to_box())
+    pub fn greater_equal<U>(rhs: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::GreaterEqual.tag(loc), Box::new(rhs))
     }
 
     /// Construct an equality check transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn equal<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::Equal.tag(loc), rhs.to_box())
+    pub fn equal<U>(rhs: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::Equal.tag(loc), Box::new(rhs))
     }
 
     /// Construct an inequality check transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn not_equal<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::NotEqual.tag(loc), rhs.to_box())
+    pub fn not_equal<U>(rhs: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::NotEqual.tag(loc), Box::new(rhs))
     }
 
     /// Construct a containment check transform.
     ///
     /// * `loc` - the location of the 'in' operator in the buffer.
-    pub fn contains<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::Contains.tag(loc), rhs.to_box())
+    pub fn contains<U>(rhs: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::Contains.tag(loc), Box::new(rhs))
     }
 
     /// Construct a logical conjunction transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn and<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::And.tag(loc), rhs.to_box())
+    pub fn and<U>(rhs: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::And.tag(loc), Box::new(rhs))
     }
 
     /// Construct a logical disjunction transform.
     ///
     /// * `loc` - the location of the indexing operator in the buffer.
-    pub fn or<U>(rhs: Tagged<Expr>, loc: U) -> Transform where Span: From<U> {
-        Transform::BinOp(BinOp::Or.tag(loc), rhs.to_box())
+    pub fn or<U>(rhs: Tagged<Expr>, loc: U) -> Transform
+    where
+        Span: From<U>,
+    {
+        Transform::BinOp(BinOp::Or.tag(loc), Box::new(rhs))
+    }
+}
+
+impl Visitable for Transform {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
+        match self {
+            Self::BinOp(_, expr) => {
+                expr.visit(visitor);
+            }
+            Self::FunCall(args) => {
+                for arg in args.iter() {
+                    arg.visit(visitor);
+                }
+            }
+            Self::UnOp(_) => {}
+        }
     }
 }
 
 impl Validatable for Transform {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            Transform::BinOp(_, node) => { node.validate()?; },
+            Transform::BinOp(_, node) => {
+                node.validate()?;
+            }
             Transform::FunCall(args) => {
                 for arg in args.as_ref() {
                     arg.validate()?;
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -870,7 +1073,6 @@ impl Display for BinOp {
         }
     }
 }
-
 
 // Expr
 // ----------------------------------------------------------------
@@ -918,10 +1120,10 @@ pub enum Expr {
     /// A function definition.
     Function {
         /// Positional function parameters.
-        positional: ListBinding,
+        positional: Tagged<ListBinding>,
 
         /// Optional keyword parameters.
-        keywords: Option<MapBinding>,
+        keywords: Option<Tagged<MapBinding>>,
 
         /// The expression to evaluate when called.
         expression: Box<Tagged<Expr>>,
@@ -932,133 +1134,184 @@ pub enum Expr {
         condition: Box<Tagged<Expr>>,
         true_branch: Box<Tagged<Expr>>,
         false_branch: Box<Tagged<Expr>>,
-    }
+    },
 }
 
 impl Tagged<Expr> {
     /// Form a sum expression from two terms.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn add<U>(self, addend: Tagged<Expr>, loc: U) -> Expr where Span: From<U> {
+    pub fn add<U>(self, addend: Tagged<Expr>, loc: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::add(addend, loc))
     }
 
     /// Form a subtraction expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn sub<U>(self, subtrahend: Tagged<Expr>, loc: U) -> Expr where Span: From<U> {
+    pub fn sub<U>(self, subtrahend: Tagged<Expr>, loc: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::subtract(subtrahend, loc))
     }
 
     /// Form a multiplication expression from two factors.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn mul<U>(self, multiplicand: Tagged<Expr>, loc: U) -> Expr where Span: From<U> {
+    pub fn mul<U>(self, multiplicand: Tagged<Expr>, loc: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::multiply(multiplicand, loc))
     }
 
     /// Form a division expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn div<U>(self, divisor: Tagged<Expr>, loc: U) -> Expr where Span: From<U> {
+    pub fn div<U>(self, divisor: Tagged<Expr>, loc: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::divide(divisor, loc))
     }
 
     /// Form an integer division expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn idiv<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
+    pub fn idiv<U>(self, rhs: Tagged<Expr>, l: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::integer_divide(rhs, l))
     }
 
     /// Form a less-than expression from operandsterms.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn lt<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
+    pub fn lt<U>(self, rhs: Tagged<Expr>, l: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::less(rhs, l))
     }
 
     /// Form a greater-than expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn gt<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
+    pub fn gt<U>(self, rhs: Tagged<Expr>, l: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::greater(rhs, l))
     }
 
     /// Form a less-than-or-equal expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn lte<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
+    pub fn lte<U>(self, rhs: Tagged<Expr>, l: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::less_equal(rhs, l))
     }
 
     /// Form a greater-than-or-equal expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn gte<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
+    pub fn gte<U>(self, rhs: Tagged<Expr>, l: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::greater_equal(rhs, l))
     }
 
     /// Form an equality check expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn equal<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
+    pub fn equal<U>(self, rhs: Tagged<Expr>, l: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::equal(rhs, l))
     }
 
     /// Form an inequality check expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn not_equal<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
+    pub fn not_equal<U>(self, rhs: Tagged<Expr>, l: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::not_equal(rhs, l))
     }
 
     /// Form a logical conjunction expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn and<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
+    pub fn and<U>(self, rhs: Tagged<Expr>, l: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::and(rhs, l))
     }
 
     /// Form a logical disjunction expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn or<U>(self, rhs: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
+    pub fn or<U>(self, rhs: Tagged<Expr>, l: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::or(rhs, l))
     }
 
     /// Form an exponentiation expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn pow<U>(self, exponent: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
+    pub fn pow<U>(self, exponent: Tagged<Expr>, l: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::power(exponent, l))
     }
 
     /// Form a subscripting/indexing expression from two operands.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn index<U>(self, subscript: Tagged<Expr>, l: U) -> Expr where Span: From<U> {
+    pub fn index<U>(self, subscript: Tagged<Expr>, l: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::index(subscript, l))
     }
 
     /// Arithmetically negate this expression.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn neg<U>(self, loc: U) -> Expr where Span: From<U> {
+    pub fn neg<U>(self, loc: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::UnOp(UnOp::ArithmeticalNegate.tag(loc)))
     }
 
     /// Logically negate this expression.
     ///
     /// * `loc` - the location of the operator in the buffer.
-    pub fn not<U>(self, loc: U) -> Expr where Span: From<U> {
+    pub fn not<U>(self, loc: U) -> Expr
+    where
+        Span: From<U>,
+    {
         self.transform(Transform::UnOp(UnOp::LogicalNegate.tag(loc)))
     }
 
     /// Form the combined transformed expression from this operand and a transform.
     pub fn transform(self, op: Transform) -> Expr {
         Expr::Transformed {
-            operand: self.to_box(),
+            operand: Box::new(self),
             transform: op,
         }
     }
@@ -1067,20 +1320,23 @@ impl Tagged<Expr> {
     /// list of arguments.
     ///
     /// * `loc` - the location of the function call operator in the buffer.
-    pub fn funcall<U>(self, args: impl ToVec<Tagged<ArgElement>>, loc: U) -> Expr where Span: From<U> {
-        self.transform(Transform::FunCall(args.to_vec().tag(loc)))
+    pub fn funcall<U>(self, args: Vec<Tagged<ArgElement>>, loc: U) -> Expr
+    where
+        Span: From<U>,
+    {
+        self.transform(Transform::FunCall(args.tag(loc)))
     }
 }
 
 impl Expr {
     /// Construct a list expression.
-    pub fn list(elements: impl ToVec<Tagged<ListElement>>) -> Expr where {
-        Expr::List(elements.to_vec())
+    pub fn list(elements: Vec<Tagged<ListElement>>) -> Expr where {
+        Expr::List(elements)
     }
 
     /// Construct a map expression.
-    pub fn map(x: impl ToVec<Tagged<MapElement>>) -> Expr {
-        Expr::Map(x.to_vec())
+    pub fn map(x: Vec<Tagged<MapElement>>) -> Expr {
+        Expr::Map(x)
     }
 
     /// Construct a string expression.
@@ -1089,79 +1345,73 @@ impl Expr {
     /// string is empty) this will return a string literal.
     pub fn string(value: Vec<StringElement>) -> Expr {
         if value.len() == 0 {
-            Expr::Literal(Object::str_interned(""))
+            Expr::Literal(Object::new_str_interned(""))
         } else if let [StringElement::Raw(val)] = &value[..] {
-            Expr::Literal(Object::str(val.as_ref()))
+            Expr::Literal(Object::new_str(val.as_ref()))
         } else {
             Expr::String(value)
         }
     }
 }
 
-impl FreeImpl for Expr {
-    fn free_impl(&self, free: &mut HashSet<Key>) {
+impl Visitable for Expr {
+    fn visit<T: Visitor>(&self, visitor: &mut T) {
         match self {
-            Expr::Literal(_) => {},
-            Expr::String(elements) => {
+            Self::Literal(_) => {}
+            Self::String(elements) => {
                 for element in elements {
-                    if let StringElement::Interpolate(expr, _) = element {
-                        expr.free_impl(free);
-                    }
+                    element.visit(visitor);
                 }
-            },
-            Expr::Identifier(name) => { free.insert(**name); },
-            Expr::List(elements) => {
+            }
+            Self::Identifier(name) => {
+                visitor.free(**name);
+            }
+            Self::List(elements) => {
                 for element in elements {
-                    element.free_impl(free);
+                    element.visit(visitor);
                 }
-            },
-            Expr::Map(elements) => {
+            }
+            Self::Map(elements) => {
                 for element in elements {
-                    element.free_impl(free);
+                    element.visit(visitor);
                 }
-            },
-            Expr::Let { bindings, expression } => {
-                let mut bound: HashSet<Key> = HashSet::new();
+            }
+            Self::Transformed { operand, transform } => {
+                operand.visit(visitor);
+                transform.visit(visitor);
+            }
+            Self::Branch {
+                condition,
+                true_branch,
+                false_branch,
+            } => {
+                condition.visit(visitor);
+                true_branch.visit(visitor);
+                false_branch.visit(visitor);
+            }
+            Self::Let {
+                bindings,
+                expression,
+            } => {
+                let mut shield = BindingShield::new(visitor);
                 for (binding, expr) in bindings {
-                    for id in expr.free() {
-                        if !bound.contains(&id) {
-                            free.insert(id);
-                        }
-                    }
-                    binding.free_and_bound(free, &mut bound);
+                    expr.visit(&mut shield);
+                    binding.visit(&mut shield);
                 }
-                for id in expression.free() {
-                    if !bound.contains(&id) {
-                        free.insert(id);
-                    }
+                expression.visit(&mut shield);
+            }
+            Self::Function {
+                positional,
+                keywords,
+                expression,
+            } => {
+                let mut threshold = FunctionThreshold::new(visitor);
+                let mut shield = BindingShield::new(&mut threshold);
+                positional.visit(&mut shield);
+                if let Some(kw) = keywords {
+                    kw.visit(&mut shield);
                 }
-            },
-            Expr::Transformed { operand, transform: operator } => {
-                operand.free_impl(free);
-                match operator {
-                    Transform::BinOp(_, expr) => expr.free_impl(free),
-                    Transform::FunCall(elements) => {
-                        for element in elements.as_ref() {
-                            element.free_impl(free);
-                        }
-                    }
-                    _ => {},
-                }
-            },
-            Expr::Branch { condition, true_branch, false_branch } => {
-                condition.free_impl(free);
-                true_branch.free_impl(free);
-                false_branch.free_impl(free);
-            },
-            Expr::Function { positional, keywords, expression } => {
-                let mut bound: HashSet<Key> = HashSet::new();
-                positional.free_and_bound(free, &mut bound);
-                keywords.as_ref().map(|x| x.free_and_bound(free, &mut bound));
-                for id in expression.free() {
-                    if !bound.contains(&id) {
-                        free.insert(id);
-                    }
-                }
+                expression.visit(&mut shield);
             }
         }
     }
@@ -1174,44 +1424,57 @@ impl Validatable for Expr {
                 for element in elements {
                     element.validate()?;
                 }
-            },
+            }
             Expr::List(elements) => {
                 for element in elements {
                     element.validate()?;
                 }
-            },
+            }
             Expr::Map(elements) => {
                 for element in elements {
                     element.validate()?;
                 }
-            },
-            Expr::Let { bindings, expression } => {
+            }
+            Expr::Let {
+                bindings,
+                expression,
+            } => {
                 for (binding, node) in bindings {
                     binding.validate()?;
                     node.validate()?;
                 }
                 expression.validate()?;
-            },
-            Expr::Transformed { operand, transform: operator } => {
+            }
+            Expr::Transformed {
+                operand,
+                transform: operator,
+            } => {
                 operand.validate()?;
                 operator.validate()?;
-            },
-            Expr::Function { positional, keywords, expression } => {
+            }
+            Expr::Function {
+                positional,
+                keywords,
+                expression,
+            } => {
                 positional.validate()?;
-                keywords.as_ref().map(MapBinding::validate).transpose()?;
+                keywords.as_ref().map(|b| b.validate()).transpose()?;
                 expression.validate()?;
-            },
-            Expr::Branch { condition, true_branch, false_branch } => {
+            }
+            Expr::Branch {
+                condition,
+                true_branch,
+                false_branch,
+            } => {
                 condition.validate()?;
                 true_branch.validate()?;
                 false_branch.validate()?;
             }
-            _ => {},
+            _ => {}
         }
         Ok(())
     }
 }
-
 
 // TopLevel
 // ----------------------------------------------------------------
@@ -1219,7 +1482,6 @@ impl Validatable for Expr {
 /// A top-level AST node, only legal at the top level of a file.
 #[derive(Debug)]
 pub enum TopLevel {
-
     /// Import an object by loading another file and binding it to a pattern.
     Import(Tagged<String>, Tagged<Binding>),
 }
@@ -1227,12 +1489,13 @@ pub enum TopLevel {
 impl Validatable for TopLevel {
     fn validate(&self) -> Result<(), Error> {
         match self {
-            Self::Import(_, binding) => { binding.validate()?; },
+            Self::Import(_, binding) => {
+                binding.validate()?;
+            }
         }
         Ok(())
     }
 }
-
 
 // File
 // ----------------------------------------------------------------
@@ -1241,7 +1504,6 @@ impl Validatable for TopLevel {
 /// statements followed by an expression.
 #[derive(Debug)]
 pub struct File {
-
     /// Top-level statements.
     pub statements: Vec<TopLevel>,
 
@@ -1249,12 +1511,20 @@ pub struct File {
     pub expression: Tagged<Expr>,
 }
 
-impl Validatable for File {
-    fn validate(&self) -> Result<(), Error> {
+impl File {
+    pub fn validate(&self) -> Result<(), Error> {
         for statement in &self.statements {
             statement.validate()?;
         }
         self.expression.validate()?;
         Ok(())
+    }
+}
+
+impl File {
+    pub(crate) fn compile(&self) -> Result<Function, Error> {
+        let mut compiler = Compiler::new();
+        compiler.emit_file(self)?;
+        Ok(compiler.finalize())
     }
 }

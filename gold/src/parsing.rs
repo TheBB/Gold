@@ -1,31 +1,38 @@
 use std::fmt::Debug;
 use std::num::{ParseFloatError, ParseIntError};
 
-use num_bigint::ParseBigIntError;
 use num_bigint::BigInt;
+use num_bigint::ParseBigIntError;
 
 use nom::{
-    IResult, Parser as NomParser, Err as NomError,
     branch::alt,
-    combinator::{map, map_res, opt, verify, value},
-    error::{ErrorKind, ParseError, FromExternalError, ContextError},
+    combinator::{map, map_res, opt, value, verify},
+    error::{ContextError, ErrorKind, FromExternalError, ParseError},
     multi::{many0, many1},
     sequence::{delimited, preceded, terminated, tuple},
+    Err as NomError, IResult, Parser as NomParser,
 };
 
 use crate::ast::*;
-use crate::error::{Error, Span, Tagged, Syntax, SyntaxError, SyntaxElement};
-use crate::lexing::{Lexer, TokenType, CachedLexer, CachedLexResult};
-use crate::object::{Object, Key};
-use crate::traits::{Boxable, Taggable, Validatable};
-
+use crate::error::{Error, Span, Syntax, SyntaxElement, SyntaxError, Tagged, Taggable};
+use crate::formatting::{
+    AlignSpec, FloatFormatType, FormatSpec, FormatType, GroupingSpec, IntegerFormatType, SignSpec,
+    StringAlignSpec, UppercaseSpec,
+};
+use crate::lexing::{CachedLexResult, CachedLexer, Lexer, TokenType};
+use crate::{Key, Object};
 
 trait ExplainError {
-    fn error<'a, T>(lex: CachedLexer<'a>, reason: T) -> Self where Syntax: From<T>;
+    fn error<'a, T>(lex: CachedLexer<'a>, reason: T) -> Self
+    where
+        Syntax: From<T>;
 }
 
 impl ExplainError for SyntaxError {
-    fn error<'a, T>(lex: CachedLexer<'a>, reason: T) -> Self where Syntax: From<T> {
+    fn error<'a, T>(lex: CachedLexer<'a>, reason: T) -> Self
+    where
+        Syntax: From<T>,
+    {
         lex.error(Syntax::from(reason))
     }
 }
@@ -68,7 +75,6 @@ impl<'a> FromExternalError<In<'a>, ParseFloatError> for SyntaxError {
     }
 }
 
-
 /// Convert a multiline string from source code to string by removing leading
 /// whitespace from each line according to the rules for such strings.
 fn multiline(s: &str) -> String {
@@ -77,11 +83,17 @@ fn multiline(s: &str) -> String {
     let first = lines.next().unwrap().trim_start();
 
     let rest: Vec<&str> = lines.filter(|s: &&str| !(*s).trim().is_empty()).collect();
-    let indent =
-        rest.iter()
-            .filter(|s: &&&str| !s.trim().is_empty())
-            .map(|s: &&str| (*s).chars().take_while(|c| c.is_whitespace()).map(|_| 1).sum())
-            .min().unwrap_or(0);
+    let indent = rest
+        .iter()
+        .filter(|s: &&&str| !s.trim().is_empty())
+        .map(|s: &&str| {
+            (*s).chars()
+                .take_while(|c| c.is_whitespace())
+                .map(|_| 1)
+                .sum()
+        })
+        .min()
+        .unwrap_or(0);
 
     let mut ret = first.to_string();
     for r in rest {
@@ -93,7 +105,6 @@ fn multiline(s: &str) -> String {
 
     ret
 }
-
 
 /// Temporary expression wrapper used for accurately tracking parenthesized
 /// locations.
@@ -142,7 +153,6 @@ enum Paren<T> {
     Parenthesized(Tagged<Tagged<T>>),
 }
 
-
 impl<T> Paren<T> {
     /// Return the inner expression with location tag, disregarding potential
     /// parentheses.
@@ -163,14 +173,16 @@ impl<T> Paren<T> {
         }
     }
 
-    fn map_wrap<F, U>(self, f: F) -> Paren<U> where F: FnOnce(Tagged<T>) -> U {
+    fn map_wrap<F, U>(self, f: F) -> Paren<U>
+    where
+        F: FnOnce(Tagged<T>) -> U,
+    {
         match self {
             Self::Naked(x) => Paren::<U>::Naked(x.wrap(f)),
             Self::Parenthesized(x) => Paren::<U>::Parenthesized(x.map(|y| y.wrap(f))),
         }
     }
 }
-
 
 type PExpr = Paren<Expr>;
 type PList = Paren<ListElement>;
@@ -184,34 +196,26 @@ type Out<'a, T> = IResult<In<'a>, T, SyntaxError>;
 trait Parser<'a, T>: NomParser<In<'a>, T, SyntaxError> {}
 impl<'a, T, P> Parser<'a, T> for P where P: NomParser<In<'a>, T, SyntaxError> {}
 
-
 /// Parser that always succeeds and consumes nothing
 fn success<'a>(input: In<'a>) -> Out<'a, Tagged<&'a str>> {
     let loc = input.position();
     Ok((input, "".tag(loc.with_length(0))))
 }
 
-
 /// Convert errors to failures.
-fn fail<'a, O, T>(
-    mut parser: impl Parser<'a, O>,
-    reason: T,
-) -> impl Parser<'a, O>
-where Syntax: From<T>, T: Copy
+fn fail<'a, O, T>(mut parser: impl Parser<'a, O>, reason: T) -> impl Parser<'a, O>
+where
+    Syntax: From<T>,
+    T: Copy,
 {
     move |input: In<'a>| {
-        parser.parse(input.clone()).map_err(
-            |err| match err {
-                NomError::Failure(e) => NomError::Failure(e),
-                NomError::Error(_) => {
-                    NomError::Failure(SyntaxError::error(input, reason))
-                },
-                _ => err
-            }
-        )
+        parser.parse(input.clone()).map_err(|err| match err {
+            NomError::Failure(e) => NomError::Failure(e),
+            NomError::Error(_) => NomError::Failure(SyntaxError::error(input, reason)),
+            _ => err,
+        })
     }
 }
-
 
 /// Apply a separator skip rule to an item parser. See [`seplist_opt_delim`] for
 /// details.
@@ -222,24 +226,17 @@ fn apply_skip<'a, O>(
     map(parser, move |x| (x, skip_delimiter))
 }
 
-
 /// Create an item parser that always skips the following separator. See
 /// [`seplist_opt_delim`] for details.
-fn do_skip<'a, O>(
-    parser: impl Parser<'a, O>,
-) -> impl Parser<'a, (O, bool)> {
+fn do_skip<'a, O>(parser: impl Parser<'a, O>) -> impl Parser<'a, (O, bool)> {
     apply_skip(parser, true)
 }
 
-
 /// Create an item parser that never skips the following separator. See
 /// [`seplist_opt_delim`] for details.
-fn dont_skip<'a, O>(
-    parser: impl Parser<'a, O>,
-) -> impl Parser<'a, (O, bool)> {
+fn dont_skip<'a, O>(parser: impl Parser<'a, O>) -> impl Parser<'a, (O, bool)> {
     apply_skip(parser, false)
 }
-
 
 /// Separated list with delimiters and optional trailing separator.
 ///
@@ -276,17 +273,17 @@ where
 
             // Try to parse an item
             match u {
-
                 // Parsing item failed: we expect a terminator
-                Err(NomError::Error(_)) => {
-                    match terminator.parse(i.clone()) {
-                        Err(NomError::Error(_)) => return Err(NomError::Failure(
-                            SyntaxError::error(i, err_terminator_or_item)
-                        )),
-                        Err(e) => return Err(e),
-                        Ok((i, termr)) => return Ok((i, (initr, items, termr))),
+                Err(NomError::Error(_)) => match terminator.parse(i.clone()) {
+                    Err(NomError::Error(_)) => {
+                        return Err(NomError::Failure(SyntaxError::error(
+                            i,
+                            err_terminator_or_item,
+                        )))
                     }
-                }
+                    Err(e) => return Err(e),
+                    Ok((i, termr)) => return Ok((i, (initr, items, termr))),
+                },
 
                 // Parsing item failed irrecoverably
                 Err(e) => return Err(e),
@@ -302,8 +299,10 @@ where
             // If at this moment we don't expect a separator, try to parse a terminator
             if !expect_separator {
                 match terminator.parse(i.clone()) {
-                    Err(NomError::Error(_)) => { },
-                    Err(e) => { return Err(e); },
+                    Err(NomError::Error(_)) => {}
+                    Err(e) => {
+                        return Err(e);
+                    }
                     Ok((i, termr)) => return Ok((i, (initr, items, termr))),
                 }
 
@@ -313,26 +312,28 @@ where
             // Try to parse a separator
             match separator.parse(i.clone()) {
                 // Parsing separator failed: we expect a terminator
-                Err(NomError::Error(_)) => {
-                    match terminator.parse(i.clone()) {
-                        Err(NomError::Error(_)) => return Err(NomError::Failure(
-                            SyntaxError::error(i, err_terminator_or_separator)
-                        )),
-                        Err(e) => return Err(e),
-                        Ok((i, termr)) => return Ok((i, (initr, items, termr))),
+                Err(NomError::Error(_)) => match terminator.parse(i.clone()) {
+                    Err(NomError::Error(_)) => {
+                        return Err(NomError::Failure(SyntaxError::error(
+                            i,
+                            err_terminator_or_separator,
+                        )))
                     }
-                }
+                    Err(e) => return Err(e),
+                    Ok((i, termr)) => return Ok((i, (initr, items, termr))),
+                },
 
                 // Parsing separator failed irrecoverably
                 Err(e) => return Err(e),
 
                 // Parsing separator succeeded
-                Ok((j, _)) => { i = j; }
+                Ok((j, _)) => {
+                    i = j;
+                }
             }
         }
     }
 }
-
 
 /// Separated list with delimiters and optional trailing separator.
 fn seplist<'a, Init, Item, Sep, Term, InitR, ItemR, SepR, TermR, T, U>(
@@ -354,17 +355,20 @@ where
     ItemR: Debug,
 {
     let item_parser = map(item, |it| (it, false));
-    seplist_opt_delim(initializer, item_parser, separator, terminator, err_terminator_or_item, err_terminator_or_separator)
+    seplist_opt_delim(
+        initializer,
+        item_parser,
+        separator,
+        terminator,
+        err_terminator_or_item,
+        err_terminator_or_separator,
+    )
 }
-
 
 /// Wrap the output of a parser in Paren::Naked.
-fn naked<'a, U>(
-    parser: impl Parser<'a, Tagged<U>>,
-) -> impl Parser<'a, Paren<U>> {
+fn naked<'a, U>(parser: impl Parser<'a, Tagged<U>>) -> impl Parser<'a, Paren<U>> {
     map(parser, Paren::Naked)
 }
-
 
 /// Never failing parser that obtains the current column.  Useful for
 /// indentation-sensitive rules.
@@ -372,7 +376,6 @@ fn column<'a>(input: In<'a>) -> Out<'a, u32> {
     let col = input.position().column();
     Ok((input, col))
 }
-
 
 fn token<'a>(
     getter: impl Fn(In<'a>) -> CachedLexResult<'a>,
@@ -388,7 +391,6 @@ fn token<'a>(
     }
 }
 
-
 macro_rules! tok {
     ($pname:ident, $toktype:ident) => {
         fn $pname<'a>(input: In<'a>) -> Out<Tagged<&'a str>> {
@@ -403,61 +405,60 @@ macro_rules! tok {
     };
 }
 
+tok! {name, Name}
+tok! {float, Float}
+tok! {integer, Integer}
 
-tok!{name, Name}
-tok!{float, Float}
-tok!{integer, Integer}
+tok! {asterisk, Asterisk}
+tok! {caret, Caret}
+tok! {close_brace, CloseBrace}
+tok! {close_brace_pipe, CloseBracePipe}
+tok! {close_bracket, CloseBracket}
+tok! {close_paren, CloseParen}
+tok! {colon, Colon}
+tok! {comma, Comma}
+tok! {dot, Dot}
+tok! {double_eq, DoubleEq}
+tok! {double_quote, DoubleQuote}
+tok! {double_slash, DoubleSlash}
+tok! {ellipsis, Ellipsis}
+tok! {eq, Eq}
+tok! {exclam_eq, ExclamEq}
+tok! {greater_eq, GreaterEq}
+tok! {greater, Greater}
+tok! {less_eq, LessEq}
+tok! {less, Less}
+tok! {minus, Minus}
+tok! {open_brace, OpenBrace}
+tok! {open_brace_pipe, OpenBracePipe}
+tok! {open_bracket, OpenBracket}
+tok! {open_paren, OpenParen}
+tok! {pipe, Pipe}
+tok! {plus, Plus}
+tok! {semicolon, SemiColon}
+tok! {slash, Slash}
 
-tok!{asterisk, Asterisk}
-tok!{caret, Caret}
-tok!{close_brace, CloseBrace}
-tok!{close_brace_pipe, CloseBracePipe}
-tok!{close_bracket, CloseBracket}
-tok!{close_paren, CloseParen}
-tok!{colon, Colon}
-tok!{comma, Comma}
-tok!{dot, Dot}
-tok!{double_eq, DoubleEq}
-tok!{double_quote, DoubleQuote}
-tok!{double_slash, DoubleSlash}
-tok!{ellipsis, Ellipsis}
-tok!{eq, Eq}
-tok!{exclam_eq, ExclamEq}
-tok!{greater_eq, GreaterEq}
-tok!{greater, Greater}
-tok!{less_eq, LessEq}
-tok!{less, Less}
-tok!{minus, Minus}
-tok!{open_brace, OpenBrace}
-tok!{open_brace_pipe, OpenBracePipe}
-tok!{open_bracket, OpenBracket}
-tok!{open_paren, OpenParen}
-tok!{pipe, Pipe}
-tok!{plus, Plus}
-tok!{semicolon, SemiColon}
-tok!{slash, Slash}
+tok! {map_name, Name, next_key}
+tok! {map_colon, Colon, next_key}
+tok! {map_dollar, Dollar, next_key}
+tok! {map_double_colon, DoubleColon, next_key}
+tok! {map_ellipsis, Ellipsis, next_key}
 
-tok!{map_name, Name, next_key}
-tok!{map_colon, Colon, next_key}
-tok!{map_dollar, Dollar, next_key}
-tok!{map_double_colon, DoubleColon, next_key}
-tok!{map_ellipsis, Ellipsis, next_key}
+tok! {string_lit, StringLit, next_string}
+tok! {string_dollar, Dollar, next_string}
+tok! {string_double_quote, DoubleQuote, next_string}
 
-tok!{string_lit, StringLit, next_string}
-tok!{string_dollar, Dollar, next_string}
-tok!{string_double_quote, DoubleQuote, next_string}
-
-tok!{fmtspec_char_raw, Char, next_fmtspec}
-tok!{fmtspec_number_raw, Integer, next_fmtspec}
-
+tok! {fmtspec_char_raw, Char, next_fmtspec}
+tok! {fmtspec_number_raw, Integer, next_fmtspec}
 
 /// Match a single multiline string starting at a column.
 fn multistring<'a>(col: u32) -> impl Parser<'a, Tagged<&'a str>> {
-    move |lex: In<'a>| lex.next_multistring(col)
-        .map(|(lex, tok)| (lex, tok.as_ref().text.tag(&tok)))
-        .map_err(NomError::Error)
+    move |lex: In<'a>| {
+        lex.next_multistring(col)
+            .map(|(lex, tok)| (lex, tok.as_ref().text.tag(&tok)))
+            .map_err(NomError::Error)
+    }
 }
-
 
 /// Match a single named keyword. This does not match if the keyword is a prefix
 /// of some other name or identifier.
@@ -465,9 +466,8 @@ fn keyword_raw<'a>(
     parser: impl Parser<'a, Tagged<&'a str>>,
     value: &'a str,
 ) -> impl Parser<'a, Tagged<&'a str>> {
-    verify(parser, move |out| { *out.as_ref() == value })
+    verify(parser, move |out| *out.as_ref() == value)
 }
-
 
 /// Match a single named keyword. This does not match if the keyword is a prefix
 /// of some other name or identifier.
@@ -475,35 +475,17 @@ fn keyword<'a>(value: &'a str) -> impl Parser<'a, Tagged<&'a str>> {
     keyword_raw(name, value)
 }
 
-
 /// Match a single named keyword. This does not match if the keyword is a prefix
 /// of some other name or identifier.
 fn map_keyword<'a>(value: &'a str) -> impl Parser<'a, Tagged<&'a str>> {
     keyword_raw(map_name, value)
 }
 
-
 /// List of keywords that must be avoided by the [`identifier`] parser.
 static KEYWORDS: [&'static str; 17] = [
-    "for",
-    "when",
-    "if",
-    "then",
-    "else",
-    "let",
-    "in",
-    "has",
-    "true",
-    "false",
-    "null",
-    "and",
-    "or",
-    "not",
-    "as",
-    "import",
-    "fn",
+    "for", "when", "if", "then", "else", "let", "in", "has", "true", "false", "null", "and", "or",
+    "not", "as", "import", "fn",
 ];
-
 
 /// Match an identfier.
 ///
@@ -511,10 +493,9 @@ static KEYWORDS: [&'static str; 17] = [
 fn identifier<'a>(input: In<'a>) -> Out<'a, Tagged<Key>> {
     map(
         verify(name, |out| !KEYWORDS.contains(out.as_ref())),
-        |span| span.map(Key::new)
+        |span| span.map(Key::new),
     )(input)
 }
-
 
 /// Match an identifier in a map context.
 ///
@@ -523,26 +504,27 @@ fn map_identifier<'a>(input: In<'a>) -> Out<'a, Tagged<Key>> {
     map(map_name, |span| span.map(Key::new))(input)
 }
 
-
 /// Match a number.
 fn number<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    naked(
-        alt((
-            map_res(float, |span| span.as_ref().replace('_', "").parse::<f64>().map(|x| Expr::Literal(Object::float(x)).tag(&span))),
-            map_res(
-                integer,
-                |span| {
-                    let text = span.as_ref().replace('_', "");
-                    let y = text.parse::<i64>().map(Object::int).or_else(
-                        |_| text.parse::<BigInt>().map(Object::int)
-                    ).map(Expr::Literal);
-                    y.map(|x| x.tag(&span))
-                },
-            ),
-        ))
-    ).parse(input)
+    naked(alt((
+        map_res(float, |span| {
+            span.as_ref()
+                .replace('_', "")
+                .parse::<f64>()
+                .map(|x| Expr::Literal(Object::float(x)).tag(&span))
+        }),
+        map_res(integer, |span| {
+            let text = span.as_ref().replace('_', "");
+            let y = text
+                .parse::<i64>()
+                .map(Object::new_int)
+                .or_else(|_| text.parse::<BigInt>().map(Object::new_int))
+                .map(Expr::Literal);
+            y.map(|x| x.tag(&span))
+        }),
+    )))
+    .parse(input)
 }
-
 
 /// Matches a raw string part.
 ///
@@ -551,94 +533,85 @@ fn number<'a>(input: In<'a>) -> Out<'a, PExpr> {
 /// parser does *not* parse the initial quote or the terminating symbol,
 /// whatever that may be.
 fn raw_string<'a>(input: In<'a>) -> Out<'a, String> {
-    map(
-        string_lit,
-        |span| {
-            let mut out = "".to_string();
-            let mut chars = span.as_ref().char_indices();
-            loop {
-                match chars.next() {
-                    Some((_, '\\')) => match chars.next() {
-                        Some((_, '\\')) => { out += "\\"; }
-                        Some((_, '"')) => { out += "\""; }
-                        Some((_, '$')) => { out += "$"; }
-                        Some((_, _)) => {
-                            // TODO: Calculate accurate error
-                            continue;
-                        },
-                        None => {
-                            // TODO: Calculate accurate error
-                            break;
-                        }
-                    },
-                    Some((_, c)) => { out.push(c) }
-                    None => { break; }
+    map(string_lit, |span| {
+        let mut out = "".to_string();
+        let mut chars = span.as_ref().char_indices();
+        loop {
+            match chars.next() {
+                Some((_, '\\')) => match chars.next() {
+                    Some((_, '\\')) => {
+                        out += "\\";
+                    }
+                    Some((_, '"')) => {
+                        out += "\"";
+                    }
+                    Some((_, '$')) => {
+                        out += "$";
+                    }
+                    Some((_, _)) => {
+                        // TODO: Calculate accurate error
+                        continue;
+                    }
+                    None => {
+                        // TODO: Calculate accurate error
+                        break;
+                    }
+                },
+                Some((_, c)) => out.push(c),
+                None => {
+                    break;
                 }
             }
-
-            out
         }
-    )(input)
-}
 
+        out
+    })(input)
+}
 
 /// Matches a non-interpolated string element.
 ///
 /// This is just the output of [`raw_string`] returned as a [`StringElement`].
 fn string_data<'a>(input: In<'a>) -> Out<'a, StringElement> {
-    map(
-        raw_string,
-        StringElement::raw,
-    )(input)
+    map(raw_string, StringElement::raw)(input)
 }
-
 
 /// Matches a specific format specifier character.
 fn fmtspec_char<'a>(c: char) -> impl Parser<'a, ()> {
     value(
         (),
-        verify(
-            fmtspec_char_raw,
-            move |out| { out.unwrap().chars().next() == Some(c) },
-        ),
+        verify(fmtspec_char_raw, move |out| {
+            out.unwrap().chars().next() == Some(c)
+        }),
     )
 }
 
-
 /// Matches a format specifier number.
 fn fmtspec_number<'a>(input: In<'a>) -> Out<'a, usize> {
-    map_res(
-        fmtspec_number_raw,
-        |out| out.as_ref().parse::<usize>(),
-    )(input)
+    map_res(fmtspec_number_raw, |out| out.as_ref().parse::<usize>())(input)
 }
-
 
 /// Matches a format specifier alignment.
 fn fmtspec_align<'a>(input: In<'a>) -> Out<'a, AlignSpec> {
     alt((
         value(AlignSpec::String(StringAlignSpec::Left), fmtspec_char('<')),
         value(AlignSpec::String(StringAlignSpec::Right), fmtspec_char('>')),
-        value(AlignSpec::String(StringAlignSpec::Center), fmtspec_char('^')),
+        value(
+            AlignSpec::String(StringAlignSpec::Center),
+            fmtspec_char('^'),
+        ),
         value(AlignSpec::AfterSign, fmtspec_char('=')),
     ))(input)
 }
 
-
 /// Matches a format specifier fill and alignment.
 fn fmtspec_fill_align<'a>(input: In<'a>) -> Out<'a, (Option<char>, AlignSpec)> {
     alt((
-        map(
-            tuple((fmtspec_char_raw, fmtspec_align)),
-            |(fill, align)| (Some(fill.unwrap().chars().next().unwrap()), align)
-        ),
-        map(
-            fmtspec_align,
-            |align| (None, align)
-        ),
+        map(tuple((fmtspec_char_raw, fmtspec_align)), |(fill, align)| {
+            (Some(fill.unwrap().chars().next().unwrap()), align)
+        }),
+        map(fmtspec_align, |align| (None, align)),
     ))(input)
 }
-
 
 /// Matches a format specifier sign
 fn fmtspec_sign<'a>(input: In<'a>) -> Out<'a, SignSpec> {
@@ -649,7 +622,6 @@ fn fmtspec_sign<'a>(input: In<'a>) -> Out<'a, SignSpec> {
     ))(input)
 }
 
-
 /// Matches a format specifier grouping
 fn fmtspec_grouping<'a>(input: In<'a>) -> Out<'a, GroupingSpec> {
     alt((
@@ -658,27 +630,53 @@ fn fmtspec_grouping<'a>(input: In<'a>) -> Out<'a, GroupingSpec> {
     ))(input)
 }
 
-
 /// Matches a format speficier type
 fn fmtspec_type<'a>(input: In<'a>) -> Out<'a, FormatType> {
     alt((
         value(FormatType::String, fmtspec_char('s')),
-
-        value(FormatType::Integer(IntegerFormatType::Binary), fmtspec_char('b')),
-        value(FormatType::Integer(IntegerFormatType::Character), fmtspec_char('c')),
-        value(FormatType::Integer(IntegerFormatType::Decimal), fmtspec_char('d')),
-        value(FormatType::Integer(IntegerFormatType::Octal), fmtspec_char('o')),
-        value(FormatType::Integer(IntegerFormatType::Hex(UppercaseSpec::Lower)), fmtspec_char('x')),
-        value(FormatType::Integer(IntegerFormatType::Hex(UppercaseSpec::Upper)), fmtspec_char('X')),
-
-        value(FormatType::Float(FloatFormatType::Sci(UppercaseSpec::Lower)), fmtspec_char('e')),
-        value(FormatType::Float(FloatFormatType::Sci(UppercaseSpec::Upper)), fmtspec_char('E')),
+        value(
+            FormatType::Integer(IntegerFormatType::Binary),
+            fmtspec_char('b'),
+        ),
+        value(
+            FormatType::Integer(IntegerFormatType::Character),
+            fmtspec_char('c'),
+        ),
+        value(
+            FormatType::Integer(IntegerFormatType::Decimal),
+            fmtspec_char('d'),
+        ),
+        value(
+            FormatType::Integer(IntegerFormatType::Octal),
+            fmtspec_char('o'),
+        ),
+        value(
+            FormatType::Integer(IntegerFormatType::Hex(UppercaseSpec::Lower)),
+            fmtspec_char('x'),
+        ),
+        value(
+            FormatType::Integer(IntegerFormatType::Hex(UppercaseSpec::Upper)),
+            fmtspec_char('X'),
+        ),
+        value(
+            FormatType::Float(FloatFormatType::Sci(UppercaseSpec::Lower)),
+            fmtspec_char('e'),
+        ),
+        value(
+            FormatType::Float(FloatFormatType::Sci(UppercaseSpec::Upper)),
+            fmtspec_char('E'),
+        ),
         value(FormatType::Float(FloatFormatType::Fixed), fmtspec_char('f')),
-        value(FormatType::Float(FloatFormatType::General), fmtspec_char('g')),
-        value(FormatType::Float(FloatFormatType::Percentage), fmtspec_char('%')),
+        value(
+            FormatType::Float(FloatFormatType::General),
+            fmtspec_char('g'),
+        ),
+        value(
+            FormatType::Float(FloatFormatType::Percentage),
+            fmtspec_char('%'),
+        ),
     ))(input)
 }
-
 
 /// Matches a format specifier
 fn format_specifier<'a>(input: In<'a>) -> Out<'a, FormatSpec> {
@@ -693,12 +691,17 @@ fn format_specifier<'a>(input: In<'a>) -> Out<'a, FormatSpec> {
             opt(preceded(fmtspec_char('.'), fmtspec_number)),
             opt(fmtspec_type),
         )),
-
         |(fill_align, sign, alternate, zero_in, width, grouping, precision, fmt_type)| {
             let zero = zero_in.unwrap_or_default();
             FormatSpec {
                 fill: match fill_align {
-                    None => if zero { '0' } else {' '},
+                    None => {
+                        if zero {
+                            '0'
+                        } else {
+                            ' '
+                        }
+                    }
                     Some((None, _)) => ' ',
                     Some((Some(fill), _)) => fill,
                 },
@@ -711,35 +714,30 @@ fn format_specifier<'a>(input: In<'a>) -> Out<'a, FormatSpec> {
 
                 alternate: alternate.unwrap_or_default(),
 
-                sign, width, grouping, precision, fmt_type,
+                sign,
+                width,
+                grouping,
+                precision,
+                fmt_type,
             }
-        }
+        },
     )(input)
 }
-
 
 /// Matches an interpolated string element.
 fn string_interp<'a>(input: In<'a>) -> Out<'a, StringElement> {
     map(
         delimited(
-            terminated(
-                string_dollar,
-                fail(open_brace, TokenType::OpenBrace),
-            ),
+            terminated(string_dollar, fail(open_brace, TokenType::OpenBrace)),
             tuple((
                 fail(expression, SyntaxElement::Expression),
-                opt(preceded(
-                    colon,
-                    format_specifier,
-                ))
+                opt(preceded(colon, format_specifier)),
             )),
             fail(close_brace, TokenType::CloseBrace),
         ),
-
         |(expression, fmt_spec)| StringElement::Interpolate(expression.inner(), fmt_spec),
     )(input)
 }
-
 
 /// Matches a string part.
 ///
@@ -753,43 +751,44 @@ fn string_part<'a>(input: In<'a>) -> Out<'a, Tagged<Vec<StringElement>>> {
             many0(alt((string_interp, string_data))),
             fail(string_double_quote, TokenType::DoubleQuote),
         )),
-
-        |(a, x, b)| x.tag(a.span()..b.span())
+        |(a, x, b)| x.tag(a.span()..b.span()),
     )(input)
 }
-
 
 /// Matches a string.
 ///
 /// This consists of a sequence of one or more string parts, separated by
 /// whitespace.
 fn string<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    naked(map(
-        many1(string_part),
-        |x| {
-            let start = x.first().unwrap().span();
-            let end = x.last().unwrap().span();
-            let elements: Vec<StringElement> = x.into_iter().map(Tagged::unwrap).flatten().collect();
-            Expr::string(elements).tag(start..end)
-        }
-    )).parse(input)
+    naked(map(many1(string_part), |x| {
+        let start = x.first().unwrap().span();
+        let end = x.last().unwrap().span();
+        let elements: Vec<StringElement> = x.into_iter().map(Tagged::unwrap).flatten().collect();
+        Expr::string(elements).tag(start..end)
+    }))
+    .parse(input)
 }
-
 
 /// Matches a boolean literal.
 fn boolean<'a>(input: In<'a>) -> Out<'a, PExpr> {
     naked(alt((
-        map(keyword("false"), |tok| Expr::Literal(Object::bool(false)).tag(&tok)),
-        map(keyword("true"), |tok| Expr::Literal(Object::bool(true)).tag(&tok)),
-    ))).parse(input)
+        map(keyword("false"), |tok| {
+            Expr::Literal(Object::bool(false)).tag(&tok)
+        }),
+        map(keyword("true"), |tok| {
+            Expr::Literal(Object::bool(true)).tag(&tok)
+        }),
+    )))
+    .parse(input)
 }
-
 
 /// Matches a null literal.
 fn null<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    naked(map(keyword("null"), |tok| Expr::Literal(Object::null()).tag(&tok))).parse(input)
+    naked(map(keyword("null"), |tok| {
+        Expr::Literal(Object::null()).tag(&tok)
+    }))
+    .parse(input)
 }
-
 
 /// Matches any atomic (non-divisible) expression.
 ///
@@ -801,10 +800,9 @@ fn atomic<'a>(input: In<'a>) -> Out<'a, PExpr> {
         boolean,
         number,
         string,
-        naked(map(identifier, |x| x.wrap(Expr::Identifier)))
+        naked(map(identifier, |x| x.wrap(Expr::Identifier))),
     ))(input)
 }
-
 
 /// Matches a list element: anything that is legal in a list.
 ///
@@ -815,19 +813,14 @@ fn atomic<'a>(input: In<'a>) -> Out<'a, PExpr> {
 /// - iterated elements: `[for x in y: @]`
 fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
     alt((
-
         // Splat
         naked(map(
-            tuple((
-                ellipsis,
-                fail(expression, SyntaxElement::Expression),
-            )),
+            tuple((ellipsis, fail(expression, SyntaxElement::Expression))),
             |(start, expr)| {
                 let span = start.span()..expr.outer();
                 ListElement::Splat(expr.inner()).tag(span)
             },
         )),
-
         // Iteration
         naked(map(
             tuple((
@@ -839,7 +832,7 @@ fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
                 ),
                 preceded(
                     fail(colon, TokenType::Colon),
-                    fail(list_element, SyntaxElement::ListElement)
+                    fail(list_element, SyntaxElement::ListElement),
                 ),
             )),
             |(start, binding, iterable, expr)| {
@@ -848,10 +841,10 @@ fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
                     binding,
                     iterable: iterable.inner(),
                     element: Box::new(expr.inner()),
-                }.tag(span)
-            }
+                }
+                .tag(span)
+            },
         )),
-
         // Conditional
         naked(map(
             tuple((
@@ -867,16 +860,14 @@ fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
                 ListElement::Cond {
                     condition: condition.inner(),
                     element: Box::new(expr.inner()),
-                }.tag(span)
+                }
+                .tag(span)
             },
         )),
-
         // Singleton
-        map(expression, |x| x.map_wrap(ListElement::Singleton))
-
+        map(expression, |x| x.map_wrap(ListElement::Singleton)),
     ))(input)
 }
-
 
 /// Matches a list.
 ///
@@ -893,11 +884,10 @@ fn list<'a>(input: In<'a>) -> Out<'a, PExpr> {
             (TokenType::CloseBracket, SyntaxElement::ListElement),
             (TokenType::CloseBracket, TokenType::Comma),
         ),
-
         |(a, x, b)| Expr::List(x.into_iter().map(|y| y.inner()).collect()).tag(a.span()..b.span()),
-    )).parse(input)
+    ))
+    .parse(input)
 }
-
 
 /// Matches a singleton key in a map context.
 ///
@@ -906,29 +896,21 @@ fn list<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn map_key_singleton<'a>(input: In<'a>) -> Out<'a, (u32, PExpr)> {
     tuple((
         column,
-
         alt((
             map(
-                tuple((
-                    map_dollar,
-                    fail(expression, SyntaxElement::Expression),
-                )),
+                tuple((map_dollar, fail(expression, SyntaxElement::Expression))),
                 |(d, ex)| {
                     let span = d.span()..ex.outer();
                     PExpr::Parenthesized(ex.inner().tag(span))
-                }
+                },
             ),
-
             string,
-
-            naked(map(
-                map_identifier,
-                |key| key.map(Object::key).map(Expr::Literal),
-            )),
-        ))
+            naked(map(map_identifier, |key| {
+                key.map(Object::key).map(Expr::Literal)
+            })),
+        )),
     ))(input)
 }
-
 
 /// Matches a singleton value in a map context.
 ///
@@ -937,20 +919,15 @@ fn map_key_singleton<'a>(input: In<'a>) -> Out<'a, (u32, PExpr)> {
 fn map_value_singleton<'a>(col: u32, input: In<'a>) -> Out<'a, (PExpr, bool)> {
     alt((
         do_skip(naked(map(
-            preceded(
-                map_double_colon,
-                multistring(col),
-            ),
+            preceded(map_double_colon, multistring(col)),
             |s| s.map(|s| Expr::string(vec![StringElement::raw(multiline(s.as_ref()))])),
         ))),
-
         dont_skip(preceded(
             fail(map_colon, TokenType::Colon),
             fail(expression, SyntaxElement::Expression),
         )),
     ))(input)
 }
-
 
 /// Matches a singleton map element: a singleton key followed by a singleton
 /// value.
@@ -960,11 +937,14 @@ fn map_element_singleton<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
     let (input, (value, skip_sep)) = map_value_singleton(col, input)?;
 
     let span = key.outer()..value.outer();
-    let ret = MapElement::Singleton { key: key.inner(), value: value.inner() }.tag(span);
+    let ret = MapElement::Singleton {
+        key: key.inner(),
+        value: value.inner(),
+    }
+    .tag(span);
 
     Ok((input, (PMap::Naked(ret), skip_sep)))
 }
-
 
 /// Matches a map element: anything that is legal in a map.
 ///
@@ -975,19 +955,14 @@ fn map_element_singleton<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
 /// - iterated elements: `{for x in y: @}`
 fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
     alt((
-
         // Splat
         dont_skip(naked(map(
-            tuple((
-                map_ellipsis,
-                fail(expression, SyntaxElement::Expression),
-            )),
+            tuple((map_ellipsis, fail(expression, SyntaxElement::Expression))),
             |(start, expr)| {
                 let span = start.span()..expr.outer();
                 MapElement::Splat(expr.inner()).tag(span)
             },
         ))),
-
         // Iteration
         map(
             tuple((
@@ -1008,11 +983,11 @@ fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
                     binding,
                     iterable: iterable.inner(),
                     element: Box::new(expr.inner()),
-                }.tag(span);
+                }
+                .tag(span);
                 (PMap::Naked(ret), skip)
             },
         ),
-
         // Conditional
         map(
             tuple((
@@ -1027,19 +1002,16 @@ fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
                 let span = start.span()..expr.outer();
                 let ret = MapElement::Cond {
                     condition: condition.inner(),
-                    element: Box::new(expr.inner())
-                }.tag(span);
+                    element: Box::new(expr.inner()),
+                }
+                .tag(span);
                 (PMap::Naked(ret), skip)
             },
         ),
-
         // Various types of singletons
         map_element_singleton,
-
     ))(input)
 }
-
-
 
 /// Matches a map.
 ///
@@ -1055,11 +1027,10 @@ fn mapping<'a>(input: In<'a>) -> Out<'a, PExpr> {
             (TokenType::CloseBrace, SyntaxElement::MapElement),
             (TokenType::CloseBrace, TokenType::Comma),
         ),
-
         |(a, x, b)| Expr::Map(x.into_iter().map(|y| y.inner()).collect()).tag(a.span()..b.span()),
-    )).parse(input)
+    ))
+    .parse(input)
 }
-
 
 /// Matches a parenthesized expression.
 ///
@@ -1072,11 +1043,9 @@ fn paren<'a>(input: In<'a>) -> Out<'a, PExpr> {
             fail(expression, SyntaxElement::Expression),
             fail(close_paren, TokenType::CloseParen),
         )),
-
-        |(start, expr, end)| PExpr::Parenthesized(expr.inner().tag(start.span()..end.span()))
+        |(start, expr, end)| PExpr::Parenthesized(expr.inner().tag(start.span()..end.span())),
     )(input)
 }
-
 
 /// Matches an expression that can be an operand.
 ///
@@ -1094,20 +1063,21 @@ fn postfixable<'a>(input: In<'a>) -> Out<'a, PExpr> {
     ))(input)
 }
 
-
 /// Matches a dot-syntax subscripting operator.
 ///
 /// This is a dot followed by an identifier.
 fn object_access<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
     map(
         tuple((dot, fail(identifier, SyntaxElement::Identifier))),
-        |(dot, out)| Transform::BinOp(
-            BinOp::Index.tag(&dot),
-            out.map(Object::key).map(Expr::Literal).to_box(),
-        ).tag(dot.span()..out.span()),
+        |(dot, out)| {
+            Transform::BinOp(
+                BinOp::Index.tag(&dot),
+                Box::new(out.map(Object::key).map(Expr::Literal)),
+            )
+            .tag(dot.span()..out.span())
+        },
     )(input)
 }
-
 
 /// Matches a bracket-syntax subscripting operator.
 ///
@@ -1121,11 +1091,10 @@ fn object_index<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
         )),
         |(a, expr, b)| {
             let span = Span::from(a.span()..b.span());
-            Transform::BinOp(BinOp::Index.tag(span), expr.inner().to_box()).tag(span)
+            Transform::BinOp(BinOp::Index.tag(span), Box::new(expr.inner())).tag(span)
         },
     )(input)
 }
-
 
 /// Matches a function argument element.
 ///
@@ -1135,46 +1104,32 @@ fn object_index<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
 /// - singleton arguments: `f(x)`
 fn function_arg<'a>(input: In<'a>) -> Out<'a, Tagged<ArgElement>> {
     alt((
-
         // Splat
         map(
-            tuple((
-                ellipsis,
-                fail(expression, SyntaxElement::Expression),
-            )),
+            tuple((ellipsis, fail(expression, SyntaxElement::Expression))),
             |(x, y)| {
                 let span = x.span()..y.outer();
                 ArgElement::Splat(y.inner()).tag(span)
-            }
+            },
         ),
-
         // Keyword
         map(
             tuple((
                 identifier,
-                preceded(
-                    colon,
-                    fail(expression, SyntaxElement::Expression),
-                ),
+                preceded(colon, fail(expression, SyntaxElement::Expression)),
             )),
             |(name, expr)| {
                 let span = name.span()..expr.outer();
                 ArgElement::Keyword(name, expr.inner()).tag(span)
             },
         ),
-
         // Singleton
-        map(
-            expression,
-            |x| {
-                let span = x.outer();
-                ArgElement::Singleton(x.inner()).tag(span)
-            },
-        ),
-
+        map(expression, |x| {
+            let span = x.outer();
+            ArgElement::Singleton(x.inner()).tag(span)
+        }),
     ))(input)
 }
-
 
 /// Matches a function call operator.
 ///
@@ -1198,7 +1153,6 @@ fn function_call<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
     )(input)
 }
 
-
 /// Matches any postfix operator expression.
 ///
 /// This is a postfixable expression (see [`postfixable`]) followed by an
@@ -1207,28 +1161,22 @@ fn postfixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
     map(
         tuple((
             postfixable,
-            many0(alt((
-                object_access,
-                object_index,
-                function_call,
-            ))),
+            many0(alt((object_access, object_index, function_call))),
         )),
-
         |(expr, ops)| {
-            ops.into_iter().fold(
-                expr,
-                |expr, operator| {
-                    let span = expr.outer()..operator.span();
-                    PExpr::Naked(Expr::Transformed {
+            ops.into_iter().fold(expr, |expr, operator| {
+                let span = expr.outer()..operator.span();
+                PExpr::Naked(
+                    Expr::Transformed {
                         operand: Box::new(expr.inner()),
-                        transform: operator.unwrap()
-                    }.tag(span))
-                },
-            )
+                        transform: operator.unwrap(),
+                    }
+                    .tag(span),
+                )
+            })
         },
     )(input)
 }
-
 
 /// Matches any prefixed operator expression.
 ///
@@ -1237,7 +1185,6 @@ fn postfixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn prefixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
     alt((
         power,
-
         map(
             tuple((
                 many1(alt((
@@ -1247,23 +1194,21 @@ fn prefixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
                 ))),
                 fail(power, SyntaxElement::Operand),
             )),
-
             |(ops, expr)| {
-                ops.into_iter().rev().fold(
-                    expr,
-                    |expr, operator| {
-                        let span = operator.span()..expr.outer();
-                        PExpr::Naked(Expr::Transformed {
+                ops.into_iter().rev().fold(expr, |expr, operator| {
+                    let span = operator.span()..expr.outer();
+                    PExpr::Naked(
+                        Expr::Transformed {
                             operand: Box::new(expr.inner()),
-                            transform: Transform::UnOp(operator)
-                        }.tag(span))
-                    },
-                )
+                            transform: Transform::UnOp(operator),
+                        }
+                        .tag(span),
+                    )
+                })
             },
-        )
+        ),
     ))(input)
 }
-
 
 /// Utility parser for parsing a single binary operator with operand,
 /// collectively termed a 'transform'.
@@ -1279,17 +1224,13 @@ fn binop<'a>(
     operand: impl Parser<'a, PExpr>,
 ) -> impl Parser<'a, Tagged<Transform>> {
     map(
-        tuple((
-            transformer,
-            fail(operand, SyntaxElement::Operand),
-        )),
+        tuple((transformer, fail(operand, SyntaxElement::Operand))),
         |(func, expr)| {
             let span = func.span()..expr.outer();
             func.as_ref()(expr.inner(), func.span()).tag(span)
         },
     )
 }
-
 
 /// Utility parser for parsing a left- or right-associative sequence of
 /// operators.
@@ -1304,28 +1245,24 @@ fn binops<'a>(
     operand: impl Parser<'a, PExpr>,
     right: bool,
 ) -> impl Parser<'a, PExpr> {
-    map(
-        tuple((
-            operand,
-            many0(transform),
-        )),
-        move |(expr, ops)| {
-            let acc = |expr: PExpr, operator: Tagged<Transform>| {
-                let span = expr.outer()..operator.span();
-                PExpr::Naked(Expr::Transformed {
+    map(tuple((operand, many0(transform))), move |(expr, ops)| {
+        let acc = |expr: PExpr, operator: Tagged<Transform>| {
+            let span = expr.outer()..operator.span();
+            PExpr::Naked(
+                Expr::Transformed {
                     operand: Box::new(expr.inner()),
                     transform: operator.unwrap(),
-                }.tag(span))
-            };
-            if right {
-                ops.into_iter().rev().fold(expr, acc)
-            } else {
-                ops.into_iter().fold(expr, acc)
-            }
-        },
-    )
+                }
+                .tag(span),
+            )
+        };
+        if right {
+            ops.into_iter().rev().fold(expr, acc)
+        } else {
+            ops.into_iter().fold(expr, acc)
+        }
+    })
 }
-
 
 /// Matches the exponentiation precedence level.
 ///
@@ -1335,16 +1272,14 @@ fn binops<'a>(
 fn power<'a>(input: In<'a>) -> Out<'a, PExpr> {
     binops(
         binop(
-            alt((
-                map(caret, |x| (Transform::power as OpCons).tag(&x)),
-            )),
+            alt((map(caret, |x| (Transform::power as OpCons).tag(&x)),)),
             prefixed,
         ),
         postfixed,
         true,
-    ).parse(input)
+    )
+    .parse(input)
 }
-
 
 /// Utility parser for matching a sequence of left-associative operators with
 /// symmetric operands. In other words, most conventional operators.
@@ -1355,19 +1290,20 @@ fn lbinop<'a>(
     binops(binop(operators, operands), operands, false)
 }
 
-
 /// Matches the multiplication precedence level.
 fn product<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
         alt((
             map(asterisk, |x| (Transform::multiply as OpCons).tag(&x)),
-            map(double_slash, |x| (Transform::integer_divide as OpCons).tag(&x)),
+            map(double_slash, |x| {
+                (Transform::integer_divide as OpCons).tag(&x)
+            }),
             map(slash, |x| (Transform::divide as OpCons).tag(&x)),
         )),
         prefixed,
-    ).parse(input)
+    )
+    .parse(input)
 }
-
 
 /// Matches the addition predecence level.
 fn sum<'a>(input: In<'a>) -> Out<'a, PExpr> {
@@ -1377,9 +1313,9 @@ fn sum<'a>(input: In<'a>) -> Out<'a, PExpr> {
             map(minus, |x| (Transform::subtract as OpCons).tag(&x)),
         )),
         product,
-    ).parse(input)
+    )
+    .parse(input)
 }
-
 
 /// Matches the inequality comparison precedence level.
 fn inequality<'a>(input: In<'a>) -> Out<'a, PExpr> {
@@ -1391,9 +1327,9 @@ fn inequality<'a>(input: In<'a>) -> Out<'a, PExpr> {
             map(greater, |x| (Transform::greater as OpCons).tag(&x)),
         )),
         sum,
-    ).parse(input)
+    )
+    .parse(input)
 }
-
 
 /// Matches the equality comparison precedence level.
 fn equality<'a>(input: In<'a>) -> Out<'a, PExpr> {
@@ -1403,54 +1339,44 @@ fn equality<'a>(input: In<'a>) -> Out<'a, PExpr> {
             map(exclam_eq, |x| (Transform::not_equal as OpCons).tag(&x)),
         )),
         inequality,
-    ).parse(input)
+    )
+    .parse(input)
 }
-
 
 /// Matches the contains precedence level.
 fn contains<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
-        alt((
-            map(keyword("has"), |x| (Transform::contains as OpCons).tag(&x)),
-        )),
+        alt((map(keyword("has"), |x| {
+            (Transform::contains as OpCons).tag(&x)
+        }),)),
         equality,
-    ).parse(input)
+    )
+    .parse(input)
 }
-
 
 /// Matches the conjunction ('and') precedence level.
 fn conjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
-        alt((
-            map(keyword("and"), |x| (Transform::and as OpCons).tag(&x)),
-        )),
+        alt((map(keyword("and"), |x| (Transform::and as OpCons).tag(&x)),)),
         contains,
-    ).parse(input)
+    )
+    .parse(input)
 }
-
 
 /// Matches the disjunction ('or') precedence level.
 fn disjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
     lbinop(
-        alt((
-            map(keyword("or"), |x| (Transform::or as OpCons).tag(&x)),
-        )),
+        alt((map(keyword("or"), |x| (Transform::or as OpCons).tag(&x)),)),
         conjunction,
-    ).parse(input)
+    )
+    .parse(input)
 }
-
 
 /// Matches an identifier binding. This is essentially the same as a normal
 /// identifier.
 fn ident_binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
-    alt((
-        map(
-            identifier,
-            |out| Binding::Identifier(out).tag(&out),
-        ),
-    ))(input)
+    alt((map(identifier, |out| Binding::Identifier(out).tag(&out)),))(input)
 }
-
 
 /// Matches a list binding element: anything that's legal in a list unpacking
 /// environment.
@@ -1463,31 +1389,23 @@ fn ident_binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
 fn list_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListBindingElement>> {
     alt((
         // Named and anonymous slurps
-        map(
-            tuple((
-                ellipsis,
-                opt(identifier)
-            )),
-            |(e, ident)| {
-                let loc = if let Some(i) = ident {
-                    Span::from(e.span()..i.span())
-                } else {
-                    e.span()
-                };
-                ident.map(ListBindingElement::SlurpTo).unwrap_or(ListBindingElement::Slurp).tag(loc)
-            },
-        ),
-
+        map(tuple((ellipsis, opt(identifier))), |(e, ident)| {
+            let loc = if let Some(i) = ident {
+                Span::from(e.span()..i.span())
+            } else {
+                e.span()
+            };
+            ident
+                .map(ListBindingElement::SlurpTo)
+                .unwrap_or(ListBindingElement::Slurp)
+                .tag(loc)
+        }),
         // Singleton bindings with or without defaults
         map(
             tuple((
                 binding,
-                opt(preceded(
-                    eq,
-                    fail(expression, SyntaxElement::Expression),
-                )),
+                opt(preceded(eq, fail(expression, SyntaxElement::Expression))),
             )),
-
             |(b, e)| {
                 let span = if let Some(d) = &e {
                     Span::from(b.span()..d.outer())
@@ -1497,13 +1415,13 @@ fn list_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListBindingElement>
 
                 ListBindingElement::Binding {
                     binding: b,
-                    default: e.map(PExpr::inner)
-                }.tag(span)
+                    default: e.map(PExpr::inner),
+                }
+                .tag(span)
             },
         ),
     ))(input)
 }
-
 
 /// Matches a list binding.
 ///
@@ -1514,25 +1432,26 @@ fn list_binding<'a, T, U, V>(
     terminator: impl Parser<'a, Tagged<V>> + Copy,
     err_terminator_or_item: T,
     err_terminator_or_separator: U,
-) -> impl Parser<'a, (Tagged<ListBinding>, V)>
+) -> impl Parser<'a, (Tagged<ListBinding>, Tagged<V>)>
 where
     Syntax: From<T> + From<U>,
     T: Copy,
     U: Copy,
 {
-    move |input| map(
-        seplist(
-            initializer,
-            list_binding_element,
-            comma,
-            terminator,
-            err_terminator_or_item,
-            err_terminator_or_separator,
-        ),
-        |(a, x, b)| (ListBinding(x).tag(a.span()..b.span()), b.unwrap()),
-    )(input)
+    move |input| {
+        map(
+            seplist(
+                initializer,
+                list_binding_element,
+                comma,
+                terminator,
+                err_terminator_or_item,
+                err_terminator_or_separator,
+            ),
+            |(a, x, b)| (ListBinding(x).tag(a.span()..b.span()), b),
+        )(input)
+    }
 }
-
 
 /// Matches a map binding element: anything that's legal in a map unpacking environment.
 ///
@@ -1544,54 +1463,37 @@ where
 /// - singleton binding with unpacking and default: `let {y as z = q} = x`
 fn map_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapBindingElement>> {
     alt((
-
         // Slurp
         map(
-            tuple((
-                ellipsis,
-                fail(identifier, SyntaxElement::Identifier),
-            )),
+            tuple((ellipsis, fail(identifier, SyntaxElement::Identifier))),
             |(e, i)| MapBindingElement::SlurpTo(i).tag(e.span()..i.span()),
         ),
-
         // All variants of singleton bindings
         map(
             tuple((
                 alt((
-
                     // With unpacking
                     map(
                         tuple((
                             map_identifier,
-                            preceded(
-                                keyword("as"),
-                                fail(binding, SyntaxElement::Binding),
-                            ),
+                            preceded(keyword("as"), fail(binding, SyntaxElement::Binding)),
                         )),
                         |(name, binding)| (name, Some(binding)),
                     ),
-
                     // Without unpacking
-                    map(
-                        identifier,
-                        |name| (name, None),
-                    ),
-
+                    map(identifier, |name| (name, None)),
                 )),
-
                 // Optional default
-                opt(
-                    preceded(
-                        eq,
-                        fail(expression, SyntaxElement::Expression),
-                    ),
-                ),
+                opt(preceded(eq, fail(expression, SyntaxElement::Expression))),
             )),
-
             |((name, binding), default)| {
                 let mut loc = name.span();
-                if let Some(b) = &binding { loc = Span::from(loc..b.span()); };
-                if let Some(d) = &default { loc = Span::from(loc..d.outer()); };
+                if let Some(b) = &binding {
+                    loc = Span::from(loc..b.span());
+                };
+                if let Some(d) = &default {
+                    loc = Span::from(loc..d.outer());
+                };
                 let rval = match binding {
                     None => MapBindingElement::Binding {
                         key: name,
@@ -1607,10 +1509,8 @@ fn map_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapBindingElement>> 
                 rval.tag(loc)
             },
         ),
-
     ))(input)
 }
-
 
 /// Matches a map binding.
 ///
@@ -1627,19 +1527,20 @@ where
     T: Copy,
     U: Copy,
 {
-    move |input: In<'a>| map(
-        seplist(
-            initializer,
-            map_binding_element,
-            comma,
-            terminator,
-            err_terminator_or_item,
-            err_terminator_or_separator,
-        ),
-        |(a, x, b)| MapBinding(x).tag(a.span()..b.span()),
-    )(input)
+    move |input: In<'a>| {
+        map(
+            seplist(
+                initializer,
+                map_binding_element,
+                comma,
+                terminator,
+                err_terminator_or_item,
+                err_terminator_or_separator,
+            ),
+            |(a, x, b)| MapBinding(x).tag(a.span()..b.span()),
+        )(input)
+    }
 }
-
 
 /// Matches a binding.
 ///
@@ -1650,7 +1551,6 @@ where
 fn binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
     alt((
         ident_binding,
-
         // TODO: Do we need double up location tagging here?
         map(
             list_binding(
@@ -1659,11 +1559,8 @@ fn binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
                 (TokenType::CloseBracket, SyntaxElement::ListBindingElement),
                 (TokenType::CloseBracket, TokenType::Comma),
             ),
-            |(x,_)| {
-                x.wrap(Binding::List)
-            },
+            |(x, _)| x.wrap(Binding::List),
         ),
-
         // TODO: Do we need double up location tagging here?
         map(
             map_binding(
@@ -1673,10 +1570,9 @@ fn binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
                 (TokenType::CloseBrace, TokenType::Comma),
             ),
             |x| x.wrap(Binding::Map),
-        )
+        ),
     ))(input)
 }
-
 
 /// Matches a function definition.
 ///
@@ -1692,32 +1588,46 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
     let (i, opener) = fail(
         alt((open_paren, open_brace)),
         (TokenType::OpenParen, TokenType::OpenBrace),
-    ).parse(i)?;
+    )
+    .parse(i)?;
 
     let (i, args, kwargs, expr) = if opener.unwrap() == "(" {
         // Parse a normal function
         let (i, (args, end)) = list_binding(
             success,
             |i| alt((close_paren, semicolon))(i),
-            (TokenType::CloseParen, TokenType::SemiColon, SyntaxElement::PosParam),
-            (TokenType::CloseParen, TokenType::SemiColon, TokenType::Comma),
-        ).parse(i)?;
+            (
+                TokenType::CloseParen,
+                TokenType::SemiColon,
+                SyntaxElement::PosParam,
+            ),
+            (
+                TokenType::CloseParen,
+                TokenType::SemiColon,
+                TokenType::Comma,
+            ),
+        )
+        .parse(i)?;
 
-        let (i, kwargs) = if end == ";" {
+        let (i, kwargs) = if *end.as_ref() == ";" {
             let (i, kwargs) = map_binding(
                 success,
                 |i| close_paren(i),
                 (TokenType::CloseParen, SyntaxElement::KeywordParam),
                 (TokenType::CloseParen, TokenType::Comma),
-            ).parse(i)?;
-            (i, Some(kwargs))
+            )
+            .parse(i)?;
+
+            let span = end.span()..kwargs.span();
+            (i, Some(kwargs.retag(span)))
         } else {
             (i, None)
         };
 
         let (i, expr) = fail(expression, SyntaxElement::Expression).parse(i)?;
 
-        (i, args.unwrap(), kwargs, expr)
+        let span = opener.span()..args.span();
+        (i, args.retag(span), kwargs, expr)
     } else {
         // Parse a keyword function
         let (i, kwargs) = map_binding(
@@ -1725,22 +1635,32 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
             |i| close_brace(i),
             (TokenType::CloseBrace, SyntaxElement::KeywordParam),
             (TokenType::CloseBrace, TokenType::Comma),
-        ).parse(i)?;
+        )
+        .parse(i)?;
         let (i, expr) = fail(expression, SyntaxElement::Expression).parse(i)?;
 
-        (i, ListBinding(vec![]), Some(kwargs), expr)
+        let span = opener.span()..kwargs.span();
+        let kwargs = kwargs.retag(span);
+        (
+            i,
+            ListBinding(vec![]).tag(kwargs.span().with_length(1)),
+            Some(kwargs),
+            expr,
+        )
     };
 
     let span = init.span()..expr.outer();
-    let result = PExpr::Naked(Expr::Function {
-        positional: args,
-        keywords: kwargs.map(Tagged::unwrap),
-        expression: Box::new(expr.inner()),
-    }.tag(span));
+    let result = PExpr::Naked(
+        Expr::Function {
+            positional: args,
+            keywords: kwargs,
+            expression: Box::new(expr.inner()),
+        }
+        .tag(span),
+    );
 
     Ok((i, result))
 }
-
 
 /// Matches a standard function definition.
 ///
@@ -1752,11 +1672,16 @@ fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
     let (i, (args, end)) = list_binding(
         |i| pipe(i),
         |i| alt((pipe, semicolon))(i),
-        (TokenType::Pipe, TokenType::SemiColon, SyntaxElement::PosParam),
+        (
+            TokenType::Pipe,
+            TokenType::SemiColon,
+            SyntaxElement::PosParam,
+        ),
         (TokenType::Pipe, TokenType::SemiColon, TokenType::Comma),
-    ).parse(input)?;
+    )
+    .parse(input)?;
 
-    let (j, kwargs) = if end == ";" {
+    let (j, kwargs) = if *end.as_ref() == ";" {
         let (j, kwargs) = map_binding(
             success,
             // |i: In<'a>| { let loc = i.position(); Ok((i, "".tag(loc.with_length(0)))) },
@@ -1772,16 +1697,18 @@ fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
     let (l, expr) = fail(expression, SyntaxElement::Expression).parse(j)?;
     let span = args.span()..expr.outer();
 
-    let result = PExpr::Naked(Expr::Function {
-        positional: args.unwrap(),
-        keywords: kwargs.map(Tagged::unwrap),
-        expression: expr.inner().to_box(),
-    }.tag(span));
+    let result = PExpr::Naked(
+        Expr::Function {
+            positional: args,
+            keywords: kwargs,
+            expression: Box::new(expr.inner()),
+        }
+        .tag(span),
+    );
 
     eprintln!("gold: |...| syntax is deprecated, use fn (...) instead");
     Ok((l, result))
 }
-
 
 /// Matches a keyword-only function.
 ///
@@ -1798,19 +1725,20 @@ fn keyword_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
             ),
             fail(expression, SyntaxElement::Expression),
         )),
-
         |(kwargs, expr)| {
             let span = kwargs.span()..expr.outer();
             eprintln!("gold: {{|...|}} syntax is deprecated, use fn {{...}} instead");
-            PExpr::Naked(Expr::Function {
-                positional: ListBinding(vec![]),
-                keywords: Some(kwargs.unwrap()),
-                expression: Box::new(expr.inner()),
-            }.tag(span))
+            PExpr::Naked(
+                Expr::Function {
+                    positional: ListBinding(vec![]).tag(kwargs.span().with_length(1)),
+                    keywords: Some(kwargs),
+                    expression: Box::new(expr.inner()),
+                }
+                .tag(span),
+            )
         },
     )(input)
 }
-
 
 /// Matches a function.
 ///
@@ -1824,7 +1752,6 @@ fn function<'a>(input: In<'a>) -> Out<'a, PExpr> {
     ))(input)
 }
 
-
 /// Matches a let-binding block.
 ///
 /// This is an arbitrary (non-empty) sequence of let-bindings followed by the
@@ -1836,16 +1763,14 @@ fn let_block<'a>(input: In<'a>) -> Out<'a, PExpr> {
     map(
         tuple((
             // position,
-            many1(
-                tuple((
-                    keyword("let"),
-                    fail(binding, SyntaxElement::Binding),
-                    preceded(
-                        fail(eq, TokenType::Eq),
-                        fail(expression, SyntaxElement::Expression),
-                    ),
-                )),
-            ),
+            many1(tuple((
+                keyword("let"),
+                fail(binding, SyntaxElement::Binding),
+                preceded(
+                    fail(eq, TokenType::Eq),
+                    fail(expression, SyntaxElement::Expression),
+                ),
+            ))),
             preceded(
                 fail(keyword("in"), SyntaxElement::In),
                 fail(expression, SyntaxElement::Expression),
@@ -1853,14 +1778,19 @@ fn let_block<'a>(input: In<'a>) -> Out<'a, PExpr> {
         )),
         |(bindings, expr)| {
             let span = bindings.first().unwrap().0.span()..expr.outer();
-            PExpr::Naked(Expr::Let {
-                bindings: bindings.into_iter().map(|(_,x,y)| (x,y.inner())).collect(),
-                expression: Box::new(expr.inner())
-            }.tag(span))
+            PExpr::Naked(
+                Expr::Let {
+                    bindings: bindings
+                        .into_iter()
+                        .map(|(_, x, y)| (x, y.inner()))
+                        .collect(),
+                    expression: Box::new(expr.inner()),
+                }
+                .tag(span),
+            )
         },
     )(input)
 }
-
 
 /// Matches a branching expression (tertiary operator).
 ///
@@ -1880,40 +1810,32 @@ fn branch<'a>(input: In<'a>) -> Out<'a, PExpr> {
                 fail(expression, SyntaxElement::Expression),
             ),
         )),
-
         |(start, condition, true_branch, false_branch)| {
             let span = start.span()..false_branch.outer();
-            PExpr::Naked(Expr::Branch {
-                condition: Box::new(condition.inner()),
-                true_branch: Box::new(true_branch.inner()),
-                false_branch: Box::new(false_branch.inner()),
-            }.tag(span))
+            PExpr::Naked(
+                Expr::Branch {
+                    condition: Box::new(condition.inner()),
+                    true_branch: Box::new(true_branch.inner()),
+                    false_branch: Box::new(false_branch.inner()),
+                }
+                .tag(span),
+            )
         },
     )(input)
 }
-
 
 /// Matches a composite expression.
 ///
 /// This is a catch-all terms for special expressions that do not participate in
 /// the operator sequence: let blocks, branches, and functions.
 fn composite<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    alt((
-        let_block,
-        branch,
-        function,
-    ))(input)
+    alt((let_block, branch, function))(input)
 }
-
 
 /// Matches any expression.
 fn expression<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    alt((
-        composite,
-        disjunction,
-    ))(input)
+    alt((composite, disjunction))(input)
 }
-
 
 /// Matches an import statement.
 ///
@@ -1924,21 +1846,23 @@ fn import<'a>(input: In<'a>) -> Out<'a, TopLevel> {
         tuple((
             preceded(
                 keyword("import"),
-                fail(tuple((
-                    double_quote,
-                    raw_string,
-                    fail(double_quote, TokenType::DoubleQuote),
-                )), SyntaxElement::ImportPath),
+                fail(
+                    tuple((
+                        double_quote,
+                        raw_string,
+                        fail(double_quote, TokenType::DoubleQuote),
+                    )),
+                    SyntaxElement::ImportPath,
+                ),
             ),
             preceded(
                 fail(keyword("as"), SyntaxElement::As),
                 fail(binding, SyntaxElement::Binding),
-            )
+            ),
         )),
         |((a, path, b), binding)| TopLevel::Import(path.tag(a.span()..b.span()), binding),
     )(input)
 }
-
 
 /// Matches a file.
 ///
@@ -1946,14 +1870,13 @@ fn import<'a>(input: In<'a>) -> Out<'a, TopLevel> {
 /// single expression.
 fn file<'a>(input: In<'a>) -> Out<'a, File> {
     map(
-        tuple((
-            many0(import),
-            fail(expression, SyntaxElement::Expression),
-        )),
-        |(statements, expression)| File { statements, expression: expression.inner() },
+        tuple((many0(import), fail(expression, SyntaxElement::Expression))),
+        |(statements, expression)| File {
+            statements,
+            expression: expression.inner(),
+        },
     )(input)
 }
-
 
 /// Parse the input and return a [`File`] object.
 pub fn parse(input: &str) -> Result<File, Error> {
@@ -1967,6 +1890,6 @@ pub fn parse(input: &str) -> Result<File, Error> {
         |(_, node)| {
             node.validate()?;
             Ok(node)
-        }
+        },
     )
 }

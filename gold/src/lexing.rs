@@ -1,65 +1,61 @@
+use regex::Regex;
 use std::cell::UnsafeCell;
 use std::fmt::Display;
-use regex::Regex;
 
 use nom::InputLength;
+use serde::{Deserialize, Serialize};
 
-use crate::error::{Tagged, SyntaxError, Syntax, SyntaxElement, Position};
-use crate::traits::Taggable;
-
+use crate::error::{Position, Syntax, SyntaxElement, SyntaxError, Tagged, Taggable};
 
 /// Result type for calls to the lexer: either a new lexer and a token, or a syntax error.
 pub(crate) type LexResult<'a> = Result<(Lexer<'a>, Tagged<Token<'a>>), SyntaxError>;
 pub(crate) type CachedLexResult<'a> = Result<(CachedLexer<'a>, Tagged<Token<'a>>), SyntaxError>;
 
-
 /// To speed up lexing, the result from the last call is saved.
 type LexCache<'a> = UnsafeCell<Option<(Ctx, usize, LexResult<'a>)>>;
 
-
 /// Complete list of all token types in the Gold grammar.
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 pub enum TokenType {
-    Asterisk,           // *
-    Caret,              // ^
-    CloseBrace,         // }
-    CloseBracePipe,     // |}
-    CloseBracket,       // ]
-    CloseParen,         // )
-    Colon,              // :
-    Comma,              // ,
-    Dollar,             // $
-    Dot,                // .
-    DoubleColon,        // ::
-    DoubleEq,           // ==
-    DoubleSlash,        // //
-    DoubleQuote,        // "
-    Ellipsis,           // ...
-    Eq,                 // =
-    ExclamEq,           // !=
-    Greater,            // >
-    GreaterEq,          // >=
-    Less,               // <
-    LessEq,             // <=
-    Minus,              // -
-    OpenBrace,          // {
-    OpenBracePipe,      // {|
-    OpenBracket,        // [
-    OpenParen,          // (
-    Pipe,               // |
-    Plus,               // +
-    SemiColon,          // ;
-    Slash,              // /
+    Asterisk,       // *
+    Caret,          // ^
+    CloseBrace,     // }
+    CloseBracePipe, // |}
+    CloseBracket,   // ]
+    CloseParen,     // )
+    Colon,          // :
+    Comma,          // ,
+    Dollar,         // $
+    Dot,            // .
+    DoubleColon,    // ::
+    DoubleEq,       // ==
+    DoubleSlash,    // //
+    DoubleQuote,    // "
+    Ellipsis,       // ...
+    Eq,             // =
+    ExclamEq,       // !=
+    Greater,        // >
+    GreaterEq,      // >=
+    Less,           // <
+    LessEq,         // <=
+    Minus,          // -
+    OpenBrace,      // {
+    OpenBracePipe,  // {|
+    OpenBracket,    // [
+    OpenParen,      // (
+    Pipe,           // |
+    Plus,           // +
+    SemiColon,      // ;
+    Slash,          // /
 
-    Name,               // Identifier
-    Float,              // Floating point number
-    Integer,            // Integer
-    StringLit,          // String literal
-    MultiString,        // Multiple-line string literal
+    Name,        // Identifier
+    Float,       // Floating point number
+    Integer,     // Integer
+    StringLit,   // String literal
+    MultiString, // Multiple-line string literal
 
-    Char,               // Arbitrary non-newline character
+    Char, // Arbitrary non-newline character
 }
-
 
 /// Enumeration of all possible token contexts.
 ///
@@ -83,7 +79,6 @@ pub(crate) enum Ctx {
     /// Format specification context
     FmtSpec,
 }
-
 
 impl Display for TokenType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -128,7 +123,6 @@ impl Display for TokenType {
     }
 }
 
-
 /// A token has a type and a reference to the slice of the input buffer that generated it.
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub(crate) struct Token<'a> {
@@ -136,14 +130,12 @@ pub(crate) struct Token<'a> {
     pub text: &'a str,
 }
 
-
 /// A lexer, for tokenizing a string of code.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Lexer<'a> {
     code: &'a str,
     position: Position,
 }
-
 
 lazy_static! {
     // Regex for skipping whitespace (not including EOL)
@@ -170,7 +162,6 @@ lazy_static! {
     // Regex for matching an integer (no underscores)
     static ref PUREDIGITS: Regex = Regex::new("^[1-9][[:digit:]]*").unwrap();
 }
-
 
 impl<'a> Lexer<'a> {
     /// Construct a new lexer.
@@ -212,7 +203,7 @@ impl<'a> Lexer<'a> {
     fn skip(self, offset: usize, delta_line: u32) -> Self {
         Lexer {
             code: &self.code[offset..],
-            position: self.position.adjust(offset, delta_line)
+            position: self.position.adjust(offset, delta_line),
         }
     }
 
@@ -224,17 +215,23 @@ impl<'a> Lexer<'a> {
     /// may return errors.
     fn skip_tag(self, offset: usize, delta_line: u32, kind: TokenType) -> LexResult<'a> {
         let code = self.code[..offset].tag(self.position.with_length(offset));
-        Ok((self.skip(offset, delta_line), code.map(|span| Token { kind, text: span })))
+        Ok((
+            self.skip(offset, delta_line),
+            code.map(|span| Token { kind, text: span }),
+        ))
     }
 
     /// Traverse over the match of a regular expression and return a token.
     ///
     /// The regex must never match beyond the first character.
     fn traverse(self, regex: &'a Regex, element: SyntaxElement, kind: TokenType) -> LexResult<'a> {
-        regex.find(self.code).map(|m| {
-            let lex = self.skip(m.start(), 0);
-            lex.skip_tag(m.end() - m.start(), 0, kind).unwrap()
-        }).ok_or_else(|| self.error(Syntax::from(element)))
+        regex
+            .find(self.code)
+            .map(|m| {
+                let lex = self.skip(m.start(), 0);
+                lex.skip_tag(m.end() - m.start(), 0, kind).unwrap()
+            })
+            .ok_or_else(|| self.error(Syntax::from(element)))
     }
 
     /// Skip an arbitrary amount of whitespace (including comments and newlines).
@@ -246,14 +243,14 @@ impl<'a> Lexer<'a> {
                 Some('\n') => {
                     self = self.skip(1, 1);
                     continue;
-                },
+                }
                 Some('#') => {
                     let end = self.code.find('\n').unwrap_or(self.code.len() - 1);
                     self = self.skip(end + 1, 1);
-                },
+                }
                 _ => {
                     break;
-                },
+                }
             }
         }
 
@@ -264,7 +261,10 @@ impl<'a> Lexer<'a> {
     /// newlines.
     fn skip_indent(self) -> Self {
         // The WHITESPACE regex cannot fail to match, so unwrapping is safe
-        WHITESPACE.find(self.code).map(|m| self.skip(m.end(), 0)).unwrap()
+        WHITESPACE
+            .find(self.code)
+            .map(|m| self.skip(m.end(), 0))
+            .unwrap()
     }
 
     /// Interpret the next token as a positive integer and return it.
@@ -275,9 +275,9 @@ impl<'a> Lexer<'a> {
     /// Interpret the next token as a number (integer or float) and return it.
     fn next_number(self) -> LexResult<'a> {
         self.traverse(&FLOAT_A, SyntaxElement::Number, TokenType::Float)
-        .or_else(|_| self.traverse(&FLOAT_B, SyntaxElement::Number, TokenType::Float))
-        .or_else(|_| self.traverse(&FLOAT_C, SyntaxElement::Number, TokenType::Float))
-        .or_else(|_| self.traverse(&DIGITS, SyntaxElement::Number, TokenType::Integer))
+            .or_else(|_| self.traverse(&FLOAT_B, SyntaxElement::Number, TokenType::Float))
+            .or_else(|_| self.traverse(&FLOAT_C, SyntaxElement::Number, TokenType::Float))
+            .or_else(|_| self.traverse(&DIGITS, SyntaxElement::Number, TokenType::Integer))
     }
 
     /// Interpret the next token as an identifier and return it.
@@ -310,7 +310,9 @@ impl<'a> Lexer<'a> {
         };
 
         // Set the cache and return
-        unsafe { *cache.get() = Some((ctx, self.position.offset(), result)); }
+        unsafe {
+            *cache.get() = Some((ctx, self.position.offset(), result));
+        }
         result
     }
 
@@ -329,14 +331,24 @@ impl<'a> Lexer<'a> {
 
             // Other tokens. Note that specific cases must be checked before
             // general ones! I.e., check for '::' before ':'.
-            Some('.') if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') => self.skip_tag(3, 0, TokenType::Ellipsis),
+            Some('.')
+                if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') =>
+            {
+                self.skip_tag(3, 0, TokenType::Ellipsis)
+            }
             Some('.') => self.skip_tag(1, 0, TokenType::Dot),
-            Some(':') if self.satisfies_at(1, |x| x == ':') => self.skip_tag(2, 0, TokenType::DoubleColon),
+            Some(':') if self.satisfies_at(1, |x| x == ':') => {
+                self.skip_tag(2, 0, TokenType::DoubleColon)
+            }
             Some(':') => self.skip_tag(1, 0, TokenType::Colon),
             Some('"') => self.skip_tag(1, 0, TokenType::DoubleQuote),
-            Some('{') if self.satisfies_at(1, |x| x == '|') => self.skip_tag(2, 0, TokenType::OpenBracePipe),
+            Some('{') if self.satisfies_at(1, |x| x == '|') => {
+                self.skip_tag(2, 0, TokenType::OpenBracePipe)
+            }
             Some('{') => self.skip_tag(1, 0, TokenType::OpenBrace),
-            Some('|') if self.satisfies_at(1, |x| x == '}') => self.skip_tag(2, 0, TokenType::CloseBracePipe),
+            Some('|') if self.satisfies_at(1, |x| x == '}') => {
+                self.skip_tag(2, 0, TokenType::CloseBracePipe)
+            }
             Some('}') => self.skip_tag(1, 0, TokenType::CloseBrace),
             Some('[') => self.skip_tag(1, 0, TokenType::OpenBracket),
             Some(']') => self.skip_tag(1, 0, TokenType::CloseBracket),
@@ -345,17 +357,27 @@ impl<'a> Lexer<'a> {
             Some(',') => self.skip_tag(1, 0, TokenType::Comma),
             Some('+') => self.skip_tag(1, 0, TokenType::Plus),
             Some('-') => self.skip_tag(1, 0, TokenType::Minus),
-            Some('/') if self.satisfies_at(1, |x| x == '/') => self.skip_tag(2, 0, TokenType::DoubleSlash),
+            Some('/') if self.satisfies_at(1, |x| x == '/') => {
+                self.skip_tag(2, 0, TokenType::DoubleSlash)
+            }
             Some('/') => self.skip_tag(1, 0, TokenType::Slash),
             Some('*') => self.skip_tag(1, 0, TokenType::Asterisk),
             Some('^') => self.skip_tag(1, 0, TokenType::Caret),
-            Some('<') if self.satisfies_at(1, |x| x == '=') => self.skip_tag(2, 0, TokenType::LessEq),
+            Some('<') if self.satisfies_at(1, |x| x == '=') => {
+                self.skip_tag(2, 0, TokenType::LessEq)
+            }
             Some('<') => self.skip_tag(1, 0, TokenType::Less),
-            Some('>') if self.satisfies_at(1, |x| x == '=') => self.skip_tag(2, 0, TokenType::GreaterEq),
+            Some('>') if self.satisfies_at(1, |x| x == '=') => {
+                self.skip_tag(2, 0, TokenType::GreaterEq)
+            }
             Some('>') => self.skip_tag(1, 0, TokenType::Greater),
-            Some('=') if self.satisfies_at(1, |x| x == '=') => self.skip_tag(2, 0, TokenType::DoubleEq),
+            Some('=') if self.satisfies_at(1, |x| x == '=') => {
+                self.skip_tag(2, 0, TokenType::DoubleEq)
+            }
             Some('=') => self.skip_tag(1, 0, TokenType::Eq),
-            Some('!') if self.satisfies_at(1, |x| x == '=') => self.skip_tag(2, 0, TokenType::ExclamEq),
+            Some('!') if self.satisfies_at(1, |x| x == '=') => {
+                self.skip_tag(2, 0, TokenType::ExclamEq)
+            }
             Some('|') => self.skip_tag(1, 0, TokenType::Pipe),
             Some(';') => self.skip_tag(1, 0, TokenType::SemiColon),
 
@@ -373,9 +395,15 @@ impl<'a> Lexer<'a> {
             Some('}') => self.skip_tag(1, 0, TokenType::CloseBrace),
             Some('$') => self.skip_tag(1, 0, TokenType::Dollar),
             Some('"') => self.skip_tag(1, 0, TokenType::DoubleQuote),
-            Some(':') if self.satisfies_at(1, |x| x == ':') => self.skip_tag(2, 0, TokenType::DoubleColon),
+            Some(':') if self.satisfies_at(1, |x| x == ':') => {
+                self.skip_tag(2, 0, TokenType::DoubleColon)
+            }
             Some(':') => self.skip_tag(1, 0, TokenType::Colon),
-            Some('.') if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') => self.skip_tag(3, 0, TokenType::Ellipsis),
+            Some('.')
+                if self.satisfies_at(1, |x| x == '.') && self.satisfies_at(2, |x| x == '.') =>
+            {
+                self.skip_tag(3, 0, TokenType::Ellipsis)
+            }
             Some(_) => self.next_name(&KEY),
             None => Err(self.error(Syntax::UnexpectedEof)),
         }
@@ -407,7 +435,8 @@ impl<'a> Lexer<'a> {
         let tok = Token {
             kind: TokenType::MultiString,
             text: &orig.code[..span.length()],
-        }.tag(span);
+        }
+        .tag(span);
 
         Ok((self, tok))
     }
@@ -447,7 +476,9 @@ impl<'a> Lexer<'a> {
                             return self.skip_tag(self.code.len(), 0, TokenType::StringLit);
                         }
 
-                        _ => { continue; }
+                        _ => {
+                            continue;
+                        }
                     }
                 }
             }
@@ -474,7 +505,6 @@ impl<'a> InputLength for Lexer<'a> {
     }
 }
 
-
 /// A lexer with built-in cache, so that the cache cell doesn't have to be
 /// passed manually to [`Lexer::next`].
 #[derive(Debug, Clone, Copy)]
@@ -497,7 +527,10 @@ impl<'a> CachedLexer<'a> {
 
     /// Construct a new cached lexer with the same cache cell as this one.
     fn cachify(&self, lexer: Lexer<'a>) -> CachedLexer<'a> {
-        CachedLexer { lexer, cache: self.cache }
+        CachedLexer {
+            lexer,
+            cache: self.cache,
+        }
     }
 
     /// Return an error at the current position.
@@ -507,9 +540,9 @@ impl<'a> CachedLexer<'a> {
 
     /// Return the next token in a given context.
     fn next(self, ctx: Ctx) -> CachedLexResult<'a> {
-        self.lexer.next(ctx, self.cache).map(
-            |(lex, tok)| (self.cachify(lex), tok)
-        )
+        self.lexer
+            .next(ctx, self.cache)
+            .map(|(lex, tok)| (self.cachify(lex), tok))
     }
 
     /// Return the next token in the default context.
