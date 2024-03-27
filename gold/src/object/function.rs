@@ -19,7 +19,7 @@ use pyo3::types::{PyTuple, PyDict};
 use pyo3::exceptions::PyTypeError;
 
 use super::{List, Map, Object};
-use crate::compile::Function;
+use crate::compile::CompiledFunction;
 use crate::error::{Error, Reason};
 use crate::eval::Vm;
 use crate::types::{GcCell, Builtin, NativeClosure};
@@ -27,7 +27,7 @@ use crate::ImportConfig;
 
 #[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
 enum FuncV {
-    Closure(Gc<Function>, GcCell<Vec<GcCell<Object>>>),
+    Closure(Gc<CompiledFunction>, GcCell<Vec<GcCell<Object>>>),
     Builtin(#[unsafe_ignore_trace] Builtin),
 
     #[serde(skip)]
@@ -66,7 +66,7 @@ impl From<Rc<NativeClosure>> for Func {
 }
 
 impl Func {
-    pub fn closure(val: Function) -> Self {
+    pub fn closure(val: CompiledFunction) -> Self {
         Self(FuncV::Closure(Gc::new(val), GcCell::new(vec![])))
     }
 
@@ -115,7 +115,7 @@ impl Func {
         }
     }
 
-    pub(crate) fn get_closure(&self) -> Option<(Gc<Function>, GcCell<Vec<GcCell<Object>>>)> {
+    pub(crate) fn get_closure(&self) -> Option<(Gc<CompiledFunction>, GcCell<Vec<GcCell<Object>>>)> {
         let Self(this) = self;
         match this {
             FuncV::Closure(f, e) => Some((f.clone(), e.clone())),

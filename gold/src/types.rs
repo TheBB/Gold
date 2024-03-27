@@ -245,3 +245,68 @@ impl<K: Eq + Hash, V> OrderedMap<K, V> {
         self.0.insert(key, value)
     }
 }
+
+/// Enumerates all the unary operators in the Gold language.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum UnOp {
+    /// Passthrough (do-nothing) operator, e.g. the unary plus
+    Passthrough,
+
+    /// Arithmetical negation (unary minus)
+    ArithmeticalNegate,
+
+    /// Logical negation (unary 'not')
+    LogicalNegate,
+}
+
+/// Enumerates all the binary operators in the Gold language.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum BinOp {
+    /// Index or subscripting operator
+    Index,
+
+    /// Exponentiation
+    Power,
+
+    /// Multiplication
+    Multiply,
+
+    /// Integer division
+    IntegerDivide,
+
+    /// Mathematical division
+    Divide,
+
+    /// Addition
+    Add,
+
+    /// Subtraction
+    Subtract,
+
+    /// Less-than
+    Less,
+
+    /// Greater-than
+    Greater,
+
+    /// Less-than-or-equal-to
+    LessEqual,
+
+    /// Greater-than-or-equal-to
+    GreaterEqual,
+
+    /// Equality
+    Equal,
+
+    /// Inequality
+    NotEqual,
+
+    /// Containment
+    Contains,
+
+    /// Logical conjunction
+    And,
+
+    /// Logical disjunction
+    Or,
+}

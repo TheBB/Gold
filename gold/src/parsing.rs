@@ -13,13 +13,14 @@ use nom::{
     Err as NomError, IResult, Parser as NomParser,
 };
 
-use crate::ast::*;
+use crate::ast::high::*;
 use crate::error::{Error, Span, Syntax, SyntaxElement, SyntaxError, Tagged, Taggable};
 use crate::formatting::{
     AlignSpec, FloatFormatType, FormatSpec, FormatType, GroupingSpec, IntegerFormatType, SignSpec,
     StringAlignSpec, UppercaseSpec,
 };
 use crate::lexing::{CachedLexResult, CachedLexer, Lexer, TokenType};
+use crate::types::{UnOp, BinOp};
 use crate::{Key, Object};
 
 trait ExplainError {
@@ -1888,7 +1889,6 @@ pub fn parse(input: &str) -> Result<File, Error> {
             NomError::Error(e) | NomError::Failure(e) => Err(e.to_error()),
         },
         |(_, node)| {
-            node.validate()?;
             Ok(node)
         },
     )

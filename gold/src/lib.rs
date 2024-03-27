@@ -62,7 +62,8 @@ pub use eval::PyImportConfig;
 /// control over imports.
 pub fn eval(input: &str, importer: &ImportConfig) -> Result<Object, Error> {
     let ast = parsing::parse(input)?;
-    let code = ast.compile()?;
+    let lowered = ast.lower()?;
+    let code = lowered.compile()?;
     let mut vm = Vm::new(importer);
     vm.eval(code)
 }

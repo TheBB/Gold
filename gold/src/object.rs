@@ -35,11 +35,12 @@ use rmp_serde::{decode, encode};
 use serde::{Deserialize, Serialize};
 use symbol_table::GlobalSymbol;
 
-use crate::compile::Function;
+use crate::compile::CompiledFunction;
 use crate::error::{Error, Internal, Reason, TypeMismatch, Value};
 use crate::formatting::FormatSpec;
 use crate::types::{Gc, GcCell};
-use crate::{ast, Key, List, Map, Type};
+use crate::{Key, List, Map, Type};
+use crate::types::{UnOp, BinOp};
 
 #[cfg(feature = "python")]
 use crate::types::NativeClosure;
@@ -367,7 +368,7 @@ impl Object {
             ObjV::Float(x) => Ok(Self(ObjV::Float(-x))),
             _ => Err(Error::new(TypeMismatch::UnOp(
                 self.type_of(),
-                ast::UnOp::ArithmeticalNegate,
+                UnOp::ArithmeticalNegate,
             ))),
         }
     }
@@ -424,7 +425,7 @@ impl Object {
         }
     }
 
-    pub(crate) fn closure(val: Function) -> Self {
+    pub(crate) fn closure(val: CompiledFunction) -> Self {
         Self(ObjV::Func(Func::closure(val)))
     }
 
@@ -699,7 +700,7 @@ impl Object {
         }
     }
 
-    pub(crate) fn get_closure(&self) -> Option<(Gc<Function>, GcCell<Vec<GcCell<Object>>>)> {
+    pub(crate) fn get_closure(&self) -> Option<(Gc<CompiledFunction>, GcCell<Vec<GcCell<Object>>>)> {
         let Self(this) = self;
         match this {
             ObjV::Func(func) => func.get_closure(),
@@ -760,7 +761,7 @@ impl Object {
             _ => Err(Error::new(TypeMismatch::BinOp(
                 self.type_of(),
                 other.type_of(),
-                ast::BinOp::Index,
+                BinOp::Index,
             ))),
         }
     }
@@ -781,7 +782,7 @@ impl Object {
         Err(Error::new(TypeMismatch::BinOp(
             self.type_of(),
             other.type_of(),
-            ast::BinOp::Contains,
+            BinOp::Contains,
         )))
     }
 
@@ -825,7 +826,7 @@ impl Object {
         other: &Self,
         ixi: impl Fn(&Int, &Int) -> S,
         fxf: impl Fn(f64, f64) -> T,
-        op: ast::BinOp,
+        op: BinOp,
     ) -> Result<Self, Error>
     where
         Self: From<S> + From<T>,
@@ -857,23 +858,23 @@ impl Object {
                 Ok(result)
             }
             (ObjV::Str(x), ObjV::Str(y)) => Ok(Self(ObjV::Str(x.add(y)))),
-            _ => self.operate(other, Int::add, |x, y| x + y, ast::BinOp::Add),
+            _ => self.operate(other, Int::add, |x, y| x + y, BinOp::Add),
         }
     }
 
     /// The minus operator: mathematical subtraction.
     pub fn sub(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, Int::sub, |x, y| x - y, ast::BinOp::Subtract)
+        self.operate(other, Int::sub, |x, y| x - y, BinOp::Subtract)
     }
 
     /// The asterisk operator: mathematical multiplication.
     pub fn mul(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, Int::mul, |x, y| x * y, ast::BinOp::Multiply)
+        self.operate(other, Int::mul, |x, y| x * y, BinOp::Multiply)
     }
 
     /// The slash operator: mathematical division.
     pub fn div(&self, other: &Self) -> Result<Self, Error> {
-        self.operate(other, Int::div, |x, y| x / y, ast::BinOp::Divide)
+        self.operate(other, Int::div, |x, y| x / y, BinOp::Divide)
     }
 
     /// The double slash operator: integer division.
@@ -882,7 +883,7 @@ impl Object {
             other,
             Int::idiv,
             |x, y| (x / y).floor() as f64,
-            ast::BinOp::IntegerDivide,
+            BinOp::IntegerDivide,
         )
     }
 
@@ -916,7 +917,7 @@ impl Object {
                 Error::new(TypeMismatch::BinOp(
                     self.type_of(),
                     other.type_of(),
-                    ast::BinOp::Power,
+                    BinOp::Power,
                 ))
             })?;
         Ok(Self::from(xx.powf(yy)))
