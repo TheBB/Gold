@@ -8,10 +8,10 @@ extern crate lazy_static;
 
 /// This module defines the Gold Object type and all its variants.
 #[macro_use]
-pub mod object;
+mod object;
 
 /// This module defines the type used as the error variant in all results.
-pub mod error;
+mod error;
 
 /// Types for the abstract syntax tree, the result of parsing.
 mod ast;
@@ -33,9 +33,6 @@ mod parsing;
 /// The compiler.
 mod compile;
 
-#[cfg(test)]
-mod tests;
-
 mod types;
 
 use std::fs::read_to_string;
@@ -44,13 +41,11 @@ use std::path::Path;
 use error::FileSystem;
 use eval::Vm;
 
-pub(crate) use types::{Key, List, Map};
-
+pub use parsing::parse;
 pub use eval::ImportConfig;
 pub use error::Error;
 pub use object::Object;
-pub use parsing::parse;
-pub use types::Type;
+pub use types::{List, Map, Type};
 
 #[cfg(feature = "python")]
 pub use eval::PyImportConfig;
@@ -61,8 +56,9 @@ pub use eval::PyImportConfig;
 /// imports will not be possible. Provide a custom import resolver for full
 /// control over imports.
 pub fn eval(input: &str, importer: &ImportConfig) -> Result<Object, Error> {
-    let ast = parsing::parse(input)?;
-    let code = ast.compile()?;
+    let ast = parse(input)?;
+    let lowered = ast.lower()?;
+    let code = lowered.compile()?;
     let mut vm = Vm::new(importer);
     vm.eval(code)
 }

@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
-pub use gc::{custom_trace, Gc};
+use gc::custom_trace;
 use indexmap::{map::Iter, IndexMap};
 use serde::{Deserialize, Serialize, Serializer, Deserializer};
 use serde::de::Visitor;
@@ -9,6 +9,8 @@ use symbol_table::GlobalSymbol;
 
 use crate::{Error, Object};
 use crate::builtins::BUILTINS;
+
+pub use gc::Gc;
 
 /// Type used for all interned strings, map keys, variable names, etc.
 pub type Key = GlobalSymbol;
@@ -19,12 +21,12 @@ pub type List = Vec<Object>;
 /// Type used for mapping of strings (that is, [`Key`]) to objects.
 pub type Map = OrderedMap<Key, Object>;
 
-pub(crate) type NativeFunction = fn(&List, Option<&Map>) -> Result<Object, Error>;
+pub type NativeFunction = fn(&List, Option<&Map>) -> Result<Object, Error>;
 
-pub(crate) type NativeClosure = dyn Fn(&List, Option<&Map>) -> Result<Object, Error>;
+pub type NativeClosure = dyn Fn(&List, Option<&Map>) -> Result<Object, Error>;
 
 #[derive(Copy, Clone)]
-pub(crate) struct Builtin {
+pub struct Builtin {
     func: NativeFunction,
     name: Key,
 }
@@ -166,7 +168,7 @@ impl<'a, T: gc::Trace + Deserialize<'a>> Deserialize<'a> for GcCell<T> {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct OrderedMap<K, V>(pub(crate) IndexMap<K, V>);
+pub struct OrderedMap<K, V>(IndexMap<K, V>);
 
 impl<K, V> OrderedMap<K, V> {
     pub fn new() -> Self {
@@ -189,6 +191,10 @@ impl<K: Hash + Eq, V> OrderedMap<K, V> {
 
     pub fn remove(&mut self, k: &K) -> Option<V> {
         self.0.remove(k)
+    }
+
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        self.0.insert(key, value)
     }
 }
 
@@ -240,8 +246,67 @@ impl<K: Hash + Eq, V> FromIterator<(K, V)> for OrderedMap<K, V> {
     }
 }
 
-impl<K: Eq + Hash, V> OrderedMap<K, V> {
-    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
-        self.0.insert(key, value)
-    }
+/// Enumerates all the unary operators in the Gold language.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum UnOp {
+    /// Passthrough (do-nothing) operator, e.g. the unary plus
+    Passthrough,
+
+    /// Arithmetical negation (unary minus)
+    ArithmeticalNegate,
+
+    /// Logical negation (unary 'not')
+    LogicalNegate,
+}
+
+/// Enumerates all the binary operators in the Gold language.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum BinOp {
+    /// Index or subscripting operator
+    Index,
+
+    /// Exponentiation
+    Power,
+
+    /// Multiplication
+    Multiply,
+
+    /// Integer division
+    IntegerDivide,
+
+    /// Mathematical division
+    Divide,
+
+    /// Addition
+    Add,
+
+    /// Subtraction
+    Subtract,
+
+    /// Less-than
+    Less,
+
+    /// Greater-than
+    Greater,
+
+    /// Less-than-or-equal-to
+    LessEqual,
+
+    /// Greater-than-or-equal-to
+    GreaterEqual,
+
+    /// Equality
+    Equal,
+
+    /// Inequality
+    NotEqual,
+
+    /// Containment
+    Contains,
+
+    /// Logical conjunction
+    And,
+
+    /// Logical disjunction
+    Or,
 }

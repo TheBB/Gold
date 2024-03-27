@@ -14,9 +14,8 @@ use pyo3::PyErr;
 #[cfg(feature = "python")]
 use pyo3::exceptions::{PyException, PySyntaxError, PyNameError, PyKeyError, PyTypeError, PyOSError, PyImportError, PyValueError};
 
-use crate::ast::{BinOp, UnOp};
+use crate::types::{BinOp, UnOp, Key, Type};
 use crate::lexing::TokenType;
-use crate::{Key, Type};
 
 /// Marks a position in a text buffer.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -28,7 +27,7 @@ pub struct Position {
 
 impl Position {
     /// Construct a new position from offset, line and column (all 0-indexed).
-    pub fn new(offset: usize, line: u32, column: u32) -> Position {
+    fn new(offset: usize, line: u32, column: u32) -> Position {
         Position {
             offset,
             line,
@@ -88,7 +87,7 @@ impl Position {
     }
 
     /// Return a new position by changing the line number.
-    pub fn with_line(self, line: u32) -> Position {
+    fn with_line(self, line: u32) -> Position {
         Position {
             offset: self.offset,
             column: self.column,
@@ -97,7 +96,7 @@ impl Position {
     }
 
     /// Return a new position by changing the column number.
-    pub fn with_column(self, col: u32) -> Position {
+    fn with_column(self, col: u32) -> Position {
         Position {
             offset: self.offset,
             line: self.line,
@@ -124,23 +123,23 @@ pub struct Span {
 
 impl Span {
     /// The starting position in the text span.
-    pub fn start(&self) -> Position {
+    fn start(&self) -> Position {
         self.start
     }
 
     /// The offset of the start of the span into the buffer.
-    pub fn offset(&self) -> usize {
-        self.start.offset
+    fn offset(&self) -> usize {
+        self.start.offset()
     }
 
     /// The zero-indexed line number of the start of the span.
-    pub fn line(&self) -> u32 {
-        self.start.line
+    fn line(&self) -> u32 {
+        self.start.line()
     }
 
     /// The zero-indexed column number of the start of the span.
-    pub fn column(&self) -> u32 {
-        self.start.column
+    fn column(&self) -> u32 {
+        self.start.column()
     }
 
     /// The length of the span.
@@ -149,7 +148,7 @@ impl Span {
     }
 
     /// Return a new span by changing the line number.
-    pub(crate) fn with_line(self, line: u32) -> Self {
+    fn with_line(self, line: u32) -> Self {
         Span {
             start: self.start.with_line(line),
             length: self.length,
@@ -157,7 +156,7 @@ impl Span {
     }
 
     /// Return a new span by changing the column number.
-    pub(crate) fn with_column(self, col: u32) -> Self {
+    fn with_column(self, col: u32) -> Self {
         Span {
             start: self.start.with_column(col),
             length: self.length,
@@ -165,11 +164,11 @@ impl Span {
     }
 
     /// Return a new span by changing the line and column numbers.
-    pub(crate) fn with_coord(self, line: u32, col: u32) -> Self {
+    fn with_coord(self, line: u32, col: u32) -> Self {
         self.with_line(line).with_column(col)
     }
 
-    pub(crate) fn with_length(self, length: usize) -> Self {
+    pub fn with_length(self, length: usize) -> Self {
         Span {
             start: self.start,
             length: length,
@@ -227,7 +226,7 @@ pub struct Tagged<T> {
 
 impl<T> Tagged<T> {
     /// Construct a new Tagged wrapper.
-    pub fn new(location: Span, contents: T) -> Tagged<T> {
+    fn new(location: Span, contents: T) -> Tagged<T> {
         Tagged::<T> {
             span: location,
             contents,
@@ -244,27 +243,9 @@ impl<T> Tagged<T> {
         self.contents
     }
 
-    /// Wrapper for [`Span::with_line`].
-    pub fn with_line(self, line: u32) -> Tagged<T> {
-        let loc = self.span.with_line(line);
-        self.retag(loc)
-    }
-
-    /// Wrapper for [`Span::with_column`].
-    pub fn with_column(self, col: u32) -> Tagged<T> {
-        let loc = self.span.with_column(col);
-        self.retag(loc)
-    }
-
     /// Wrapper for [`Span::with_coord`].
     pub fn with_coord(self, line: u32, col: u32) -> Tagged<T> {
         let loc = self.span.with_coord(line, col);
-        self.retag(loc)
-    }
-
-    /// Wrapper for [`Span::with_length`]
-    pub fn with_length(self, length: usize) -> Tagged<T> {
-        let loc = self.span.with_length(length);
         self.retag(loc)
     }
 
@@ -587,7 +568,7 @@ pub enum Unpack {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub(crate) enum Types {
+pub enum Types {
     One(Type),
     Two(Type, Type),
     Three(Type, Type, Type),
@@ -637,7 +618,7 @@ impl From<(Type, Type, Type, Type)> for Types {
 
 /// Enumerates different type mismatch reasons.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-pub(crate) enum TypeMismatch {
+pub enum TypeMismatch {
     /// Attempted to iterate over a non-iterable.
     Iterate(Type),
 
@@ -737,7 +718,7 @@ pub enum FileSystem {
 
 /// Grand enumeration of all possible error reasons.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub(crate) enum Reason {
+pub enum Reason {
     /// Unknown reason - should never happen.
     None,
 
@@ -812,7 +793,7 @@ impl From<Value> for Reason {
 /// Enumerates all different 'actions' - things that Gold might try to do which
 /// can cause an error.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub(crate) enum Action {
+pub enum Action {
     /// Parsing phase.
     Parse,
 
@@ -860,7 +841,7 @@ pub struct Error {
 impl Error {
     /// Append a location to the stack. Takes ownership and returns the same
     /// object, for ease of use with `Result::map_err`.
-    pub(crate) fn tag<T>(mut self, loc: T, action: Action) -> Self
+    pub fn tag<T>(mut self, loc: T, action: Action) -> Self
     where
         Span: From<T>,
     {
@@ -877,7 +858,7 @@ impl Error {
 
     /// Get the reason
     #[cfg(feature = "python")]
-    pub(crate) fn reason(&self) -> Option<&Reason> {
+    fn reason(&self) -> Option<&Reason> {
         self.reason.as_ref()
     }
 
@@ -886,7 +867,8 @@ impl Error {
         self.rendered.as_ref().map(String::as_str)
     }
 
-    pub(crate) fn with_reason<T>(mut self, reason: T) -> Self
+    /// Override the error reason.
+    pub fn with_reason<T>(mut self, reason: T) -> Self
     where
         Reason: From<T>,
     {
@@ -894,30 +876,33 @@ impl Error {
         self
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn with_locations_vec(mut self, locations: Vec<(Span, Action)>) -> Self {
+    /// Override the error location stack.
+    pub fn with_locations_vec(mut self, locations: Vec<(Span, Action)>) -> Self {
         self.locations = Some(locations);
         self
     }
 
-    pub(crate) fn with_locations(mut self, error: Self) -> Self {
+    /// Override the error location stack with the location stack from another error.
+    pub fn with_locations(mut self, error: Self) -> Self {
         self.locations = error.locations;
         self
     }
 
-    pub(crate) fn add_locations(mut self, other: Self) -> Self {
+    /// Append the locations from another error to this error.
+    pub fn add_locations(mut self, other: Self) -> Self {
         self.locations = match (self.locations, other.locations) {
             (Some(mut v), Some(mut w)) => {
                 v.append(&mut w);
                 Some(v)
             }
+            (Some(v), None) => Some(v),
             (_, w) => w,
         };
         self
     }
 
     /// Construct a new error with an empty stack.
-    pub(crate) fn new<T>(reason: T) -> Self
+    pub fn new<T>(reason: T) -> Self
     where
         Reason: From<T>,
     {
@@ -928,8 +913,8 @@ impl Error {
         }
     }
 
-    /// Remove the human-friendly string representation.
-    pub fn unrender(mut self) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn unrender(mut self) -> Self {
         self.rendered = None;
         self
     }
@@ -1229,7 +1214,7 @@ impl<'a> Display for ErrorRenderer<'a> {
 // ------------------------------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct IntervalTree<I, S, T> {
+pub struct IntervalTree<I, S, T> {
     root: Option<Node<I, S, T>>,
 }
 
@@ -1287,7 +1272,7 @@ impl<I: Debug + Copy + PartialOrd, S: Debug, T: Debug> IntervalTree<I, S, T> {
     }
 }
 
-impl<I: Copy + PartialOrd> IntervalTree<I, (Span, Action), Reason> {
+impl<I: Copy + PartialOrd + Debug> IntervalTree<I, (Span, Action), Reason> {
     pub fn error(&self, loc: I) -> Error {
         match &self.root {
             None => Error::new(Internal::UnknownError),

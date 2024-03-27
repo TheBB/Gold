@@ -3,20 +3,17 @@ use std::collections::{HashMap, HashSet};
 use gc::{Finalize, Trace};
 use serde::{Deserialize, Serialize};
 
-use crate::ast::{
-    ArgElement, BinOp, Binding, BindingClassifier, BindingMode, BindingShield, Expr, File,
-    FreeNames, ListBinding, ListBindingElement, ListElement, MapBinding, MapBindingElement,
-    MapElement, StringElement, TopLevel, Transform, UnOp, Visitable,
-};
-use crate::builtins::BUILTINS;
+use crate::ast::low::{Binding, Expr, Function, ListBinding, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, Transform, ArgElement};
 use crate::error::{Action, Error, IntervalTree, Reason, Span, Tagged, Unpack};
 use crate::formatting::FormatSpec;
-use crate::{Key, Object};
+use crate::types::{BinOp, UnOp, Key};
+use crate::Object;
+use crate::ast::{BindingLoc, SlotCatalog, SlotType};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
-pub(crate) struct Function {
+pub struct CompiledFunction {
     pub constants: Vec<Object>,
-    pub functions: Vec<Function>,
+    pub functions: Vec<CompiledFunction>,
 
     #[unsafe_ignore_trace]
     pub code: Vec<Instruction>,
@@ -35,7 +32,7 @@ pub(crate) struct Function {
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub(crate) enum Instruction {
+pub enum Instruction {
     // Loading
     LoadConst(usize),
     LoadLocal(usize),
@@ -69,7 +66,8 @@ pub(crate) enum Instruction {
     // Unary operators
     ArithmeticalNegate,
     LogicalNegate,
-    Format(usize),
+    FormatWithSpec(usize),
+    FormatWithDefault,
 
     // Binary mathematical operators
     Add,
@@ -95,6 +93,7 @@ pub(crate) enum Instruction {
     NewList,
     NewMap,
     NewIterator,
+    NewString,
 
     // Mutability
     PushToList,
@@ -135,138 +134,89 @@ pub(crate) enum Instruction {
     IntArgSplat,
 }
 
-#[derive(Debug)]
-enum BindingSlot {
+#[derive(Debug, Clone)]
+enum Slot {
     Local(usize),
     Cell(usize),
-    Enclosed(usize),
 }
 
-#[derive(Debug)]
-struct Namespace {
+#[derive(Debug, Clone)]
+struct SlotMap {
+    catalog: SlotCatalog,
+    map: HashMap<usize, Slot>,
     next_local: usize,
     next_cell: usize,
-    next_enclosed: usize,
-    types: HashMap<Key, BindingSlot>,
 }
 
-impl Namespace {
-    pub fn new(parent: Option<&Namespace>) -> Namespace {
-        Namespace {
-            next_local: parent.as_ref().map(|p| p.next_local).unwrap_or(0),
-            next_cell: parent.as_ref().map(|p| p.next_cell).unwrap_or(0),
-            next_enclosed: 0,
-            types: HashMap::new(),
+impl SlotMap {
+    fn new(parent: Option<&SlotMap>, catalog: SlotCatalog) -> Self {
+        Self {
+            catalog,
+            map: HashMap::new(),
+            next_local: parent.map(|p| p.next_local).unwrap_or(0),
+            next_cell: parent.map(|p| p.next_cell).unwrap_or(0),
         }
     }
 
-    pub fn lookup_instruction(&self, key: Key) -> Option<Instruction> {
-        match self.types.get(&key) {
-            Some(BindingSlot::Local(i)) => Some(Instruction::LoadLocal(*i)),
-            Some(BindingSlot::Cell(i)) => Some(Instruction::LoadCell(*i)),
-            Some(BindingSlot::Enclosed(i)) => Some(Instruction::LoadEnclosed(*i)),
+    fn load_instruction(&mut self, index: usize) -> Option<Instruction> {
+        match self.map.get(&index) {
+            Some(Slot::Local(i)) => { return Some(Instruction::LoadLocal(*i)); }
+            Some(Slot::Cell(i)) => { return Some(Instruction::LoadCell(*i)); }
+            None => {}
+        }
+
+        match self.catalog.get(&index) {
+            Some(SlotType::Local) => {
+                let index = self.next_local;
+                self.next_local += 1;
+                self.map.insert(index, Slot::Local(index));
+                Some(Instruction::LoadLocal(index))
+            }
+            Some(SlotType::Cell) => {
+                let index = self.next_cell;
+                self.next_cell += 1;
+                self.map.insert(index, Slot::Cell(index));
+                Some(Instruction::LoadCell(index))
+            }
             None => None,
         }
     }
 
-    pub fn store_instruction(&mut self, key: Key) -> Instruction {
-        match self.types.get(&key) {
-            Some(BindingSlot::Local(i)) => Instruction::StoreLocal(*i),
-            Some(BindingSlot::Cell(i)) => Instruction::StoreCell(*i),
-            Some(BindingSlot::Enclosed(_)) => {
-                panic!("storing in an enclosed slot");
-            }
-            None => {
-                self.types.insert(key, BindingSlot::Local(self.next_local));
+    fn store_instruction(&mut self, index: usize) -> Option<Instruction> {
+        match self.map.get(&index) {
+            Some(Slot::Local(i)) => { return Some(Instruction::StoreLocal(*i)); }
+            Some(Slot::Cell(i)) => { return Some(Instruction::StoreCell(*i)); }
+            None => {}
+        }
+
+        match self.catalog.get(&index) {
+            Some(SlotType::Local) => {
+                let loc = self.next_local;
                 self.next_local += 1;
-                Instruction::StoreLocal(self.next_local - 1)
+                self.map.insert(index, Slot::Local(loc));
+                Some(Instruction::StoreLocal(loc))
             }
-        }
-    }
-
-    pub fn mark_cell(&mut self, key: Key) {
-        match self.types.get(&key) {
-            Some(BindingSlot::Local(_)) => {
-                panic!("mark as cell but already local");
-            }
-            Some(BindingSlot::Cell(_)) => {}
-            Some(BindingSlot::Enclosed(_)) => {}
-            None => {
-                self.types.insert(key, BindingSlot::Cell(self.next_cell));
+            Some(SlotType::Cell) => {
+                let loc = self.next_cell;
                 self.next_cell += 1;
+                self.map.insert(index, Slot::Cell(loc));
+                Some(Instruction::StoreCell(loc))
             }
+            None => None,
         }
     }
 
-    pub fn require_enclosed(&mut self, key: Key) {
-        match self.types.get(&key) {
-            Some(BindingSlot::Enclosed(_)) => {}
-            Some(_) => {
-                panic!("marking as enclosed a binding that already exists");
-            }
-            None => {
-                self.types
-                    .insert(key, BindingSlot::Enclosed(self.next_enclosed));
-                self.next_enclosed += 1;
-            }
-        }
-    }
 }
 
-struct NamespaceStack {
-    namespaces: Vec<Namespace>,
-}
-
-impl NamespaceStack {
-    pub fn new() -> NamespaceStack {
-        NamespaceStack {
-            namespaces: vec![Namespace::new(None)],
-        }
-    }
-
-    pub fn push(&mut self) {
-        self.namespaces.push(Namespace::new(self.namespaces.last()))
-    }
-
-    pub fn pop(&mut self) {
-        self.namespaces.pop();
-    }
-
-    pub fn lookup_instruction(&self, key: Key) -> Option<Instruction> {
-        for namespace in self.namespaces.iter().rev() {
-            if let Some(instruction) = namespace.lookup_instruction(key) {
-                return Some(instruction);
-            }
-        }
-
-        BUILTINS
-            .0
-            .get(key.as_str())
-            .map(|i| Instruction::LoadBuiltin(*i))
-    }
-
-    pub fn store_instruction(&mut self, key: Key) -> Instruction {
-        self.namespaces.last_mut().unwrap().store_instruction(key)
-    }
-
-    pub fn mark_cell(&mut self, key: Key) {
-        self.namespaces.last_mut().unwrap().mark_cell(key);
-    }
-
-    pub fn require_enclosed(&mut self, key: Key) {
-        self.namespaces.last_mut().unwrap().require_enclosed(key);
-    }
-}
-
-pub(crate) struct Compiler {
+pub struct Compiler {
     constants: Vec<Object>,
-    funcs: Vec<Function>,
+    funcs: Vec<CompiledFunction>,
     fmt_specs: Vec<FormatSpec>,
     import_paths: Vec<String>,
 
     code: Vec<Instruction>,
 
-    names: NamespaceStack,
+    slots: Vec<SlotMap>,
 
     num_locals: usize,
     num_cells: usize,
@@ -276,84 +226,73 @@ pub(crate) struct Compiler {
 }
 
 impl Compiler {
-    pub fn new() -> Compiler {
-        Compiler {
-            constants: Vec::new(),
+    pub fn compile(function: Function) -> Result<CompiledFunction, Error> {
+        let Function { constants, expression, slots, fmt_specs, positional, keywords, .. } = function;
+        let mut compiler = Compiler {
+            constants,
             funcs: Vec::new(),
-            fmt_specs: Vec::new(),
+            fmt_specs,
             import_paths: Vec::new(),
             code: Vec::new(),
-            names: NamespaceStack::new(),
+            slots: Vec::new(),
             num_locals: 0,
             num_cells: 0,
             actions: Vec::new(),
             reasons: Vec::new(),
+        };
+        compiler.push_slots(&slots);
+
+        if let Some(args) = positional {
+            compiler.emit_list_binding(&args)?;
         }
-    }
+        compiler.instruction(Instruction::Discard);
 
-    pub fn emit_file(&mut self, file: &File) -> Result<usize, Error> {
-        let mut new_name_collection = FreeNames::new();
-        file.expression.visit(&mut new_name_collection);
-
-        for name in new_name_collection.captured_names() {
-            self.names.mark_cell(name);
+        if let Some(kwargs) = keywords {
+            compiler.emit_map_binding(&kwargs)?;
         }
+        compiler.instruction(Instruction::Discard);
 
-        let mut len = 0;
-        for toplevel in &file.statements {
-            len += self.emit_toplevel(toplevel)?;
-        }
-
-        len += self.emit_expression(&file.expression)?;
-        Ok(len)
-    }
-
-    fn emit_toplevel(&mut self, statement: &TopLevel) -> Result<usize, Error> {
-        match statement {
-            TopLevel::Import(path, binding) => {
-                let index = self.import_path(path.as_ref().clone());
-                let loc = self.code.len();
-                self.instruction(Instruction::Import(index));
-                self.actions
-                    .push((loc, loc + 1, path.span(), Action::Import));
-                let len = self.emit_binding(binding)?;
-                Ok(len + 1)
-            }
-        }
+        compiler.emit_expression(&expression)?;
+        compiler.pop_slots();
+        Ok(compiler.finalize())
     }
 
     fn emit_expression(&mut self, expr: &Expr) -> Result<usize, Error> {
         match expr {
-            Expr::Literal(obj) => {
-                let index = self.constant(obj.clone());
-                self.instruction(Instruction::LoadConst(index));
+            Expr::Constant(index) => {
+                self.instruction(Instruction::LoadConst(*index));
                 Ok(1)
             }
 
-            Expr::Identifier(key) => {
-                if let Some(instruction) = self.names.lookup_instruction(**key) {
-                    self.instruction(instruction);
-                    Ok(1)
-                } else {
-                    return Err(Error::new(Reason::Unbound(**key)).tag(key, Action::LookupName));
-                }
-            }
-
-            Expr::Transformed { operand, transform } => {
-                let mut len = self.emit_expression(operand)?;
-                len += self.emit_transform(transform)?;
-                Ok(len)
-            }
-
             Expr::String(elements) => {
-                let index = self.constant(Object::new_str(""));
-                self.instruction(Instruction::LoadConst(index));
+                self.instruction(Instruction::NewString);
 
                 let mut len = 0;
                 for element in elements {
                     len += self.emit_string_element(element)?;
                 }
                 Ok(len + 1)
+            }
+
+            Expr::Slot(loc) => {
+                match self.load_instruction(*loc) {
+                    Some(instruction) => {
+                        self.instruction(instruction);
+                        Ok(1)
+                    }
+                    None => { panic!("my god"); }
+                }
+            }
+
+            Expr::Builtin(index) => {
+                self.instruction(Instruction::LoadBuiltin(*index));
+                Ok(1)
+            }
+
+            Expr::Transformed { operand, transform } => {
+                let mut len = self.emit_expression(operand)?;
+                len += self.emit_transform(transform)?;
+                Ok(len)
             }
 
             Expr::Branch {
@@ -375,7 +314,6 @@ impl Compiler {
 
             Expr::List(elements) => {
                 self.instruction(Instruction::NewList);
-
                 let mut len = 0;
                 for element in elements {
                     len += self.emit_list_element(element)?;
@@ -385,7 +323,6 @@ impl Compiler {
 
             Expr::Map(elements) => {
                 self.instruction(Instruction::NewMap);
-
                 let mut len = 0;
                 for element in elements {
                     len += self.emit_map_element(element)?;
@@ -393,92 +330,110 @@ impl Compiler {
                 Ok(len + 1)
             }
 
-            Expr::Let {
-                bindings,
-                expression,
-            } => {
-                self.names.push();
-
-                let mut classifier = BindingClassifier::new();
-                for (binding, expr) in bindings {
-                    expr.visit(&mut classifier);
-                    binding.visit(&mut classifier);
-                }
-                expression.visit(&mut classifier);
-
-                for key in classifier.names_with_mode(BindingMode::Cell) {
-                    // println!("marking {:?} as cell in let-binding", key);
-                    self.names.mark_cell(key);
-                }
-
+            Expr::Let { bindings, expression, slots } => {
+                self.push_slots(slots);
                 let mut len = 0;
                 for (binding, expr) in bindings {
                     len += self.emit_expression(expr)?;
                     len += self.emit_binding(binding)?;
                 }
-
                 len += self.emit_expression(expression)?;
-                self.names.pop();
+                self.pop_slots();
                 Ok(len)
             }
 
-            Expr::Function {
-                positional,
-                keywords,
-                expression,
-            } => {
+            Expr::Imports { imports, expression, slots } => {
+                self.push_slots(slots);
+                let mut len = 0;
+                for (binding, path) in imports {
+                    let index = self.import_path(path.as_ref().clone());
+                    let loc = self.code.len();
+                    self.instruction(Instruction::Import(index));
+                    self.actions.push((loc, loc + 1, path.span(), Action::Import));
+                    len += self.emit_binding(binding)? + 1;
+                }
+                len += self.emit_expression(expression)?;
+                self.pop_slots();
+                Ok(len)
+            }
+
+            Expr::Func(function) => {
                 let load_index = self.instruction(Instruction::Noop);
-                let mut len = 1;
 
-                let mut compiler = Compiler::new();
-
-                let mut name_collection = FreeNames::new();
-                let mut shield = BindingShield::new(&mut name_collection);
-                positional.visit(&mut shield);
-                keywords.as_ref().map(|kw| kw.visit(&mut shield));
-                expression.visit(&mut shield);
-
-                // println!("compiling a function");
-
-                for name in name_collection.free_names() {
-                    compiler.require_enclosed(*name);
-                    let instruction = self.names.lookup_instruction(*name);
-                    if let Some(Instruction::LoadCell(i)) = instruction {
-                        self.instruction(Instruction::PushCellToClosure(i));
-                        len += 1;
-                    } else if let Some(Instruction::LoadEnclosed(i)) = instruction {
-                        self.instruction(Instruction::PushEnclosedToClosure(i));
-                        len += 1;
-                    } else {
-                        panic!(
-                            "failed to look up name that must be provided to closure: {:?}",
-                            name
-                        );
+                let mut len = 0;
+                for loc in function.requires.iter() {
+                    match self.push_cell_instruction(*loc) {
+                        Some(instruction) => {
+                            self.instruction(instruction);
+                            len += 1;
+                        }
+                        None => { panic!("the stars"); }
                     }
                 }
 
-                let mut new_name_collection = FreeNames::new();
-                expression.visit(&mut new_name_collection);
-
-                for name in new_name_collection.captured_names() {
-                    // println!("marking as captured: {:?}", name);
-                    compiler.names.mark_cell(name);
-                }
-
-                compiler.emit_list_binding(positional)?;
-                compiler.instruction(Instruction::Discard);
-                if let Some(kw) = keywords {
-                    compiler.emit_map_binding(kw)?;
-                }
-                compiler.instruction(Instruction::Discard);
-                compiler.emit_expression(expression)?;
-
-                let func = compiler.finalize();
-
-                let index = self.function(func);
+                let compiled = Compiler::compile(function.clone())?;
+                let index = self.function(compiled);
                 self.code[load_index] = Instruction::LoadFunc(index);
-                Ok(len)
+                Ok(len + 1)
             }
+
+    //         Expr::Function {
+    //             positional,
+    //             keywords,
+    //             expression,
+    //         } => {
+    //             let load_index = self.instruction(Instruction::Noop);
+    //             let mut len = 1;
+
+    //             let mut compiler = Compiler::new();
+
+    //             let mut name_collection = FreeNames::new();
+    //             let mut shield = BindingShield::new(&mut name_collection);
+    //             positional.visit(&mut shield);
+    //             keywords.as_ref().map(|kw| kw.visit(&mut shield));
+    //             expression.visit(&mut shield);
+
+    //             // println!("compiling a function");
+
+    //             for name in name_collection.free_names() {
+    //                 compiler.require_enclosed(*name);
+    //                 let instruction = self.names.lookup_instruction(*name);
+    //                 if let Some(Instruction::LoadCell(i)) = instruction {
+    //                     self.instruction(Instruction::PushCellToClosure(i));
+    //                     len += 1;
+    //                 } else if let Some(Instruction::LoadEnclosed(i)) = instruction {
+    //                     self.instruction(Instruction::PushEnclosedToClosure(i));
+    //                     len += 1;
+    //                 } else {
+    //                     panic!(
+    //                         "failed to look up name that must be provided to closure: {:?}",
+    //                         name
+    //                     );
+    //                 }
+    //             }
+
+    //             let mut new_name_collection = FreeNames::new();
+    //             expression.visit(&mut new_name_collection);
+
+    //             for name in new_name_collection.captured_names() {
+    //                 // println!("marking as captured: {:?}", name);
+    //                 compiler.names.mark_cell(name);
+    //             }
+
+    //             compiler.emit_list_binding(positional)?;
+    //             compiler.instruction(Instruction::Discard);
+    //             if let Some(kw) = keywords {
+    //                 compiler.emit_map_binding(kw)?;
+    //             }
+    //             compiler.instruction(Instruction::Discard);
+    //             compiler.emit_expression(expression)?;
+
+    //             let func = compiler.finalize();
+
+    //             let index = self.function(func);
+    //             self.code[load_index] = Instruction::LoadFunc(index);
+    //             Ok(len)
+    //         }
         }
     }
 
@@ -486,26 +441,31 @@ impl Compiler {
         let loc = self.code.len();
 
         let retval = match binding.as_ref() {
-            Binding::Identifier(key) => {
-                let instruction = self.names.store_instruction(**key);
-                self.instruction(instruction);
-                Ok(1)
+            Binding::Slot(slot) => {
+                match self.store_instruction(*slot) {
+                    Some(instruction) => {
+                        self.instruction(instruction);
+                        Ok(1)
+                    }
+                    None => { panic!("oh shit"); }
+                }
             }
 
-            Binding::List(elements) => {
-                let len = self.emit_list_binding(elements.as_ref())?;
+            Binding::List(binding) => {
+                let len = self.emit_list_binding(binding.as_ref())?;
                 self.instruction(Instruction::Discard);
                 Ok(len + 1)
             }
 
-            Binding::Map(elements) => {
-                let len = self.emit_map_binding(elements)?;
+            Binding::Map(binding) => {
+                let len = self.emit_map_binding(binding)?;
                 self.instruction(Instruction::Discard);
                 Ok(len + 1)
             }
         };
 
         let end = self.code.len();
+        println!("zoopie");
         self.actions.push((loc, end, binding.span(), Action::Bind));
 
         retval
@@ -513,79 +473,72 @@ impl Compiler {
 
     fn emit_list_binding(&mut self, binding: &ListBinding) -> Result<usize, Error> {
         let mut len = 0;
-        let solution = binding.solution();
 
-        if solution.slurp.is_some() {
+        if binding.slurp.is_some() {
             self.instruction(Instruction::AssertListMinLength(
-                solution.num_front + solution.num_back,
+                binding.num_front + binding.num_back,
             ));
             len += 1;
         } else {
             self.instruction(Instruction::AssertListMinMaxLength(
-                solution.num_front,
-                solution.num_front + solution.def_front,
+                binding.num_front,
+                binding.num_front + binding.def_front,
             ));
             len += 1;
         }
 
-        if let Some(Some(key)) = solution.slurp {
+        if let Some(Some(slot)) = binding.slurp {
             self.instruction(Instruction::IntSlice {
-                start: solution.num_front + solution.def_front,
-                from_end: solution.num_back + solution.def_back,
+                start: binding.num_front + binding.def_front,
+                from_end: binding.num_back + binding.def_back,
             });
-            let instruction = self.names.store_instruction(key);
-            self.instruction(instruction);
+            match self.store_instruction(slot) {
+            // match self.slots.as_mut().map(|x| x.store_instruction(slot)).flatten() {
+                Some(instruction) => {
+                    self.instruction(instruction);
+                    len += 1;
+                }
+                None => { panic!("oh shit"); }
+            }
             len += 2;
         }
 
-        for (i, element) in solution.front.iter().enumerate() {
-            match element.as_ref() {
-                ListBindingElement::Binding { binding, default } => {
-                    if let Some(d) = default {
-                        let index = self.instruction(Instruction::Noop);
-                        let default_len = self.emit_expression(d.as_ref())?;
-                        self.code[index] = Instruction::IntIndexLAndJump {
-                            index: i,
-                            jump: default_len,
-                        };
-                        len += default_len + 1;
-                    } else {
-                        self.instruction(Instruction::IntIndexL(i));
-                        len += 1;
-                    }
-                    len += self.emit_binding(binding)?;
-                }
-
-                _ => {}
+        for (i, (sub_binding, default)) in binding.front.iter().enumerate() {
+            if let Some(d) = default {
+                let index = self.instruction(Instruction::Noop);
+                let default_len = self.emit_expression(d.as_ref())?;
+                self.code[index] = Instruction::IntIndexLAndJump {
+                    index: i,
+                    jump: default_len,
+                };
+                len += default_len + 1;
+            } else {
+                self.instruction(Instruction::IntIndexL(i));
+                len += 1;
             }
+            len += self.emit_binding(sub_binding)?;
         }
 
-        for (i, element) in solution.back.iter().enumerate() {
-            match element.as_ref() {
-                ListBindingElement::Binding { binding, default } => {
-                    if let Some(d) = default {
-                        let index = self.instruction(Instruction::Noop);
-                        let default_len = self.emit_expression(d.as_ref())?;
-                        self.code[index] = Instruction::IntIndexFromEndAndJump {
-                            index: i,
-                            root_front: solution.num_front + solution.def_front,
-                            root_back: solution.num_back + solution.def_back,
-                            jump: default_len,
-                        };
-                        len += default_len + 1;
-                    } else {
-                        self.instruction(Instruction::IntIndexFromEnd {
-                            index: i,
-                            root_front: solution.num_front + solution.def_front,
-                            root_back: solution.num_back + solution.def_back,
-                        });
-                        len += 1;
-                    }
-                    len += self.emit_binding(binding)?;
-                }
-
-                _ => {}
+        for (i, (sub_binding, default)) in binding.back.iter().enumerate() {
+            if let Some(d) = default {
+                let index = self.instruction(Instruction::Noop);
+                let default_len = self.emit_expression(d.as_ref())?;
+                self.code[index] = Instruction::IntIndexFromEndAndJump {
+                    index: i,
+                    root_front: binding.num_front + binding.def_front,
+                    root_back: binding.num_back + binding.def_back,
+                    jump: default_len,
+                };
+                len += default_len + 1;
+            } else {
+                self.instruction(Instruction::IntIndexFromEnd {
+                    index: i,
+                    root_front: binding.num_front + binding.def_front,
+                    root_back: binding.num_back + binding.def_back,
+                });
+                len += 1;
             }
+            len += self.emit_binding(sub_binding)?;
         }
 
         Ok(len)
@@ -597,48 +550,42 @@ impl Compiler {
         self.instruction(Instruction::AssertMap);
         len += 1;
 
-        for element in binding.0.iter() {
-            match element.as_ref() {
-                MapBindingElement::Binding {
-                    key,
-                    binding: sub_binding,
-                    default,
-                } => {
-                    if let Some(d) = default {
-                        let index = self.instruction(Instruction::Noop);
-                        let default_len = self.emit_expression(d.as_ref())?;
-                        self.code[index] = Instruction::IntIndexMAndJump {
-                            key: *key.as_ref(),
-                            jump: default_len,
-                        };
-                        len += default_len + 1;
-                    } else {
-                        let loc = self.code.len();
-                        self.instruction(Instruction::IntIndexM(*key.as_ref()));
-                        self.actions.push((loc, loc + 1, key.span(), Action::Bind));
-                        self.reasons
-                            .push((loc, loc + 1, Reason::from(Unpack::KeyMissing(**key))));
-                    }
-                    len += self.emit_binding(sub_binding)?;
-                }
-
-                MapBindingElement::SlurpTo(key) => {
-                    self.instruction(Instruction::Duplicate);
-                    len += 1;
-
-                    for element in binding.0.iter() {
-                        if let MapBindingElement::Binding { key, .. } = element.as_ref() {
-                            self.instruction(Instruction::DelKeyIfExists(*key.as_ref()));
-                            len += 1;
-                        }
-                    }
-
-                    let instruction = self.names.store_instruction(**key);
-                    self.instruction(instruction);
-
-                    len += 1;
-                }
+        for MapBindingElement { key, binding, default} in binding.elements.iter() {
+            if let Some(d) = default {
+                let index = self.instruction(Instruction::Noop);
+                let default_len = self.emit_expression(d.as_ref())?;
+                self.code[index] = Instruction::IntIndexMAndJump {
+                    key: *key.as_ref(),
+                    jump: default_len,
+                };
+                len += default_len + 1;
+            } else {
+                let loc = self.code.len();
+                self.instruction(Instruction::IntIndexM(*key.as_ref()));
+                self.actions.push((loc, loc + 1, key.span(), Action::Bind));
+                self.reasons.push((loc, loc + 1, Reason::from(Unpack::KeyMissing(**key))));
             }
+            len += self.emit_binding(binding)?;
+        }
+
+        if let Some(slot) = binding.slurp {
+            self.instruction(Instruction::Duplicate);
+            len += 1;
+
+            for MapBindingElement { key, .. } in binding.elements.iter() {
+                self.instruction(Instruction::DelKeyIfExists(*key.as_ref()));
+                len += 1;
+            }
+
+            match self.store_instruction(slot) {
+                Some(instruction) => {
+                    self.instruction(instruction);
+                    len += 1;
+                }
+                None => { panic!("oh shit"); }
+            }
+
+            len += 1;
         }
 
         Ok(len)
@@ -646,20 +593,21 @@ impl Compiler {
 
     fn emit_string_element(&mut self, element: &StringElement) -> Result<usize, Error> {
         match element {
-            StringElement::Raw(expr) => {
-                let index = self.constant(Object::new_str(expr.as_ref()));
-                self.instruction(Instruction::LoadConst(index));
+            StringElement::Raw(index) => {
+                self.instruction(Instruction::LoadConst(*index));
                 self.instruction(Instruction::Add);
                 Ok(2)
             }
 
             StringElement::Interpolate(expr, spec) => {
                 let len = self.emit_expression(expr)?;
-                let index = self.fmt_spec(spec.unwrap_or_default());
+                if let Some(index) = spec {
+                    self.instruction(Instruction::FormatWithSpec(*index));
+                } else {
+                    self.instruction(Instruction::FormatWithDefault);
+                }
                 let loc = self.code.len();
-                self.instruction(Instruction::Format(index));
-                self.actions
-                    .push((loc, loc + 1, expr.span(), Action::Format));
+                self.actions.push((loc, loc + 1, expr.span(), Action::Format));
                 self.instruction(Instruction::Add);
                 Ok(len + 2)
             }
@@ -678,8 +626,7 @@ impl Compiler {
                 let len = self.emit_expression(expr)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::SplatToCollection);
-                self.actions
-                    .push((loc, loc + 1, expr.span(), Action::Splat));
+                self.actions.push((loc, loc + 1, expr.span(), Action::Splat));
                 Ok(len + 1)
             }
 
@@ -692,26 +639,13 @@ impl Compiler {
                 Ok(condition_len + element_len + 2)
             }
 
-            ListElement::Loop {
-                binding,
-                iterable,
-                element,
-            } => {
+            ListElement::Loop { binding, iterable, element, slots } => {
                 let iterable_len = self.emit_expression(iterable)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::NewIterator);
-                self.actions
-                    .push((loc, loc + 1, iterable.span(), Action::Iterate));
+                self.actions.push((loc, loc + 1, iterable.span(), Action::Iterate));
 
-                self.names.push();
-
-                let mut classifier = BindingClassifier::new();
-                binding.visit(&mut classifier);
-                element.visit(&mut classifier);
-
-                for key in classifier.names_with_mode(BindingMode::Cell) {
-                    self.names.mark_cell(key);
-                }
+                self.push_slots(slots);
 
                 let index = self.instruction(Instruction::Noop);
                 let mut jump_len = self.emit_binding(binding)?;
@@ -722,7 +656,7 @@ impl Compiler {
                 self.code[index] = Instruction::NextOrJump(jump_len + 3);
                 self.instruction(Instruction::Discard);
 
-                self.names.pop();
+                self.pop_slots();
                 Ok(iterable_len + jump_len + 6)
             }
         }
@@ -733,8 +667,7 @@ impl Compiler {
             MapElement::Singleton { key, value } => {
                 let loc = self.code.len();
                 let mut len = self.emit_expression(key)?;
-                self.actions
-                    .push((loc, self.code.len(), key.span(), Action::Assign));
+                self.actions.push((loc, self.code.len(), key.span(), Action::Assign));
                 len += self.emit_expression(value)?;
                 self.instruction(Instruction::PushToMap);
                 Ok(len + 1)
@@ -744,8 +677,7 @@ impl Compiler {
                 let len = self.emit_expression(expr)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::SplatToCollection);
-                self.actions
-                    .push((loc, loc + 1, expr.span(), Action::Splat));
+                self.actions.push((loc, loc + 1, expr.span(), Action::Splat));
                 Ok(len + 1)
             }
 
@@ -758,26 +690,13 @@ impl Compiler {
                 Ok(condition_len + element_len + 2)
             }
 
-            MapElement::Loop {
-                binding,
-                iterable,
-                element,
-            } => {
+            MapElement::Loop { binding, iterable, element, slots } => {
                 let iterable_len = self.emit_expression(iterable)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::NewIterator);
-                self.actions
-                    .push((loc, loc + 1, iterable.span(), Action::Iterate));
+                self.actions.push((loc, loc + 1, iterable.span(), Action::Iterate));
 
-                self.names.push();
-
-                let mut classifier = BindingClassifier::new();
-                binding.visit(&mut classifier);
-                element.visit(&mut classifier);
-
-                for key in classifier.names_with_mode(BindingMode::Cell) {
-                    self.names.mark_cell(key);
-                }
+                self.push_slots(slots);
 
                 let index = self.instruction(Instruction::Noop);
                 let mut jump_len = self.emit_binding(binding)?;
@@ -788,7 +707,7 @@ impl Compiler {
                 self.code[index] = Instruction::NextOrJump(jump_len + 3);
                 self.instruction(Instruction::Discard);
 
-                self.names.pop();
+                self.pop_slots();
                 Ok(iterable_len + jump_len + 6)
             }
         }
@@ -893,19 +812,21 @@ impl Compiler {
                 Ok(len + 1)
             }
 
-            Transform::FunCall(args) => {
-                let mut len = 0;
+            Transform::FunCall(args, add_action) => {
                 self.instruction(Instruction::NewMap);
                 self.instruction(Instruction::NewList);
 
+                let mut len = 0;
                 for arg in args.iter() {
                     len += self.emit_arg_element(arg)?;
                 }
 
                 let loc = self.code.len();
                 self.instruction(Instruction::Call);
-                self.actions
-                    .push((loc, loc + 1, args.span(), Action::Evaluate));
+                if *add_action {
+                    self.actions.push((loc, loc + 1, args.span(), Action::Evaluate));
+                }
+
                 Ok(len + 3)
             }
         }
@@ -959,21 +880,59 @@ impl Compiler {
         r
     }
 
-    fn constant(&mut self, constant: Object) -> usize {
-        let r = self.constants.len();
-        self.constants.push(constant);
-        r
+    fn push_cell_instruction(&mut self, loc: BindingLoc) -> Option<Instruction> {
+        match loc {
+            BindingLoc::Enclosed(i) => Some(Instruction::PushEnclosedToClosure(i)),
+            _ => match self.load_instruction(loc) {
+                Some(Instruction::LoadCell(i)) => Some(Instruction::PushCellToClosure(i)),
+                _ => None,
+            }
+        }
     }
 
-    fn function(&mut self, function: Function) -> usize {
+    fn load_instruction(&mut self, loc: BindingLoc) -> Option<Instruction> {
+        match loc {
+            BindingLoc::Enclosed(i) => { Some(Instruction::LoadEnclosed(i)) }
+            BindingLoc::Slot(index) => {
+                for map in self.slots.iter_mut().rev() {
+                    let result = map.load_instruction(index);
+                    if result.is_some() {
+                        return result;
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    fn store_instruction(&mut self, index: usize) -> Option<Instruction> {
+        for map in self.slots.iter_mut().rev() {
+            let result = map.store_instruction(index);
+            if result.is_some() {
+                return result;
+            }
+        }
+        None
+    }
+
+    // fn constant(&mut self, constant: Object) -> usize {
+    //     let r = self.constants.len();
+    //     self.constants.push(constant);
+    //     r
+    // }
+
+    fn push_slots(&mut self, slots: &SlotCatalog) {
+        let new = SlotMap::new(self.slots.last(), slots.clone());
+        self.slots.push(new);
+    }
+
+    fn pop_slots(&mut self) {
+        self.slots.pop();
+    }
+
+    fn function(&mut self, function: CompiledFunction) -> usize {
         let r = self.funcs.len();
         self.funcs.push(function);
-        r
-    }
-
-    fn fmt_spec(&mut self, spec: FormatSpec) -> usize {
-        let r = self.fmt_specs.len();
-        self.fmt_specs.push(spec);
         r
     }
 
@@ -1012,15 +971,20 @@ impl Compiler {
         tree
     }
 
-    pub fn require_enclosed(&mut self, key: Key) {
-        self.names.require_enclosed(key);
-    }
-
-    pub fn finalize(mut self) -> Function {
+    fn finalize(mut self) -> CompiledFunction {
         self.code.push(Instruction::Return);
+
+        println!("-----------------------------------------------");
+        for instruction in self.code.iter() {
+            dbg!(instruction);
+        }
+        dbg!(&self.actions);
+        dbg!(&self.reasons);
+        println!("-----------------------------------------------");
+
         let trace = self.build_trace();
 
-        Function {
+        CompiledFunction {
             functions: self.funcs,
             constants: self.constants,
             code: self.code,
@@ -1029,7 +993,6 @@ impl Compiler {
             num_locals: self.num_locals,
             num_cells: self.num_cells,
             trace,
-            // reasons,
         }
     }
 }

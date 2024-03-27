@@ -27,7 +27,7 @@ enum IntV {
 
 /// The integer variant represents all possible Gold integers.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
-pub(crate) struct Int(IntV);
+pub struct Int(IntV);
 
 impl PartialOrd<Int> for Int {
     fn partial_cmp(&self, other: &Int) -> Option<Ordering> {
@@ -97,11 +97,11 @@ impl Step for Int {
 }
 
 impl Int {
-    pub fn small(value: i64) -> Self {
+    fn small(value: i64) -> Self {
         Self(IntV::Small(value))
     }
 
-    pub fn big(value: BigInt) -> Self {
+    fn big(value: BigInt) -> Self {
         let mut r = Self(IntV::Big(Rc::new(value)));
         r.normalize();
         r
@@ -263,7 +263,7 @@ impl Int {
 
     /// Normalize self by converting bignums to machine integers when possible.
     /// Used as a postprocesssing step for most arithmetic operations.
-    pub fn normalize(&mut self) {
+    fn normalize(&mut self) {
         let Self(this) = self;
         if let IntV::Big(x) = this {
             if let Some(y) = x.as_ref().to_i64() {

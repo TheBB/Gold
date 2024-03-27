@@ -19,7 +19,7 @@ use pyo3::types::{PyTuple, PyDict};
 use pyo3::exceptions::PyTypeError;
 
 use super::{List, Map, Object};
-use crate::compile::Function;
+use crate::compile::CompiledFunction;
 use crate::error::{Error, Reason};
 use crate::eval::Vm;
 use crate::types::{GcCell, Builtin, NativeClosure};
@@ -27,7 +27,7 @@ use crate::ImportConfig;
 
 #[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
 enum FuncV {
-    Closure(Gc<Function>, GcCell<Vec<GcCell<Object>>>),
+    Closure(Gc<CompiledFunction>, GcCell<Vec<GcCell<Object>>>),
     Builtin(#[unsafe_ignore_trace] Builtin),
 
     #[serde(skip)]
@@ -51,7 +51,7 @@ impl Debug for FuncV {
 /// The function variant represents all possible forms of callable objects in
 /// Gold.
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
-pub(crate) struct Func(FuncV);
+pub struct Func(FuncV);
 
 impl From<Builtin> for Func {
     fn from(value: Builtin) -> Self {
@@ -65,11 +65,13 @@ impl From<Rc<NativeClosure>> for Func {
     }
 }
 
-impl Func {
-    pub fn closure(val: Function) -> Self {
-        Self(FuncV::Closure(Gc::new(val), GcCell::new(vec![])))
+impl From<CompiledFunction> for Func {
+    fn from(value: CompiledFunction) -> Self {
+        Self(FuncV::Closure(Gc::new(value), GcCell::new(vec![])))
     }
+}
 
+impl Func {
     /// All functions in Gold compare different to each other except built-ins.
     pub fn user_eq(&self, other: &Func) -> bool {
         let Self(this) = self;
@@ -81,7 +83,7 @@ impl Func {
     }
 
     /// The function call operator.
-    pub(crate) fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+    pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
         let Self(this) = self;
         match this {
             FuncV::NativeClosure(f) => f(args, kwargs),
@@ -94,7 +96,7 @@ impl Func {
         }
     }
 
-    pub(crate) fn push_cell(&self, other: GcCell<Object>) -> Result<(), Error> {
+    pub fn push_cell(&self, other: GcCell<Object>) -> Result<(), Error> {
         let Self(this) = self;
         match this {
             FuncV::Closure(_, enclosed) => {
@@ -106,7 +108,7 @@ impl Func {
         }
     }
 
-    pub(crate) fn native_callable(&self) -> Option<&NativeClosure> {
+    pub fn native_callable(&self) -> Option<&NativeClosure> {
         let Self(this) = self;
         match this {
             FuncV::NativeClosure(closure) => Some(closure.as_ref()),
@@ -115,7 +117,7 @@ impl Func {
         }
     }
 
-    pub(crate) fn get_closure(&self) -> Option<(Gc<Function>, GcCell<Vec<GcCell<Object>>>)> {
+    pub fn get_closure(&self) -> Option<(Gc<CompiledFunction>, GcCell<Vec<GcCell<Object>>>)> {
         let Self(this) = self;
         match this {
             FuncV::Closure(f, e) => Some((f.clone(), e.clone())),
@@ -139,7 +141,7 @@ impl PyFunction {
         args: &PyTuple,
         kwargs: Option<&PyDict>,
     ) -> pyo3::PyResult<Py<PyAny>> {
-        let func = Object::func(self.0.clone());
+        let func = Object::new_func(self.0.clone());
 
         let posargs_obj = args.extract::<Object>()?;
         let posargs = posargs_obj.get_list().ok_or_else(|| {
