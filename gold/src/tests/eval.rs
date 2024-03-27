@@ -1,4 +1,4 @@
-use crate::ast::{BinOp, UnOp};
+use crate::types::{BinOp, UnOp};
 use crate::error::{Action, BindingType, Error, Reason, Span, TypeMismatch, Types, Unpack};
 use crate::eval_raw;
 use crate::{Key, Object, Type};
@@ -585,6 +585,10 @@ fn map_concat() {
 
 #[test]
 fn functions() {
+    assert_seq!(eval("let f = fn () 1 in f()"), Object::from(1));
+
+    assert_seq!(eval("let a = 1 let f = fn () a in f()"), Object::from(1));
+
     assert_seq!(
         eval(concat!(
             "let double = fn (x) x + x\n",

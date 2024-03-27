@@ -14,7 +14,7 @@ use pyo3::PyErr;
 #[cfg(feature = "python")]
 use pyo3::exceptions::{PyException, PySyntaxError, PyNameError, PyKeyError, PyTypeError, PyOSError, PyImportError, PyValueError};
 
-use crate::ast::{BinOp, UnOp};
+use crate::types::{BinOp, UnOp};
 use crate::lexing::TokenType;
 use crate::{Key, Type};
 
@@ -911,6 +911,7 @@ impl Error {
                 v.append(&mut w);
                 Some(v)
             }
+            (Some(v), None) => Some(v),
             (_, w) => w,
         };
         self
@@ -1287,7 +1288,7 @@ impl<I: Debug + Copy + PartialOrd, S: Debug, T: Debug> IntervalTree<I, S, T> {
     }
 }
 
-impl<I: Copy + PartialOrd> IntervalTree<I, (Span, Action), Reason> {
+impl<I: Copy + PartialOrd + Debug> IntervalTree<I, (Span, Action), Reason> {
     pub fn error(&self, loc: I) -> Error {
         match &self.root {
             None => Error::new(Internal::UnknownError),

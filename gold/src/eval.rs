@@ -11,11 +11,11 @@ use pyo3::exceptions::PyTypeError;
 #[cfg(feature = "python")]
 use pyo3::types::{PyString, PyTuple};
 
-use crate::ast::*;
 use crate::builtins::BUILTINS;
-use crate::compile::{Function, Instruction};
+use crate::compile::{CompiledFunction, Instruction};
 use crate::error::{BindingType, Error, Reason, TypeMismatch, Unpack};
-use crate::types::GcCell;
+use crate::formatting::FormatSpec;
+use crate::types::{GcCell, BinOp};
 use crate::{eval_file, eval_raw as eval_str};
 use crate::{List, Map, Object, Type};
 
@@ -137,7 +137,7 @@ impl PyImportConfig {
 
 
 pub(crate) struct Frame {
-    pub function: Function,
+    pub function: CompiledFunction,
     pub stack: Vec<Object>,
     pub locals: Vec<Object>,
     pub cells: Vec<GcCell<Object>>,
@@ -146,7 +146,7 @@ pub(crate) struct Frame {
 }
 
 impl Frame {
-    pub fn new(function: Function, enclosed: GcCell<Vec<GcCell<Object>>>) -> Frame {
+    pub fn new(function: CompiledFunction, enclosed: GcCell<Vec<GcCell<Object>>>) -> Frame {
         let num_locals = function.num_locals;
         let num_cells = function.num_cells;
 
@@ -186,15 +186,17 @@ impl<'a> Vm<'a> {
         }
     }
 
-    pub fn eval(&mut self, function: Function) -> Result<Object, Error> {
+    pub fn eval(&mut self, function: CompiledFunction) -> Result<Object, Error> {
         self.frames.push(Frame::new(function, GcCell::new(vec![])));
         self.fp = 0;
+        self.push(Object::new_map());
+        self.push(Object::new_list());
         self.eval_impl()
     }
 
     pub fn eval_with_args(
         &mut self,
-        function: Function,
+        function: CompiledFunction,
         enclosed: GcCell<Vec<GcCell<Object>>>,
         args: &List,
         kwargs: Option<&Map>,
@@ -239,7 +241,8 @@ impl<'a> Vm<'a> {
             .trace
             .error(self.frames[self.fp].ip - 1);
         for fp in (0..self.fp).rev() {
-            err = err.add_locations(self.frames[fp].function.trace.error(self.frames[fp].ip - 1));
+            let other = self.frames[fp].function.trace.error(self.frames[fp].ip - 1);
+            err = err.add_locations(other);
         }
         err
     }
@@ -428,10 +431,19 @@ impl<'a> Vm<'a> {
                     self.push(Object::bool(!obj.truthy()));
                 }
 
-                Instruction::Format(i) => {
+                Instruction::FormatWithSpec(i) => {
                     let obj = self.pop();
                     let result = Object::new_str(
                         obj.format(&self.cur_frame().function.fmt_specs[i])
+                            .map_err(|e| e.with_locations(self.err()))?,
+                    );
+                    self.push(result);
+                }
+
+                Instruction::FormatWithDefault => {
+                    let obj = self.pop();
+                    let result = Object::new_str(
+                        obj.format(&FormatSpec::default())
                             .map_err(|e| e.with_locations(self.err()))?,
                     );
                     self.push(result);
@@ -575,6 +587,10 @@ impl<'a> Vm<'a> {
                 Instruction::NewIterator => {
                     let obj = self.pop();
                     self.push(Object::iterator(&obj).map_err(|e| e.with_locations(self.err()))?);
+                }
+
+                Instruction::NewString => {
+                    self.push(Object::new_str(""));
                 }
 
                 Instruction::PushToList => {
