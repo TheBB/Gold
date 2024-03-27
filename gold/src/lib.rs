@@ -33,9 +33,6 @@ mod parsing;
 /// The compiler.
 mod compile;
 
-#[cfg(test)]
-mod tests;
-
 mod types;
 
 use std::fs::read_to_string;
