@@ -38,7 +38,7 @@ enum StrV {
 
 /// The string variant represents all possible Gold strings.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, Trace, Finalize)]
-pub(crate) struct Str(StrV);
+pub struct Str(StrV);
 
 impl PartialOrd<Str> for Str {
     fn partial_cmp(&self, other: &Str) -> Option<Ordering> {
@@ -53,6 +53,12 @@ impl From<&Str> for Key {
             StrV::Interned(x) => *x,
             StrV::Natural(x) => Key::new(x.as_ref()),
         }
+    }
+}
+
+impl From<Key> for Str {
+    fn from(value: Key) -> Self {
+        Str(StrV::Interned(value))
     }
 }
 

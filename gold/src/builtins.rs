@@ -2,11 +2,10 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::error::Value;
-use crate::error::{Error, TypeMismatch, Types};
-use crate::object::integer::Int;
-use crate::types::Builtin;
-use crate::{Key, List, Map, Object, Type};
+use crate::error::{Error, TypeMismatch, Types, Value};
+use crate::object::Int;
+use crate::types::{Key, List, Map, Builtin};
+use crate::{Object, Type};
 
 /// Convert a function by name to a [`Builtin`] object and append it to a
 /// mapping.
@@ -24,7 +23,7 @@ macro_rules! builtin {
         let index = $t.len();
         $t.push(Builtin::new(
             $e,
-            $crate::Key::new(stringify!($e).to_string()),
+            $crate::types::Key::new(stringify!($e).to_string()),
         ));
         $m.insert(stringify!($e), index);
     };
@@ -32,7 +31,7 @@ macro_rules! builtin {
 
 lazy_static! {
     /// Table of all builtin functions.
-    pub(crate) static ref BUILTINS: (
+    pub static ref BUILTINS: (
         HashMap<&'static str, usize>,
         Vec<Builtin>,
     ) = {
@@ -131,15 +130,15 @@ macro_rules! argcount {
 /// Return the size of a collection or the length of a string.
 fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
-        return Ok(Object::new_int(x.chars().count()))
+        return Ok(Object::from(x.chars().count()))
     });
 
     signature!(args = [x: list] {
-        return Ok(Object::new_int(x.len()))
+        return Ok(Object::from(x.len()))
     });
 
     signature!(args = [x: map] {
-        return Ok(Object::new_int(x.len()))
+        return Ok(Object::from(x.len()))
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, String, List, Map) });
@@ -150,14 +149,14 @@ fn len(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// Works similarly to Python's function of the same name.
 fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [start: int, stop: int] {
-        return Ok((start.clone()..stop.clone()).map(Object::new_int).collect())
+        return Ok((start.clone()..stop.clone()).map(Object::from).collect())
     });
 
     signature!(args = [x: any, _y: int] { expected_pos!(0, x, Integer) });
     signature!(args = [_x: any, y: any] { expected_pos!(1, y, Integer) });
 
     signature!(args = [stop: int] {
-        return Ok((Int::from(0)..stop.clone()).map(Object::new_int).collect())
+        return Ok((Int::from(0)..stop.clone()).map(Object::from).collect())
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, Integer) });
@@ -168,15 +167,15 @@ fn range(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// Convert the argument to an integer
 fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
-        return Ok(Object::new_int(x.clone()))
+        return Ok(Object::from(x.clone()))
     });
 
     signature!(args = [x: float] {
-        return Ok(Object::new_int(x.round() as i64))
+        return Ok(Object::from(x.round() as i64))
     });
 
     signature!(args = [x: bool] {
-        return Ok(Object::new_int(if x { 1 } else { 0 }))
+        return Ok(Object::from(if x { 1 } else { 0 }))
     });
 
     signature!(args = [x: str] {
@@ -193,21 +192,21 @@ fn int(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// Convert the argument to a float
 fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
-        return Ok(Object::float(x.to_f64()))
+        return Ok(Object::from(x.to_f64()))
     });
 
     signature!(args = [x: float] {
-        return Ok(Object::float(x))
+        return Ok(Object::from(x))
     });
 
     signature!(args = [x: bool] {
-        return Ok(Object::float(if x { 1.0 } else { 0.0 }))
+        return Ok(Object::from(if x { 1.0 } else { 0.0 }))
     });
 
     signature!(args = [x: str] {
         return f64::from_str(x).map_err(
             |_| Error::new(Value::Convert(Type::Float))
-        ).map(Object::float)
+        ).map(Object::from)
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, Integer, Float, Boolean, String) });
@@ -218,7 +217,7 @@ fn float(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// Convert the argument to a bool (this never fails, see Gold's truthiness rules)
 fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: any] {
-        return Ok(Object::bool(x.truthy()))
+        return Ok(Object::from(x.truthy()))
     });
 
     argcount!(1, args)
@@ -227,11 +226,11 @@ fn bool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// Convert the argument to a string
 fn str(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: str] {
-        return Ok(Object::new_str(x))
+        return Ok(Object::from(x))
     });
 
     signature!(args = [x: any] {
-        return Ok(Object::new_str(x.to_string()))
+        return Ok(Object::from(x.to_string()))
     });
 
     argcount!(1, args)
@@ -287,7 +286,7 @@ fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         let ret = Object::new_list();
         for (key, val) in x.borrow().iter() {
             ret.push_unchecked(Object::from(vec![
-                Object::key(*key),
+                Object::from(*key),
                 val.clone(),
             ]));
         }
@@ -305,13 +304,13 @@ fn items(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 /// computes y to the power x (which is the same as `y^x`).
 fn exp(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [exp: tofloat] kwargs = {base: tofloat} {
-        return Ok(Object::float(base.powf(exp)))
+        return Ok(Object::from(base.powf(exp)))
     });
 
     signature!(args = [_x: tofloat] kwargs = {base: any} { expected_kw!(base, kwargs, Integer, Float) });
 
     signature!(args = [x: tofloat] {
-        return Ok(Object::float(x.exp()))
+        return Ok(Object::from(x.exp()))
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, Integer, Float) });
@@ -325,13 +324,13 @@ fn exp(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
 /// while `log(x, base: y)` computes the logarith of `x` to the base `y`.
 fn log(args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [num: tofloat] kwargs = {base: tofloat} {
-        return Ok(Object::float(num.log(base)))
+        return Ok(Object::from(num.log(base)))
     });
 
     signature!(args = [_x: tofloat] kwargs = {base: any} { expected_kw!(base, kwargs, Integer, Float) });
 
     signature!(args = [x: tofloat] {
-        return Ok(Object::float(x.ln()))
+        return Ok(Object::from(x.ln()))
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, Integer, Float) });
@@ -347,7 +346,7 @@ fn ord(args: &List, _: Option<&Map>) -> Result<Object, Error> {
         if c.is_none() || chars.next().is_some() {
             return Err(Error::new(Value::TooLong))
         }
-        return Ok(Object::new_int(c.unwrap() as i64))
+        return Ok(Object::from(c.unwrap() as i64))
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, String) });
@@ -361,7 +360,7 @@ fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
     signature!(args = [x: int] {
         let codepoint = u32::try_from(x).map_err(|_| Error::new(Value::OutOfRange))?;
         let c = char::try_from(codepoint).map_err(|_| Error::new(Value::OutOfRange))?;
-        return Ok(Object::new_str(c.to_string()))
+        return Ok(Object::from(c.to_string()))
     });
 
     signature!(args = [x: any] { expected_pos!(0, x, Integer) });
@@ -371,64 +370,64 @@ fn chr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
 
 /// Check whether the argument is an integer.
 fn isint(args: &List, _: Option<&Map>) -> Result<Object, Error> {
-    signature!(args = [_x: int] { return Ok(Object::bool(true)); });
-    signature!(args = [_x: any] { return Ok(Object::bool(false)); });
+    signature!(args = [_x: int] { return Ok(Object::from(true)); });
+    signature!(args = [_x: any] { return Ok(Object::from(false)); });
     argcount!(1, args)
 }
 
 /// Check whether the argument is a string.
 fn isstr(args: &List, _: Option<&Map>) -> Result<Object, Error> {
-    signature!(args = [_x: str] { return Ok(Object::bool(true)); });
-    signature!(args = [_x: any] { return Ok(Object::bool(false)); });
+    signature!(args = [_x: str] { return Ok(Object::from(true)); });
+    signature!(args = [_x: any] { return Ok(Object::from(false)); });
     argcount!(1, args)
 }
 
 /// Check whether the argument is null.
 fn isnull(args: &List, _: Option<&Map>) -> Result<Object, Error> {
-    signature!(args = [_x: null] { return Ok(Object::bool(true)); });
-    signature!(args = [_x: any] { return Ok(Object::bool(false)); });
+    signature!(args = [_x: null] { return Ok(Object::from(true)); });
+    signature!(args = [_x: any] { return Ok(Object::from(false)); });
     argcount!(1, args)
 }
 
 /// Check whether the argument is a boolean.
 fn isbool(args: &List, _: Option<&Map>) -> Result<Object, Error> {
-    signature!(args = [_x: bool] { return Ok(Object::bool(true)); });
-    signature!(args = [_x: any] { return Ok(Object::bool(false)); });
+    signature!(args = [_x: bool] { return Ok(Object::from(true)); });
+    signature!(args = [_x: any] { return Ok(Object::from(false)); });
     argcount!(1, args)
 }
 
 /// Check whether the argument is a float.
 fn isfloat(args: &List, _: Option<&Map>) -> Result<Object, Error> {
-    signature!(args = [_x: float] { return Ok(Object::bool(true)); });
-    signature!(args = [_x: any] { return Ok(Object::bool(false)); });
+    signature!(args = [_x: float] { return Ok(Object::from(true)); });
+    signature!(args = [_x: any] { return Ok(Object::from(false)); });
     argcount!(1, args)
 }
 
 /// Check whether the argument is a number (integer or float).
 fn isnumber(args: &List, _: Option<&Map>) -> Result<Object, Error> {
-    signature!(args = [_x: float] { return Ok(Object::bool(true)); });
-    signature!(args = [_x: int] { return Ok(Object::bool(true)); });
-    signature!(args = [_x: any] { return Ok(Object::bool(false)); });
+    signature!(args = [_x: float] { return Ok(Object::from(true)); });
+    signature!(args = [_x: int] { return Ok(Object::from(true)); });
+    signature!(args = [_x: any] { return Ok(Object::from(false)); });
     argcount!(1, args)
 }
 
 /// Check whether the argument is an object (a mapping).
 fn isobject(args: &List, _: Option<&Map>) -> Result<Object, Error> {
-    signature!(args = [_x: map] { return Ok(Object::bool(true)); });
-    signature!(args = [_x: any] { return Ok(Object::bool(false)); });
+    signature!(args = [_x: map] { return Ok(Object::from(true)); });
+    signature!(args = [_x: any] { return Ok(Object::from(false)); });
     argcount!(1, args)
 }
 
 /// Check whether the argument is a list.
 fn islist(args: &List, _: Option<&Map>) -> Result<Object, Error> {
-    signature!(args = [_x: list] { return Ok(Object::bool(true)); });
-    signature!(args = [_x: any] { return Ok(Object::bool(false)); });
+    signature!(args = [_x: list] { return Ok(Object::from(true)); });
+    signature!(args = [_x: any] { return Ok(Object::from(false)); });
     argcount!(1, args)
 }
 
 /// Check whether the argument is a function.
 fn isfunc(args: &List, _: Option<&Map>) -> Result<Object, Error> {
-    signature!(args = [_x: func] { return Ok(Object::bool(true)); });
-    signature!(args = [_x: any] { return Ok(Object::bool(false)); });
+    signature!(args = [_x: func] { return Ok(Object::from(true)); });
+    signature!(args = [_x: any] { return Ok(Object::from(false)); });
     argcount!(1, args)
 }

@@ -1,19 +1,19 @@
 use crate::compile::{Compiler, CompiledFunction};
 use crate::error::Tagged;
 use crate::formatting::FormatSpec;
-use crate::{Error, Key, Object};
-use crate::types::{UnOp, BinOp};
+use crate::{Error, Object};
+use crate::types::{UnOp, BinOp, Key};
 use super::scope::{BindingLoc, ClosureScope, LocalScope, Scope, SlotCatalog};
 
 #[derive(Debug, Clone)]
-pub(crate) enum Binding {
+pub enum Binding {
     Slot(usize),
     List(Tagged<ListBinding>),
     Map(Tagged<MapBinding>),
 }
 
 #[derive(Debug, Default, Clone)]
-pub(crate) struct ListBinding {
+pub struct ListBinding {
     pub num_front: usize,
     pub num_back: usize,
     pub def_front: usize,
@@ -24,34 +24,43 @@ pub(crate) struct ListBinding {
     pub back: Vec<(Tagged<Binding>, Option<Tagged<Expr>>)>,
 }
 
+impl ListBinding {
+    pub fn push(&mut self, binding: Tagged<Binding>, default: Option<Tagged<Expr>>) {
+        match self.slurp {
+            Some(_) => { self.back.push((binding, default)); }
+            None => { self.front.push((binding, default)); }
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
-pub(crate) struct MapBindingElement {
+pub struct MapBindingElement {
     pub key: Tagged<Key>,
     pub binding: Tagged<Binding>,
     pub default: Option<Tagged<Expr>>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MapBinding {
+pub struct MapBinding {
     pub elements: Vec<MapBindingElement>,
     pub slurp: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum Transform {
+pub enum Transform {
     UnOp(Tagged<UnOp>),
     BinOp(Tagged<BinOp>, Box<Tagged<Expr>>),
     FunCall(Tagged<Vec<Tagged<ArgElement>>>, bool),
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum StringElement {
+pub enum StringElement {
     Raw(usize),
     Interpolate(Tagged<Expr>, Option<usize>),
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum ListElement {
+pub enum ListElement {
     Singleton(Tagged<Expr>),
     Splat(Tagged<Expr>),
     Cond {
@@ -67,7 +76,7 @@ pub(crate) enum ListElement {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum MapElement {
+pub enum MapElement {
     Singleton {
         key: Tagged<Expr>,
         value: Tagged<Expr>,
@@ -86,14 +95,14 @@ pub(crate) enum MapElement {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum ArgElement {
+pub enum ArgElement {
     Singleton(Tagged<Expr>),
     Keyword(Tagged<Key>, Tagged<Expr>),
     Splat(Tagged<Expr>),
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum Expr {
+pub enum Expr {
     Constant(usize),
     String(Vec<StringElement>),
     Slot(BindingLoc),
@@ -123,7 +132,7 @@ pub(crate) enum Expr {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Function {
+pub struct Function {
     pub constants: Vec<Object>,
     pub fmt_specs: Vec<FormatSpec>,
     pub positional: Option<Tagged<ListBinding>>,
@@ -135,11 +144,11 @@ pub(crate) struct Function {
 
 impl Function {
     pub fn compile(self) -> Result<CompiledFunction, Error> {
-        Compiler::new_from_function(self)
+        Compiler::compile(self)
     }
 }
 
-pub(super) struct FunctionBuilder<'a> {
+pub struct FunctionBuilder<'a> {
     scope: ClosureScope<'a>,
     expression: Option<Tagged<Expr>>,
     positional: Option<Tagged<ListBinding>>,
@@ -186,7 +195,7 @@ impl<'a> FunctionBuilder<'a> {
     }
 }
 
-pub(super) struct LetBuilder<'a> {
+pub struct LetBuilder<'a> {
     scope: LocalScope<'a>,
     bindings: Vec<(Tagged<Binding>, Tagged<Expr>)>,
     expression: Option<Tagged<Expr>>,
@@ -223,7 +232,7 @@ impl<'a> LetBuilder<'a> {
     }
 }
 
-pub(super) struct ImportsBuilder<'a> {
+pub struct ImportsBuilder<'a> {
     scope: LocalScope<'a>,
     imports: Vec<(Tagged<Binding>, Tagged<String>)>,
     expression: Option<Tagged<Expr>>,

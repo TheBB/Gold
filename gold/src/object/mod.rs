@@ -12,15 +12,13 @@
 //! all its variants to be unstable. Public methods on [`Object`] and
 //! [`ObjectVariant`] (`Object` implements `Deref<ObjectVariant>`) are stable.
 
-pub mod function;
-pub mod integer;
-pub mod string;
+mod function;
+mod integer;
+mod string;
 
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
-use std::io::{Read, Write};
 use std::str::FromStr;
-use std::time::SystemTime;
 
 #[cfg(feature = "python")]
 use std::collections::HashMap;
@@ -31,7 +29,7 @@ use std::rc::Rc;
 use gc::{Finalize, GcCellRef, GcCellRefMut, Trace};
 use json::JsonValue;
 use num_bigint::BigInt;
-use rmp_serde::{decode, encode};
+use rmp_serde::{encode, decode};
 use serde::{Deserialize, Serialize};
 use symbol_table::GlobalSymbol;
 
@@ -39,15 +37,14 @@ use crate::compile::CompiledFunction;
 use crate::error::{Error, Internal, Reason, TypeMismatch, Value};
 use crate::formatting::FormatSpec;
 use crate::types::{Gc, GcCell};
-use crate::{Key, List, Map, Type};
-use crate::types::{UnOp, BinOp};
+use crate::types::{UnOp, BinOp, Key, List, Map, Type};
 
 #[cfg(feature = "python")]
 use crate::types::NativeClosure;
 
-use function::Func;
-use integer::Int;
-use string::Str;
+pub use function::Func;
+pub use integer::Int;
+pub use string::Str;
 
 #[cfg(feature="python")]
 use pyo3::{IntoPy, PyObject, Python, FromPyObject, PyAny, PyResult, PyErr, Py};
@@ -58,15 +55,12 @@ use pyo3::types::{PyList, PyDict, PyTuple};
 #[cfg(feature = "python")]
 use pyo3::exceptions::PyTypeError;
 
-/// The current serialization format version.
-const SERIALIZE_VERSION: i32 = 1;
-
 
 /// The object variant implements all possible variants of Gold objects,
 /// although it's not the user-facing type, which is [`Object`], an opaque
 /// struct enclosing an `ObjectVariant`.
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
-pub(crate) enum ObjV {
+enum ObjV {
     /// Integers
     Int(#[unsafe_ignore_trace] Int),
 
@@ -138,11 +132,11 @@ macro_rules! extract {
 
 macro_rules! extractkw {
     ($kwargs:ident , $key:ident , any) => {
-        $kwargs.and_then(|kws| kws.get(&$crate::Key::from(stringify!($key))))
+        $kwargs.and_then(|kws| kws.get(&$crate::types::Key::from(stringify!($key))))
     };
 
     ($kwargs:ident , $key:ident , tofloat) => {{
-        let key = $crate::Key::from(stringify!($key));
+        let key = $crate::types::Key::from(stringify!($key));
         $kwargs.and_then(|kws| {
             kws.get(&key)
                 .and_then(|x| x.get_float())
@@ -206,8 +200,6 @@ macro_rules! signature {
     };
 }
 
-pub use signature;
-
 /// The general type of Gold objects.
 ///
 /// While this type wraps [`ObjectVariant`], a fact which can be revealed using
@@ -216,7 +208,7 @@ pub use signature;
 ///
 /// `Object` is `Deref<ObjectVariant>`, so supports all methods defined there.
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
-pub struct Object(pub(crate) ObjV);
+pub struct Object(ObjV);
 
 // FuncVariant doesn't implement PartialEq, so this has to be done manually.
 impl PartialEq<Object> for Object {
@@ -256,27 +248,22 @@ impl Object {
     // ------------------------------------------------------------------------------------------------
 
     /// Construct an interned string.
-    pub fn new_str_interned<T>(val: T) -> Self where Key: From<T> {
+    pub(crate) fn new_str_interned<T>(val: T) -> Self where Key: From<T> {
         Self(ObjV::Str(Str::interned(val)))
     }
 
     /// Construct a non-interned string.
-    pub fn new_str_natural(val: impl AsRef<str>) -> Self {
+    pub(crate) fn new_str_natural(val: impl AsRef<str>) -> Self {
         Self(ObjV::Str(Str::natural(val)))
     }
 
     /// Construct a string, deciding based on length whether to intern or not.
-    pub fn new_str<T>(val: T) -> Self where Key: From<T>, T: AsRef<str> {
+    fn new_str<T>(val: T) -> Self where Key: From<T>, T: AsRef<str> {
         if val.as_ref().len() < 20 {
             Self::new_str_interned(val)
         } else {
             Self::new_str_natural(val)
         }
-    }
-
-    /// Construct an integer.
-    pub(crate) fn new_int<T>(val: T) -> Self where Int: From<T> {
-        Self(ObjV::Int(Int::from(val)))
     }
 
     /// Construct a big integer from a decimal string representation.
@@ -296,10 +283,36 @@ impl Object {
         Self(ObjV::Map(GcCell::new(Map::new())))
     }
 
+    /// Return the null object.
+    pub fn null() -> Self {
+        Self(ObjV::Null)
+    }
+
+    /// Construct a function.
+    pub fn new_func<T>(val: T) -> Self
+    where
+        Func: From<T>,
+    {
+        Self(ObjV::Func(Func::from(val)))
+    }
+
+    /// Construct an iterator
+    pub fn new_iterator(obj: &Object) -> Result<Self, Error> {
+        if let Object(ObjV::List(l)) = obj {
+            Ok(Object(ObjV::ListIter(
+                GcCell::new(0),
+                l.clone(),
+            )))
+        } else {
+            Err(Error::new(TypeMismatch::Iterate(obj.type_of())))
+        }
+    }
+
     // Mutation
     // ------------------------------------------------------------------------------------------------
 
-    pub(crate) fn push(&self, other: Object) -> Result<(), Error> {
+    /// Append a new element to a list.
+    pub fn push(&self, other: Object) -> Result<(), Error> {
         let Self(this) = self;
         match this {
             ObjV::List(x) => {
@@ -311,11 +324,13 @@ impl Object {
         }
     }
 
-    pub(crate) fn push_unchecked(&self, other: Object) {
+    /// Append a new element to a list, without checking whether it's a list.
+    pub fn push_unchecked(&self, other: Object) {
         self.push(other).unwrap();
     }
 
-    pub(crate) fn push_cell(&self, other: GcCell<Object>) -> Result<(), Error> {
+    /// Append a new cell to a closure.
+    pub fn push_cell(&self, other: GcCell<Object>) -> Result<(), Error> {
         let Self(this) = self;
         match this {
             ObjV::Func(func) => { func.push_cell(other) },
@@ -323,7 +338,8 @@ impl Object {
         }
     }
 
-    pub(crate) fn insert(&self, key: Self, value: Self) -> Result<(), Error> {
+    /// Assign a new key-value pair to a map.
+    pub fn insert(&self, key: Self, value: Self) -> Result<(), Error> {
         self.insert_key(
             key.get_key()
                 .ok_or_else(|| Error::new(TypeMismatch::MapKey(key.type_of())))?,
@@ -331,7 +347,8 @@ impl Object {
         )
     }
 
-    pub(crate) fn insert_key(&self, key: Key, value: Object) -> Result<(), Error> {
+    /// Assign a new key-value pair to a map.
+    pub fn insert_key(&self, key: Key, value: Object) -> Result<(), Error> {
         let Self(this) = self;
         match this {
             ObjV::Map(x) => {
@@ -340,132 +357,6 @@ impl Object {
                 Ok(())
             }
             _ => Err(Error::new(Reason::None)),
-        }
-    }
-
-    pub(crate) fn append(&self, mut it: impl Iterator<Item = Object>) -> Result<(), Error> {
-        let Self(this) = self;
-        match this {
-            ObjV::List(x) => {
-                let mut xx = x.borrow_mut();
-                while let Some(obj) = it.next() {
-                    xx.push(obj);
-                }
-                Ok(())
-            }
-            _ => Err(Error::new(Reason::None)),
-        }
-    }
-
-    // Unchecked functions
-    // ------------------------------------------------------------------------------------------------
-
-    /// Mathematical negation.
-    pub fn neg(&self) -> Result<Self, Error> {
-        let Self(this) = self;
-        match this {
-            ObjV::Int(x) => Ok(Self(ObjV::Int(x.neg()))),
-            ObjV::Float(x) => Ok(Self(ObjV::Float(-x))),
-            _ => Err(Error::new(TypeMismatch::UnOp(
-                self.type_of(),
-                UnOp::ArithmeticalNegate,
-            ))),
-        }
-    }
-
-    /// String representation of this object. Used for string interpolation.
-    pub fn format(&self, spec: &FormatSpec) -> Result<String, Error> {
-        let Self(this) = self;
-        match this {
-            ObjV::Str(r) => {
-                if let Some(str_spec) = spec.string_spec() {
-                    Ok(str_spec.format(r.as_str()))
-                } else {
-                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
-                }
-            }
-            ObjV::Boolean(x) => {
-                if let Some(str_spec) = spec.string_spec() {
-                    let s = if *x { "true" } else { "false" };
-                    Ok(str_spec.format(s))
-                } else if let Some(int_spec) = spec.integer_spec() {
-                    let i = if *x { 1 } else { 0 };
-                    int_spec.format(&Int::from(i))
-                } else if let Some(float_spec) = spec.float_spec() {
-                    let f = if *x { 1.0 } else { 0.0 };
-                    Ok(float_spec.format(f))
-                } else {
-                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
-                }
-            }
-            ObjV::Null => {
-                if let Some(str_spec) = spec.string_spec() {
-                    Ok(str_spec.format("null"))
-                } else {
-                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
-                }
-            }
-            ObjV::Int(r) => {
-                if let Some(int_spec) = spec.integer_spec() {
-                    int_spec.format(r)
-                } else if let Some(float_spec) = spec.float_spec() {
-                    Ok(float_spec.format(r.to_f64()))
-                } else {
-                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
-                }
-            }
-            ObjV::Float(r) => {
-                if let Some(float_spec) = spec.float_spec() {
-                    Ok(float_spec.format(*r))
-                } else {
-                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
-                }
-            }
-            _ => Err(Error::new(TypeMismatch::Interpolate(self.type_of()))),
-        }
-    }
-
-    pub(crate) fn closure(val: CompiledFunction) -> Self {
-        Self(ObjV::Func(Func::closure(val)))
-    }
-
-    /// Construct a string directly from an interned symbol.
-    pub fn key(val: Key) -> Self {
-        Self(ObjV::Str(Str::interned(val)))
-    }
-
-    /// Construct a float.
-    pub fn float(val: f64) -> Self {
-        Self(ObjV::Float(val))
-    }
-
-    /// Construct a boolean.
-    pub fn bool(val: bool) -> Self {
-        Self(ObjV::Boolean(val))
-    }
-
-    /// Return the null object.
-    pub fn null() -> Self {
-        Self(ObjV::Null)
-    }
-
-    /// Construct a function.
-    pub(crate) fn func<T>(val: T) -> Self
-    where
-        Func: From<T>,
-    {
-        Self(ObjV::Func(Func::from(val)))
-    }
-
-    /// Construct an iterator
-    pub fn iterator(obj: &Object) -> Result<Self, Error> {
-        if let Object(ObjV::List(l)) = obj {
-            Ok(Object(ObjV::ListIter(
-                GcCell::new(0),
-                l.clone(),
-            )))
-        } else {
-            Err(Error::new(TypeMismatch::Iterate(obj.type_of())))
         }
     }
 
@@ -486,307 +377,9 @@ impl Object {
         }
     }
 
-    /// Serialize this objcet to a byte vector.
-    pub fn serialize(&self) -> Option<Vec<u8>> {
-        let data = (SERIALIZE_VERSION, SystemTime::now(), self);
-        encode::to_vec(&data).ok()
-    }
-
-    /// Serialize this objcet to a writable buffer.
-    pub fn serialize_write<T: Write + ?Sized>(&self, out: &mut T) -> Option<()> {
-        let data = (SERIALIZE_VERSION, SystemTime::now(), self);
-        encode::write(out, &data).ok()
-    }
-
-    /// Deserialize an object from a byte vector.
-    pub fn deserialize(data: &Vec<u8>) -> Option<(Self, SystemTime)> {
-        let (version, time, retval) =
-            decode::from_slice::<(i32, SystemTime, Self)>(data.as_slice()).ok()?;
-        if version < SERIALIZE_VERSION {
-            None
-        } else {
-            Some((retval, time))
-        }
-    }
-
-    /// Deserialize an object from a readable buffer.
-    pub fn deserialize_read<T: Read>(data: T) -> Option<(Self, SystemTime)> {
-        let (version, time, retval) = decode::from_read::<T, (i32, SystemTime, Self)>(data).ok()?;
-        if version < SERIALIZE_VERSION {
-            None
-        } else {
-            Some((retval, time))
-        }
-    }
-
-    /// Get the type of this object.
-    pub fn type_of(&self) -> Type {
-        let Self(this) = self;
-        match this {
-            ObjV::Int(_) => Type::Integer,
-            ObjV::Float(_) => Type::Float,
-            ObjV::Str(_) => Type::String,
-            ObjV::Boolean(_) => Type::Boolean,
-            ObjV::List(_) => Type::List,
-            ObjV::Map(_) => Type::Map,
-            ObjV::Func(_) => Type::Function,
-            ObjV::ListIter(_, _) => Type::Iterator,
-            ObjV::Null => Type::Null,
-        }
-    }
-
-    /// User-facing (non-structural) equality.
-    ///
-    /// We use a stricter form of equality checking for testing purposes. This
-    /// method implements equality under Gold semantics.
-    pub fn user_eq(&self, other: &Self) -> bool {
-        match (&self.0, &other.0) {
-            // Equality between disparate types
-            (ObjV::Float(x), ObjV::Int(y)) => y.eq(x),
-            (ObjV::Int(x), ObjV::Float(y)) => x.eq(y),
-
-            // Structural equality
-            (ObjV::Int(x), ObjV::Int(y)) => x.user_eq(y),
-            (ObjV::Float(x), ObjV::Float(y)) => x.eq(y),
-            (ObjV::Str(x), ObjV::Str(y)) => x.user_eq(y),
-            (ObjV::Boolean(x), ObjV::Boolean(y)) => x.eq(y),
-            (ObjV::Null, ObjV::Null) => true,
-            (ObjV::Func(x), ObjV::Func(y)) => x.user_eq(y),
-
-            // Composite objects: we must implement equality the hard way, since
-            // `eq` would not delegate to checking contained objects using
-            // `user_eq`.
-            (ObjV::List(x), ObjV::List(y)) => {
-                let xx = x.borrow();
-                let yy = y.borrow();
-                if xx.len() != yy.len() {
-                    return false;
-                }
-                for (xx, yy) in xx.iter().zip(yy.iter()) {
-                    if !xx.user_eq(yy) {
-                        return false;
-                    }
-                }
-                true
-            }
-
-            (ObjV::Map(x), ObjV::Map(y)) => {
-                let xx = x.borrow();
-                let yy = y.borrow();
-                if xx.len() != yy.len() {
-                    return false;
-                }
-                for (xk, xv) in xx.iter() {
-                    if let Some(yv) = yy.get(xk) {
-                        if !xv.user_eq(yv) {
-                            return false;
-                        }
-                    } else {
-                        return false;
-                    }
-                }
-                true
-            }
-
-            // Different types generally mean not equal
-            _ => false,
-        }
-    }
-
-    /// Extract the string variant if applicable.
-    pub fn get_str(&self) -> Option<&str> {
-        match &self.0 {
-            ObjV::Str(x) => Some(x.as_str()),
-            _ => None,
-        }
-    }
-
-    /// Extract the integer variant if applicable.
-    pub(crate) fn get_int(&self) -> Option<&Int> {
-        match &self.0 {
-            ObjV::Int(x) => Some(x),
-            _ => None,
-        }
-    }
-
-    /// Extract the floating-point variant if applicable.
-    pub fn get_float(&self) -> Option<f64> {
-        match &self.0 {
-            ObjV::Float(x) => Some(*x),
-            _ => None,
-        }
-    }
-
-    /// Extract the bool variant if applicable. (See also [`ObjectVariant::truthy`].)
-    pub fn get_bool(&self) -> Option<bool> {
-        match &self.0 {
-            ObjV::Boolean(x) => Some(*x),
-            _ => None,
-        }
-    }
-
-    /// Extract the list variant if applicable.
-    pub fn get_list<'a>(&'a self) -> Option<GcCellRef<'_, List>> {
-        match &self.0 {
-            ObjV::List(x) => Some(x.borrow()),
-            _ => None,
-        }
-    }
-
-    /// Extract the map variant if applicable.
-    pub(crate) fn get_map<'a>(&'a self) -> Option<GcCellRef<'_, Map>> {
-        match &self.0 {
-            ObjV::Map(x) => Some(x.borrow()),
-            _ => None,
-        }
-    }
-
-    /// Extract the map variant if applicable.
-    pub(crate) fn get_map_mut<'a>(&'a self) -> Option<GcCellRefMut<'_, Map>> {
-        match &self.0 {
-            ObjV::Map(x) => Some(x.borrow_mut()),
-            _ => None,
-        }
-    }
-
-    /// Extract the function variant if applicable.
-    #[cfg(feature = "python")]
-    pub(crate) fn get_func_variant<'a>(&'a self) -> Option<&'a Func> {
-        match &self.0 {
-            ObjV::Func(func) => Some(func),
-            _ => None,
-        }
-    }
-
-    /// Extract the key variant if applicable (an interned string).
-    pub fn get_key(&self) -> Option<Key> {
-        match &self.0 {
-            ObjV::Str(x) => Some(Key::from(x)),
-            _ => None,
-        }
-    }
-
-    /// Extract the function variant if applicable.
-    pub(crate) fn get_func(&self) -> Option<&Func> {
-        match &self.0 {
-            ObjV::Func(x) => Some(x),
-            _ => None,
-        }
-    }
-
-    /// Extract the null variant if applicable.
-    ///
-    /// Note that `obj.get_null().is_some() == obj.is_null()`.
-    pub fn get_null(&self) -> Option<()> {
-        match &self.0 {
-            ObjV::Null => Some(()),
-            _ => None,
-        }
-    }
-
-    /// Check whether the object is null.
-    pub fn is_null(&self) -> bool {
-        match &self.0 {
-            ObjV::Null => true,
-            _ => false,
-        }
-    }
-
-    pub(crate) fn native_callable(&self) -> Option<&dyn Fn(&List, Option<&Map>) -> Result<Object, Error>> {
-        let Self(this) = self;
-        match this {
-            ObjV::Func(func) => func.native_callable(),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn get_closure(&self) -> Option<(Gc<CompiledFunction>, GcCell<Vec<GcCell<Object>>>)> {
-        let Self(this) = self;
-        match this {
-            ObjV::Func(func) => func.get_closure(),
-            _ => None,
-        }
-    }
-
-    /// The function call operator.
-    #[cfg(feature = "python")]
-    pub(crate) fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
-        match self.get_func_variant() {
-            Some(func) => func.call(args, kwargs),
-            None => return Err(Error::new(TypeMismatch::Call(self.type_of()))),
-        }
-    }
-
-    /// Check whether this object is truthy, as interpreted by if-then-else
-    /// expressions.
-    ///
-    /// Every object is truthy except for null, false and zeros. In particular,
-    /// empty collections are truthy!
-    pub fn truthy(&self) -> bool {
-        match &self.0 {
-            ObjV::Null => false,
-            ObjV::Boolean(val) => *val,
-            ObjV::Int(r) => r.nonzero(),
-            ObjV::Float(r) => *r != 0.0,
-            _ => true,
-        }
-    }
-
-    /// Return `Some(true)` if `self` and `other` are comparable and that the
-    /// comparison is equal to `ordering`. Returns `Some(false)` if it is not.
-    /// Returns `None` if they are not comparable.
-    pub fn cmp_bool(&self, other: &Self, ordering: Ordering) -> Option<bool> {
-        self.partial_cmp(other).map(|x| x == ordering)
-    }
-
-    /// The indexing operator (for both lists and maps).
-    pub fn index(&self, other: &Object) -> Result<Object, Error> {
-        match (&self.0, &other.0) {
-            (ObjV::List(x), ObjV::Int(y)) => {
-                let xx = x.borrow();
-                let i: usize = y.try_into().map_err(|_| Error::new(Value::OutOfRange))?;
-                if i >= xx.len() {
-                    Err(Error::new(Value::OutOfRange))
-                } else {
-                    Ok(xx[i].clone())
-                }
-            }
-            (ObjV::Map(x), ObjV::Str(y)) => {
-                let xx = x.borrow();
-                let yy = GlobalSymbol::from(y);
-                xx.get(&yy)
-                    .ok_or_else(|| Error::new(Reason::Unassigned(yy)))
-                    .map(Object::clone)
-            }
-            _ => Err(Error::new(TypeMismatch::BinOp(
-                self.type_of(),
-                other.type_of(),
-                BinOp::Index,
-            ))),
-        }
-    }
-
-    /// The containment operator.
-    pub fn contains(&self, other: &Object) -> Result<bool, Error> {
-        let Self(this) = self;
-        let Self(that) = other;
-
-        if let ObjV::List(x) = this {
-            return Ok(x.borrow().contains(other));
-        }
-
-        if let (ObjV::Str(haystack), ObjV::Str(needle)) = (this, that) {
-            return Ok(haystack.as_str().contains(needle.as_str()));
-        }
-
-        Err(Error::new(TypeMismatch::BinOp(
-            self.type_of(),
-            other.type_of(),
-            BinOp::Contains,
-        )))
-    }
-
-    pub(crate) fn splat_into(&self, other: Object) -> Result<(), Error> {
+    /// Splat all elements in `other` into this object. Works for map-to-map and
+    /// list-to-list.
+    pub fn splat_into(&self, other: Object) -> Result<(), Error> {
         let Self(this) = self;
         let Self(that) = &other;
         match (this, that) {
@@ -811,6 +404,49 @@ impl Object {
             (ObjV::Map(_), _) => Err(Error::new(TypeMismatch::SplatMap(other.type_of()))),
 
             _ => Err(Error::new(Internal::SplatToNonCollection)),
+        }
+    }
+
+    fn append(&self, mut it: impl Iterator<Item = Object>) -> Result<(), Error> {
+        let Self(this) = self;
+        match this {
+            ObjV::List(x) => {
+                let mut xx = x.borrow_mut();
+                while let Some(obj) = it.next() {
+                    xx.push(obj);
+                }
+                Ok(())
+            }
+            _ => Err(Error::new(Reason::None)),
+        }
+    }
+
+    // Serialization
+    // ------------------------------------------------------------------------------------------------
+
+    #[allow(dead_code)]
+    fn serialize(&self) -> Option<Vec<u8>> {
+        encode::to_vec(self).ok()
+    }
+
+    #[allow(dead_code)]
+    fn deserialize(data: &Vec<u8>) -> Option<Self> {
+        decode::from_slice::<Self>(data.as_slice()).ok()
+    }
+
+    // Mathematical operators
+    // ------------------------------------------------------------------------------------------------
+
+    /// Mathematical negation.
+    pub fn neg(&self) -> Result<Self, Error> {
+        let Self(this) = self;
+        match this {
+            ObjV::Int(x) => Ok(Self(ObjV::Int(x.neg()))),
+            ObjV::Float(x) => Ok(Self(ObjV::Float(-x))),
+            _ => Err(Error::new(TypeMismatch::UnOp(
+                self.type_of(),
+                UnOp::ArithmeticalNegate,
+            ))),
         }
     }
 
@@ -887,16 +523,6 @@ impl Object {
         )
     }
 
-    /// Convert to f64 if possible.
-    pub fn to_f64(&self) -> Option<f64> {
-        let Self(this) = self;
-        match this {
-            ObjV::Int(x) => Some(x.to_f64()),
-            ObjV::Float(x) => Some(*x),
-            _ => None,
-        }
-    }
-
     /// The exponentiation operator. This uses [`IntVariant::pow`] if both
     /// operands are integers and if the exponent is non-negative. Otherwise it
     /// delegates to floating-point exponentiation.
@@ -921,6 +547,343 @@ impl Object {
                 ))
             })?;
         Ok(Self::from(xx.powf(yy)))
+    }
+
+    // Introspection
+    // ------------------------------------------------------------------------------------------------
+
+    /// Get the type of this object.
+    pub fn type_of(&self) -> Type {
+        let Self(this) = self;
+        match this {
+            ObjV::Int(_) => Type::Integer,
+            ObjV::Float(_) => Type::Float,
+            ObjV::Str(_) => Type::String,
+            ObjV::Boolean(_) => Type::Boolean,
+            ObjV::List(_) => Type::List,
+            ObjV::Map(_) => Type::Map,
+            ObjV::Func(_) => Type::Function,
+            ObjV::ListIter(_, _) => Type::Iterator,
+            ObjV::Null => Type::Null,
+        }
+    }
+
+    /// Extract the string variant if applicable.
+    pub fn get_str(&self) -> Option<&str> {
+        match &self.0 {
+            ObjV::Str(x) => Some(x.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Extract the integer variant if applicable.
+    pub fn get_int(&self) -> Option<&Int> {
+        match &self.0 {
+            ObjV::Int(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    /// Extract the floating-point variant if applicable.
+    pub fn get_float(&self) -> Option<f64> {
+        match &self.0 {
+            ObjV::Float(x) => Some(*x),
+            _ => None,
+        }
+    }
+
+    /// Extract the bool variant if applicable. (See also [`ObjectVariant::truthy`].)
+    pub fn get_bool(&self) -> Option<bool> {
+        match &self.0 {
+            ObjV::Boolean(x) => Some(*x),
+            _ => None,
+        }
+    }
+
+    /// Extract the list variant if applicable.
+    pub fn get_list<'a>(&'a self) -> Option<GcCellRef<'_, List>> {
+        match &self.0 {
+            ObjV::List(x) => Some(x.borrow()),
+            _ => None,
+        }
+    }
+
+    /// Extract the map variant if applicable.
+    pub fn get_map<'a>(&'a self) -> Option<GcCellRef<'_, Map>> {
+        match &self.0 {
+            ObjV::Map(x) => Some(x.borrow()),
+            _ => None,
+        }
+    }
+
+    /// Extract the map variant if applicable.
+    pub fn get_map_mut<'a>(&'a self) -> Option<GcCellRefMut<'_, Map>> {
+        match &self.0 {
+            ObjV::Map(x) => Some(x.borrow_mut()),
+            _ => None,
+        }
+    }
+
+    /// Extract the function variant if applicable.
+    #[cfg(feature = "python")]
+    pub fn get_func_variant<'a>(&'a self) -> Option<&'a Func> {
+        match &self.0 {
+            ObjV::Func(func) => Some(func),
+            _ => None,
+        }
+    }
+
+    /// Extract the key variant if applicable (an interned string).
+    pub fn get_key(&self) -> Option<Key> {
+        match &self.0 {
+            ObjV::Str(x) => Some(Key::from(x)),
+            _ => None,
+        }
+    }
+
+    /// Extract the function variant if applicable.
+    pub fn get_func(&self) -> Option<&Func> {
+        match &self.0 {
+            ObjV::Func(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    /// Extract the null variant if applicable.
+    ///
+    /// Note that `obj.get_null().is_some() == obj.is_null()`.
+    pub fn get_null(&self) -> Option<()> {
+        match &self.0 {
+            ObjV::Null => Some(()),
+            _ => None,
+        }
+    }
+
+    /// Check whether the object is null.
+    pub fn is_null(&self) -> bool {
+        match &self.0 {
+            ObjV::Null => true,
+            _ => false,
+        }
+    }
+
+    /// Extract a native Rust callable if applicable.
+    pub fn get_native_callable(&self) -> Option<&dyn Fn(&List, Option<&Map>) -> Result<Object, Error>> {
+        let Self(this) = self;
+        match this {
+            ObjV::Func(func) => func.native_callable(),
+            _ => None,
+        }
+    }
+
+    /// Extract the closure variant if applicable (a compiled function together
+    /// with a vector of closure cells).
+    pub fn get_closure(&self) -> Option<(Gc<CompiledFunction>, GcCell<Vec<GcCell<Object>>>)> {
+        let Self(this) = self;
+        match this {
+            ObjV::Func(func) => func.get_closure(),
+            _ => None,
+        }
+    }
+
+    /// Check whether this object is truthy, as interpreted by if-then-else
+    /// expressions.
+    ///
+    /// Every object is truthy except for null, false and zeros. In particular,
+    /// empty collections are truthy!
+    pub fn truthy(&self) -> bool {
+        match &self.0 {
+            ObjV::Null => false,
+            ObjV::Boolean(val) => *val,
+            ObjV::Int(r) => r.nonzero(),
+            ObjV::Float(r) => *r != 0.0,
+            _ => true,
+        }
+    }
+
+    // Unchecked functions
+    // ------------------------------------------------------------------------------------------------
+
+    /// String representation of this object. Used for string interpolation.
+    pub fn format(&self, spec: &FormatSpec) -> Result<String, Error> {
+        let Self(this) = self;
+        match this {
+            ObjV::Str(r) => {
+                if let Some(str_spec) = spec.string_spec() {
+                    Ok(str_spec.format(r.as_str()))
+                } else {
+                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
+                }
+            }
+            ObjV::Boolean(x) => {
+                if let Some(str_spec) = spec.string_spec() {
+                    let s = if *x { "true" } else { "false" };
+                    Ok(str_spec.format(s))
+                } else if let Some(int_spec) = spec.integer_spec() {
+                    let i = if *x { 1 } else { 0 };
+                    int_spec.format(&Int::from(i))
+                } else if let Some(float_spec) = spec.float_spec() {
+                    let f = if *x { 1.0 } else { 0.0 };
+                    Ok(float_spec.format(f))
+                } else {
+                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
+                }
+            }
+            ObjV::Null => {
+                if let Some(str_spec) = spec.string_spec() {
+                    Ok(str_spec.format("null"))
+                } else {
+                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
+                }
+            }
+            ObjV::Int(r) => {
+                if let Some(int_spec) = spec.integer_spec() {
+                    int_spec.format(r)
+                } else if let Some(float_spec) = spec.float_spec() {
+                    Ok(float_spec.format(r.to_f64()))
+                } else {
+                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
+                }
+            }
+            ObjV::Float(r) => {
+                if let Some(float_spec) = spec.float_spec() {
+                    Ok(float_spec.format(*r))
+                } else {
+                    Err(Error::new(TypeMismatch::InterpolateSpec(self.type_of())))
+                }
+            }
+            _ => Err(Error::new(TypeMismatch::Interpolate(self.type_of()))),
+        }
+    }
+
+    /// User-facing (non-structural) equality.
+    ///
+    /// We use a stricter form of equality checking for testing purposes. This
+    /// method implements equality under Gold semantics.
+    pub fn user_eq(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            // Equality between disparate types
+            (ObjV::Float(x), ObjV::Int(y)) => y.eq(x),
+            (ObjV::Int(x), ObjV::Float(y)) => x.eq(y),
+
+            // Structural equality
+            (ObjV::Int(x), ObjV::Int(y)) => x.user_eq(y),
+            (ObjV::Float(x), ObjV::Float(y)) => x.eq(y),
+            (ObjV::Str(x), ObjV::Str(y)) => x.user_eq(y),
+            (ObjV::Boolean(x), ObjV::Boolean(y)) => x.eq(y),
+            (ObjV::Null, ObjV::Null) => true,
+            (ObjV::Func(x), ObjV::Func(y)) => x.user_eq(y),
+
+            // Composite objects: we must implement equality the hard way, since
+            // `eq` would not delegate to checking contained objects using
+            // `user_eq`.
+            (ObjV::List(x), ObjV::List(y)) => {
+                let xx = x.borrow();
+                let yy = y.borrow();
+                if xx.len() != yy.len() {
+                    return false;
+                }
+                for (xx, yy) in xx.iter().zip(yy.iter()) {
+                    if !xx.user_eq(yy) {
+                        return false;
+                    }
+                }
+                true
+            }
+
+            (ObjV::Map(x), ObjV::Map(y)) => {
+                let xx = x.borrow();
+                let yy = y.borrow();
+                if xx.len() != yy.len() {
+                    return false;
+                }
+                for (xk, xv) in xx.iter() {
+                    if let Some(yv) = yy.get(xk) {
+                        if !xv.user_eq(yv) {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+                true
+            }
+
+            // Different types generally mean not equal
+            _ => false,
+        }
+    }
+    /// The function call operator.
+    #[cfg(feature = "python")]
+    fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+        match self.get_func_variant() {
+            Some(func) => func.call(args, kwargs),
+            None => return Err(Error::new(TypeMismatch::Call(self.type_of()))),
+        }
+    }
+
+    /// Return `Some(true)` if `self` and `other` are comparable and that the
+    /// comparison is equal to `ordering`. Returns `Some(false)` if it is not.
+    /// Returns `None` if they are not comparable.
+    pub fn cmp_bool(&self, other: &Self, ordering: Ordering) -> Option<bool> {
+        self.partial_cmp(other).map(|x| x == ordering)
+    }
+
+    /// The indexing operator (for both lists and maps).
+    pub fn index(&self, other: &Object) -> Result<Object, Error> {
+        match (&self.0, &other.0) {
+            (ObjV::List(x), ObjV::Int(y)) => {
+                let xx = x.borrow();
+                let i: usize = y.try_into().map_err(|_| Error::new(Value::OutOfRange))?;
+                if i >= xx.len() {
+                    Err(Error::new(Value::OutOfRange))
+                } else {
+                    Ok(xx[i].clone())
+                }
+            }
+            (ObjV::Map(x), ObjV::Str(y)) => {
+                let xx = x.borrow();
+                let yy = GlobalSymbol::from(y);
+                xx.get(&yy)
+                    .ok_or_else(|| Error::new(Reason::Unassigned(yy)))
+                    .map(Object::clone)
+            }
+            _ => Err(Error::new(TypeMismatch::BinOp(
+                self.type_of(),
+                other.type_of(),
+                BinOp::Index,
+            ))),
+        }
+    }
+
+    /// The containment operator.
+    pub fn contains(&self, other: &Object) -> Result<bool, Error> {
+        let Self(this) = self;
+        let Self(that) = other;
+
+        if let ObjV::List(x) = this {
+            return Ok(x.borrow().contains(other));
+        }
+
+        if let (ObjV::Str(haystack), ObjV::Str(needle)) = (this, that) {
+            return Ok(haystack.as_str().contains(needle.as_str()));
+        }
+
+        Err(Error::new(TypeMismatch::BinOp(
+            self.type_of(),
+            other.type_of(),
+            BinOp::Contains,
+        )))
+    }
+
+    /// Convert to f64 if possible.
+    fn to_f64(&self) -> Option<f64> {
+        let Self(this) = self;
+        match this {
+            ObjV::Int(x) => Some(x.to_f64()),
+            ObjV::Float(x) => Some(*x),
+            _ => None,
+        }
     }
 }
 
@@ -968,7 +931,7 @@ impl Display for Object {
 
 impl From<bool> for Object {
     fn from(value: bool) -> Self {
-        Object::bool(value)
+        Object(ObjV::Boolean(value))
     }
 }
 
@@ -978,9 +941,21 @@ impl From<&str> for Object {
     }
 }
 
+impl From<String> for Object {
+    fn from(value: String) -> Self {
+        Object::new_str(value)
+    }
+}
+
+impl From<&String> for Object {
+    fn from(value: &String) -> Self {
+        Object::new_str(value.as_str())
+    }
+}
+
 impl From<Key> for Object {
     fn from(value: Key) -> Self {
-        Object::key(value)
+        Object(ObjV::Str(Str::from(value)))
     }
 }
 
@@ -1074,11 +1049,11 @@ impl<'s> FromPyObject<'s> for Object {
     fn extract(obj: &'s PyAny) -> PyResult<Self> {
         // Nothing magical here, just a prioritized list of possible Python types and their Gold equivalents
         if let Ok(x) = obj.extract::<Func>() {
-            Ok(Object::func(x))
+            Ok(Object::new_func(x))
         } else if let Ok(x) = obj.extract::<i64>() {
-            Ok(Object::new_int(x))
+            Ok(Object::from(x))
         } else if let Ok(x) = obj.extract::<BigInt>() {
-            Ok(Object::new_int(x))
+            Ok(Object::from(x))
         } else if let Ok(x) = obj.extract::<f64>() {
             Ok(Object::from(x))
         } else if let Ok(x) = obj.extract::<&str>() {
@@ -1107,7 +1082,7 @@ impl<'s> FromPyObject<'s> for Object {
                 });
                 result.map_err(|e: PyErr| Error::new(Reason::External(format!("{}", e))))
             });
-            Ok(Object::func(closure))
+            Ok(Object::new_func(closure))
         } else {
             Err(PyTypeError::new_err(format!(
                 "uncovertible type: {}",
@@ -1143,7 +1118,7 @@ impl pyo3::IntoPy<PyObject> for Object {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use core::cmp::Ordering;
 
     use crate::formatting::{
@@ -1155,35 +1130,35 @@ mod test {
 
     #[test]
     fn to_string() {
-        assert_eq!(Object::new_int(1).to_string(), "1");
-        assert_eq!(Object::new_int(-1).to_string(), "-1");
+        assert_eq!(Object::from(1).to_string(), "1");
+        assert_eq!(Object::from(-1).to_string(), "-1");
         assert_eq!(
             Object::new_int_from_str("9223372036854775808").unwrap().to_string(),
             "9223372036854775808"
         );
 
-        assert_eq!(Object::float(1.2).to_string(), "1.2");
-        assert_eq!(Object::float(1.0).to_string(), "1");
+        assert_eq!(Object::from(1.2).to_string(), "1.2");
+        assert_eq!(Object::from(1.0).to_string(), "1");
 
-        assert_eq!(Object::float(-1.2).to_string(), "-1.2");
-        assert_eq!(Object::float(-1.0).to_string(), "-1");
+        assert_eq!(Object::from(-1.2).to_string(), "-1.2");
+        assert_eq!(Object::from(-1.0).to_string(), "-1");
 
-        assert_eq!(Object::bool(true).to_string(), "true");
-        assert_eq!(Object::bool(false).to_string(), "false");
+        assert_eq!(Object::from(true).to_string(), "true");
+        assert_eq!(Object::from(false).to_string(), "false");
         assert_eq!(Object::null().to_string(), "null");
 
-        assert_eq!(Object::new_str("alpha").to_string(), "\"alpha\"");
-        assert_eq!(Object::new_str("\"alpha\\").to_string(), "\"\\\"alpha\\\\\"");
+        assert_eq!(Object::from("alpha").to_string(), "\"alpha\"");
+        assert_eq!(Object::from("\"alpha\\").to_string(), "\"\\\"alpha\\\\\"");
 
         assert_eq!(Object::new_list().to_string(), "[]");
         assert_eq!(
-            Object::from(vec![Object::new_int(1), Object::new_str("alpha")]).to_string(),
+            Object::from(vec![Object::from(1), Object::from("alpha")]).to_string(),
             "[1, \"alpha\"]"
         );
 
         assert_eq!(Object::new_map().to_string(), "{}");
         assert_eq!(
-            Object::from(vec![("a", Object::new_int(1)),]).to_string(),
+            Object::from(vec![("a", Object::from(1)),]).to_string(),
             "{a: 1}"
         );
     }
@@ -1191,23 +1166,23 @@ mod test {
     #[test]
     fn format() {
         assert_eq!(
-            Object::new_str("alpha").format(&Default::default()),
+            Object::from("alpha").format(&Default::default()),
             Ok("alpha".to_string())
         );
         assert_eq!(
-            Object::new_str("\"alpha\"").format(&Default::default()),
+            Object::from("\"alpha\"").format(&Default::default()),
             Ok("\"alpha\"".to_string())
         );
         assert_eq!(
-            Object::new_str("\"al\\pha\"").format(&Default::default()),
+            Object::from("\"al\\pha\"").format(&Default::default()),
             Ok("\"al\\pha\"".to_string())
         );
         assert_eq!(
-            Object::bool(true).format(&Default::default()),
+            Object::from(true).format(&Default::default()),
             Ok("true".to_string())
         );
         assert_eq!(
-            Object::bool(false).format(&Default::default()),
+            Object::from(false).format(&Default::default()),
             Ok("false".to_string())
         );
         assert_eq!(
@@ -1215,20 +1190,20 @@ mod test {
             Ok("null".to_string())
         );
         assert_eq!(
-            Object::new_int(0).format(&Default::default()),
+            Object::from(0).format(&Default::default()),
             Ok("0".to_string())
         );
         assert_eq!(
-            Object::new_int(-2).format(&Default::default()),
+            Object::from(-2).format(&Default::default()),
             Ok("-2".to_string())
         );
         assert_eq!(
-            Object::new_int(5).format(&Default::default()),
+            Object::from(5).format(&Default::default()),
             Ok("5".to_string())
         );
 
         assert_eq!(
-            Object::new_str("dong").format(&FormatSpec {
+            Object::from("dong").format(&FormatSpec {
                 fill: ' ',
                 width: Some(10),
                 ..Default::default()
@@ -1237,7 +1212,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_str("dong").format(&FormatSpec {
+            Object::from("dong").format(&FormatSpec {
                 fill: ' ',
                 width: Some(2),
                 ..Default::default()
@@ -1246,7 +1221,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_str("dong").format(&FormatSpec {
+            Object::from("dong").format(&FormatSpec {
                 fill: ' ',
                 width: Some(12),
                 align: Some(AlignSpec::left()),
@@ -1256,7 +1231,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_str("dong").format(&FormatSpec {
+            Object::from("dong").format(&FormatSpec {
                 fill: ' ',
                 width: Some(8),
                 align: Some(AlignSpec::right()),
@@ -1266,7 +1241,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_str("dong").format(&FormatSpec {
+            Object::from("dong").format(&FormatSpec {
                 fill: ' ',
                 width: Some(8),
                 align: Some(AlignSpec::center()),
@@ -1276,7 +1251,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_str("dong").format(&FormatSpec {
+            Object::from("dong").format(&FormatSpec {
                 fill: ' ',
                 width: Some(7),
                 align: Some(AlignSpec::center()),
@@ -1286,7 +1261,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_str("dong").format(&FormatSpec {
+            Object::from("dong").format(&FormatSpec {
                 fill: '~',
                 width: Some(8),
                 align: Some(AlignSpec::center()),
@@ -1296,7 +1271,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::bool(true).format(&FormatSpec {
+            Object::from(true).format(&FormatSpec {
                 fill: '~',
                 width: Some(8),
                 align: Some(AlignSpec::center()),
@@ -1306,7 +1281,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::bool(false).format(&FormatSpec {
+            Object::from(false).format(&FormatSpec {
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Decimal)),
                 ..Default::default()
             }),
@@ -1314,7 +1289,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::bool(true).format(&FormatSpec {
+            Object::from(true).format(&FormatSpec {
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Decimal)),
                 ..Default::default()
             }),
@@ -1322,7 +1297,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::bool(false).format(&FormatSpec {
+            Object::from(false).format(&FormatSpec {
                 fill: ' ',
                 width: Some(6),
                 align: Some(AlignSpec::right()),
@@ -1342,7 +1317,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(0).format(&FormatSpec {
+            Object::from(0).format(&FormatSpec {
                 sign: Some(SignSpec::Plus),
                 ..Default::default()
             }),
@@ -1350,7 +1325,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(15).format(&FormatSpec {
+            Object::from(15).format(&FormatSpec {
                 sign: Some(SignSpec::Space),
                 ..Default::default()
             }),
@@ -1358,7 +1333,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(11).format(&FormatSpec {
+            Object::from(11).format(&FormatSpec {
                 sign: Some(SignSpec::Minus),
                 ..Default::default()
             }),
@@ -1366,7 +1341,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(-1).format(&FormatSpec {
+            Object::from(-1).format(&FormatSpec {
                 sign: Some(SignSpec::Plus),
                 ..Default::default()
             }),
@@ -1374,7 +1349,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(-13).format(&FormatSpec {
+            Object::from(-13).format(&FormatSpec {
                 sign: Some(SignSpec::Space),
                 ..Default::default()
             }),
@@ -1382,7 +1357,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(-10).format(&FormatSpec {
+            Object::from(-10).format(&FormatSpec {
                 sign: Some(SignSpec::Minus),
                 ..Default::default()
             }),
@@ -1390,7 +1365,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(15).format(&FormatSpec {
+            Object::from(15).format(&FormatSpec {
                 align: Some(AlignSpec::left()),
                 width: Some(10),
                 ..Default::default()
@@ -1399,7 +1374,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(15).format(&FormatSpec {
+            Object::from(15).format(&FormatSpec {
                 align: Some(AlignSpec::center()),
                 width: Some(10),
                 ..Default::default()
@@ -1408,7 +1383,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(15).format(&FormatSpec {
+            Object::from(15).format(&FormatSpec {
                 align: Some(AlignSpec::right()),
                 width: Some(10),
                 ..Default::default()
@@ -1417,7 +1392,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(-15).format(&FormatSpec {
+            Object::from(-15).format(&FormatSpec {
                 align: Some(AlignSpec::left()),
                 width: Some(10),
                 ..Default::default()
@@ -1426,7 +1401,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(-15).format(&FormatSpec {
+            Object::from(-15).format(&FormatSpec {
                 align: Some(AlignSpec::center()),
                 width: Some(10),
                 ..Default::default()
@@ -1435,7 +1410,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(-15).format(&FormatSpec {
+            Object::from(-15).format(&FormatSpec {
                 align: Some(AlignSpec::right()),
                 width: Some(10),
                 ..Default::default()
@@ -1444,7 +1419,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(-15).format(&FormatSpec {
+            Object::from(-15).format(&FormatSpec {
                 align: Some(AlignSpec::AfterSign),
                 width: Some(10),
                 ..Default::default()
@@ -1453,7 +1428,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(15).format(&FormatSpec {
+            Object::from(15).format(&FormatSpec {
                 align: Some(AlignSpec::AfterSign),
                 width: Some(10),
                 ..Default::default()
@@ -1462,7 +1437,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(23).format(&FormatSpec {
+            Object::from(23).format(&FormatSpec {
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Decimal)),
                 ..Default::default()
             }),
@@ -1470,7 +1445,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(23).format(&FormatSpec {
+            Object::from(23).format(&FormatSpec {
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Binary)),
                 ..Default::default()
             }),
@@ -1478,7 +1453,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(23).format(&FormatSpec {
+            Object::from(23).format(&FormatSpec {
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Octal)),
                 ..Default::default()
             }),
@@ -1486,7 +1461,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(42).format(&FormatSpec {
+            Object::from(42).format(&FormatSpec {
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
                     UppercaseSpec::Lower
                 ))),
@@ -1496,7 +1471,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(42).format(&FormatSpec {
+            Object::from(42).format(&FormatSpec {
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
                     UppercaseSpec::Upper
                 ))),
@@ -1506,7 +1481,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(23).format(&FormatSpec {
+            Object::from(23).format(&FormatSpec {
                 alternate: true,
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Decimal)),
                 ..Default::default()
@@ -1515,7 +1490,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(23).format(&FormatSpec {
+            Object::from(23).format(&FormatSpec {
                 alternate: true,
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Binary)),
                 ..Default::default()
@@ -1524,7 +1499,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(23).format(&FormatSpec {
+            Object::from(23).format(&FormatSpec {
                 alternate: true,
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Octal)),
                 ..Default::default()
@@ -1533,7 +1508,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(42).format(&FormatSpec {
+            Object::from(42).format(&FormatSpec {
                 alternate: true,
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
                     UppercaseSpec::Lower
@@ -1544,7 +1519,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(42).format(&FormatSpec {
+            Object::from(42).format(&FormatSpec {
                 alternate: true,
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
                     UppercaseSpec::Upper
@@ -1555,7 +1530,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(12738912).format(&FormatSpec {
+            Object::from(12738912).format(&FormatSpec {
                 grouping: Some(GroupingSpec::Comma),
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Decimal)),
                 ..Default::default()
@@ -1564,7 +1539,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(12738912).format(&FormatSpec {
+            Object::from(12738912).format(&FormatSpec {
                 grouping: Some(GroupingSpec::Underscore),
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Binary)),
                 ..Default::default()
@@ -1573,7 +1548,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(12738912).format(&FormatSpec {
+            Object::from(12738912).format(&FormatSpec {
                 grouping: Some(GroupingSpec::Underscore),
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Octal)),
                 ..Default::default()
@@ -1582,7 +1557,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(12738912).format(&FormatSpec {
+            Object::from(12738912).format(&FormatSpec {
                 grouping: Some(GroupingSpec::Comma),
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
                     UppercaseSpec::Lower
@@ -1593,7 +1568,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(12738912).format(&FormatSpec {
+            Object::from(12738912).format(&FormatSpec {
                 width: Some(12),
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
                     UppercaseSpec::Lower
@@ -1604,7 +1579,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(12738912).format(&FormatSpec {
+            Object::from(12738912).format(&FormatSpec {
                 sign: Some(SignSpec::Plus),
                 width: Some(12),
                 fmt_type: Some(FormatType::Integer(IntegerFormatType::Hex(
@@ -1616,7 +1591,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(12738912).format(&FormatSpec {
+            Object::from(12738912).format(&FormatSpec {
                 align: Some(AlignSpec::AfterSign),
                 sign: Some(SignSpec::Plus),
                 width: Some(12),
@@ -1629,7 +1604,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(12738912).format(&FormatSpec {
+            Object::from(12738912).format(&FormatSpec {
                 align: Some(AlignSpec::AfterSign),
                 sign: Some(SignSpec::Plus),
                 alternate: true,
@@ -1643,7 +1618,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::new_int(12738912).format(&FormatSpec {
+            Object::from(12738912).format(&FormatSpec {
                 align: Some(AlignSpec::AfterSign),
                 sign: Some(SignSpec::Plus),
                 alternate: true,
@@ -1658,7 +1633,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(1.234).format(&FormatSpec {
+            Object::from(1.234).format(&FormatSpec {
                 precision: Some(1),
                 ..Default::default()
             }),
@@ -1666,7 +1641,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(1.234).format(&FormatSpec {
+            Object::from(1.234).format(&FormatSpec {
                 precision: Some(6),
                 ..Default::default()
             }),
@@ -1674,7 +1649,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(1.234).format(&FormatSpec {
+            Object::from(1.234).format(&FormatSpec {
                 fmt_type: Some(FormatType::Float(FloatFormatType::Fixed)),
                 ..Default::default()
             }),
@@ -1682,7 +1657,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(1.234).format(&FormatSpec {
+            Object::from(1.234).format(&FormatSpec {
                 precision: Some(9),
                 fmt_type: Some(FormatType::Float(FloatFormatType::Fixed)),
                 ..Default::default()
@@ -1691,7 +1666,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(12.34).format(&FormatSpec {
+            Object::from(12.34).format(&FormatSpec {
                 precision: Some(5),
                 fmt_type: Some(FormatType::Float(FloatFormatType::Sci(
                     UppercaseSpec::Lower
@@ -1702,7 +1677,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(12.34).format(&FormatSpec {
+            Object::from(12.34).format(&FormatSpec {
                 fmt_type: Some(FormatType::Float(FloatFormatType::Sci(
                     UppercaseSpec::Upper
                 ))),
@@ -1712,7 +1687,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(12.34).format(&FormatSpec {
+            Object::from(12.34).format(&FormatSpec {
                 fmt_type: Some(FormatType::Float(FloatFormatType::General)),
                 ..Default::default()
             }),
@@ -1720,7 +1695,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(12.34).format(&FormatSpec {
+            Object::from(12.34).format(&FormatSpec {
                 align: Some(AlignSpec::AfterSign),
                 width: Some(8),
                 ..Default::default()
@@ -1729,7 +1704,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(-12.34).format(&FormatSpec {
+            Object::from(-12.34).format(&FormatSpec {
                 align: Some(AlignSpec::AfterSign),
                 width: Some(8),
                 ..Default::default()
@@ -1738,7 +1713,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(12.34).format(&FormatSpec {
+            Object::from(12.34).format(&FormatSpec {
                 align: Some(AlignSpec::AfterSign),
                 sign: Some(SignSpec::Plus),
                 width: Some(8),
@@ -1748,7 +1723,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(12.34).format(&FormatSpec {
+            Object::from(12.34).format(&FormatSpec {
                 align: Some(AlignSpec::left()),
                 sign: Some(SignSpec::Plus),
                 width: Some(8),
@@ -1758,7 +1733,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(12.34).format(&FormatSpec {
+            Object::from(12.34).format(&FormatSpec {
                 align: Some(AlignSpec::center()),
                 sign: Some(SignSpec::Plus),
                 width: Some(8),
@@ -1768,7 +1743,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(1000000.0).format(&FormatSpec {
+            Object::from(1000000.0).format(&FormatSpec {
                 grouping: Some(GroupingSpec::Underscore),
                 ..Default::default()
             }),
@@ -1776,7 +1751,7 @@ mod test {
         );
 
         assert_eq!(
-            Object::float(1000000.0).format(&FormatSpec {
+            Object::from(1000000.0).format(&FormatSpec {
                 grouping: Some(GroupingSpec::Underscore),
                 precision: Some(8),
                 ..Default::default()
@@ -1788,168 +1763,168 @@ mod test {
     #[test]
     fn compare() {
         assert_eq!(
-            Object::float(0.1).partial_cmp(&Object::new_int_from_str("0").unwrap()),
+            Object::from(0.1).partial_cmp(&Object::new_int_from_str("0").unwrap()),
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Object::float(0.5).partial_cmp(&Object::new_int_from_str("0").unwrap()),
+            Object::from(0.5).partial_cmp(&Object::new_int_from_str("0").unwrap()),
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Object::float(0.9).partial_cmp(&Object::new_int_from_str("0").unwrap()),
+            Object::from(0.9).partial_cmp(&Object::new_int_from_str("0").unwrap()),
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Object::float(1.0).partial_cmp(&Object::new_int_from_str("0").unwrap()),
+            Object::from(1.0).partial_cmp(&Object::new_int_from_str("0").unwrap()),
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Object::float(0.0).partial_cmp(&Object::new_int_from_str("0").unwrap()),
+            Object::from(0.0).partial_cmp(&Object::new_int_from_str("0").unwrap()),
             Some(Ordering::Equal)
         );
         assert_eq!(
-            Object::float(-0.0).partial_cmp(&Object::new_int_from_str("0").unwrap()),
+            Object::from(-0.0).partial_cmp(&Object::new_int_from_str("0").unwrap()),
             Some(Ordering::Equal)
         );
         assert_eq!(
-            Object::float(-0.1).partial_cmp(&Object::new_int_from_str("0").unwrap()),
+            Object::from(-0.1).partial_cmp(&Object::new_int_from_str("0").unwrap()),
             Some(Ordering::Less)
         );
         assert_eq!(
-            Object::float(-0.5).partial_cmp(&Object::new_int_from_str("0").unwrap()),
+            Object::from(-0.5).partial_cmp(&Object::new_int_from_str("0").unwrap()),
             Some(Ordering::Less)
         );
         assert_eq!(
-            Object::float(-0.9).partial_cmp(&Object::new_int_from_str("0").unwrap()),
+            Object::from(-0.9).partial_cmp(&Object::new_int_from_str("0").unwrap()),
             Some(Ordering::Less)
         );
         assert_eq!(
-            Object::float(-1.0).partial_cmp(&Object::new_int_from_str("0").unwrap()),
+            Object::from(-1.0).partial_cmp(&Object::new_int_from_str("0").unwrap()),
             Some(Ordering::Less)
         );
 
         assert_eq!(
-            Object::float(-1.0).partial_cmp(&Object::new_int_from_str("-1").unwrap()),
+            Object::from(-1.0).partial_cmp(&Object::new_int_from_str("-1").unwrap()),
             Some(Ordering::Equal)
         );
         assert_eq!(
-            Object::float(-1.1).partial_cmp(&Object::new_int_from_str("-1").unwrap()),
+            Object::from(-1.1).partial_cmp(&Object::new_int_from_str("-1").unwrap()),
             Some(Ordering::Less)
         );
         assert_eq!(
-            Object::float(-0.9).partial_cmp(&Object::new_int_from_str("-1").unwrap()),
+            Object::from(-0.9).partial_cmp(&Object::new_int_from_str("-1").unwrap()),
             Some(Ordering::Greater)
         );
 
         assert_eq!(
-            Object::float(1.0).partial_cmp(&Object::new_int_from_str("1").unwrap()),
+            Object::from(1.0).partial_cmp(&Object::new_int_from_str("1").unwrap()),
             Some(Ordering::Equal)
         );
         assert_eq!(
-            Object::float(1.1).partial_cmp(&Object::new_int_from_str("1").unwrap()),
+            Object::from(1.1).partial_cmp(&Object::new_int_from_str("1").unwrap()),
             Some(Ordering::Greater)
         );
         assert_eq!(
-            Object::float(0.9).partial_cmp(&Object::new_int_from_str("1").unwrap()),
+            Object::from(0.9).partial_cmp(&Object::new_int_from_str("1").unwrap()),
             Some(Ordering::Less)
         );
 
         assert_eq!(
             Object::new_int_from_str("0")
                 .unwrap()
-                .partial_cmp(&Object::float(0.1)),
+                .partial_cmp(&Object::from(0.1)),
             Some(Ordering::Less)
         );
         assert_eq!(
             Object::new_int_from_str("0")
                 .unwrap()
-                .partial_cmp(&Object::float(0.5)),
+                .partial_cmp(&Object::from(0.5)),
             Some(Ordering::Less)
         );
         assert_eq!(
             Object::new_int_from_str("0")
                 .unwrap()
-                .partial_cmp(&Object::float(0.9)),
+                .partial_cmp(&Object::from(0.9)),
             Some(Ordering::Less)
         );
         assert_eq!(
             Object::new_int_from_str("0")
                 .unwrap()
-                .partial_cmp(&Object::float(1.0)),
+                .partial_cmp(&Object::from(1.0)),
             Some(Ordering::Less)
         );
         assert_eq!(
             Object::new_int_from_str("0")
                 .unwrap()
-                .partial_cmp(&Object::float(0.0)),
+                .partial_cmp(&Object::from(0.0)),
             Some(Ordering::Equal)
         );
         assert_eq!(
             Object::new_int_from_str("0")
                 .unwrap()
-                .partial_cmp(&Object::float(-0.0)),
+                .partial_cmp(&Object::from(-0.0)),
             Some(Ordering::Equal)
         );
         assert_eq!(
             Object::new_int_from_str("0")
                 .unwrap()
-                .partial_cmp(&Object::float(-0.1)),
+                .partial_cmp(&Object::from(-0.1)),
             Some(Ordering::Greater)
         );
         assert_eq!(
             Object::new_int_from_str("0")
                 .unwrap()
-                .partial_cmp(&Object::float(-0.5)),
+                .partial_cmp(&Object::from(-0.5)),
             Some(Ordering::Greater)
         );
         assert_eq!(
             Object::new_int_from_str("0")
                 .unwrap()
-                .partial_cmp(&Object::float(-0.9)),
+                .partial_cmp(&Object::from(-0.9)),
             Some(Ordering::Greater)
         );
         assert_eq!(
             Object::new_int_from_str("0")
                 .unwrap()
-                .partial_cmp(&Object::float(-1.0)),
+                .partial_cmp(&Object::from(-1.0)),
             Some(Ordering::Greater)
         );
 
         assert_eq!(
             Object::new_int_from_str("-1")
                 .unwrap()
-                .partial_cmp(&Object::float(-1.0)),
+                .partial_cmp(&Object::from(-1.0)),
             Some(Ordering::Equal)
         );
         assert_eq!(
             Object::new_int_from_str("-1")
                 .unwrap()
-                .partial_cmp(&Object::float(-1.1)),
+                .partial_cmp(&Object::from(-1.1)),
             Some(Ordering::Greater)
         );
         assert_eq!(
             Object::new_int_from_str("-1")
                 .unwrap()
-                .partial_cmp(&Object::float(-0.9)),
+                .partial_cmp(&Object::from(-0.9)),
             Some(Ordering::Less)
         );
 
         assert_eq!(
             Object::new_int_from_str("1")
                 .unwrap()
-                .partial_cmp(&Object::float(1.0)),
+                .partial_cmp(&Object::from(1.0)),
             Some(Ordering::Equal)
         );
         assert_eq!(
             Object::new_int_from_str("1")
                 .unwrap()
-                .partial_cmp(&Object::float(1.1)),
+                .partial_cmp(&Object::from(1.1)),
             Some(Ordering::Less)
         );
         assert_eq!(
             Object::new_int_from_str("1")
                 .unwrap()
-                .partial_cmp(&Object::float(0.9)),
+                .partial_cmp(&Object::from(0.9)),
             Some(Ordering::Greater)
         );
     }
@@ -1963,8 +1938,7 @@ mod test_serialization {
         assert_eq!(
             x.serialize()
                 .map(|y| Object::deserialize(&y))
-                .flatten()
-                .map(|x| x.0),
+                .flatten(),
             Some(x)
         )
     }
@@ -1976,46 +1950,46 @@ mod test_serialization {
 
     #[test]
     fn integers() {
-        check(Object::new_int(1));
-        check(Object::new_int(9223372036854775807_i64));
-        check(Object::new_int(-9223372036854775807_i64));
+        check(Object::from(1));
+        check(Object::from(9223372036854775807_i64));
+        check(Object::from(-9223372036854775807_i64));
         check(Object::new_int_from_str("9223372036854775808").unwrap());
     }
 
     #[test]
     fn strings() {
-        check(Object::new_str(""));
-        check(Object::new_str("dingbob"));
-        check(Object::new_str("ding\"bob"));
+        check(Object::from(""));
+        check(Object::from("dingbob"));
+        check(Object::from("ding\"bob"));
     }
 
     #[test]
     fn bools() {
-        check(Object::bool(true));
-        check(Object::bool(false));
+        check(Object::from(true));
+        check(Object::from(false));
     }
 
     #[test]
     fn floats() {
-        check(Object::float(1.2234));
+        check(Object::from(1.2234));
     }
 
     #[test]
     fn maps() {
         check(Object::from(vec![
-            ("a", Object::new_int(1)),
-            ("b", Object::bool(true)),
-            ("c", Object::new_str("zomg")),
+            ("a", Object::from(1)),
+            ("b", Object::from(true)),
+            ("c", Object::from("zomg")),
         ]));
     }
 
     #[test]
     fn lists() {
         check(Object::from(vec![
-            Object::new_int(1),
-            Object::new_str("dingbob"),
-            Object::float(-2.11),
-            Object::bool(false),
+            Object::from(1),
+            Object::from("dingbob"),
+            Object::from(-2.11),
+            Object::from(false),
         ]));
     }
 }

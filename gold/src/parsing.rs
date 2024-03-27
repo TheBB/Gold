@@ -20,8 +20,8 @@ use crate::formatting::{
     StringAlignSpec, UppercaseSpec,
 };
 use crate::lexing::{CachedLexResult, CachedLexer, Lexer, TokenType};
-use crate::types::{UnOp, BinOp};
-use crate::{Key, Object};
+use crate::types::{UnOp, BinOp, Key};
+use crate::Object;
 
 trait ExplainError {
     fn error<'a, T>(lex: CachedLexer<'a>, reason: T) -> Self
@@ -512,14 +512,14 @@ fn number<'a>(input: In<'a>) -> Out<'a, PExpr> {
             span.as_ref()
                 .replace('_', "")
                 .parse::<f64>()
-                .map(|x| Expr::Literal(Object::float(x)).tag(&span))
+                .map(|x| Expr::Literal(Object::from(x)).tag(&span))
         }),
         map_res(integer, |span| {
             let text = span.as_ref().replace('_', "");
             let y = text
                 .parse::<i64>()
-                .map(Object::new_int)
-                .or_else(|_| text.parse::<BigInt>().map(Object::new_int))
+                .map(Object::from)
+                .or_else(|_| text.parse::<BigInt>().map(Object::from))
                 .map(Expr::Literal);
             y.map(|x| x.tag(&span))
         }),
@@ -774,10 +774,10 @@ fn string<'a>(input: In<'a>) -> Out<'a, PExpr> {
 fn boolean<'a>(input: In<'a>) -> Out<'a, PExpr> {
     naked(alt((
         map(keyword("false"), |tok| {
-            Expr::Literal(Object::bool(false)).tag(&tok)
+            Expr::Literal(Object::from(false)).tag(&tok)
         }),
         map(keyword("true"), |tok| {
-            Expr::Literal(Object::bool(true)).tag(&tok)
+            Expr::Literal(Object::from(true)).tag(&tok)
         }),
     )))
     .parse(input)
@@ -907,7 +907,7 @@ fn map_key_singleton<'a>(input: In<'a>) -> Out<'a, (u32, PExpr)> {
             ),
             string,
             naked(map(map_identifier, |key| {
-                key.map(Object::key).map(Expr::Literal)
+                key.map(Object::from).map(Expr::Literal)
             })),
         )),
     ))(input)
@@ -1073,7 +1073,7 @@ fn object_access<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
         |(dot, out)| {
             Transform::BinOp(
                 BinOp::Index.tag(&dot),
-                Box::new(out.map(Object::key).map(Expr::Literal)),
+                Box::new(out.map(Object::from).map(Expr::Literal)),
             )
             .tag(dot.span()..out.span())
         },
@@ -1449,7 +1449,7 @@ where
                 err_terminator_or_item,
                 err_terminator_or_separator,
             ),
-            |(a, x, b)| (ListBinding(x).tag(a.span()..b.span()), b),
+            |(a, x, b)| (ListBinding::new(x).tag(a.span()..b.span()), b),
         )(input)
     }
 }
@@ -1538,7 +1538,7 @@ where
                 err_terminator_or_item,
                 err_terminator_or_separator,
             ),
-            |(a, x, b)| MapBinding(x).tag(a.span()..b.span()),
+            |(a, x, b)| MapBinding::new(x).tag(a.span()..b.span()),
         )(input)
     }
 }
@@ -1644,7 +1644,7 @@ fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         let kwargs = kwargs.retag(span);
         (
             i,
-            ListBinding(vec![]).tag(kwargs.span().with_length(1)),
+            ListBinding::new(vec![]).tag(kwargs.span().with_length(1)),
             Some(kwargs),
             expr,
         )
@@ -1731,7 +1731,7 @@ fn keyword_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
             eprintln!("gold: {{|...|}} syntax is deprecated, use fn {{...}} instead");
             PExpr::Naked(
                 Expr::Function {
-                    positional: ListBinding(vec![]).tag(kwargs.span().with_length(1)),
+                    positional: ListBinding::new(vec![]).tag(kwargs.span().with_length(1)),
                     keywords: Some(kwargs),
                     expression: Box::new(expr.inner()),
                 }
@@ -2013,7 +2013,7 @@ mod tests {
         }
     }
 
-    pub trait ToBox<T>
+    trait ToBox<T>
     where
         T: Sized,
     {
@@ -2206,40 +2206,40 @@ mod tests {
 
     #[test]
     fn lists() {
-        assert_eq!(expr("[]"), Ok(Expr::list(vec![]).tag(0..2)),);
+        assert_eq!(expr("[]"), Ok(Expr::List(vec![]).tag(0..2)),);
 
-        assert_eq!(expr("[   ]"), Ok(Expr::list(vec![]).tag(0..5)),);
+        assert_eq!(expr("[   ]"), Ok(Expr::List(vec![]).tag(0..5)),);
 
         assert_eq!(
             expr("[true]"),
-            Ok(Expr::list(vec![true.lel(1..5),]).tag(0..6)),
+            Ok(Expr::List(vec![true.lel(1..5),]).tag(0..6)),
         );
 
         assert_eq!(
             expr("[\"\"]"),
-            Ok(Expr::list(vec!["".lel(1..3),]).tag(0..4)),
+            Ok(Expr::List(vec!["".lel(1..3),]).tag(0..4)),
         );
 
-        assert_eq!(expr("[1,]"), Ok(Expr::list(vec![1.lel(1),]).tag(0..4)),);
+        assert_eq!(expr("[1,]"), Ok(Expr::List(vec![1.lel(1),]).tag(0..4)),);
 
         assert_eq!(
             expr("[  1   ,  ]"),
-            Ok(Expr::list(vec![1.lel(3),]).tag(0..11)),
+            Ok(Expr::List(vec![1.lel(3),]).tag(0..11)),
         );
 
         assert_eq!(
             expr("[  1   ,2  ]"),
-            Ok(Expr::list(vec![1.lel(3), 2.lel(8),]).tag(0..12)),
+            Ok(Expr::List(vec![1.lel(3), 2.lel(8),]).tag(0..12)),
         );
 
         assert_eq!(
             expr("[  1   ,2  ,]"),
-            Ok(Expr::list(vec![1.lel(3), 2.lel(8),]).tag(0..13)),
+            Ok(Expr::List(vec![1.lel(3), 2.lel(8),]).tag(0..13)),
         );
 
         assert_eq!(
             expr("[1, false, 2.3, \"fable\", lel]"),
-            Ok(Expr::list(vec![
+            Ok(Expr::List(vec![
                 1.lel(1),
                 false.lel(4..9),
                 2.3.lel(11..14),
@@ -2251,7 +2251,7 @@ mod tests {
 
         assert_eq!(
             expr("[1, ...x, y]"),
-            Ok(Expr::list(vec![
+            Ok(Expr::List(vec![
                 1.lel(1),
                 "x".id(7).wrap(ListElement::Splat).retag(4..8),
                 "y".id(10).wrap(ListElement::Singleton),
@@ -2261,7 +2261,7 @@ mod tests {
 
         assert_eq!(
             expr("[1, for x in y: x, 2]"),
-            Ok(Expr::list(vec![
+            Ok(Expr::List(vec![
                 1.lel(1),
                 ListElement::Loop {
                     binding: "x".bid(8),
@@ -2276,7 +2276,7 @@ mod tests {
 
         assert_eq!(
             expr("[when f(x): x]"),
-            Ok(Expr::list(vec![ListElement::Cond {
+            Ok(Expr::List(vec![ListElement::Cond {
                 condition: "f"
                     .id(6)
                     .funcall(vec!["x".id(8).wrap(ArgElement::Singleton),], 7..10)
@@ -2289,7 +2289,7 @@ mod tests {
 
         assert_eq!(
             expr("[ 1 , ... x , when x : y , for x in y : z , ]"),
-            Ok(Expr::list(vec![
+            Ok(Expr::List(vec![
                 1.lel(2),
                 "x".id(10).wrap(ListElement::Splat).retag(6..11),
                 ListElement::Cond {
@@ -2309,7 +2309,7 @@ mod tests {
 
         assert_eq!(
             expr("[ (1) , ... (x), when x: (y) , for x in y: (z) ]"),
-            Ok(Expr::list(vec![
+            Ok(Expr::List(vec![
                 1.lel(3),
                 "x".id(13).wrap(ListElement::Splat).retag(8..15),
                 ListElement::Cond {
@@ -2332,14 +2332,14 @@ mod tests {
     fn nested_lists() {
         assert_eq!(
             expr("[[]]"),
-            Ok(Expr::list(vec![Expr::list(vec![]).tag(1..3).wrap(ListElement::Singleton),]).tag(0..4)),
+            Ok(Expr::List(vec![Expr::List(vec![]).tag(1..3).wrap(ListElement::Singleton),]).tag(0..4)),
         );
 
         assert_eq!(
             expr("[1, [2]]"),
-            Ok(Expr::list(vec![
+            Ok(Expr::List(vec![
                 1.lel(1),
-                Expr::list(vec![2.lel(5),])
+                Expr::List(vec![2.lel(5),])
                     .tag(4..7)
                     .wrap(ListElement::Singleton),
             ])
@@ -2349,28 +2349,28 @@ mod tests {
 
     #[test]
     fn maps() {
-        assert_eq!(expr("{}"), Ok(Expr::map(vec![]).tag(0..2)),);
+        assert_eq!(expr("{}"), Ok(Expr::Map(vec![]).tag(0..2)),);
 
-        assert_eq!(expr("{  }"), Ok(Expr::map(vec![]).tag(0..4)),);
+        assert_eq!(expr("{  }"), Ok(Expr::Map(vec![]).tag(0..4)),);
 
         assert_eq!(
             expr("{a: 1}"),
-            Ok(Expr::map(vec![("a".lit(1), 1.expr(4)).mel(),]).tag(0..6)),
+            Ok(Expr::Map(vec![("a".lit(1), 1.expr(4)).mel(),]).tag(0..6)),
         );
 
         assert_eq!(
             expr("{a: 1,}"),
-            Ok(Expr::map(vec![("a".lit(1), 1.expr(4)).mel(),]).tag(0..7)),
+            Ok(Expr::Map(vec![("a".lit(1), 1.expr(4)).mel(),]).tag(0..7)),
         );
 
         assert_eq!(
             expr("{  a :1,}"),
-            Ok(Expr::map(vec![("a".lit(3), 1.expr(6)).mel(),]).tag(0..9)),
+            Ok(Expr::Map(vec![("a".lit(3), 1.expr(6)).mel(),]).tag(0..9)),
         );
 
         assert_eq!(
             expr("{a: 1  ,b:2}"),
-            Ok(Expr::map(vec![
+            Ok(Expr::Map(vec![
                 ("a".lit(1), 1.expr(4)).mel(),
                 ("b".lit(8), 2.expr(10)).mel(),
             ])
@@ -2379,22 +2379,22 @@ mod tests {
 
         assert_eq!(
             expr("{che9: false}"),
-            Ok(Expr::map(vec![("che9".lit(1..5), false.expr(7..12)).mel(),]).tag(0..13)),
+            Ok(Expr::Map(vec![("che9".lit(1..5), false.expr(7..12)).mel(),]).tag(0..13)),
         );
 
         assert_eq!(
             expr("{fable: \"fable\"}"),
-            Ok(Expr::map(vec![("fable".lit(1..6), "fable".expr(8..15)).mel(),]).tag(0..16)),
+            Ok(Expr::Map(vec![("fable".lit(1..6), "fable".expr(8..15)).mel(),]).tag(0..16)),
         );
 
         assert_eq!(
             expr("{format: 1}"),
-            Ok(Expr::map(vec![("format".lit(1..7), 1.expr(9)).mel(),]).tag(0..11)),
+            Ok(Expr::Map(vec![("format".lit(1..7), 1.expr(9)).mel(),]).tag(0..11)),
         );
 
         assert_eq!(
             expr("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}"),
-            Ok(Expr::map(vec![
+            Ok(Expr::Map(vec![
                 ("a".lit(1), 1.expr(4)).mel(),
                 ("b".lit(7), true.expr(10..14)).mel(),
                 ("c".lit(16), 20.0.expr(19..23)).mel(),
@@ -2406,12 +2406,12 @@ mod tests {
 
         assert_eq!(
             expr("{ident-with-hyphen: 1}"),
-            Ok(Expr::map(vec![("ident-with-hyphen".lit(1..18), 1.expr(20)).mel(),]).tag(0..22)),
+            Ok(Expr::Map(vec![("ident-with-hyphen".lit(1..18), 1.expr(20)).mel(),]).tag(0..22)),
         );
 
         assert_eq!(
             expr("{$z: y}"),
-            Ok(Expr::map(vec![MapElement::Singleton {
+            Ok(Expr::Map(vec![MapElement::Singleton {
                 key: "z".id(2),
                 value: "y".id(5)
             }
@@ -2421,7 +2421,7 @@ mod tests {
 
         assert_eq!(
             expr("{$(z): y}"),
-            Ok(Expr::map(vec![MapElement::Singleton {
+            Ok(Expr::Map(vec![MapElement::Singleton {
                 key: "z".id(3),
                 value: "y".id(7),
             }
@@ -2431,12 +2431,12 @@ mod tests {
 
         assert_eq!(
             expr("{\"z\": y}"),
-            Ok(Expr::map(vec![("z".lit(1..4), "y".id(6)).mel(),]).tag(0..8)),
+            Ok(Expr::Map(vec![("z".lit(1..4), "y".id(6)).mel(),]).tag(0..8)),
         );
 
         assert_eq!(
             expr(concat!("{\n", "   z:: here's some text\n", "}\n",)),
-            Ok(Expr::map(vec![(
+            Ok(Expr::Map(vec![(
                 "z".lit(5).with_coord(1, 3),
                 "here's some text".expr(8..26).with_coord(1, 6)
             )
@@ -2451,7 +2451,7 @@ mod tests {
                 "       text\n",
                 "}\n",
             )),
-            Ok(Expr::map(vec![(
+            Ok(Expr::Map(vec![(
                 "z".lit(5).with_coord(1, 3),
                 "here's some\ntext".expr(8..33).with_coord(1, 6)
             )
@@ -2461,7 +2461,7 @@ mod tests {
 
         assert_eq!(
             expr(concat!("{\n", "   z:: here's some\n", "     text\n", "}\n",)),
-            Ok(Expr::map(vec![(
+            Ok(Expr::Map(vec![(
                 "z".lit(5).with_coord(1, 3),
                 "here's some\ntext".expr(8..31).with_coord(1, 6)
             )
@@ -2477,7 +2477,7 @@ mod tests {
                 "     text\n",
                 "}\n",
             )),
-            Ok(Expr::map(vec![(
+            Ok(Expr::Map(vec![(
                 "z".lit(5).with_coord(1, 3),
                 "here's some\ntext".expr(8..36).with_coord(1, 6)
             )
@@ -2493,7 +2493,7 @@ mod tests {
                 "       text\n",
                 "}\n",
             )),
-            Ok(Expr::map(vec![(
+            Ok(Expr::Map(vec![(
                 "z".lit(5).with_coord(1, 3),
                 "here's some\n  text".expr(8..38).with_coord(1, 6)
             )
@@ -2509,7 +2509,7 @@ mod tests {
                 "     text\n",
                 "}\n",
             )),
-            Ok(Expr::map(vec![(
+            Ok(Expr::Map(vec![(
                 "z".lit(5).with_coord(1, 3),
                 "  here's some\ntext".expr(8..38).with_coord(1, 6)
             )
@@ -2519,7 +2519,7 @@ mod tests {
 
         assert_eq!(
             expr(concat!("{\n", "    a:: x\n", "    b: y,\n", "}\n",)),
-            Ok(Expr::map(vec![
+            Ok(Expr::Map(vec![
                 (
                     "a".lit(6).with_coord(1, 4),
                     "x".expr(9..12).with_coord(1, 7)
@@ -2536,7 +2536,7 @@ mod tests {
 
         assert_eq!(
             expr("{...y, x: 1}"),
-            Ok(Expr::map(vec![
+            Ok(Expr::Map(vec![
                 MapElement::Splat("y".id(4)).tag(1..5),
                 ("x".lit(7), 1.expr(10)).mel(),
             ])
@@ -2545,9 +2545,9 @@ mod tests {
 
         assert_eq!(
             expr("{for [x,y] in z: x: y}"),
-            Ok(Expr::map(vec![MapElement::Loop {
+            Ok(Expr::Map(vec![MapElement::Loop {
                 binding: Binding::List(
-                    ListBinding(vec![
+                    ListBinding::new(vec![
                         ListBindingElement::Binding {
                             binding: "x".bid(6),
                             default: None
@@ -2571,7 +2571,7 @@ mod tests {
 
         assert_eq!(
             expr("{when f(x): z: y}"),
-            Ok(Expr::map(vec![MapElement::Cond {
+            Ok(Expr::Map(vec![MapElement::Cond {
                 condition: "f"
                     .id(6)
                     .funcall(vec![ArgElement::Singleton("x".id(8)).tag(8),], 7..10)
@@ -2584,7 +2584,7 @@ mod tests {
 
         assert_eq!(
             expr("{ a : 1 , ... x , when x : b : y , for x in y : c : z , $ f : 2 , }"),
-            Ok(Expr::map(vec![
+            Ok(Expr::Map(vec![
                 ("a".lit(2), 1.expr(6)).mel(),
                 MapElement::Splat("x".id(14)).tag(10..15),
                 MapElement::Cond {
@@ -2609,7 +2609,7 @@ mod tests {
 
         assert_eq!(
             expr("{ a : (1), ... (x), when x : b : (y), for x in y : c : (z), $ f : (2) }"),
-            Ok(Expr::map(vec![
+            Ok(Expr::Map(vec![
                 MapElement::Singleton {
                     key: "a".lit(2),
                     value: 1.expr(7)
@@ -2672,7 +2672,7 @@ mod tests {
             Ok(Expr::Let {
                 bindings: vec![(
                     Binding::List(
-                        ListBinding(vec![
+                        ListBinding::new(vec![
                             ListBindingElement::Binding {
                                 binding: "a".bid(5),
                                 default: None
@@ -2691,7 +2691,7 @@ mod tests {
                     "c".id(20),
                 ),],
                 expression: Box::new(
-                    Expr::list(vec![
+                    Expr::List(vec![
                         "a".id(26).wrap(ListElement::Singleton),
                         "b".id(29).wrap(ListElement::Singleton),
                     ])
@@ -2706,7 +2706,7 @@ mod tests {
             Ok(Expr::Let {
                 bindings: vec![(
                     Binding::List(
-                        ListBinding(vec![
+                        ListBinding::new(vec![
                             ListBindingElement::Binding {
                                 binding: "_".bid(5),
                                 default: None
@@ -2729,7 +2729,7 @@ mod tests {
             Ok(Expr::Let {
                 bindings: vec![(
                     Binding::List(
-                        ListBinding(vec![ListBindingElement::SlurpTo("a".key(8)).tag(5..9),])
+                        ListBinding::new(vec![ListBindingElement::SlurpTo("a".key(8)).tag(5..9),])
                             .tag(4..10)
                     )
                     .tag(4..10),
@@ -2745,7 +2745,7 @@ mod tests {
             Ok(Expr::Let {
                 bindings: vec![(
                     Binding::List(
-                        ListBinding(vec![ListBindingElement::SlurpTo("a".key(8)).tag(5..9),])
+                        ListBinding::new(vec![ListBindingElement::SlurpTo("a".key(8)).tag(5..9),])
                             .tag(4..11)
                     )
                     .tag(4..11),
@@ -2761,7 +2761,7 @@ mod tests {
             Ok(Expr::Let {
                 bindings: vec![(
                     Binding::Map(
-                        MapBinding(vec![MapBindingElement::Binding {
+                        MapBinding::new(vec![MapBindingElement::Binding {
                             key: "a".key(5),
                             binding: "a".bid(5),
                             default: None,
@@ -2782,7 +2782,7 @@ mod tests {
             Ok(Expr::Let {
                 bindings: vec![(
                     Binding::Map(
-                        MapBinding(vec![MapBindingElement::Binding {
+                        MapBinding::new(vec![MapBindingElement::Binding {
                             key: "a".key(5),
                             binding: "b".bid(10),
                             default: None,
@@ -2803,7 +2803,7 @@ mod tests {
             Ok(Expr::Let {
                 bindings: vec![(
                     Binding::Map(
-                        MapBinding(vec![MapBindingElement::Binding {
+                        MapBinding::new(vec![MapBindingElement::Binding {
                             key: "a".key(5),
                             binding: "a".bid(5),
                             default: Some("y".id(9)),
@@ -2824,7 +2824,7 @@ mod tests {
             Ok(Expr::Let {
                 bindings: vec![(
                     Binding::Map(
-                        MapBinding(vec![MapBindingElement::Binding {
+                        MapBinding::new(vec![MapBindingElement::Binding {
                             key: "a".key(5),
                             binding: "b".bid(10),
                             default: Some("y".id(14)),
@@ -2845,7 +2845,7 @@ mod tests {
             Ok(Expr::Let {
                 bindings: vec![(
                     Binding::List(
-                        ListBinding(vec![ListBindingElement::Binding {
+                        ListBinding::new(vec![ListBindingElement::Binding {
                             binding: "y".bid(6),
                             default: Some(1.expr(11)),
                         }
@@ -2865,7 +2865,7 @@ mod tests {
             Ok(Expr::Let {
                 bindings: vec![(
                     Binding::Map(
-                        MapBinding(vec![MapBindingElement::Binding {
+                        MapBinding::new(vec![MapBindingElement::Binding {
                             key: "y".key(6),
                             binding: "y".bid(6),
                             default: Some(1.expr(11)),
@@ -3000,7 +3000,7 @@ mod tests {
         assert_eq!(
             expr("(fn (x,y) x+y)(1,2)"),
             Ok(Expr::Function {
-                positional: ListBinding(vec![
+                positional: ListBinding::new(vec![
                     ListBindingElement::Binding {
                         binding: "x".bid(5),
                         default: None
@@ -3180,7 +3180,7 @@ mod tests {
         assert_eq!(
             expr("fn () 1"),
             Ok(Expr::Function {
-                positional: ListBinding(vec![]).tag(3..5),
+                positional: ListBinding::new(vec![]).tag(3..5),
                 keywords: None,
                 expression: 1.expr(6).to_box(),
             }
@@ -3190,8 +3190,8 @@ mod tests {
         assert_eq!(
             expr("fn (;) 1"),
             Ok(Expr::Function {
-                positional: ListBinding(vec![]).tag(3..5),
-                keywords: Some(MapBinding(vec![]).tag(4..6)),
+                positional: ListBinding::new(vec![]).tag(3..5),
+                keywords: Some(MapBinding::new(vec![]).tag(4..6)),
                 expression: 1.expr(7).to_box(),
             }
             .tag(0..8)),
@@ -3200,8 +3200,8 @@ mod tests {
         assert_eq!(
             expr("fn {} 1"),
             Ok(Expr::Function {
-                positional: ListBinding(vec![]).tag(3..4),
-                keywords: Some(MapBinding(vec![]).tag(3..5)),
+                positional: ListBinding::new(vec![]).tag(3..4),
+                keywords: Some(MapBinding::new(vec![]).tag(3..5)),
                 expression: 1.expr(6).to_box(),
             }
             .tag(0..7)),
@@ -3210,7 +3210,7 @@ mod tests {
         assert_eq!(
             expr("fn (a) let b = a in b"),
             Ok(Expr::Function {
-                positional: ListBinding(vec![ListBindingElement::Binding {
+                positional: ListBinding::new(vec![ListBindingElement::Binding {
                     binding: "a".bid(4),
                     default: None
                 }
@@ -3231,9 +3231,9 @@ mod tests {
         assert_eq!(
             expr("fn {x=1, y=2} x + y"),
             Ok(Expr::Function {
-                positional: ListBinding(vec![]).tag(3..4),
+                positional: ListBinding::new(vec![]).tag(3..4),
                 keywords: Some(
-                    MapBinding(vec![
+                    MapBinding::new(vec![
                         MapBindingElement::Binding {
                             key: "x".key(4),
                             binding: "x".bid(4),

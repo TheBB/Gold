@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 
 use crate::formatting::FormatSpec;
-use crate::{Key, Object};
+use crate::types::Key;
+use crate::Object;
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum BindingLoc {
+pub enum BindingLoc {
     Enclosed(usize),
     Slot(usize)
 }
 
-pub(super) trait Scope {
+pub trait Scope {
     fn new_constant(&mut self, value: Object) -> usize;
     fn new_fmt_spec(&mut self, spec: FormatSpec) -> usize;
     fn lookup_store(&mut self, name: Key) -> Option<usize>;
@@ -17,17 +18,17 @@ pub(super) trait Scope {
     fn next_slot(&self) -> usize;
 }
 
-pub(super) trait SubScope {
+pub trait SubScope {
     fn announce_binding(&mut self, name: Key);
 }
 
-pub(super) struct ClosureScope<'a> {
+pub struct ClosureScope<'a> {
     parent: Option<&'a mut dyn Scope>,
     manager: LocalScopeManager,
-    pub constants: Vec<Object>,
-    pub fmt_specs: Vec<FormatSpec>,
+    constants: Vec<Object>,
+    fmt_specs: Vec<FormatSpec>,
     enclosed: HashMap<Key, usize>,
-    pub requires: Vec<BindingLoc>,
+    requires: Vec<BindingLoc>,
 }
 
 impl<'a> ClosureScope<'a> {
@@ -109,13 +110,13 @@ enum BindingStatus {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum SlotType {
+pub enum SlotType {
     Local,
     Cell,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct SlotCatalog {
+pub struct SlotCatalog {
     map: HashMap<usize, SlotType>,
 }
 
@@ -131,14 +132,14 @@ struct LocalScopeManager {
 }
 
 impl LocalScopeManager {
-    pub fn new(parent: Option<&dyn Scope>) -> Self {
+    fn new(parent: Option<&dyn Scope>) -> Self {
         Self {
             binding_status: HashMap::new(),
             next_slot: parent.map(|p| p.next_slot()).unwrap_or(0),
         }
     }
 
-    pub fn announce_binding(&mut self, name: Key) {
+    fn announce_binding(&mut self, name: Key) {
         let current = self.binding_status.get(&name).copied();
         match current {
             None => { self.binding_status.insert(name, BindingStatus::Expected); }
@@ -199,7 +200,7 @@ impl LocalScopeManager {
     }
 }
 
-pub(super) struct LocalScope<'a> {
+pub struct LocalScope<'a> {
     parent: &'a mut dyn Scope,
     manager: LocalScopeManager,
 }

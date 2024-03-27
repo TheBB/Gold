@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{error::Error, object::integer::Int};
+use crate::{error::Error, object::Int};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum StringAlignSpec {
@@ -189,9 +189,9 @@ impl Default for FormatSpec {
 }
 
 pub struct StringFormatSpec {
-    pub fill: char,
-    pub align: StringAlignSpec,
-    pub width: Option<usize>,
+    fill: char,
+    align: StringAlignSpec,
+    width: Option<usize>,
 }
 
 impl StringFormatSpec {
@@ -252,24 +252,24 @@ impl IntegerFormatSpec {
         }
     }
 
-    pub(crate) fn format(&self, value: &Int) -> Result<String, Error> {
+    pub fn format(&self, value: &Int) -> Result<String, Error> {
         value.format(self)
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct FloatFormatSpec {
-    pub fill: char,
-    pub align: AlignSpec,
-    pub sign: SignSpec,
-    pub width: Option<usize>,
-    pub grouping: Option<GroupingSpec>,
-    pub precision: usize,
-    pub fmt_type: FloatFormatType,
+    fill: char,
+    align: AlignSpec,
+    sign: SignSpec,
+    width: Option<usize>,
+    grouping: Option<GroupingSpec>,
+    precision: usize,
+    fmt_type: FloatFormatType,
 }
 
 impl FloatFormatSpec {
-    pub fn string_spec(&self) -> Option<StringFormatSpec> {
+    fn string_spec(&self) -> Option<StringFormatSpec> {
         match (self.align, self.width) {
             (AlignSpec::AfterSign, _) => {
                 return None;

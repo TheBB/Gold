@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Position, Syntax, SyntaxElement, SyntaxError, Tagged, Taggable};
 
 /// Result type for calls to the lexer: either a new lexer and a token, or a syntax error.
-pub(crate) type LexResult<'a> = Result<(Lexer<'a>, Tagged<Token<'a>>), SyntaxError>;
-pub(crate) type CachedLexResult<'a> = Result<(CachedLexer<'a>, Tagged<Token<'a>>), SyntaxError>;
+type LexResult<'a> = Result<(Lexer<'a>, Tagged<Token<'a>>), SyntaxError>;
+pub type CachedLexResult<'a> = Result<(CachedLexer<'a>, Tagged<Token<'a>>), SyntaxError>;
 
 /// To speed up lexing, the result from the last call is saved.
 type LexCache<'a> = UnsafeCell<Option<(Ctx, usize, LexResult<'a>)>>;
@@ -63,7 +63,7 @@ pub enum TokenType {
 /// lexer does not keep track of the information necessary to determine the
 /// context: that falls to the parser.
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub(crate) enum Ctx {
+pub enum Ctx {
     /// Default context (normal code)
     Default,
 
@@ -125,14 +125,14 @@ impl Display for TokenType {
 
 /// A token has a type and a reference to the slice of the input buffer that generated it.
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub(crate) struct Token<'a> {
+pub struct Token<'a> {
     pub kind: TokenType,
     pub text: &'a str,
 }
 
 /// A lexer, for tokenizing a string of code.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Lexer<'a> {
+pub struct Lexer<'a> {
     code: &'a str,
     position: Position,
 }
@@ -173,7 +173,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Return the current position of the lexer.
-    pub fn position(&self) -> Position {
+    fn position(&self) -> Position {
         self.position
     }
 
@@ -235,7 +235,7 @@ impl<'a> Lexer<'a> {
     }
 
     /// Skip an arbitrary amount of whitespace (including comments and newlines).
-    pub fn skip_whitespace(mut self) -> Self {
+    fn skip_whitespace(mut self) -> Self {
         loop {
             self = self.skip_indent();
 
@@ -292,7 +292,7 @@ impl<'a> Lexer<'a> {
 
     /// Return the next token. Will look up the cached result and return it if
     /// appropriate, or calculate a new token and set the cache.
-    pub fn next(self, ctx: Ctx, cache: &LexCache<'a>) -> LexResult<'a> {
+    fn next(self, ctx: Ctx, cache: &LexCache<'a>) -> LexResult<'a> {
         // Check if the cache is set and matches
         if let Some((tok_ctx, tok_offset, result)) = unsafe { &*cache.get() } {
             if tok_ctx == &ctx && tok_offset == &self.position.offset() {
@@ -508,7 +508,7 @@ impl<'a> InputLength for Lexer<'a> {
 /// A lexer with built-in cache, so that the cache cell doesn't have to be
 /// passed manually to [`Lexer::next`].
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct CachedLexer<'a> {
+pub struct CachedLexer<'a> {
     lexer: Lexer<'a>,
     cache: &'a LexCache<'a>,
 }
@@ -516,7 +516,7 @@ pub(crate) struct CachedLexer<'a> {
 impl<'a> CachedLexer<'a> {
     /// Construct a new cached lexer. Use [`Lexer::cache`] to make the cache
     /// cell.
-    pub fn new(lexer: Lexer<'a>, cache: &'a LexCache<'a>) -> CachedLexer<'a> {
+    fn new(lexer: Lexer<'a>, cache: &'a LexCache<'a>) -> CachedLexer<'a> {
         CachedLexer { lexer, cache }
     }
 

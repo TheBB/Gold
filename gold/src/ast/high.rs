@@ -4,11 +4,12 @@ use std::rc::Rc;
 use gc::{Finalize, Trace};
 use serde::{Deserialize, Serialize};
 
-use crate::{builtins::BUILTINS, error::{BindingType, Reason, Span, Syntax}};
+use crate::{builtins::BUILTINS, error::{Reason, Span, Syntax}};
 use crate::formatting::FormatSpec;
 
 use crate::error::{Action, Error, Tagged, Taggable};
-use crate::{Key, Object};
+use crate::Object;
+use crate::types::Key;
 use super::low;
 use super::scope::{SubScope, Scope, LocalScope};
 use crate::types::{UnOp, BinOp};
@@ -77,61 +78,13 @@ impl MapBindingElement {
 
 /// A list binding destructures a list into a list of patterns.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
-pub struct ListBinding(pub Vec<Tagged<ListBindingElement>>);
-
-#[derive(Debug, Default)]
-pub struct ListBindingSolution<'a> {
-    pub num_front: usize,
-    pub num_back: usize,
-    pub def_front: usize,
-    pub def_back: usize,
-    pub slurp: Option<Option<Key>>,
-
-    pub front: &'a [Tagged<ListBindingElement>],
-    pub back: &'a [Tagged<ListBindingElement>],
-}
-
-impl<'a> ListBinding {
-    pub fn solution(&'a self) -> ListBindingSolution<'a> {
-        let mut ret = ListBindingSolution::default();
-
-        for element in &self.0 {
-            match element.as_ref() {
-                ListBindingElement::Slurp => {
-                    ret.slurp = Some(None);
-                    continue;
-                }
-                ListBindingElement::SlurpTo(key) => {
-                    ret.slurp = Some(Some(**key));
-                    continue;
-                }
-                _ => {}
-            }
-
-            let has_default = if let ListBindingElement::Binding {
-                default: Some(_), ..
-            } = **element
-            {
-                true
-            } else {
-                false
-            };
-            match (has_default, ret.slurp) {
-                (true, Some(_)) => ret.def_back += 1,
-                (true, None) => ret.def_front += 1,
-                (false, Some(_)) => ret.num_back += 1,
-                (false, None) => ret.num_front += 1,
-            }
-        }
-
-        ret.front = &self.0[..ret.num_front + ret.def_front];
-        ret.back = &self.0[self.0.len() - ret.num_back - ret.def_back..];
-
-        ret
-    }
-}
+pub struct ListBinding(Vec<Tagged<ListBindingElement>>);
 
 impl ListBinding {
+    pub fn new(elements: Vec<Tagged<ListBindingElement>>) -> Self {
+        Self(elements)
+    }
+
     fn announce_bindings(&self, scope: &mut dyn SubScope) {
         for element in &self.0 {
             element.announce_bindings(scope);
@@ -167,10 +120,7 @@ impl ListBinding {
 
                     let new_binding = binding.lower(scope)?.tag(binding);
                     let new_default = default.as_ref().map(|x| x.lower(scope).map(|y| y.tag(x))).transpose()?;
-                    match retval.slurp {
-                        Some(_) => { retval.back.push((new_binding, new_default)); }
-                        None => { retval.front.push((new_binding, new_default)); }
-                    }
+                    retval.push(new_binding, new_default);
                 }
             }
         }
@@ -185,9 +135,13 @@ impl ListBinding {
 /// A map binding destructres a map into a list of patterns associated with
 /// keys.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Trace, Finalize)]
-pub struct MapBinding(pub Vec<Tagged<MapBindingElement>>);
+pub struct MapBinding(Vec<Tagged<MapBindingElement>>);
 
 impl MapBinding {
+    pub fn new(elements: Vec<Tagged<MapBindingElement>>) -> Self {
+        Self(elements)
+    }
+
     fn announce_bindings(&self, scope: &mut dyn SubScope) {
         for element in &self.0 {
             element.announce_bindings(scope);
@@ -239,15 +193,6 @@ pub enum Binding {
 }
 
 impl Binding {
-    /// Return the type of the binding.
-    pub fn type_of(&self) -> BindingType {
-        match self {
-            Self::Identifier(_) => BindingType::Identifier,
-            Self::List(_) => BindingType::List,
-            Self::Map(_) => BindingType::Map,
-        }
-    }
-
     fn announce_bindings(&self, scope: &mut dyn SubScope) {
         match self {
             Self::Identifier(key) => { scope.announce_binding(*key.as_ref()); }
@@ -910,14 +855,6 @@ impl Tagged<Expr> {
         self.transform(Transform::UnOp(UnOp::LogicalNegate.tag(loc)))
     }
 
-    /// Form the combined transformed expression from this operand and a transform.
-    pub fn transform(self, op: Transform) -> Expr {
-        Expr::Transformed {
-            operand: Box::new(self),
-            transform: op,
-        }
-    }
-
     /// Form a function call expression from by calling this function with a
     /// list of arguments.
     ///
@@ -928,28 +865,26 @@ impl Tagged<Expr> {
     {
         self.transform(Transform::FunCall(args.tag(loc)))
     }
+
+    /// Form the combined transformed expression from this operand and a transform.
+    fn transform(self, op: Transform) -> Expr {
+        Expr::Transformed {
+            operand: Box::new(self),
+            transform: op,
+        }
+    }
 }
 
 impl Expr {
-    /// Construct a list expression.
-    pub fn list(elements: Vec<Tagged<ListElement>>) -> Expr where {
-        Expr::List(elements)
-    }
-
-    /// Construct a map expression.
-    pub fn map(x: Vec<Tagged<MapElement>>) -> Expr {
-        Expr::Map(x)
-    }
-
     /// Construct a string expression.
     ///
     /// If there's only one string element, and it's a raw string, (or if the
     /// string is empty) this will return a string literal.
     pub fn string(value: Vec<StringElement>) -> Expr {
         if value.len() == 0 {
-            Expr::Literal(Object::new_str_interned(""))
+            Expr::Literal(Object::from(""))
         } else if let [StringElement::Raw(val)] = &value[..] {
-            Expr::Literal(Object::new_str(val.as_ref()))
+            Expr::Literal(Object::from(val.as_ref()))
         } else {
             Expr::String(value)
         }
@@ -1069,7 +1004,7 @@ pub struct File {
 }
 
 impl File {
-    pub(crate) fn lower(&self) -> Result<low::Function, Error> {
+    pub fn lower(&self) -> Result<low::Function, Error> {
         let mut outer = low::FunctionBuilder::new(None);
 
         let mut import_builder = low::ImportsBuilder::new(outer.scope());

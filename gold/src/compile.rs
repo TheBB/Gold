@@ -6,12 +6,12 @@ use serde::{Deserialize, Serialize};
 use crate::ast::low::{Binding, Expr, Function, ListBinding, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, Transform, ArgElement};
 use crate::error::{Action, Error, IntervalTree, Reason, Span, Tagged, Unpack};
 use crate::formatting::FormatSpec;
-use crate::types::{BinOp, UnOp};
-use crate::{Key, Object};
-use crate::ast::scope::{BindingLoc, SlotCatalog, SlotType};
+use crate::types::{BinOp, UnOp, Key};
+use crate::Object;
+use crate::ast::{BindingLoc, SlotCatalog, SlotType};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
-pub(crate) struct CompiledFunction {
+pub struct CompiledFunction {
     pub constants: Vec<Object>,
     pub functions: Vec<CompiledFunction>,
 
@@ -32,7 +32,7 @@ pub(crate) struct CompiledFunction {
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
-pub(crate) enum Instruction {
+pub enum Instruction {
     // Loading
     LoadConst(usize),
     LoadLocal(usize),
@@ -208,7 +208,7 @@ impl SlotMap {
 
 }
 
-pub(crate) struct Compiler {
+pub struct Compiler {
     constants: Vec<Object>,
     funcs: Vec<CompiledFunction>,
     fmt_specs: Vec<FormatSpec>,
@@ -226,7 +226,7 @@ pub(crate) struct Compiler {
 }
 
 impl Compiler {
-    pub fn new_from_function(function: Function) -> Result<CompiledFunction, Error> {
+    pub fn compile(function: Function) -> Result<CompiledFunction, Error> {
         let Function { constants, expression, slots, fmt_specs, positional, keywords, .. } = function;
         let mut compiler = Compiler {
             constants,
@@ -371,7 +371,7 @@ impl Compiler {
                     }
                 }
 
-                let compiled = Compiler::new_from_function(function.clone())?;
+                let compiled = Compiler::compile(function.clone())?;
                 let index = self.function(compiled);
                 self.code[load_index] = Instruction::LoadFunc(index);
                 Ok(len + 1)
@@ -971,7 +971,7 @@ impl Compiler {
         tree
     }
 
-    pub fn finalize(mut self) -> CompiledFunction {
+    fn finalize(mut self) -> CompiledFunction {
         self.code.push(Instruction::Return);
 
         println!("-----------------------------------------------");
