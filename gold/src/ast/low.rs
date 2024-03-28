@@ -1,8 +1,8 @@
 use crate::compile::{Compiler, CompiledFunction};
 use crate::error::Tagged;
 use crate::formatting::FormatSpec;
-use crate::{Error, Object};
-use crate::types::{UnOp, BinOp, Key};
+use crate::Object;
+use crate::types::{UnOp, BinOp, Key, Res};
 use super::scope::{BindingLoc, ClosureScope, LocalScope, Scope, SlotCatalog};
 
 #[derive(Debug, Clone)]
@@ -143,7 +143,7 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn compile(self) -> Result<CompiledFunction, Error> {
+    pub fn compile(self) -> Res<CompiledFunction> {
         Compiler::compile(self)
     }
 }

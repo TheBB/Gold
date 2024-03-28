@@ -9,7 +9,7 @@ use crate::Object;
 use crate::types::Key;
 use super::low;
 use super::scope::{SubScope, Scope, LocalScope};
-use crate::types::{UnOp, BinOp};
+use crate::types::{UnOp, BinOp, Res};
 
 // ListBindingElement
 // ----------------------------------------------------------------
@@ -87,7 +87,7 @@ impl ListBinding {
         }
     }
 
-    fn lower(&self, scope: &mut dyn Scope) -> Result<low::ListBinding, Error> {
+    fn lower(&self, scope: &mut dyn Scope) -> Res<low::ListBinding> {
         let mut retval = low::ListBinding::default();
 
         for element in &self.0 {
@@ -143,7 +143,7 @@ impl MapBinding {
         }
     }
 
-    fn lower(&self, scope: &mut dyn Scope) -> Result<low::MapBinding, Error> {
+    fn lower(&self, scope: &mut dyn Scope) -> Res<low::MapBinding> {
         let mut retval = low::MapBinding {
             elements: Vec::new(),
             slurp: None,
@@ -196,7 +196,7 @@ impl Binding {
         }
     }
 
-    fn lower(&self, scope: &mut dyn Scope) -> Result<low::Binding, Error> {
+    fn lower(&self, scope: &mut dyn Scope) -> Res<low::Binding> {
         match self {
             Self::Identifier(key) => match scope.lookup_store(*key.as_ref()) {
                 None => Err(Error::new(Reason::Unbound(*key.as_ref())).tag(key.span(), Action::LookupName)),
@@ -232,7 +232,7 @@ impl StringElement {
         StringElement::Raw(Rc::new(val.as_ref().to_owned()))
     }
 
-    fn lower(&self, scope: &mut dyn Scope) -> Result<low::StringElement, Error> {
+    fn lower(&self, scope: &mut dyn Scope) -> Res<low::StringElement> {
         match self {
             Self::Raw(str) => {
                 let index = scope.new_constant(Object::new_str_natural(str.as_ref()));
@@ -271,7 +271,7 @@ pub enum ListElement {
 }
 
 impl ListElement {
-    fn lower(&self, scope: &mut dyn Scope) -> Result<low::ListElement, Error> {
+    fn lower(&self, scope: &mut dyn Scope) -> Res<low::ListElement> {
         match self {
             Self::Singleton(expr) => Ok(low::ListElement::Singleton(expr.lower(scope)?.tag(expr))),
             Self::Splat(expr) => Ok(low::ListElement::Splat(expr.lower(scope)?.tag(expr))),
@@ -326,7 +326,7 @@ pub enum MapElement {
 }
 
 impl MapElement {
-    fn lower(&self, scope: &mut dyn Scope) -> Result<low::MapElement, Error> {
+    fn lower(&self, scope: &mut dyn Scope) -> Res<low::MapElement> {
         match self {
             Self::Singleton { key, value } => {
                 let new_key = key.lower(scope)?.tag(key);
@@ -375,7 +375,7 @@ pub enum ArgElement {
 }
 
 impl ArgElement {
-    fn lower(&self, scope: &mut dyn Scope) -> Result<low::ArgElement, Error> {
+    fn lower(&self, scope: &mut dyn Scope) -> Res<low::ArgElement> {
         match self {
             Self::Singleton(expr) => Ok(low::ArgElement::Singleton(expr.lower(scope)?.tag(expr))),
             Self::Keyword(key, expr) => Ok(low::ArgElement::Keyword(*key, expr.lower(scope)?.tag(expr))),
@@ -565,7 +565,7 @@ impl Transform {
         Transform::BinOp(BinOp::Or.tag(loc), Box::new(rhs))
     }
 
-    fn lower(&self, scope: &mut dyn Scope) -> Result<low::Transform, Error> {
+    fn lower(&self, scope: &mut dyn Scope) -> Res<low::Transform> {
         match self {
             Self::UnOp(op) => Ok(low::Transform::UnOp(*op)),
             Self::BinOp(op, expr) => {
@@ -885,7 +885,7 @@ impl Expr {
         }
     }
 
-    fn lower(&self, scope: &mut dyn Scope) -> Result<low::Expr, Error> {
+    fn lower(&self, scope: &mut dyn Scope) -> Res<low::Expr> {
         match self {
             Self::Literal(obj) => {
                 let index = scope.new_constant(obj.clone());
@@ -999,7 +999,7 @@ pub struct File {
 }
 
 impl File {
-    pub fn lower(&self) -> Result<low::Function, Error> {
+    pub fn lower(&self) -> Res<low::Function> {
         let mut outer = low::FunctionBuilder::new(None);
 
         let mut import_builder = low::ImportsBuilder::new(outer.scope());

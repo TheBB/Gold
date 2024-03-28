@@ -36,8 +36,7 @@ use symbol_table::GlobalSymbol;
 use crate::compile::CompiledFunction;
 use crate::error::{Error, Internal, Reason, TypeMismatch, Value};
 use crate::formatting::FormatSpec;
-use crate::types::{Cell, Gc, GcCell};
-use crate::types::{UnOp, BinOp, Key, List, Map, Type};
+use crate::types::{Cell, Gc, GcCell, Res, UnOp, BinOp, Key, List, Map, Type};
 
 #[cfg(feature = "python")]
 use crate::types::NativeClosure;
@@ -297,7 +296,7 @@ impl Object {
     }
 
     /// Construct an iterator
-    pub fn new_iterator(obj: &Object) -> Result<Self, Error> {
+    pub fn new_iterator(obj: &Object) -> Res<Self> {
         if let Object(ObjV::List(l)) = obj {
             Ok(Object(ObjV::ListIter(
                 GcCell::new(0),
@@ -312,7 +311,7 @@ impl Object {
     // ------------------------------------------------------------------------------------------------
 
     /// Append a new element to a list.
-    pub fn push(&self, other: Object) -> Result<(), Error> {
+    pub fn push(&self, other: Object) -> Res<()> {
         let Self(this) = self;
         match this {
             ObjV::List(x) => {
@@ -330,7 +329,7 @@ impl Object {
     }
 
     /// Append a new cell to a closure.
-    pub fn push_cell(&self, other: Cell) -> Result<(), Error> {
+    pub fn push_cell(&self, other: Cell) -> Res<()> {
         let Self(this) = self;
         match this {
             ObjV::Func(func) => { func.push_cell(other) },
@@ -339,7 +338,7 @@ impl Object {
     }
 
     /// Assign a new key-value pair to a map.
-    pub fn insert(&self, key: Self, value: Self) -> Result<(), Error> {
+    pub fn insert(&self, key: Self, value: Self) -> Res<()> {
         self.insert_key(
             key.get_key()
                 .ok_or_else(|| Error::new(TypeMismatch::MapKey(key.type_of())))?,
@@ -348,7 +347,7 @@ impl Object {
     }
 
     /// Assign a new key-value pair to a map.
-    pub fn insert_key(&self, key: Key, value: Object) -> Result<(), Error> {
+    pub fn insert_key(&self, key: Key, value: Object) -> Res<()> {
         let Self(this) = self;
         match this {
             ObjV::Map(x) => {
@@ -361,7 +360,7 @@ impl Object {
     }
 
     /// Get next value from an iterator
-    pub fn next(&self) -> Result<Option<Self>, Error> {
+    pub fn next(&self) -> Res<Option<Self>> {
         if let Object(ObjV::ListIter(index_cell, list)) = self {
             let mut index_cell_ref = index_cell.borrow_mut();
             let l = list.borrow();
@@ -379,7 +378,7 @@ impl Object {
 
     /// Splat all elements in `other` into this object. Works for map-to-map and
     /// list-to-list.
-    pub fn splat_into(&self, other: Object) -> Result<(), Error> {
+    pub fn splat_into(&self, other: Object) -> Res<()> {
         let Self(this) = self;
         let Self(that) = &other;
         match (this, that) {
@@ -407,7 +406,7 @@ impl Object {
         }
     }
 
-    fn append(&self, mut it: impl Iterator<Item = Object>) -> Result<(), Error> {
+    fn append(&self, mut it: impl Iterator<Item = Object>) -> Res<()> {
         let Self(this) = self;
         match this {
             ObjV::List(x) => {
@@ -438,7 +437,7 @@ impl Object {
     // ------------------------------------------------------------------------------------------------
 
     /// Mathematical negation.
-    pub fn neg(&self) -> Result<Self, Error> {
+    pub fn neg(&self) -> Res<Self> {
         let Self(this) = self;
         match this {
             ObjV::Int(x) => Ok(Self(ObjV::Int(x.neg()))),
@@ -463,7 +462,7 @@ impl Object {
         ixi: impl Fn(&Int, &Int) -> S,
         fxf: impl Fn(f64, f64) -> T,
         op: BinOp,
-    ) -> Result<Self, Error>
+    ) -> Res<Self>
     where
         Self: From<S> + From<T>,
     {
@@ -484,7 +483,7 @@ impl Object {
     }
 
     /// The plus operator: concatenate strings and lists, or delegate to mathematical addition.
-    pub fn add(&self, other: &Self) -> Result<Self, Error> {
+    pub fn add(&self, other: &Self) -> Res<Self> {
         let Self(this) = self;
         let Self(that) = other;
         match (this, that) {
@@ -499,22 +498,22 @@ impl Object {
     }
 
     /// The minus operator: mathematical subtraction.
-    pub fn sub(&self, other: &Self) -> Result<Self, Error> {
+    pub fn sub(&self, other: &Self) -> Res<Self> {
         self.operate(other, Int::sub, |x, y| x - y, BinOp::Subtract)
     }
 
     /// The asterisk operator: mathematical multiplication.
-    pub fn mul(&self, other: &Self) -> Result<Self, Error> {
+    pub fn mul(&self, other: &Self) -> Res<Self> {
         self.operate(other, Int::mul, |x, y| x * y, BinOp::Multiply)
     }
 
     /// The slash operator: mathematical division.
-    pub fn div(&self, other: &Self) -> Result<Self, Error> {
+    pub fn div(&self, other: &Self) -> Res<Self> {
         self.operate(other, Int::div, |x, y| x / y, BinOp::Divide)
     }
 
     /// The double slash operator: integer division.
-    pub fn idiv(&self, other: &Self) -> Result<Self, Error> {
+    pub fn idiv(&self, other: &Self) -> Res<Self> {
         self.operate(
             other,
             Int::idiv,
@@ -526,7 +525,7 @@ impl Object {
     /// The exponentiation operator. This uses [`IntVariant::pow`] if both
     /// operands are integers and if the exponent is non-negative. Otherwise it
     /// delegates to floating-point exponentiation.
-    pub fn pow(&self, other: &Self) -> Result<Self, Error> {
+    pub fn pow(&self, other: &Self) -> Res<Self> {
         let Self(this) = self;
         let Self(that) = other;
 
@@ -668,7 +667,7 @@ impl Object {
     }
 
     /// Extract a native Rust callable if applicable.
-    pub fn get_native_callable(&self) -> Option<&dyn Fn(&List, Option<&Map>) -> Result<Object, Error>> {
+    pub fn get_native_callable(&self) -> Option<&dyn Fn(&List, Option<&Map>) -> Res<Object>> {
         let Self(this) = self;
         match this {
             ObjV::Func(func) => func.native_callable(),
@@ -705,7 +704,7 @@ impl Object {
     // ------------------------------------------------------------------------------------------------
 
     /// String representation of this object. Used for string interpolation.
-    pub fn format(&self, spec: &FormatSpec) -> Result<String, Error> {
+    pub fn format(&self, spec: &FormatSpec) -> Res<String> {
         let Self(this) = self;
         match this {
             ObjV::Str(r) => {
@@ -815,7 +814,7 @@ impl Object {
     }
     /// The function call operator.
     #[cfg(feature = "python")]
-    fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+    fn call(&self, args: &List, kwargs: Option<&Map>) -> Res<Object> {
         match self.get_func_variant() {
             Some(func) => func.call(args, kwargs),
             None => return Err(Error::new(TypeMismatch::Call(self.type_of()))),
@@ -830,7 +829,7 @@ impl Object {
     }
 
     /// The indexing operator (for both lists and maps).
-    pub fn index(&self, other: &Object) -> Result<Object, Error> {
+    pub fn index(&self, other: &Object) -> Res<Object> {
         match (&self.0, &other.0) {
             (ObjV::List(x), ObjV::Int(y)) => {
                 let xx = x.borrow();
@@ -857,7 +856,7 @@ impl Object {
     }
 
     /// The containment operator.
-    pub fn contains(&self, other: &Object) -> Result<bool, Error> {
+    pub fn contains(&self, other: &Object) -> Res<bool> {
         let Self(this) = self;
         let Self(that) = other;
 

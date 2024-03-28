@@ -45,7 +45,7 @@ pub use parsing::parse;
 pub use eval::ImportConfig;
 pub use error::Error;
 pub use object::Object;
-pub use types::{List, Map, Type};
+pub use types::{List, Map, Type, Res};
 
 #[cfg(feature = "python")]
 pub use eval::PyImportConfig;
@@ -55,7 +55,7 @@ pub use eval::PyImportConfig;
 /// Use `root` to define the root path for imports. If not given, relative path
 /// imports will not be possible. Provide a custom import resolver for full
 /// control over imports.
-pub fn eval(input: &str, importer: &ImportConfig) -> Result<Object, Error> {
+pub fn eval(input: &str, importer: &ImportConfig) -> Res<Object> {
     let ast = parse(input)?;
     let lowered = ast.lower()?;
     let code = lowered.compile()?;
@@ -66,7 +66,7 @@ pub fn eval(input: &str, importer: &ImportConfig) -> Result<Object, Error> {
 /// Evaluate Gold code and return the result.
 ///
 /// This is equivalent to calling [`eval`] with no path and an import resolver that always fails.
-pub fn eval_raw(input: &str) -> Result<Object, Error> {
+pub fn eval_raw(input: &str) -> Res<Object> {
     eval(input, &ImportConfig::default())
 }
 
@@ -75,7 +75,7 @@ pub fn eval_raw(input: &str) -> Result<Object, Error> {
 /// This is equivalent to reading the file and calling [`eval`] with the source
 /// code, the file's path and an import resolver that always fails. Relative
 /// path imports will succeed.
-pub fn eval_file(input: &Path) -> Result<Object, Error> {
+pub fn eval_file(input: &Path) -> Res<Object> {
     let contents =
         read_to_string(input).map_err(|_| Error::new(FileSystem::Read(input.to_owned())))?;
     let parent = input

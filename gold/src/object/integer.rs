@@ -11,10 +11,10 @@ use num_traits::{checked_pow, ToPrimitive};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Value};
-
 use crate::formatting::{
     AlignSpec, GroupingSpec, IntegerFormatSpec, IntegerFormatType, SignSpec, UppercaseSpec,
 };
+use crate::types::Res;
 
 #[cfg(feature="python")]
 use pyo3::{IntoPy, PyObject, Python};
@@ -306,7 +306,7 @@ impl Int {
         }
     }
 
-    pub fn format(&self, spec: &IntegerFormatSpec) -> Result<String, Error> {
+    pub fn format(&self, spec: &IntegerFormatSpec) -> Res<String> {
         let Self(this) = self;
 
         let base = match (spec.fmt_type, this) {

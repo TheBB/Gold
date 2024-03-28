@@ -27,6 +27,9 @@ pub type NativeClosure = dyn Fn(&List, Option<&Map>) -> Result<Object, Error>;
 
 pub type Cell = GcCell<Option<Object>>;
 
+/// Alias for `Result<T, Error>`.
+pub type Res<T> = Result<T, Error>;
+
 #[derive(Copy, Clone)]
 pub struct Builtin {
     func: NativeFunction,

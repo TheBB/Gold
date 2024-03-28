@@ -15,14 +15,14 @@ use crate::builtins::BUILTINS;
 use crate::compile::{CompiledFunction, Instruction};
 use crate::error::{BindingType, Error, Reason, TypeMismatch, Unpack};
 use crate::formatting::FormatSpec;
-use crate::types::{BinOp, Cell, GcCell};
+use crate::types::{BinOp, Cell, GcCell, Res};
 use crate::{eval_file, eval_raw as eval_str};
 use crate::{List, Map, Object, Type};
 
 /// Source code of the standard library (imported under the name 'std')
 const STDLIB: &str = include_str!("std.gold");
 
-type ImportCallable = dyn Fn(&str) -> Result<Option<Object>, Error>;
+type ImportCallable = dyn Fn(&str) -> Res<Option<Object>>;
 
 /// Configure the import behavior when evaluating Gold code.
 #[derive(Clone, Default)]
@@ -50,7 +50,7 @@ impl ImportConfig {
     }
 
     /// Resolve an import path.
-    fn resolve(&self, path: &str) -> Result<Object, Error> {
+    fn resolve(&self, path: &str) -> Res<Object> {
         // Gold reserves all import paths starting with 'std'
         if path.starts_with("std") {
             match path {
@@ -186,7 +186,7 @@ impl<'a> Vm<'a> {
         }
     }
 
-    pub fn eval(&mut self, function: CompiledFunction) -> Result<Object, Error> {
+    pub fn eval(&mut self, function: CompiledFunction) -> Res<Object> {
         self.frames.push(Frame::new(function, GcCell::new(vec![])));
         self.fp = 0;
         self.push(Object::new_map());
@@ -200,7 +200,7 @@ impl<'a> Vm<'a> {
         enclosed: GcCell<Vec<Cell>>,
         args: &List,
         kwargs: Option<&Map>,
-    ) -> Result<Object, Error> {
+    ) -> Res<Object> {
         self.frames.push(Frame::new(function, enclosed));
         self.fp = 0;
         self.push(
@@ -247,7 +247,7 @@ impl<'a> Vm<'a> {
         err
     }
 
-    fn eval_impl(&mut self) -> Result<Object, Error> {
+    fn eval_impl(&mut self) -> Res<Object> {
         loop {
             let instruction = self.cur_frame().next_instruction();
             match instruction {
@@ -790,11 +790,11 @@ impl<'a> Vm<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{BinOp, UnOp, Key};
+    use crate::types::{BinOp, UnOp, Key, Res};
     use crate::error::{Action, BindingType, Error, Reason, Span, TypeMismatch, Types, Unpack};
     use crate::{eval_raw, Object, Type};
 
-    fn eval(input: &str) -> Result<Object, Error> {
+    fn eval(input: &str) -> Res<Object> {
         eval_raw(input).map_err(Error::unrender)
     }
 
@@ -1896,8 +1896,9 @@ mod examples {
     use std::env;
     use std::path::PathBuf;
     use crate::{Object, Error, eval_file};
+    use crate::types::Res;
 
-    fn eval(example: &str) -> Result<Object, Error> {
+    fn eval(example: &str) -> Res<Object> {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.pop();
         path.push("examples");

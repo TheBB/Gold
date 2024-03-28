@@ -22,7 +22,7 @@ use super::{List, Map, Object};
 use crate::compile::CompiledFunction;
 use crate::error::{Error, Reason};
 use crate::eval::Vm;
-use crate::types::{Builtin, Cell, GcCell, NativeClosure};
+use crate::types::{Builtin, Cell, GcCell, NativeClosure, Res};
 use crate::ImportConfig;
 
 #[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
@@ -83,7 +83,7 @@ impl Func {
     }
 
     /// The function call operator.
-    pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Result<Object, Error> {
+    pub fn call(&self, args: &List, kwargs: Option<&Map>) -> Res<Object> {
         let Self(this) = self;
         match this {
             FuncV::NativeClosure(f) => f(args, kwargs),
@@ -96,7 +96,7 @@ impl Func {
         }
     }
 
-    pub fn push_cell(&self, other: Cell) -> Result<(), Error> {
+    pub fn push_cell(&self, other: Cell) -> Res<()> {
         let Self(this) = self;
         match this {
             FuncV::Closure(_, enclosed) => {

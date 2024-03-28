@@ -20,7 +20,7 @@ use crate::formatting::{
     StringAlignSpec, UppercaseSpec,
 };
 use crate::lexing::{CachedLexResult, CachedLexer, Lexer, TokenType};
-use crate::types::{UnOp, BinOp, Key};
+use crate::types::{UnOp, BinOp, Key, Res};
 use crate::Object;
 
 trait ExplainError {
@@ -1880,7 +1880,7 @@ fn file<'a>(input: In<'a>) -> Out<'a, File> {
 }
 
 /// Parse the input and return a [`File`] object.
-pub fn parse(input: &str) -> Result<File, Error> {
+pub fn parse(input: &str) -> Res<File> {
     let cache = Lexer::cache();
     let lexer = Lexer::new(input).with_cache(&cache);
     file(lexer).map_or_else(
@@ -1901,7 +1901,7 @@ mod tests {
     use crate::error::{Tagged, Taggable, Span, Action, Syntax, SyntaxElement as S};
     use crate::formatting::{FormatSpec, AlignSpec, FormatType, GroupingSpec, SignSpec, StringAlignSpec};
     use crate::lexing::TokenType as T;
-    use crate::types::Key;
+    use crate::types::{Key, Res};
     use super::parse as parse_file;
 
     trait ToExpr {
@@ -2045,7 +2045,7 @@ mod tests {
         }
     }
 
-    fn expr(input: &str) -> Result<Tagged<Expr>, Error> {
+    fn expr(input: &str) -> Res<Tagged<Expr>> {
         parse_file(input)
             .map(|x| x.expression)
             .map_err(Error::unrender)

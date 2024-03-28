@@ -4,9 +4,9 @@ use gc::{Finalize, Trace};
 use serde::{Deserialize, Serialize};
 
 use crate::ast::low::{Binding, Expr, Function, ListBinding, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, Transform, ArgElement};
-use crate::error::{Action, Error, IntervalTree, Reason, Span, Tagged, Unpack};
+use crate::error::{Action, IntervalTree, Reason, Span, Tagged, Unpack};
 use crate::formatting::FormatSpec;
-use crate::types::{BinOp, UnOp, Key};
+use crate::types::{BinOp, UnOp, Key, Res};
 use crate::Object;
 use crate::ast::{BindingLoc, SlotCatalog, SlotType};
 
@@ -241,7 +241,7 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn compile(function: Function) -> Result<CompiledFunction, Error> {
+    pub fn compile(function: Function) -> Res<CompiledFunction> {
         let Function { constants, expression, slots, fmt_specs, positional, keywords, .. } = function;
         let mut compiler = Compiler {
             constants,
@@ -272,7 +272,7 @@ impl Compiler {
         Ok(compiler.finalize())
     }
 
-    fn emit_expression(&mut self, expr: &Expr) -> Result<usize, Error> {
+    fn emit_expression(&mut self, expr: &Expr) -> Res<usize> {
         match expr {
             Expr::Constant(index) => {
                 self.instruction(Instruction::LoadConst(*index));
@@ -394,7 +394,7 @@ impl Compiler {
         }
     }
 
-    fn emit_binding(&mut self, binding: &Tagged<Binding>) -> Result<usize, Error> {
+    fn emit_binding(&mut self, binding: &Tagged<Binding>) -> Res<usize> {
         let loc = self.code.len();
 
         let retval = match binding.as_ref() {
@@ -427,7 +427,7 @@ impl Compiler {
         retval
     }
 
-    fn emit_list_binding(&mut self, binding: &ListBinding) -> Result<usize, Error> {
+    fn emit_list_binding(&mut self, binding: &ListBinding) -> Res<usize> {
         let mut len = 0;
 
         if binding.slurp.is_some() {
@@ -500,7 +500,7 @@ impl Compiler {
         Ok(len)
     }
 
-    fn emit_map_binding(&mut self, binding: &Tagged<MapBinding>) -> Result<usize, Error> {
+    fn emit_map_binding(&mut self, binding: &Tagged<MapBinding>) -> Res<usize> {
         let mut len = 0;
 
         self.instruction(Instruction::AssertMap);
@@ -547,7 +547,7 @@ impl Compiler {
         Ok(len)
     }
 
-    fn emit_string_element(&mut self, element: &StringElement) -> Result<usize, Error> {
+    fn emit_string_element(&mut self, element: &StringElement) -> Res<usize> {
         match element {
             StringElement::Raw(index) => {
                 self.instruction(Instruction::LoadConst(*index));
@@ -570,7 +570,7 @@ impl Compiler {
         }
     }
 
-    fn emit_list_element(&mut self, element: &ListElement) -> Result<usize, Error> {
+    fn emit_list_element(&mut self, element: &ListElement) -> Res<usize> {
         match element {
             ListElement::Singleton(expr) => {
                 let len = self.emit_expression(expr)?;
@@ -618,7 +618,7 @@ impl Compiler {
         }
     }
 
-    fn emit_map_element(&mut self, element: &MapElement) -> Result<usize, Error> {
+    fn emit_map_element(&mut self, element: &MapElement) -> Res<usize> {
         match element {
             MapElement::Singleton { key, value } => {
                 let loc = self.code.len();
@@ -669,7 +669,7 @@ impl Compiler {
         }
     }
 
-    fn emit_transform(&mut self, transform: &Transform) -> Result<usize, Error> {
+    fn emit_transform(&mut self, transform: &Transform) -> Res<usize> {
         match transform {
             Transform::UnOp(op) => {
                 let loc = self.code.len();
@@ -788,7 +788,7 @@ impl Compiler {
         }
     }
 
-    fn emit_arg_element(&mut self, arg: &ArgElement) -> Result<usize, Error> {
+    fn emit_arg_element(&mut self, arg: &ArgElement) -> Res<usize> {
         match arg {
             ArgElement::Singleton(expr) => {
                 let len = self.emit_expression(expr)?;
