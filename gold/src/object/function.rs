@@ -20,7 +20,7 @@ use pyo3::exceptions::PyTypeError;
 
 use super::{List, Map, Object};
 use crate::compile::CompiledFunction;
-use crate::error::{Error, Reason};
+use crate::error::{Error, Internal};
 use crate::eval::Vm;
 use crate::types::{Builtin, Cell, GcCell, NativeClosure, Res};
 use crate::ImportConfig;
@@ -104,7 +104,7 @@ impl Func {
                 e.push(other);
                 Ok(())
             }
-            _ => Err(Error::new(Reason::None)),
+            _ => Err(Internal::PushCellNotClosure.err()),
         }
     }
 

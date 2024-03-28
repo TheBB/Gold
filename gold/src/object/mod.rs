@@ -319,7 +319,7 @@ impl Object {
                 xx.push(other);
                 Ok(())
             }
-            _ => Err(Error::new(Reason::None)),
+            _ => Err(Internal::PushNotList.err()),
         }
     }
 
@@ -333,7 +333,7 @@ impl Object {
         let Self(this) = self;
         match this {
             ObjV::Func(func) => { func.push_cell(other) },
-            _ => Err(Error::new(Reason::None)),
+            _ => Err(Internal::PushCellNotClosure.err()),
         }
     }
 
@@ -355,7 +355,7 @@ impl Object {
                 xx.insert(key, value);
                 Ok(())
             }
-            _ => Err(Error::new(Reason::None)),
+            _ => Err(Internal::InsertNotMap.err()),
         }
     }
 
@@ -372,7 +372,7 @@ impl Object {
                 Ok(None)
             }
         } else {
-            Err(Error::new(Reason::None))
+            Err(Internal::NextNotIterator.err())
         }
     }
 
@@ -402,7 +402,7 @@ impl Object {
 
             (ObjV::Map(_), _) => Err(Error::new(TypeMismatch::SplatMap(other.type_of()))),
 
-            _ => Err(Error::new(Internal::SplatToNonCollection)),
+            _ => Err(Internal::SplatNotCollection.err()),
         }
     }
 
@@ -416,7 +416,7 @@ impl Object {
                 }
                 Ok(())
             }
-            _ => Err(Error::new(Reason::None)),
+            _ => Err(Internal::AppendNotList.err()),
         }
     }
 

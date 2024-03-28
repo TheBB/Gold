@@ -524,15 +524,67 @@ pub enum Internal {
 
     /// Attempted splatting into a non-collection. (003)
     /// This should be prevented by the parser.
-    SplatToNonCollection,
+    SplatNotCollection,
+
+    /// Arguments passed to a function was not a list. (004)
+    ArgsNotList,
+
+    /// Keyword arguments passed to a function was not a map. (005)
+    KwargsNotMap,
+
+    /// Attempted to use the DelKeyIfExists instruction on a non-map. (006)
+    DelKeyNotMap,
+
+    /// Attempted to use one of the internal indexing instructions on a non-list. (007)
+    IndexNotList,
+
+    /// Attempted to use an internal indexing instruction on a list that was out of bounds. (008)
+    IndexOutOfBounds,
+
+    /// Attempted to use one of the internal indexing instructions on a non-map. (009)
+    IndexNotMap,
+
+    /// Attempted to push a cell to a non-closure. (010)
+    PushCellNotClosure,
+
+    /// Attempted to push an item to a non-list. (011)
+    PushNotList,
+
+    /// Attempted to insert into a non-map. (012)
+    InsertNotMap,
+
+    /// Attempted to get the next item from a non-iterator. (013)
+    NextNotIterator,
+
+    /// Attempted to use the append operation on a non-list. (014)
+    AppendNotList,
 }
 
 impl Internal {
+    pub fn err(self) -> Error {
+        if cfg!(debug_assertions) {
+            panic!("Internal error triggered: {:?}", &self);
+        } else {
+            Error::new(self)
+        }
+    }
+
     fn error_code(&self) -> usize {
         match self {
             Self::SetInFrozenNamespace => 1,
             Self::UnknownError => 2,
-            Self::SplatToNonCollection => 3,
+            Self::SplatNotCollection => 3,
+            Self::ArgsNotList => 4,
+            Self::KwargsNotMap => 5,
+            Self::DelKeyNotMap => 6,
+            Self::IndexNotList => 7,
+            Self::IndexOutOfBounds => 8,
+            Self::IndexNotMap => 9,
+            Self::PushCellNotClosure => 10,
+            Self::PushNotList => 11,
+            Self::InsertNotMap => 12,
+            Self::NextNotIterator => 13,
+            Self::AppendNotList => 14,
         }
     }
 }
@@ -720,7 +772,7 @@ pub enum FileSystem {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Reason {
     /// Unknown reason - should never happen.
-    None,
+    // None,
 
     /// Syntax error.
     Syntax(Syntax),
@@ -936,7 +988,6 @@ impl Error {
         let pystr = format!("From Gold: {}", self.rendered().unwrap());
         match self.reason() {
             None => PyException::new_err(pystr),
-            Some(Reason::None) => PyException::new_err(pystr),
             Some(Reason::Syntax(_)) => PySyntaxError::new_err(pystr),
             Some(Reason::Unbound(_)) => PyNameError::new_err(pystr),
             Some(Reason::Unassigned(_)) => PyKeyError::new_err(pystr),
@@ -1017,10 +1068,6 @@ fn fmt_expected_arg(
 impl Display for Reason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::None => {
-                f.write_str("unknown reason - this should not happen, please file a bug report")
-            }
-
             Self::Syntax(Syntax::UnexpectedEof) => f.write_str("unexpected end of input"),
             Self::Syntax(Syntax::UnexpectedChar(c)) => {
                 f.write_fmt(format_args!("unexpected {}", c))
@@ -1169,7 +1216,7 @@ impl<'a> Display for ErrorRenderer<'a> {
 
         f.write_fmt(format_args!(
             "Error: {}",
-            err.reason.as_ref().unwrap_or(&Reason::None)
+            err.reason.as_ref().unwrap_or(&Reason::from(Internal::UnknownError))
         ))?;
         if let Some(locs) = err.locations.as_ref() {
             for (loc, act) in locs.iter() {
@@ -1278,11 +1325,10 @@ impl<I: Copy + PartialOrd + Debug> IntervalTree<I, (Span, Action), Reason> {
             None => Error::new(Internal::UnknownError),
 
             Some(root) => {
-                let mut err = Error::new(
-                    root.most_specific_second(loc)
-                        .cloned()
-                        .unwrap_or(Reason::from(Internal::UnknownError)),
-                );
+                let mut err = root.most_specific_second(loc)
+                    .cloned()
+                    .map(Error::new)
+                    .unwrap_or_else(|| Error::new(Internal::UnknownError));
 
                 let mut locations: Vec<(Span, Action)> = Vec::new();
                 root.all_first(loc, &mut locations);

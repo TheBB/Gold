@@ -13,7 +13,7 @@ use pyo3::types::{PyString, PyTuple};
 
 use crate::builtins::BUILTINS;
 use crate::compile::{CompiledFunction, Instruction};
-use crate::error::{BindingType, Error, Reason, TypeMismatch, Unpack};
+use crate::error::{BindingType, Error, Internal, Reason, TypeMismatch, Unpack};
 use crate::formatting::FormatSpec;
 use crate::types::{BinOp, Cell, GcCell, Res};
 use crate::{eval_file, eval_raw as eval_str};
@@ -369,8 +369,8 @@ impl<'a> Vm<'a> {
                     let func = self.pop();
 
                     if let Some(f) = func.get_native_callable() {
-                        let x = args.get_list().ok_or_else(|| Error::new(Reason::None))?;
-                        let y = kwargs.get_map().ok_or_else(|| Error::new(Reason::None))?;
+                        let x = args.get_list().ok_or_else(|| Internal::ArgsNotList.err())?;
+                        let y = kwargs.get_map().ok_or_else(|| Internal::KwargsNotMap.err())?;
                         let result = f(&x, Some(&y)).map_err(|e| e.with_locations(self.err()))?;
                         self.push(result);
                     } else if let Some((f, e)) = func.get_closure() {
@@ -388,10 +388,13 @@ impl<'a> Vm<'a> {
                 Instruction::AssertListMinLength(len) => {
                     let obj = self.peek();
                     match obj.get_list() {
-                        None => return Err(Error::new(Reason::None)),
+                        None => return Err(self.err().with_reason(Unpack::TypeMismatch(
+                            BindingType::List,
+                            obj.type_of(),
+                        ))),
                         Some(l) => {
                             if l.len() < len {
-                                return Err(Error::new(Reason::None));
+                                return Err(self.err().with_reason(Unpack::ListTooShort));
                             }
                         }
                     }
@@ -626,7 +629,7 @@ impl<'a> Vm<'a> {
                     let mut l = self
                         .peek()
                         .get_map_mut()
-                        .ok_or_else(|| Error::new(Reason::None))?;
+                        .ok_or_else(|| Internal::DelKeyNotMap.err())?;
                     l.remove(&key);
                 }
 
@@ -660,8 +663,8 @@ impl<'a> Vm<'a> {
                         let l = self
                             .peek()
                             .get_list()
-                            .ok_or_else(|| Error::new(Reason::None))?;
-                        l.get(i).ok_or_else(|| Error::new(Reason::None))?.clone()
+                            .ok_or_else(|| Internal::IndexNotList.err())?;
+                        l.get(i).ok_or_else(|| Internal::IndexOutOfBounds.err())?.clone()
                     };
                     self.push(obj);
                 }
@@ -671,7 +674,7 @@ impl<'a> Vm<'a> {
                         let l = self
                             .peek()
                             .get_list()
-                            .ok_or_else(|| Error::new(Reason::None))?;
+                            .ok_or_else(|| Internal::IndexNotList.err())?;
                         l.get(index).cloned()
                     };
 
@@ -690,9 +693,9 @@ impl<'a> Vm<'a> {
                         let l = self
                             .peek()
                             .get_list()
-                            .ok_or_else(|| Error::new(Reason::None))?;
+                            .ok_or_else(|| Internal::IndexNotList.err())?;
                         let i = (l.len() - root_back).max(root_front) + index;
-                        l.get(i).ok_or_else(|| Error::new(Reason::None))?.clone()
+                        l.get(i).ok_or_else(|| Internal::IndexOutOfBounds.err())?.clone()
                     };
                     self.push(obj);
                 }
@@ -707,7 +710,7 @@ impl<'a> Vm<'a> {
                         let l = self
                             .peek()
                             .get_list()
-                            .ok_or_else(|| Error::new(Reason::None))?;
+                            .ok_or_else(|| Internal::IndexNotList.err())?;
                         let root = if root_back > l.len() {
                             root_front
                         } else {
@@ -737,7 +740,7 @@ impl<'a> Vm<'a> {
                                 Object::new_list()
                             }
                         })
-                        .ok_or_else(|| Error::new(Reason::None))?;
+                        .ok_or_else(|| Internal::IndexNotList.err())?;
                     self.push(obj);
                 }
 
@@ -746,7 +749,7 @@ impl<'a> Vm<'a> {
                         let l = self
                             .peek()
                             .get_map()
-                            .ok_or_else(|| Error::new(Reason::None))?;
+                            .ok_or_else(|| Internal::IndexNotMap.err())?;
                         l.get(&key).ok_or_else(|| self.err())?.clone()
                     };
                     self.push(obj);
@@ -757,7 +760,7 @@ impl<'a> Vm<'a> {
                         let l = self
                             .peek()
                             .get_map()
-                            .ok_or_else(|| Error::new(Reason::None))?;
+                            .ok_or_else(|| Internal::IndexNotMap.err())?;
                         l.get(&key).cloned()
                     };
 
