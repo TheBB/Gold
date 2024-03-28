@@ -101,7 +101,6 @@ impl ListBinding {
                         return Err(Error::new(Reason::Unbound(*key.as_ref())).tag(key.span(), Action::LookupName));
                     }
                     Some(index) => {
-                        println!("list binding slurp to slot at {}", index);
                         retval.slurp = Some(Some(index));
                         continue;
                     },
