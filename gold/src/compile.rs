@@ -46,6 +46,10 @@ pub enum Instruction {
     StoreLocal(usize),
     StoreCell(usize),
 
+    // Destroying
+    DestroyLocal(usize),
+    DestroyCell(usize),
+
     // Control flow
     Return,
     CondJump(usize),
@@ -167,16 +171,16 @@ impl SlotMap {
 
         match self.catalog.get(&index) {
             Some(SlotType::Local) => {
-                let index = self.next_local;
+                let locnum = self.next_local;
                 self.next_local += 1;
-                self.map.insert(index, Slot::Local(index));
-                Some(Instruction::LoadLocal(index))
+                self.map.insert(index, Slot::Local(locnum));
+                Some(Instruction::LoadLocal(locnum))
             }
             Some(SlotType::Cell) => {
-                let index = self.next_cell;
+                let cellnum = self.next_cell;
                 self.next_cell += 1;
-                self.map.insert(index, Slot::Cell(index));
-                Some(Instruction::LoadCell(index))
+                self.map.insert(index, Slot::Cell(cellnum));
+                Some(Instruction::LoadCell(cellnum))
             }
             None => None,
         }
@@ -191,21 +195,32 @@ impl SlotMap {
 
         match self.catalog.get(&index) {
             Some(SlotType::Local) => {
-                let loc = self.next_local;
+                let locnum = self.next_local;
                 self.next_local += 1;
-                self.map.insert(index, Slot::Local(loc));
-                Some(Instruction::StoreLocal(loc))
+                self.map.insert(index, Slot::Local(locnum));
+                Some(Instruction::StoreLocal(locnum))
             }
             Some(SlotType::Cell) => {
-                let loc = self.next_cell;
+                let cellnum = self.next_cell;
                 self.next_cell += 1;
-                self.map.insert(index, Slot::Cell(loc));
-                Some(Instruction::StoreCell(loc))
+                self.map.insert(index, Slot::Cell(cellnum));
+                Some(Instruction::StoreCell(cellnum))
             }
             None => None,
         }
     }
 
+    fn destroy(&self, compiler: &mut Compiler) -> usize {
+        let mut len = 0;
+        for (_, slot) in self.map.iter() {
+            match slot {
+                Slot::Local(i) => { compiler.instruction(Instruction::DestroyLocal(*i)); }
+                Slot::Cell(i) => { compiler.instruction(Instruction::DestroyCell(*i)); }
+            }
+            len += 1;
+        }
+        len
+    }
 }
 
 pub struct Compiler {
@@ -338,7 +353,7 @@ impl Compiler {
                     len += self.emit_binding(binding)?;
                 }
                 len += self.emit_expression(expression)?;
-                self.pop_slots();
+                len += self.pop_slots();
                 Ok(len)
             }
 
@@ -353,7 +368,7 @@ impl Compiler {
                     len += self.emit_binding(binding)? + 1;
                 }
                 len += self.emit_expression(expression)?;
-                self.pop_slots();
+                len += self.pop_slots();
                 Ok(len)
             }
 
@@ -597,8 +612,8 @@ impl Compiler {
                 self.code[index] = Instruction::NextOrJump(jump_len + 3);
                 self.instruction(Instruction::Discard);
 
-                self.pop_slots();
-                Ok(iterable_len + jump_len + 6)
+                let pop_len = self.pop_slots();
+                Ok(iterable_len + jump_len + pop_len + 6)
             }
         }
     }
@@ -648,8 +663,8 @@ impl Compiler {
                 self.code[index] = Instruction::NextOrJump(jump_len + 3);
                 self.instruction(Instruction::Discard);
 
-                self.pop_slots();
-                Ok(iterable_len + jump_len + 6)
+                let pop_len = self.pop_slots();
+                Ok(iterable_len + jump_len + pop_len + 6)
             }
         }
     }
@@ -856,19 +871,14 @@ impl Compiler {
         None
     }
 
-    // fn constant(&mut self, constant: Object) -> usize {
-    //     let r = self.constants.len();
-    //     self.constants.push(constant);
-    //     r
-    // }
-
     fn push_slots(&mut self, slots: &SlotCatalog) {
         let new = SlotMap::new(self.slots.last(), slots.clone());
         self.slots.push(new);
     }
 
-    fn pop_slots(&mut self) {
-        self.slots.pop();
+    fn pop_slots(&mut self) -> usize {
+        let catalog = self.slots.pop().unwrap();
+        catalog.destroy(self)
     }
 
     fn function(&mut self, function: CompiledFunction) -> usize {
@@ -914,14 +924,6 @@ impl Compiler {
 
     fn finalize(mut self) -> CompiledFunction {
         self.code.push(Instruction::Return);
-
-        // println!("-----------------------------------------------");
-        // for instruction in self.code.iter() {
-        //     dbg!(instruction);
-        // }
-        // dbg!(&self.actions);
-        // dbg!(&self.reasons);
-        // println!("-----------------------------------------------");
 
         let trace = self.build_trace();
 

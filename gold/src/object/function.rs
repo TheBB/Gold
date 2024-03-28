@@ -22,12 +22,12 @@ use super::{List, Map, Object};
 use crate::compile::CompiledFunction;
 use crate::error::{Error, Reason};
 use crate::eval::Vm;
-use crate::types::{GcCell, Builtin, NativeClosure};
+use crate::types::{Builtin, Cell, GcCell, NativeClosure};
 use crate::ImportConfig;
 
 #[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
 enum FuncV {
-    Closure(Gc<CompiledFunction>, GcCell<Vec<GcCell<Object>>>),
+    Closure(Gc<CompiledFunction>, GcCell<Vec<Cell>>),
     Builtin(#[unsafe_ignore_trace] Builtin),
 
     #[serde(skip)]
@@ -96,7 +96,7 @@ impl Func {
         }
     }
 
-    pub fn push_cell(&self, other: GcCell<Object>) -> Result<(), Error> {
+    pub fn push_cell(&self, other: Cell) -> Result<(), Error> {
         let Self(this) = self;
         match this {
             FuncV::Closure(_, enclosed) => {
@@ -117,7 +117,7 @@ impl Func {
         }
     }
 
-    pub fn get_closure(&self) -> Option<(Gc<CompiledFunction>, GcCell<Vec<GcCell<Object>>>)> {
+    pub fn get_closure(&self) -> Option<(Gc<CompiledFunction>, GcCell<Vec<Cell>>)> {
         let Self(this) = self;
         match this {
             FuncV::Closure(f, e) => Some((f.clone(), e.clone())),

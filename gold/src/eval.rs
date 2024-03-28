@@ -15,7 +15,7 @@ use crate::builtins::BUILTINS;
 use crate::compile::{CompiledFunction, Instruction};
 use crate::error::{BindingType, Error, Reason, TypeMismatch, Unpack};
 use crate::formatting::FormatSpec;
-use crate::types::{GcCell, BinOp};
+use crate::types::{BinOp, Cell, GcCell};
 use crate::{eval_file, eval_raw as eval_str};
 use crate::{List, Map, Object, Type};
 
@@ -139,26 +139,26 @@ impl PyImportConfig {
 struct Frame {
     function: CompiledFunction,
     stack: Vec<Object>,
-    locals: Vec<Object>,
-    cells: Vec<GcCell<Object>>,
-    enclosed: GcCell<Vec<GcCell<Object>>>,
+    locals: Vec<Option<Object>>,
+    cells: Vec<Cell>,
+    enclosed: GcCell<Vec<Cell>>,
     ip: usize,
 }
 
 impl Frame {
-    fn new(function: CompiledFunction, enclosed: GcCell<Vec<GcCell<Object>>>) -> Frame {
+    fn new(function: CompiledFunction, enclosed: GcCell<Vec<Cell>>) -> Frame {
         let num_locals = function.num_locals;
         let num_cells = function.num_cells;
 
         let mut cells = Vec::with_capacity(num_cells);
         for _ in 0..num_cells {
-            cells.push(GcCell::new(Object::null()));
+            cells.push(Cell::new(None));
         }
 
         Frame {
             function,
             stack: Vec::new(),
-            locals: vec![Object::null(); num_locals],
+            locals: vec![None; num_locals],
             cells,
             enclosed,
             ip: 0,
@@ -197,7 +197,7 @@ impl<'a> Vm<'a> {
     pub fn eval_with_args(
         &mut self,
         function: CompiledFunction,
-        enclosed: GcCell<Vec<GcCell<Object>>>,
+        enclosed: GcCell<Vec<Cell>>,
         args: &List,
         kwargs: Option<&Map>,
     ) -> Result<Object, Error> {
@@ -257,13 +257,13 @@ impl<'a> Vm<'a> {
                 }
 
                 Instruction::LoadLocal(i) => {
-                    let obj = self.cur_frame().locals[i].clone();
+                    let obj = self.cur_frame().locals[i].as_ref().unwrap().clone();
                     self.push(obj);
                 }
 
                 Instruction::LoadCell(i) => {
                     let cell = &self.cur_frame().cells[i];
-                    let obj = cell.borrow().clone();
+                    let obj: Object = cell.borrow().as_ref().unwrap().clone();
                     self.push(obj);
                 }
 
@@ -271,7 +271,7 @@ impl<'a> Vm<'a> {
                     let obj = {
                         let e = self.cur_frame().enclosed.borrow();
                         let f = e[i].borrow();
-                        f.clone()
+                        f.as_ref().unwrap().clone()
                     };
                     self.push(obj);
                 }
@@ -295,13 +295,22 @@ impl<'a> Vm<'a> {
 
                 Instruction::StoreLocal(i) => {
                     let obj = self.pop();
-                    self.cur_frame().locals[i] = obj;
+                    self.cur_frame().locals[i] = Some(obj);
                 }
 
                 Instruction::StoreCell(i) => {
                     let obj = self.pop();
                     let cell = &self.cur_frame().cells[i];
-                    *cell.borrow_mut() = obj;
+                    *cell.borrow_mut() = Some(obj);
+                }
+
+                Instruction::DestroyLocal(i) => {
+                    self.cur_frame().locals[i] = None;
+                }
+
+                Instruction::DestroyCell(i) => {
+                    let cell = &mut self.cur_frame().cells[i];
+                    *cell = Cell::new(None);
                 }
 
                 Instruction::Return => {
@@ -1177,6 +1186,26 @@ mod tests {
         assert_seq!(
             eval(concat!("let a = fn () b\n", "let b = 1\n", "in a()",)),
             Object::from(1)
+        );
+
+        assert_seq!(
+            eval(concat!(
+                "let a = 1\n",
+                "in let a = a + 1\n",
+                "   let b = fn () a\n",
+                "   in [a, b()]"
+            )),
+            Object::from(vec![Object::from(2), Object::from(2)]),
+        );
+
+        assert_seq!(
+            eval(concat!(
+                "let a = 1\n",
+                "in let b = fn () a\n",
+                "   let a = a + 1\n",
+                "   in [a, b()]"
+            )),
+            Object::from(vec![Object::from(2), Object::from(2)]),
         );
     }
 

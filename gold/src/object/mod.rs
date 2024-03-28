@@ -36,7 +36,7 @@ use symbol_table::GlobalSymbol;
 use crate::compile::CompiledFunction;
 use crate::error::{Error, Internal, Reason, TypeMismatch, Value};
 use crate::formatting::FormatSpec;
-use crate::types::{Gc, GcCell};
+use crate::types::{Cell, Gc, GcCell};
 use crate::types::{UnOp, BinOp, Key, List, Map, Type};
 
 #[cfg(feature = "python")]
@@ -330,7 +330,7 @@ impl Object {
     }
 
     /// Append a new cell to a closure.
-    pub fn push_cell(&self, other: GcCell<Object>) -> Result<(), Error> {
+    pub fn push_cell(&self, other: Cell) -> Result<(), Error> {
         let Self(this) = self;
         match this {
             ObjV::Func(func) => { func.push_cell(other) },
@@ -678,7 +678,7 @@ impl Object {
 
     /// Extract the closure variant if applicable (a compiled function together
     /// with a vector of closure cells).
-    pub fn get_closure(&self) -> Option<(Gc<CompiledFunction>, GcCell<Vec<GcCell<Object>>>)> {
+    pub fn get_closure(&self) -> Option<(Gc<CompiledFunction>, GcCell<Vec<Cell>>)> {
         let Self(this) = self;
         match this {
             ObjV::Func(func) => func.get_closure(),
