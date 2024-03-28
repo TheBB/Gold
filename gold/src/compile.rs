@@ -376,64 +376,6 @@ impl Compiler {
                 self.code[load_index] = Instruction::LoadFunc(index);
                 Ok(len + 1)
             }
-
-    //         Expr::Function {
-    //             positional,
-    //             keywords,
-    //             expression,
-    //         } => {
-    //             let load_index = self.instruction(Instruction::Noop);
-    //             let mut len = 1;
-
-    //             let mut compiler = Compiler::new();
-
-    //             let mut name_collection = FreeNames::new();
-    //             let mut shield = BindingShield::new(&mut name_collection);
-    //             positional.visit(&mut shield);
-    //             keywords.as_ref().map(|kw| kw.visit(&mut shield));
-    //             expression.visit(&mut shield);
-
-    //             // println!("compiling a function");
-
-    //             for name in name_collection.free_names() {
-    //                 compiler.require_enclosed(*name);
-    //                 let instruction = self.names.lookup_instruction(*name);
-    //                 if let Some(Instruction::LoadCell(i)) = instruction {
-    //                     self.instruction(Instruction::PushCellToClosure(i));
-    //                     len += 1;
-    //                 } else if let Some(Instruction::LoadEnclosed(i)) = instruction {
-    //                     self.instruction(Instruction::PushEnclosedToClosure(i));
-    //                     len += 1;
-    //                 } else {
-    //                     panic!(
-    //                         "failed to look up name that must be provided to closure: {:?}",
-    //                         name
-    //                     );
-    //                 }
-    //             }
-
-    //             let mut new_name_collection = FreeNames::new();
-    //             expression.visit(&mut new_name_collection);
-
-    //             for name in new_name_collection.captured_names() {
-    //                 // println!("marking as captured: {:?}", name);
-    //                 compiler.names.mark_cell(name);
-    //             }
-
-    //             compiler.emit_list_binding(positional)?;
-    //             compiler.instruction(Instruction::Discard);
-    //             if let Some(kw) = keywords {
-    //                 compiler.emit_map_binding(kw)?;
-    //             }
-    //             compiler.instruction(Instruction::Discard);
-    //             compiler.emit_expression(expression)?;
-
-    //             let func = compiler.finalize();
-
-    //             let index = self.function(func);
-    //             self.code[load_index] = Instruction::LoadFunc(index);
-    //             Ok(len)
-    //         }
         }
     }
 
@@ -465,7 +407,6 @@ impl Compiler {
         };
 
         let end = self.code.len();
-        println!("zoopie");
         self.actions.push((loc, end, binding.span(), Action::Bind));
 
         retval
@@ -974,13 +915,13 @@ impl Compiler {
     fn finalize(mut self) -> CompiledFunction {
         self.code.push(Instruction::Return);
 
-        println!("-----------------------------------------------");
-        for instruction in self.code.iter() {
-            dbg!(instruction);
-        }
-        dbg!(&self.actions);
-        dbg!(&self.reasons);
-        println!("-----------------------------------------------");
+        // println!("-----------------------------------------------");
+        // for instruction in self.code.iter() {
+        //     dbg!(instruction);
+        // }
+        // dbg!(&self.actions);
+        // dbg!(&self.reasons);
+        // println!("-----------------------------------------------");
 
         let trace = self.build_trace();
 

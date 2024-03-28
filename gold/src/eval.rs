@@ -1861,3 +1861,326 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod examples {
+    use std::env;
+    use std::path::PathBuf;
+    use crate::{Object, Error, eval_file};
+
+    fn eval(example: &str) -> Result<Object, Error> {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.pop();
+        path.push("examples");
+        path.push(example);
+        eval_file(&path).map_err(Error::unrender)
+    }
+
+    macro_rules! assert_seq {
+        ($x:expr , $y:expr $(,)?) => {
+            assert_eq!($x, Ok($y))
+        };
+    }
+
+    #[test]
+    fn dh_books() {
+        assert_seq!(
+            eval("dh-books.gold"),
+            Object::from(vec![
+                Object::from(vec![
+                    ("category", Object::from("nonfiction")),
+                    ("department", Object::from("books")),
+                    ("publisher", Object::from("O'Reilly Media")),
+                    ("title", Object::from("Microservices for Java Developers"))
+                ]),
+                Object::from(vec![
+                    ("category", Object::from("nonfiction")),
+                    ("department", Object::from("books")),
+                    ("publisher", Object::from("Addison Wesley")),
+                    ("title", Object::from("The Go Programming Language"))
+                ]),
+                Object::from(vec![
+                    ("category", Object::from("nonfiction")),
+                    ("department", Object::from("books")),
+                    ("publisher", Object::from("O'Reilly Media")),
+                    ("title", Object::from("Parallel and Concurrent Programming in Haskell"))
+                ]),
+            ]),
+        );
+    }
+
+    #[test]
+    fn dh_definitions() {
+        assert_seq!(
+            eval("dh-definitions.gold"),
+            Object::from(vec![
+                ("home", Object::new_str_natural("/home/bill")),
+                ("privateKey", Object::from("/home/bill/.ssh/id_ed25519")),
+                ("publicKey", Object::from("/home/bill/.ssh/id_ed25519.pub")),
+            ]),
+        );
+    }
+
+    #[test]
+    fn dh_employees() {
+        assert_seq!(
+            eval("dh-employees.gold"),
+            Object::from(vec![
+                Object::from(vec![
+                    ("age", Object::from(23)),
+                    ("name", Object::from("John Doe")),
+                    ("position", Object::from(vec![
+                        ("department", Object::from("Data Platform")),
+                        ("title", Object::from("Software Engineer")),
+                    ]))
+                ]),
+                Object::from(vec![
+                    ("age", Object::from(24)),
+                    ("name", Object::from("Alice Smith")),
+                    ("position", Object::from(vec![
+                        ("department", Object::from("Data Platform")),
+                        ("title", Object::from("Software Engineer")),
+                    ]))
+                ]),
+            ]),
+        )
+    }
+
+    #[test]
+    fn dh_filter() {
+        assert_seq!(
+            eval("dh-filter.gold"),
+            Object::from(vec![
+                Object::from(vec![
+                    ("name", Object::from("Alice")),
+                    ("age", Object::from(24)),
+                    ("admin", Object::from(true)),
+                ]),
+                Object::from(vec![
+                    ("name", Object::from("Bob")),
+                    ("age", Object::from(49)),
+                    ("admin", Object::from(true)),
+                ]),
+            ]),
+        );
+    }
+
+    #[test]
+    fn dh_functions() {
+        assert_seq!(
+            eval("dh-functions.gold"),
+            Object::from(vec![
+                Object::from(vec![
+                    ("home", Object::new_str_natural("/home/bill")),
+                    ("privateKey", Object::from("/home/bill/.ssh/id_ed25519")),
+                    ("publicKey", Object::from("/home/bill/.ssh/id_ed25519.pub")),
+                ]),
+                Object::from(vec![
+                    ("home", Object::new_str_natural("/home/jane")),
+                    ("privateKey", Object::from("/home/jane/.ssh/id_ed25519")),
+                    ("publicKey", Object::from("/home/jane/.ssh/id_ed25519.pub")),
+                ]),
+            ]),
+        );
+    }
+
+    #[test]
+    fn dh_generate() {
+        assert_seq!(
+            eval("dh-generate.gold"),
+            Object::from(vec![
+                Object::from(vec![
+                    ("home", Object::new_str_natural("/home/build0")),
+                    ("privateKey", Object::from("/home/build0/.ssh/id_ed25519")),
+                    ("publicKey", Object::from("/home/build0/.ssh/id_ed25519.pub")),
+                ]),
+                Object::from(vec![
+                    ("home", Object::new_str_natural("/home/build1")),
+                    ("privateKey", Object::from("/home/build1/.ssh/id_ed25519")),
+                    ("publicKey", Object::from("/home/build1/.ssh/id_ed25519.pub")),
+                ]),
+                Object::from(vec![
+                    ("home", Object::new_str_natural("/home/build2")),
+                    ("privateKey", Object::from("/home/build2/.ssh/id_ed25519")),
+                    ("publicKey", Object::from("/home/build2/.ssh/id_ed25519.pub")),
+                ]),
+                Object::from(vec![
+                    ("home", Object::new_str_natural("/home/build3")),
+                    ("privateKey", Object::from("/home/build3/.ssh/id_ed25519")),
+                    ("publicKey", Object::from("/home/build3/.ssh/id_ed25519.pub")),
+                ]),
+                Object::from(vec![
+                    ("home", Object::new_str_natural("/home/build4")),
+                    ("privateKey", Object::from("/home/build4/.ssh/id_ed25519")),
+                    ("publicKey", Object::from("/home/build4/.ssh/id_ed25519.pub")),
+                ]),
+                Object::from(vec![
+                    ("home", Object::new_str_natural("/home/build5")),
+                    ("privateKey", Object::from("/home/build5/.ssh/id_ed25519")),
+                    ("publicKey", Object::from("/home/build5/.ssh/id_ed25519.pub")),
+                ]),
+                Object::from(vec![
+                    ("home", Object::new_str_natural("/home/build6")),
+                    ("privateKey", Object::from("/home/build6/.ssh/id_ed25519")),
+                    ("publicKey", Object::from("/home/build6/.ssh/id_ed25519.pub")),
+                ]),
+                Object::from(vec![
+                    ("home", Object::new_str_natural("/home/build7")),
+                    ("privateKey", Object::from("/home/build7/.ssh/id_ed25519")),
+                    ("publicKey", Object::from("/home/build7/.ssh/id_ed25519.pub")),
+                ]),
+                Object::from(vec![
+                    ("home", Object::new_str_natural("/home/build8")),
+                    ("privateKey", Object::from("/home/build8/.ssh/id_ed25519")),
+                    ("publicKey", Object::from("/home/build8/.ssh/id_ed25519.pub")),
+                ]),
+                Object::from(vec![
+                    ("home", Object::new_str_natural("/home/build9")),
+                    ("privateKey", Object::from("/home/build9/.ssh/id_ed25519")),
+                    ("publicKey", Object::from("/home/build9/.ssh/id_ed25519.pub")),
+                ]),
+            ]),
+        );
+    }
+
+    #[test]
+    fn dh_hello_world() {
+        assert_seq!(
+            eval("dh-hello-world.gold"),
+            Object::from(vec![
+                ("home", Object::from("/home/bill")),
+                ("privateKey", Object::from("/home/bill/.ssh/id_ed25519")),
+                ("publicKey", Object::from("/home/bill/.ssh/id_ed25519.pub")),
+            ]),
+        );
+    }
+
+    #[test]
+    fn dh_servers() {
+        assert_seq!(
+            eval("dh-servers.gold"),
+            Object::from(vec![
+                Object::from(vec![
+                    ("cpus", Object::from(1)),
+                    ("gigabytesOfRAM", Object::from(1)),
+                    ("hostname", Object::from("eu-west.example.com")),
+                    ("terabytesOfDisk", Object::from(1)),
+                ]),
+                Object::from(vec![
+                    ("cpus", Object::from(64)),
+                    ("gigabytesOfRAM", Object::from(256)),
+                    ("hostname", Object::from("us-east.example.com")),
+                    ("terabytesOfDisk", Object::from(16)),
+                ]),
+                Object::from(vec![
+                    ("cpus", Object::from(64)),
+                    ("gigabytesOfRAM", Object::from(256)),
+                    ("hostname", Object::from("ap-northeast.example.com")),
+                    ("terabytesOfDisk", Object::from(16)),
+                ]),
+                Object::from(vec![
+                    ("cpus", Object::from(8)),
+                    ("gigabytesOfRAM", Object::from(16)),
+                    ("hostname", Object::from("us-west.example.com")),
+                    ("terabytesOfDisk", Object::from(4)),
+                ]),
+                Object::from(vec![
+                    ("cpus", Object::from(1)),
+                    ("gigabytesOfRAM", Object::from(1)),
+                    ("hostname", Object::from("sa-east.example.com")),
+                    ("terabytesOfDisk", Object::from(1)),
+                ]),
+                Object::from(vec![
+                    ("cpus", Object::from(64)),
+                    ("gigabytesOfRAM", Object::from(256)),
+                    ("hostname", Object::from("ca-central.example.com")),
+                    ("terabytesOfDisk", Object::from(16)),
+                ]),
+            ]),
+        );
+    }
+
+    #[test]
+    fn dh_servers_2() {
+        assert_seq!(
+            eval("dh-servers-2.gold"),
+            Object::from(vec![
+                Object::from(vec![
+                    ("cpus", Object::from(1)),
+                    ("gigabytesOfRAM", Object::from(1)),
+                    ("hostname", Object::from("eu-west.example.com")),
+                    ("terabytesOfDisk", Object::from(1)),
+                ]),
+                Object::from(vec![
+                    ("cpus", Object::from(64)),
+                    ("gigabytesOfRAM", Object::from(256)),
+                    ("hostname", Object::from("us-east.example.com")),
+                    ("terabytesOfDisk", Object::from(16)),
+                ]),
+                Object::from(vec![
+                    ("cpus", Object::from(64)),
+                    ("gigabytesOfRAM", Object::from(256)),
+                    ("hostname", Object::from("ap-northeast.example.com")),
+                    ("terabytesOfDisk", Object::from(16)),
+                ]),
+                Object::from(vec![
+                    ("cpus", Object::from(8)),
+                    ("gigabytesOfRAM", Object::from(16)),
+                    ("hostname", Object::from("us-west.example.com")),
+                    ("terabytesOfDisk", Object::from(4)),
+                ]),
+                Object::from(vec![
+                    ("cpus", Object::from(1)),
+                    ("gigabytesOfRAM", Object::from(1)),
+                    ("hostname", Object::from("sa-east.example.com")),
+                    ("terabytesOfDisk", Object::from(1)),
+                ]),
+                Object::from(vec![
+                    ("cpus", Object::from(64)),
+                    ("gigabytesOfRAM", Object::from(256)),
+                    ("hostname", Object::from("ca-central.example.com")),
+                    ("terabytesOfDisk", Object::from(16)),
+                ]),
+            ]),
+        );
+    }
+
+    #[test]
+    fn dh_users() {
+        assert_seq!(
+            eval("dh-users.gold"),
+            Object::from(vec![
+                Object::from(vec![
+                    ("name", Object::from("Alice")),
+                    ("age", Object::from(24)),
+                    ("admin", Object::from(true)),
+                ]),
+                Object::from(vec![
+                    ("name", Object::from("Bob")),
+                    ("age", Object::from(49)),
+                    ("admin", Object::from(true)),
+                ]),
+                Object::from(vec![
+                    ("name", Object::from("Carlo")),
+                    ("age", Object::from(20)),
+                    ("admin", Object::from(false)),
+                ]),
+            ]),
+        );
+    }
+
+    #[test]
+    fn fibonacci() {
+        assert_seq!(eval("fibonacci.gold"), Object::from(13));
+    }
+
+    #[test]
+    fn fibonacci_recursive() {
+        assert_seq!(eval("fibonacci-recursive.gold"), Object::from(13));
+    }
+
+    #[test]
+    fn import() {
+        assert_seq!(eval("import.gold"), Object::from(3));
+    }
+}

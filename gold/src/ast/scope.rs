@@ -97,7 +97,7 @@ impl<'a> Scope for ClosureScope<'a> {
     }
 
     fn next_slot(&self) -> usize {
-        0
+        self.manager.next_slot
     }
 }
 
