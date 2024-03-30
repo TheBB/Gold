@@ -18,9 +18,12 @@ use pyo3::types::{PyTuple, PyDict};
 #[cfg(feature = "python")]
 use pyo3::exceptions::PyTypeError;
 
+#[cfg(feature = "python")]
+use crate::Error;
+
 use super::{List, Map, Object};
 use crate::compile::CompiledFunction;
-use crate::error::{Error, Internal};
+use crate::error::Internal;
 use crate::eval::Vm;
 use crate::types::{Builtin, Cell, GcCell, NativeClosure, Res};
 use crate::ImportConfig;

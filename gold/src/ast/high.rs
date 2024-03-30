@@ -11,6 +11,28 @@ use super::low;
 use super::scope::{SubScope, Scope, LocalScope};
 use crate::types::{UnOp, BinOp, Res};
 
+// Utility
+// ----------------------------------------------------------------
+
+trait Lower {
+    type Target;
+    fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target>;
+}
+
+impl<T: Lower> Lower for Tagged<T> {
+    type Target = Tagged<<T as Lower>::Target>;
+    fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
+        self.map(|t| t.lower(scope)).transpose()
+    }
+}
+
+impl<T: Lower> Lower for Option<T> {
+    type Target = Option<<T as Lower>::Target>;
+    fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
+        self.map(|t| t.lower(scope)).transpose()
+    }
+}
+
 // ListBindingElement
 // ----------------------------------------------------------------
 
@@ -86,25 +108,17 @@ impl ListBinding {
             element.announce_bindings(scope);
         }
     }
+}
 
-    fn lower(&self, scope: &mut dyn Scope) -> Res<low::ListBinding> {
+impl Lower for ListBinding {
+    type Target = low::ListBinding;
+
+    fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
         let mut retval = low::ListBinding::default();
 
-        for element in &self.0 {
-            match element.as_ref() {
-                ListBindingElement::Slurp => {
-                    retval.slurp = Some(None);
-                    continue;
-                }
-                ListBindingElement::SlurpTo(key) => match scope.lookup_store(*key.as_ref()) {
-                    None => {
-                        return Err(Error::new(Reason::Unbound(*key.as_ref())).tag(key.span(), Action::LookupName));
-                    }
-                    Some(index) => {
-                        retval.slurp = Some(Some(index));
-                        continue;
-                    },
-                }
+        for element in self.0 {
+            let (element, span) = element.decompose();
+            match element {
                 ListBindingElement::Binding { binding, default } => {
                     match (default.is_some(), retval.slurp) {
                         (true, Some(_)) => { retval.def_back += 1; }
@@ -113,9 +127,27 @@ impl ListBinding {
                         (false, None) => { retval.num_front += 1; }
                     }
 
-                    let new_binding = binding.lower(scope)?.tag(binding);
-                    let new_default = default.as_ref().map(|x| x.lower(scope).map(|y| y.tag(x))).transpose()?;
+                    let new_default = default.lower(scope)?;
+                    let new_binding = binding.lower(scope)?;
                     retval.push(new_binding, new_default);
+                }
+                _ => {
+                    if retval.slurp.is_some() {
+                        return Err(Error::new(Syntax::MultiSlurp).tag(span, Action::Parse));
+                    }
+                    if let ListBindingElement::SlurpTo(key) = element {
+                        match scope.lookup_store(*key.as_ref()) {
+                            None => {
+                                return Err(Error::new(Reason::Unbound(*key.as_ref())).tag(key.span(), Action::LookupName));
+                            }
+                            Some(index) => {
+                                retval.slurp = Some(Some(index));
+                                continue;
+                            },
+                        }
+                    } else {
+                        retval.slurp = Some(None);
+                    }
                 }
             }
         }
@@ -142,25 +174,32 @@ impl MapBinding {
             element.announce_bindings(scope);
         }
     }
+}
 
-    fn lower(&self, scope: &mut dyn Scope) -> Res<low::MapBinding> {
+impl Lower for MapBinding {
+    type Target = low::MapBinding;
+
+    fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
         let mut retval = low::MapBinding {
             elements: Vec::new(),
             slurp: None,
         };
 
-        for element in &self.0 {
-            match element.as_ref() {
+        for element in self.0 {
+            let (element, span) = element.decompose();
+            match element {
                 MapBindingElement::Binding { key, binding, default } => {
-                    let new_binding = binding.lower(scope)?.tag(binding);
-                    let new_default = default.as_ref().map(|x| x.lower(scope).map(|y| y.tag(x))).transpose()?;
-                    retval.elements.push(
-                        low::MapBindingElement { key: *key, binding: new_binding, default: new_default }
-                    );
+                    let new_default = default.lower(scope)?;
+                    let new_binding = binding.lower(scope)?;
+                    retval.elements.push(low::MapBindingElement {
+                        key: key,
+                        binding: new_binding,
+                        default: new_default,
+                    });
                 }
                 MapBindingElement::SlurpTo(key) => {
                     if retval.slurp.is_some() {
-                        return Err(Error::new(Syntax::MultiSlurp).tag(element.span(), Action::Parse));
+                        return Err(Error::new(Syntax::MultiSlurp).tag(span, Action::Parse));
                     }
                     match scope.lookup_store(*key.as_ref()) {
                         None => return Err(Error::new(Reason::Unbound(*key.as_ref())).tag(key.span(), Action::LookupName)),
@@ -195,21 +234,19 @@ impl Binding {
             Self::Map(binding) => { binding.announce_bindings(scope); }
         }
     }
+}
 
-    fn lower(&self, scope: &mut dyn Scope) -> Res<low::Binding> {
+impl Lower for Binding {
+    type Target = low::Binding;
+
+    fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
         match self {
             Self::Identifier(key) => match scope.lookup_store(*key.as_ref()) {
                 None => Err(Error::new(Reason::Unbound(*key.as_ref())).tag(key.span(), Action::LookupName)),
                 Some(index) => Ok(low::Binding::Slot(index)),
             }
-            Self::List(binding) => {
-                let list_binding = binding.lower(scope)?.tag(binding);
-                Ok(low::Binding::List(list_binding))
-            }
-            Self::Map(binding) => {
-                let map_binding = binding.lower(scope)?.tag(binding);
-                Ok(low::Binding::Map(map_binding))
-            }
+            Self::List(binding) => Ok(low::Binding::List(binding.lower(scope)?)),
+            Self::Map(binding) => Ok(low::Binding::Map(binding.lower(scope)?)),
         }
     }
 }
@@ -231,18 +268,21 @@ impl StringElement {
     pub fn raw<T: AsRef<str>>(val: T) -> StringElement {
         StringElement::Raw(Rc::new(val.as_ref().to_owned()))
     }
+}
 
-    fn lower(&self, scope: &mut dyn Scope) -> Res<low::StringElement> {
+impl Lower for StringElement {
+    type Target = low::StringElement;
+
+    fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
         match self {
             Self::Raw(str) => {
                 let index = scope.new_constant(Object::new_str_natural(str.as_ref()));
                 Ok(low::StringElement::Raw(index))
             }
-            Self::Interpolate(expr, fmt) => {
-                let expr = expr.lower(scope)?.tag(expr);
-                let index = fmt.map(|f| scope.new_fmt_spec(f));
-                Ok(low::StringElement::Interpolate(expr, index))
-            }
+            Self::Interpolate(expr, fmt) => Ok(low::StringElement::Interpolate(
+                expr.lower(scope)?,
+                fmt.map(|f| scope.new_fmt_spec(f)),
+            )),
         }
     }
 }
@@ -270,23 +310,24 @@ pub enum ListElement {
     },
 }
 
-impl ListElement {
-    fn lower(&self, scope: &mut dyn Scope) -> Res<low::ListElement> {
+impl Lower for ListElement {
+    type Target = low::ListElement;
+
+    fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
         match self {
-            Self::Singleton(expr) => Ok(low::ListElement::Singleton(expr.lower(scope)?.tag(expr))),
-            Self::Splat(expr) => Ok(low::ListElement::Splat(expr.lower(scope)?.tag(expr))),
-            Self::Cond { condition, element } => {
-                let new_condition = condition.lower(scope)?.tag(condition);
-                let new_element = element.lower(scope)?.tag(element.as_ref());
-                Ok(low::ListElement::Cond { condition: new_condition, element: Box::new(new_element) })
-            }
+            Self::Singleton(expr) => Ok(low::ListElement::Singleton(expr.lower(scope)?)),
+            Self::Splat(expr) => Ok(low::ListElement::Splat(expr.lower(scope)?)),
+            Self::Cond { condition, element } => Ok(low::ListElement::Cond {
+                condition: condition.lower(scope)?,
+                element: Box::new(element.lower(scope)?),
+            }),
             Self::Loop { binding, iterable, element } => {
                 let mut subscope = LocalScope::new(scope);
                 binding.announce_bindings(&mut subscope);
 
-                let new_iterable = iterable.lower(&mut subscope)?.tag(iterable);
-                let new_binding = binding.lower(&mut subscope)?.tag(binding);
-                let new_element = element.lower(&mut subscope)?.tag(element.as_ref());
+                let new_iterable = iterable.lower(&mut subscope)?;
+                let new_binding = binding.lower(&mut subscope)?;
+                let new_element = element.lower(&mut subscope)?;
 
                 Ok(low::ListElement::Loop {
                     binding: new_binding,
@@ -325,27 +366,27 @@ pub enum MapElement {
     },
 }
 
-impl MapElement {
-    fn lower(&self, scope: &mut dyn Scope) -> Res<low::MapElement> {
+impl Lower for MapElement {
+    type Target = low::MapElement;
+
+    fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
         match self {
-            Self::Singleton { key, value } => {
-                let new_key = key.lower(scope)?.tag(key);
-                let new_value = value.lower(scope)?.tag(value);
-                Ok(low::MapElement::Singleton { key: new_key, value: new_value })
-            },
-            Self::Splat(expr) => Ok(low::MapElement::Splat(expr.lower(scope)?.tag(expr))),
-            Self::Cond { condition, element } => {
-                let new_condition = condition.lower(scope)?.tag(condition);
-                let new_element = element.lower(scope)?.tag(element.as_ref());
-                Ok(low::MapElement::Cond { condition: new_condition, element: Box::new(new_element) })
-            }
+            Self::Singleton { key, value } => Ok(low::MapElement::Singleton {
+                key: key.lower(scope)?,
+                value: value.lower(scope)?,
+            }),
+            Self::Splat(expr) => Ok(low::MapElement::Splat(expr.lower(scope)?)),
+            Self::Cond { condition, element } => Ok(low::MapElement::Cond {
+                condition: condition.lower(scope)?,
+                element: Box::new(element.lower(scope)?),
+            }),
             Self::Loop { binding, iterable, element } => {
                 let mut subscope = LocalScope::new(scope);
                 binding.announce_bindings(&mut subscope);
 
-                let new_iterable = iterable.lower(&mut subscope)?.tag(iterable);
-                let new_binding = binding.lower(&mut subscope)?.tag(binding);
-                let new_element = element.lower(&mut subscope)?.tag(element.as_ref());
+                let new_iterable = iterable.lower(&mut subscope)?;
+                let new_binding = binding.lower(&mut subscope)?;
+                let new_element = element.lower(&mut subscope)?;
 
                 Ok(low::MapElement::Loop {
                     binding: new_binding,
@@ -374,12 +415,14 @@ pub enum ArgElement {
     Splat(Tagged<Expr>),
 }
 
-impl ArgElement {
-    fn lower(&self, scope: &mut dyn Scope) -> Res<low::ArgElement> {
+impl Lower for ArgElement {
+    type Target = low::ArgElement;
+
+    fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
         match self {
-            Self::Singleton(expr) => Ok(low::ArgElement::Singleton(expr.lower(scope)?.tag(expr))),
-            Self::Keyword(key, expr) => Ok(low::ArgElement::Keyword(*key, expr.lower(scope)?.tag(expr))),
-            Self::Splat(expr) => Ok(low::ArgElement::Splat(expr.lower(scope)?.tag(expr))),
+            Self::Singleton(expr) => Ok(low::ArgElement::Singleton(expr.lower(scope)?)),
+            Self::Keyword(key, expr) => Ok(low::ArgElement::Keyword(key, expr.lower(scope)?)),
+            Self::Splat(expr) => Ok(low::ArgElement::Splat(expr.lower(scope)?)),
         }
     }
 }
@@ -564,20 +607,22 @@ impl Transform {
     {
         Transform::BinOp(BinOp::Or.tag(loc), Box::new(rhs))
     }
+}
 
-    fn lower(&self, scope: &mut dyn Scope) -> Res<low::Transform> {
+impl Lower for Transform {
+    type Target = low::Transform;
+
+    fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
         match self {
-            Self::UnOp(op) => Ok(low::Transform::UnOp(*op)),
-            Self::BinOp(op, expr) => {
-                let expr = expr.lower(scope)?.tag(expr.as_ref());
-                Ok(low::Transform::BinOp(*op, Box::new(expr)))
-            }
+            Self::UnOp(op) => Ok(low::Transform::UnOp(op)),
+            Self::BinOp(op, expr) => Ok(low::Transform::BinOp(op, Box::new(expr.lower(scope)?))),
             Self::FunCall(args) => {
+                let (args, span) = args.decompose();
                 let mut elements: Vec<Tagged<low::ArgElement>> = Vec::new();
-                for arg in args.iter() {
-                    elements.push(arg.lower(scope)?.tag(arg));
+                for arg in args {
+                    elements.push(arg.lower(scope)?);
                 }
-                Ok(low::Transform::FunCall(elements.tag(args), true))
+                Ok(low::Transform::FunCall(elements.tag(span), true))
             }
         }
     }
@@ -884,15 +929,19 @@ impl Expr {
             Expr::String(value)
         }
     }
+}
 
-    fn lower(&self, scope: &mut dyn Scope) -> Res<low::Expr> {
+impl Lower for Expr {
+    type Target = low::Expr;
+
+    fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
         match self {
             Self::Literal(obj) => {
-                let index = scope.new_constant(obj.clone());
+                let index = scope.new_constant(obj);
                 Ok(low::Expr::Constant(index))
             }
             Self::String(elements) => {
-                let mut new_elements: Vec<low::StringElement> = Vec::with_capacity(elements.len());
+                let mut new_elements = Vec::with_capacity(elements.len());
                 for element in elements {
                     new_elements.push(element.lower(scope)?);
                 }
@@ -910,59 +959,59 @@ impl Expr {
                 }
             }
             Self::List(elements) => {
-                let mut new_elements: Vec<Tagged<low::ListElement>> = Vec::new();
+                let mut new_elements = Vec::new();
                 for element in elements {
-                    new_elements.push(element.lower(scope)?.tag(element));
+                    new_elements.push(element.lower(scope)?);
                 }
                 Ok(low::Expr::List(new_elements))
             }
             Self::Map(elements) => {
-                let mut new_elements: Vec<Tagged<low::MapElement>> = Vec::new();
+                let mut new_elements = Vec::new();
                 for element in elements {
-                    new_elements.push(element.lower(scope)?.tag(element));
+                    new_elements.push(element.lower(scope)?);
                 }
                 Ok(low::Expr::Map(new_elements))
             }
             Self::Let { bindings, expression } => {
                 let mut builder = low::LetBuilder::new(scope);
-                for (binding, _) in bindings {
+                for (binding, _) in bindings.iter() {
                     binding.announce_bindings(builder.scope());
                 }
 
-                for (binding, expr) in bindings {
-                    let new_expr = expr.lower(builder.scope())?.tag(expr);
-                    let new_binding = binding.lower(builder.scope())?.tag(binding);
+                for (binding, expr) in bindings.into_iter() {
+                    let new_expr = expr.lower(builder.scope())?;
+                    let new_binding = binding.lower(builder.scope())?;
                     builder.add_binding(new_binding, new_expr);
                 }
 
-                let new_expr = expression.lower(builder.scope())?.tag(expression.as_ref());
-                builder.expression(new_expr);
+                let new_expression = expression.lower(builder.scope())?;
+                builder.expression(new_expression);
 
                 Ok(builder.finalize())
             }
             Self::Transformed { operand, transform } => {
-                let operand = operand.lower(scope)?.tag(operand.as_ref());
+                let operand = operand.lower(scope)?;
                 let transform = transform.lower(scope)?;
                 Ok(low::Expr::Transformed { operand: Box::new(operand), transform })
             }
             Self::Branch { condition, true_branch, false_branch } => {
                 Ok(low::Expr::Branch {
-                    condition: Box::new(condition.lower(scope)?.tag(condition.as_ref())),
-                    true_branch: Box::new(true_branch.lower(scope)?.tag(true_branch.as_ref())),
-                    false_branch: Box::new(false_branch.lower(scope)?.tag(false_branch.as_ref())),
+                    condition: Box::new(condition.lower(scope)?),
+                    true_branch: Box::new(true_branch.lower(scope)?),
+                    false_branch: Box::new(false_branch.lower(scope)?),
                 })
             }
             Self::Function { positional, keywords, expression } => {
                 let mut builder = low::FunctionBuilder::new(Some(scope));
 
                 positional.announce_bindings(builder.scope());
-                if let Some(kw) = keywords {
+                if let Some(kw) = &keywords {
                     kw.announce_bindings(builder.scope());
                 }
 
-                let new_positional = positional.lower(builder.scope())?.tag(positional);
-                let new_keywords = keywords.as_ref().map(|kw| kw.lower(builder.scope()).map(|x| x.tag(kw))).transpose()?;
-                let expr = expression.lower(builder.scope())?.tag(expression.as_ref());
+                let new_positional = positional.lower(builder.scope())?;
+                let new_keywords = keywords.lower(builder.scope())?;
+                let expr = expression.lower(builder.scope())?;
 
                 builder.positional(new_positional);
                 builder.keywords(new_keywords);
@@ -999,7 +1048,7 @@ pub struct File {
 }
 
 impl File {
-    pub fn lower(&self) -> Res<low::Function> {
+    pub fn lower(self) -> Res<low::Function> {
         let mut outer = low::FunctionBuilder::new(None);
 
         let mut import_builder = low::ImportsBuilder::new(outer.scope());
@@ -1007,14 +1056,14 @@ impl File {
             let TopLevel::Import(_, binding) = statement;
             binding.announce_bindings(import_builder.scope());
         }
-        for statement in self.statements.iter() {
+        for statement in self.statements.into_iter() {
             let TopLevel::Import(path, binding) = statement;
-            let new_binding = binding.lower(import_builder.scope())?.tag(binding);
-            import_builder.add_import(new_binding, path.clone());
+            let new_binding = binding.lower(import_builder.scope())?;
+            import_builder.add_import(new_binding, path);
         }
 
         let mut inner_builder = low::FunctionBuilder::new(Some(import_builder.scope()));
-        let expr = self.expression.lower(inner_builder.scope())?.tag(&self.expression);
+        let expr = self.expression.lower(inner_builder.scope())?;
         inner_builder.expression(expr);
         let inner_expr = low::Expr::Func(inner_builder.finalize()).tag(0);
 

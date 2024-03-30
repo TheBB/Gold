@@ -415,7 +415,7 @@ impl Compiler {
             }
 
             Binding::Map(binding) => {
-                let len = self.emit_map_binding(binding)?;
+                let len = self.emit_map_binding(&binding)?;
                 self.instruction(Instruction::Discard);
                 Ok(len + 1)
             }
@@ -521,7 +521,7 @@ impl Compiler {
                 self.actions.push((loc, loc + 1, key.span(), Action::Bind));
                 self.reasons.push((loc, loc + 1, Reason::from(Unpack::KeyMissing(**key))));
             }
-            len += self.emit_binding(binding)?;
+            len += self.emit_binding(&binding)?;
         }
 
         if let Some(slot) = binding.slurp {
