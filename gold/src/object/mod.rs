@@ -58,7 +58,7 @@ use pyo3::exceptions::PyTypeError;
 /// The object variant implements all possible variants of Gold objects,
 /// although it's not the user-facing type, which is [`Object`], an opaque
 /// struct enclosing an `ObjectVariant`.
-#[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
+#[derive(Debug, Serialize, Deserialize, Trace, Finalize)]
 enum ObjV {
     /// Integers
     Int(#[unsafe_ignore_trace] Int),
@@ -86,6 +86,25 @@ enum ObjV {
 
     /// Null
     Null,
+}
+
+impl Clone for ObjV {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Int(x) => Self::Int(x.clone()),
+            Self::Float(x) => Self::Float(*x),
+            Self::Str(x) => Self::Str(x.clone()),
+            Self::Boolean(x) => Self::Boolean(*x),
+            Self::List(x) => Self::List(GcCell::new(x.borrow().clone())),
+            Self::Map(x) => Self::Map(GcCell::new(x.borrow().clone())),
+            Self::Func(x) => Self::Func(x.clone()),
+            Self::ListIter(x, y) => Self::ListIter(
+                GcCell::new(x.borrow().clone()),
+                GcCell::new(y.borrow().clone()),
+            ),
+            Self::Null => Self::Null,
+        }
+    }
 }
 
 // Utility macro for extracting a certain type from an object variant. Used for

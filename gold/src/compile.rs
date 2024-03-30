@@ -255,27 +255,27 @@ impl Compiler {
             actions: Vec::new(),
             reasons: Vec::new(),
         };
-        compiler.push_slots(&slots);
+        compiler.push_slots(slots);
 
         if let Some(args) = positional {
-            compiler.emit_list_binding(&args)?;
+            compiler.emit_list_binding(args.unwrap())?;
         }
         compiler.instruction(Instruction::Discard);
 
         if let Some(kwargs) = keywords {
-            compiler.emit_map_binding(&kwargs)?;
+            compiler.emit_map_binding(kwargs)?;
         }
         compiler.instruction(Instruction::Discard);
 
-        compiler.emit_expression(&expression)?;
+        compiler.emit_expression(expression.unwrap())?;
         compiler.pop_slots();
         Ok(compiler.finalize())
     }
 
-    fn emit_expression(&mut self, expr: &Expr) -> Res<usize> {
+    fn emit_expression(&mut self, expr: Expr) -> Res<usize> {
         match expr {
             Expr::Constant(index) => {
-                self.instruction(Instruction::LoadConst(*index));
+                self.instruction(Instruction::LoadConst(index));
                 Ok(1)
             }
 
@@ -290,7 +290,7 @@ impl Compiler {
             }
 
             Expr::Slot(loc) => {
-                match self.load_instruction(*loc) {
+                match self.load_instruction(loc) {
                     Some(instruction) => {
                         self.instruction(instruction);
                         Ok(1)
@@ -300,12 +300,12 @@ impl Compiler {
             }
 
             Expr::Builtin(index) => {
-                self.instruction(Instruction::LoadBuiltin(*index));
+                self.instruction(Instruction::LoadBuiltin(index));
                 Ok(1)
             }
 
             Expr::Transformed { operand, transform } => {
-                let mut len = self.emit_expression(operand)?;
+                let mut len = self.emit_expression(operand.unwrap())?;
                 len += self.emit_transform(transform)?;
                 Ok(len)
             }
@@ -315,11 +315,11 @@ impl Compiler {
                 true_branch,
                 false_branch,
             } => {
-                let cond_len = self.emit_expression(condition)?;
+                let cond_len = self.emit_expression(condition.unwrap())?;
                 let cjump_index = self.instruction(Instruction::Noop);
-                let false_len = self.emit_expression(false_branch)?;
+                let false_len = self.emit_expression(false_branch.unwrap())?;
                 let jump_index = self.instruction(Instruction::Noop);
-                let true_len = self.emit_expression(true_branch)?;
+                let true_len = self.emit_expression(true_branch.unwrap())?;
 
                 self.code[cjump_index] = Instruction::CondJump(false_len + 1);
                 self.code[jump_index] = Instruction::Jump(true_len);
@@ -331,7 +331,7 @@ impl Compiler {
                 self.instruction(Instruction::NewList);
                 let mut len = 0;
                 for element in elements {
-                    len += self.emit_list_element(element)?;
+                    len += self.emit_list_element(element.unwrap())?;
                 }
                 Ok(len + 1)
             }
@@ -340,7 +340,7 @@ impl Compiler {
                 self.instruction(Instruction::NewMap);
                 let mut len = 0;
                 for element in elements {
-                    len += self.emit_map_element(element)?;
+                    len += self.emit_map_element(element.unwrap())?;
                 }
                 Ok(len + 1)
             }
@@ -349,10 +349,10 @@ impl Compiler {
                 self.push_slots(slots);
                 let mut len = 0;
                 for (binding, expr) in bindings {
-                    len += self.emit_expression(expr)?;
+                    len += self.emit_expression(expr.unwrap())?;
                     len += self.emit_binding(binding)?;
                 }
-                len += self.emit_expression(expression)?;
+                len += self.emit_expression(expression.unwrap())?;
                 len += self.pop_slots();
                 Ok(len)
             }
@@ -367,7 +367,7 @@ impl Compiler {
                     self.actions.push((loc, loc + 1, path.span(), Action::Import));
                     len += self.emit_binding(binding)? + 1;
                 }
-                len += self.emit_expression(expression)?;
+                len += self.emit_expression(expression.unwrap())?;
                 len += self.pop_slots();
                 Ok(len)
             }
@@ -394,12 +394,13 @@ impl Compiler {
         }
     }
 
-    fn emit_binding(&mut self, binding: &Tagged<Binding>) -> Res<usize> {
+    fn emit_binding(&mut self, binding: Tagged<Binding>) -> Res<usize> {
         let loc = self.code.len();
+        let (binding, span) = binding.decompose();
 
-        let retval = match binding.as_ref() {
+        let retval = match binding {
             Binding::Slot(slot) => {
-                match self.store_instruction(*slot) {
+                match self.store_instruction(slot) {
                     Some(instruction) => {
                         self.instruction(instruction);
                         Ok(1)
@@ -409,7 +410,7 @@ impl Compiler {
             }
 
             Binding::List(binding) => {
-                let len = self.emit_list_binding(binding.as_ref())?;
+                let len = self.emit_list_binding(binding.unwrap())?;
                 self.instruction(Instruction::Discard);
                 Ok(len + 1)
             }
@@ -422,12 +423,12 @@ impl Compiler {
         };
 
         let end = self.code.len();
-        self.actions.push((loc, end, binding.span(), Action::Bind));
+        self.actions.push((loc, end, span, Action::Bind));
 
         retval
     }
 
-    fn emit_list_binding(&mut self, binding: &ListBinding) -> Res<usize> {
+    fn emit_list_binding(&mut self, binding: ListBinding) -> Res<usize> {
         let mut len = 0;
 
         if binding.slurp.is_some() {
@@ -449,7 +450,6 @@ impl Compiler {
                 from_end: binding.num_back + binding.def_back,
             });
             match self.store_instruction(slot) {
-            // match self.slots.as_mut().map(|x| x.store_instruction(slot)).flatten() {
                 Some(instruction) => {
                     self.instruction(instruction);
                     len += 1;
@@ -459,10 +459,10 @@ impl Compiler {
             len += 2;
         }
 
-        for (i, (sub_binding, default)) in binding.front.iter().enumerate() {
+        for (i, (sub_binding, default)) in binding.front.into_iter().enumerate() {
             if let Some(d) = default {
                 let index = self.instruction(Instruction::Noop);
-                let default_len = self.emit_expression(d.as_ref())?;
+                let default_len = self.emit_expression(d.unwrap())?;
                 self.code[index] = Instruction::IntIndexLAndJump {
                     index: i,
                     jump: default_len,
@@ -475,10 +475,10 @@ impl Compiler {
             len += self.emit_binding(sub_binding)?;
         }
 
-        for (i, (sub_binding, default)) in binding.back.iter().enumerate() {
+        for (i, (sub_binding, default)) in binding.back.into_iter().enumerate() {
             if let Some(d) = default {
                 let index = self.instruction(Instruction::Noop);
-                let default_len = self.emit_expression(d.as_ref())?;
+                let default_len = self.emit_expression(d.unwrap())?;
                 self.code[index] = Instruction::IntIndexFromEndAndJump {
                     index: i,
                     root_front: binding.num_front + binding.def_front,
@@ -500,29 +500,13 @@ impl Compiler {
         Ok(len)
     }
 
-    fn emit_map_binding(&mut self, binding: &Tagged<MapBinding>) -> Res<usize> {
+    fn emit_map_binding(&mut self, binding: Tagged<MapBinding>) -> Res<usize> {
         let mut len = 0;
 
         self.instruction(Instruction::AssertMap);
         len += 1;
 
-        for MapBindingElement { key, binding, default} in binding.elements.iter() {
-            if let Some(d) = default {
-                let index = self.instruction(Instruction::Noop);
-                let default_len = self.emit_expression(d.as_ref())?;
-                self.code[index] = Instruction::IntIndexMAndJump {
-                    key: *key.as_ref(),
-                    jump: default_len,
-                };
-                len += default_len + 1;
-            } else {
-                let loc = self.code.len();
-                self.instruction(Instruction::IntIndexM(*key.as_ref()));
-                self.actions.push((loc, loc + 1, key.span(), Action::Bind));
-                self.reasons.push((loc, loc + 1, Reason::from(Unpack::KeyMissing(**key))));
-            }
-            len += self.emit_binding(binding)?;
-        }
+        let binding = binding.unwrap();
 
         if let Some(slot) = binding.slurp {
             self.instruction(Instruction::Duplicate);
@@ -544,69 +528,90 @@ impl Compiler {
             len += 1;
         }
 
+        for MapBindingElement { key, binding, default} in binding.elements.into_iter() {
+            if let Some(d) = default {
+                let index = self.instruction(Instruction::Noop);
+                let default_len = self.emit_expression(d.unwrap())?;
+                self.code[index] = Instruction::IntIndexMAndJump {
+                    key: *key.as_ref(),
+                    jump: default_len,
+                };
+                len += default_len + 1;
+            } else {
+                let loc = self.code.len();
+                self.instruction(Instruction::IntIndexM(*key.as_ref()));
+                self.actions.push((loc, loc + 1, key.span(), Action::Bind));
+                self.reasons.push((loc, loc + 1, Reason::from(Unpack::KeyMissing(*key))));
+            }
+            len += self.emit_binding(binding)?;
+        }
+
         Ok(len)
     }
 
-    fn emit_string_element(&mut self, element: &StringElement) -> Res<usize> {
+    fn emit_string_element(&mut self, element: StringElement) -> Res<usize> {
         match element {
             StringElement::Raw(index) => {
-                self.instruction(Instruction::LoadConst(*index));
+                self.instruction(Instruction::LoadConst(index));
                 self.instruction(Instruction::Add);
                 Ok(2)
             }
 
             StringElement::Interpolate(expr, spec) => {
+                let (expr, span) = expr.decompose();
                 let len = self.emit_expression(expr)?;
                 if let Some(index) = spec {
-                    self.instruction(Instruction::FormatWithSpec(*index));
+                    self.instruction(Instruction::FormatWithSpec(index));
                 } else {
                     self.instruction(Instruction::FormatWithDefault);
                 }
                 let loc = self.code.len();
-                self.actions.push((loc, loc + 1, expr.span(), Action::Format));
+                self.actions.push((loc, loc + 1, span, Action::Format));
                 self.instruction(Instruction::Add);
                 Ok(len + 2)
             }
         }
     }
 
-    fn emit_list_element(&mut self, element: &ListElement) -> Res<usize> {
+    fn emit_list_element(&mut self, element: ListElement) -> Res<usize> {
         match element {
             ListElement::Singleton(expr) => {
-                let len = self.emit_expression(expr)?;
+                let len = self.emit_expression(expr.unwrap())?;
                 self.instruction(Instruction::PushToList);
                 Ok(len + 1)
             }
 
             ListElement::Splat(expr) => {
+                let (expr, span) = expr.decompose();
                 let len = self.emit_expression(expr)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::SplatToCollection);
-                self.actions.push((loc, loc + 1, expr.span(), Action::Splat));
+                self.actions.push((loc, loc + 1, span, Action::Splat));
                 Ok(len + 1)
             }
 
             ListElement::Cond { condition, element } => {
-                let condition_len = self.emit_expression(condition)?;
+                let condition_len = self.emit_expression(condition.unwrap())?;
                 self.instruction(Instruction::LogicalNegate);
                 let index = self.instruction(Instruction::Noop);
-                let element_len = self.emit_list_element(element)?;
+                let element_len = self.emit_list_element(element.unwrap())?;
                 self.code[index] = Instruction::CondJump(element_len);
                 Ok(condition_len + element_len + 2)
             }
 
             ListElement::Loop { binding, iterable, element, slots } => {
+                let (iterable, span) = iterable.decompose();
                 let iterable_len = self.emit_expression(iterable)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::NewIterator);
-                self.actions.push((loc, loc + 1, iterable.span(), Action::Iterate));
+                self.actions.push((loc, loc + 1, span, Action::Iterate));
 
                 self.push_slots(slots);
 
                 let index = self.instruction(Instruction::Noop);
                 let mut jump_len = self.emit_binding(binding)?;
                 self.instruction(Instruction::Interchange);
-                jump_len += self.emit_list_element(element)?;
+                jump_len += self.emit_list_element(element.unwrap())?;
                 self.instruction(Instruction::Interchange);
                 self.instruction(Instruction::JumpBack(jump_len + 4));
                 self.code[index] = Instruction::NextOrJump(jump_len + 3);
@@ -618,46 +623,49 @@ impl Compiler {
         }
     }
 
-    fn emit_map_element(&mut self, element: &MapElement) -> Res<usize> {
+    fn emit_map_element(&mut self, element: MapElement) -> Res<usize> {
         match element {
             MapElement::Singleton { key, value } => {
                 let loc = self.code.len();
+                let (key, span) = key.decompose();
                 let mut len = self.emit_expression(key)?;
-                self.actions.push((loc, self.code.len(), key.span(), Action::Assign));
-                len += self.emit_expression(value)?;
+                self.actions.push((loc, self.code.len(), span, Action::Assign));
+                len += self.emit_expression(value.unwrap())?;
                 self.instruction(Instruction::PushToMap);
                 Ok(len + 1)
             }
 
             MapElement::Splat(expr) => {
+                let (expr, span) = expr.decompose();
                 let len = self.emit_expression(expr)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::SplatToCollection);
-                self.actions.push((loc, loc + 1, expr.span(), Action::Splat));
+                self.actions.push((loc, loc + 1, span, Action::Splat));
                 Ok(len + 1)
             }
 
             MapElement::Cond { condition, element } => {
-                let condition_len = self.emit_expression(condition)?;
+                let condition_len = self.emit_expression(condition.unwrap())?;
                 self.instruction(Instruction::LogicalNegate);
                 let index = self.instruction(Instruction::Noop);
-                let element_len = self.emit_map_element(element)?;
+                let element_len = self.emit_map_element(element.unwrap())?;
                 self.code[index] = Instruction::CondJump(element_len);
                 Ok(condition_len + element_len + 2)
             }
 
             MapElement::Loop { binding, iterable, element, slots } => {
+                let (iterable, span) = iterable.decompose();
                 let iterable_len = self.emit_expression(iterable)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::NewIterator);
-                self.actions.push((loc, loc + 1, iterable.span(), Action::Iterate));
+                self.actions.push((loc, loc + 1, span, Action::Iterate));
 
                 self.push_slots(slots);
 
                 let index = self.instruction(Instruction::Noop);
                 let mut jump_len = self.emit_binding(binding)?;
                 self.instruction(Instruction::Interchange);
-                jump_len += self.emit_map_element(element)?;
+                jump_len += self.emit_map_element(element.unwrap())?;
                 self.instruction(Instruction::Interchange);
                 self.instruction(Instruction::JumpBack(jump_len + 4));
                 self.code[index] = Instruction::NextOrJump(jump_len + 3);
@@ -669,7 +677,7 @@ impl Compiler {
         }
     }
 
-    fn emit_transform(&mut self, transform: &Transform) -> Res<usize> {
+    fn emit_transform(&mut self, transform: Transform) -> Res<usize> {
         match transform {
             Transform::UnOp(op) => {
                 let loc = self.code.len();
@@ -693,12 +701,14 @@ impl Compiler {
             }
 
             Transform::BinOp(operator, operand) => {
-                match operator.as_ref() {
+                let (operator, span) = operator.decompose();
+
+                match operator {
                     BinOp::Or => {
                         self.instruction(Instruction::Duplicate);
                         let cjump_index = self.instruction(Instruction::Noop);
                         self.instruction(Instruction::Discard);
-                        let false_len = self.emit_expression(operand)?;
+                        let false_len = self.emit_expression(operand.unwrap())?;
                         self.code[cjump_index] = Instruction::CondJump(false_len + 1);
                         return Ok(false_len + 3);
                     }
@@ -707,17 +717,17 @@ impl Compiler {
                         self.instruction(Instruction::CondJump(1));
                         let jump_index = self.instruction(Instruction::Noop);
                         self.instruction(Instruction::Discard);
-                        let true_len = self.emit_expression(operand)?;
+                        let true_len = self.emit_expression(operand.unwrap())?;
                         self.code[jump_index] = Instruction::Jump(true_len + 1);
                         return Ok(true_len + 4);
                     }
                     _ => {}
                 }
 
-                let len = self.emit_expression(operand.as_ref())?;
+                let len = self.emit_expression(operand.unwrap())?;
                 let loc = self.code.len();
 
-                match operator.as_ref() {
+                match operator {
                     BinOp::Power => {
                         self.code.push(Instruction::Power);
                     }
@@ -763,8 +773,7 @@ impl Compiler {
                     BinOp::Or | BinOp::And => {}
                 };
 
-                self.actions
-                    .push((loc, loc + 1, operator.span(), Action::Evaluate));
+                self.actions.push((loc, loc + 1, span, Action::Evaluate));
                 Ok(len + 1)
             }
 
@@ -773,14 +782,15 @@ impl Compiler {
                 self.instruction(Instruction::NewList);
 
                 let mut len = 0;
-                for arg in args.iter() {
-                    len += self.emit_arg_element(arg)?;
+                let (args, span) = args.decompose();
+                for arg in args.into_iter() {
+                    len += self.emit_arg_element(arg.unwrap())?;
                 }
 
                 let loc = self.code.len();
                 self.instruction(Instruction::Call);
-                if *add_action {
-                    self.actions.push((loc, loc + 1, args.span(), Action::Evaluate));
+                if add_action {
+                    self.actions.push((loc, loc + 1, span, Action::Evaluate));
                 }
 
                 Ok(len + 3)
@@ -788,26 +798,26 @@ impl Compiler {
         }
     }
 
-    fn emit_arg_element(&mut self, arg: &ArgElement) -> Res<usize> {
+    fn emit_arg_element(&mut self, arg: ArgElement) -> Res<usize> {
         match arg {
             ArgElement::Singleton(expr) => {
-                let len = self.emit_expression(expr)?;
+                let len = self.emit_expression(expr.unwrap())?;
                 self.instruction(Instruction::PushToList);
                 Ok(len + 1)
             }
 
             ArgElement::Keyword(key, expr) => {
-                let len = self.emit_expression(expr)?;
-                self.instruction(Instruction::IntPushToKwargs(**key));
+                let len = self.emit_expression(expr.unwrap())?;
+                self.instruction(Instruction::IntPushToKwargs(*key));
                 Ok(len + 1)
             }
 
             ArgElement::Splat(expr) => {
+                let (expr, span) = expr.decompose();
                 let len = self.emit_expression(expr)?;
                 let loc = self.code.len();
                 self.instruction(Instruction::IntArgSplat);
-                self.actions
-                    .push((loc, loc + 1, expr.span(), Action::Splat));
+                self.actions.push((loc, loc + 1, span, Action::Splat));
                 Ok(len + 1)
             }
         }
@@ -871,8 +881,8 @@ impl Compiler {
         None
     }
 
-    fn push_slots(&mut self, slots: &SlotCatalog) {
-        let new = SlotMap::new(self.slots.last(), slots.clone());
+    fn push_slots(&mut self, slots: SlotCatalog) {
+        let new = SlotMap::new(self.slots.last(), slots);
         self.slots.push(new);
     }
 

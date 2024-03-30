@@ -243,6 +243,11 @@ impl<T> Tagged<T> {
         self.contents
     }
 
+    /// Destroy the wrapper and return its span and contents.
+    pub fn decompose(self) -> (T, Span) {
+        (self.contents, self.span)
+    }
+
     /// Wrapper for [`Span::with_coord`].
     pub fn with_coord(self, line: u32, col: u32) -> Tagged<T> {
         let loc = self.span.with_coord(line, col);
@@ -275,6 +280,26 @@ impl<T> Tagged<T> {
         Tagged::<T> {
             span: Span::from(loc),
             contents: self.contents,
+        }
+    }
+}
+
+impl<T, E> Tagged<Result<T, E>> {
+    /// Transpose tagged and result.
+    pub fn transpose(self) -> Result<Tagged<T>, E> {
+        match self.contents {
+            Ok(x) => Ok(Tagged::new(self.span, x)),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl<T> Tagged<Option<T>> {
+    /// Transpose tagged and option.
+    pub fn transpose(self) -> Option<Tagged<T>> {
+        match self.contents {
+            Some(x) => Some(Tagged::new(self.span, x)),
+            None => None,
         }
     }
 }

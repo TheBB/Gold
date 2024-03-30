@@ -18,20 +18,33 @@ use pyo3::types::{PyTuple, PyDict};
 #[cfg(feature = "python")]
 use pyo3::exceptions::PyTypeError;
 
+#[cfg(feature = "python")]
+use crate::Error;
+
 use super::{List, Map, Object};
 use crate::compile::CompiledFunction;
-use crate::error::{Error, Internal};
+use crate::error::Internal;
 use crate::eval::Vm;
 use crate::types::{Builtin, Cell, GcCell, NativeClosure, Res};
 use crate::ImportConfig;
 
-#[derive(Clone, Serialize, Deserialize, Trace, Finalize)]
+#[derive(Serialize, Deserialize, Trace, Finalize)]
 enum FuncV {
     Closure(Gc<CompiledFunction>, GcCell<Vec<Cell>>),
     Builtin(#[unsafe_ignore_trace] Builtin),
 
     #[serde(skip)]
     NativeClosure(#[unsafe_ignore_trace] Rc<NativeClosure>),
+}
+
+impl Clone for FuncV {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Closure(x, y) => Self::Closure(x.clone(), GcCell::new(y.borrow().clone())),
+            Self::Builtin(x) => Self::Builtin(x.clone()),
+            Self::NativeClosure(x) => Self::NativeClosure(x.clone()),
+        }
+    }
 }
 
 impl Debug for FuncV {
