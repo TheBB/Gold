@@ -48,7 +48,7 @@ pub struct MapBinding {
 
 #[derive(Debug, Clone)]
 pub enum Transform {
-    UnOp(Tagged<UnOp>),
+    UnOp(Tagged<Option<UnOp>>),
     BinOp(Tagged<BinOp>, Box<Tagged<Expr>>),
     FunCall(Tagged<Vec<Tagged<ArgElement>>>, bool),
 }
@@ -139,7 +139,7 @@ pub struct Function {
     pub keywords: Option<Tagged<MapBinding>>,
     pub expression: Box<Tagged<Expr>>,
     pub slots: SlotCatalog,
-    pub requires: Vec<BindingLoc>,
+    pub requires: Option<Vec<BindingLoc>>,
 }
 
 impl Function {
@@ -190,7 +190,7 @@ impl<'a> FunctionBuilder<'a> {
             keywords: self.keywords,
             expression: Box::new(self.expression.unwrap()),
             slots,
-            requires,
+            requires: Some(requires),
         }
     }
 }

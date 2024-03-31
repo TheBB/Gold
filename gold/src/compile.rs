@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::ast::low::{Binding, Expr, Function, ListBinding, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, Transform, ArgElement};
 use crate::error::{Action, IntervalTree, Reason, Span, Tagged, Unpack};
 use crate::formatting::FormatSpec;
-use crate::types::{BinOp, UnOp, Key, Res};
+use crate::types::{BinOp, Key, Res, LogicOp};
 use crate::Object;
 use crate::ast::{BindingLoc, SlotCatalog, SlotType};
 
@@ -34,107 +34,271 @@ pub struct CompiledFunction {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum Instruction {
     // Loading
+    // ------------------------------------------------------------------------------------------------
+
+    /// Load the given object from the constants array and push it on the stack.
     LoadConst(usize),
+
+    /// Load the given object from the locals array and push it on the stack.
     LoadLocal(usize),
+
+    /// Load the given object from the cell array and push it on the stack.
     LoadCell(usize),
+
+    /// Load the given object from the enclosed array and push it on the stack.
     LoadEnclosed(usize),
+
+    /// Load the given function object, wrap it into a closure and push it on the stack.
     LoadFunc(usize),
+
+    /// Load the given builtin from the global BUILTINS array and push it on the stack.
     LoadBuiltin(usize),
+
+    /// Process the given import path and push the result on the stack.
     Import(usize),
 
     // Storing
+    // ------------------------------------------------------------------------------------------------
+
+    /// Pop the stack and push the object to the local array at the given index.
     StoreLocal(usize),
+
+    /// Pop the stack and push the object to the cell array at the given index.
     StoreCell(usize),
 
     // Destroying
+    // ------------------------------------------------------------------------------------------------
+
+    /// Reset the slot in the local array at the given index.
     DestroyLocal(usize),
+
+    /// Reset the slot in the cell array at the given index.
+    /// This should not mutate the existing cell, just replace it with a new one.
     DestroyCell(usize),
 
     // Control flow
+    // ------------------------------------------------------------------------------------------------
+
+    /// Pop the stack and push the object to the lower frame's stack.
     Return,
+
+    /// Pop the stack, and jump the given number of instructions if the object is truthy.
     CondJump(usize),
+
+    /// Jump the given number of instructions unconditionally. Not that, since
+    /// the VM advances over this instruction before executing it, the delta
+    /// must NOT count this instruction.
     Jump(usize),
+
+    /// Jump the given number of instructions in reverse, unconditionally. Note
+    /// that, since the VM advances over this instruction before executing it,
+    /// the delta must count this instruction as well.
     JumpBack(usize),
+
+    /// Clone the object on the top of the stack and push it.
     Duplicate,
+
+    /// Drop the object on the top of the stack.
     Discard,
+
+    /// Drop several objects on the top of the stack.
     DiscardMany(usize),
+
+    /// Interchange the top two objects on the stack.
     Interchange,
+
+    /// Call the function at stack[2] using stack[0] as arguments (must be a
+    /// list) and stack[1] as keyword arguments (must be a map).
     Call,
+
+    /// Do nothing.
     Noop,
 
     // Asserts
+    // ------------------------------------------------------------------------------------------------
+
+    /// Throw an error unless the top of the stack is a list with at least the
+    /// given length.
     AssertListMinLength(usize),
+
+    /// Throw an error unless the top of the stack is a list with at least the
+    /// given minimum length and at most the given maximum length.
     AssertListMinMaxLength(usize, usize),
+
+    /// Throw an error unless the top of the stack is a map.
     AssertMap,
 
     // Unary operators
+    // ------------------------------------------------------------------------------------------------
+
+    /// Apply the unary mathematical negation operator to the top of the stack and push the result.
     ArithmeticalNegate,
+
+    /// Apply the unary logical negation operator to the top of the stack and push the result.
     LogicalNegate,
+
+    /// Format the top of the stack with the given format specification and push the result.
     FormatWithSpec(usize),
+
+    /// Format the top of the stack with the default format specification and push the result.
     FormatWithDefault,
 
     // Binary mathematical operators
+    // ------------------------------------------------------------------------------------------------
+
+    /// Pop y and x from the stack, then push `x + y`.
     Add,
+
+    /// Pop y and x from the stack, then push `x - y`.
     Subtract,
+
+    /// Pop y and x from the stack, then push `x * y`.
     Multiply,
+
+    /// Pop y and x from the stack, then push `x // y`.
     IntegerDivide,
+
+    /// Pop y and x from the stack, then push `x / y`.
     Divide,
+
+    /// Pop y and x from the stack, then push `x ^ y`.
     Power,
 
     // Binary comparison operators
+    // ------------------------------------------------------------------------------------------------
+
+    /// Pop y and x from the stack, then push `x < y`.
     Less,
+
+    /// Pop y and x from the stack, then push `x > y`.
     Greater,
+
+    /// Pop y and x from the stack, then push `x <= y`.
     LessEqual,
+
+    /// Pop y and x from the stack, then push `x >= y`.
     GreaterEqual,
+
+    /// Pop y and x from the stack, then push `x == y`.
     Equal,
+
+    /// Pop y and x from the stack, then push `x != y`.
     NotEqual,
+
+    /// Pop y and x from the stack, then push `x has y`.
     Contains,
 
     // Other operators
+    // ------------------------------------------------------------------------------------------------
+
+    /// Pop y and x from the stack, then push `x[y]`.
     Index,
 
     // Constructors
+    // ------------------------------------------------------------------------------------------------
+
+    /// Push a new empty list on the stack.
     NewList,
+
+    /// Push a new empty map on the stack.
     NewMap,
+
+    /// Pop the stack and convert the object into an iterator, then push it on the stack.
     NewIterator,
+
+    /// Push a new empty string on the stack.
     NewString,
 
     // Mutability
+    // ------------------------------------------------------------------------------------------------
+
+    /// Pop the stack and push the object to the list on the top of the stack.
     PushToList,
+
+    /// Pop the top two stack objects (value and key) and push them to the map
+    /// on the top of the stack.
     PushToMap,
+
+    /// Pop the stack and insert all its elements into the object on the top of
+    /// the stack.
     SplatToCollection,
+
+    /// Remove the key from the map at the top of the stack, if it exists.
     DelKeyIfExists(Key),
+
+    /// Load the cell at the given index and push it to the closure at the top
+    /// of the stack. Important: the cell must be pushed as-is. It should not be
+    /// unwrapped.
     PushCellToClosure(usize),
+
+    /// Load the cell at the given enclosure index and push it to the closure at
+    /// the top of the stack. Important: the cell must be pushed as-is. It
+    /// should not be unwrapped.
     PushEnclosedToClosure(usize),
+
+    /// Get the next element from the iterator at the top of the stack and push
+    /// it on the stack. If there are no more elements, jump the given delta.
     NextOrJump(usize),
 
     // Shortcuts for internal use
+    // ------------------------------------------------------------------------------------------------
+
+    /// Get the element from the list at the top of the stack at the given
+    /// index, and push it on the stack.
     IntIndexL(usize),
+
+    /// Get the element from the list at the top of the stack at the given
+    /// index, push it on the stack and then jump the given delta. Do not error
+    /// or jump if the index does not exist.
     IntIndexLAndJump {
         index: usize,
         jump: usize,
     },
+
+    /// Get the element from the list at the top of the stack at the given index
+    /// counted from the end, and push it on the stack.
     IntIndexFromEnd {
         index: usize,
         root_front: usize,
         root_back: usize,
     },
+
+    /// Get the element from the list at the top of the stack at the giv index
+    /// counted from the end, push it on the stack and then jump the given
+    /// delta. Do not error or jump if the index does not exist.
     IntIndexFromEndAndJump {
         index: usize,
         root_front: usize,
         root_back: usize,
         jump: usize,
     },
+
+    /// Extract the given slice from the list at the top of the stack and push
+    /// it to the stack.
     IntSlice {
         start: usize,
         from_end: usize,
     },
+
+    /// Get the element from the map at the top of the stack and push it on the
+    /// stack.
     IntIndexM(Key),
+
+    /// Get the element from the map at the top of the stack, push it on the
+    /// stack and then jump the given delta. Do not error or jump if the key
+    /// does not exist.
     IntIndexMAndJump {
         key: Key,
         jump: usize,
     },
+
+    /// Pop the stack and push the object to the kwargs map (located at
+    /// stack[1]) with the given key.
     IntPushToKwargs(Key),
+
+    /// Pop the stack and insert the elements into either the args list (located
+    /// at stack[0]) or the kwargs map (located at stack[1]), depending on
+    /// whether it's a list or a map.
     IntArgSplat,
 }
 
@@ -223,6 +387,119 @@ impl SlotMap {
     }
 }
 
+trait WrapCompiler: Sized {
+    fn compiler(&mut self) -> &mut Compiler;
+
+    fn instruction(mut self, instruction: Instruction) -> Self {
+        self.compiler().instruction(instruction);
+        self
+    }
+
+    fn emit_expression(mut self, expr: Expr) -> Res<Self> {
+        self.compiler().emit_expression(expr)?;
+        Ok(self)
+    }
+
+    fn emit_binding(mut self, binding: Tagged<Binding>) -> Res<Self> {
+        self.compiler().emit_binding(binding)?;
+        Ok(self)
+    }
+
+    fn emit_list_binding(mut self, binding: ListBinding) -> Res<Self> {
+        self.compiler().emit_list_binding(binding)?;
+        Ok(self)
+    }
+
+    fn emit_map_binding(mut self, binding: MapBinding) -> Res<Self> {
+        self.compiler().emit_map_binding(binding)?;
+        Ok(self)
+    }
+
+    fn emit_list_element(mut self, element: ListElement) -> Res<Self> {
+        self.compiler().emit_list_element(element)?;
+        Ok(self)
+    }
+
+    fn emit_map_element(mut self, element: MapElement) -> Res<Self> {
+        self.compiler().emit_map_element(element)?;
+        Ok(self)
+    }
+
+    fn store_instruction(mut self, index: usize) -> Option<Self> {
+        self.compiler().store_instruction(index)?;
+        Some(self)
+    }
+}
+
+struct TraceWrapper<'a> {
+    compiler: &'a mut Compiler,
+    span: Span,
+    action: Action,
+    reason: Option<Reason>,
+
+    start: usize,
+}
+
+impl<'a> WrapCompiler for TraceWrapper<'a> {
+    fn compiler(&mut self) -> &mut Compiler {
+        self.compiler
+    }
+}
+
+impl<'a> TraceWrapper<'a> {
+    fn new(compiler: &'a mut Compiler, span: Span, action: Action) -> Self {
+        let start = compiler.code.len();
+        Self { compiler, span, action, start, reason: None }
+    }
+
+    fn reason<T>(mut self, reason: T) -> Self
+    where
+        Reason: From<T>,
+    {
+        self.reason = Some(Reason::from(reason));
+        self
+    }
+
+    fn finalize(self) -> usize {
+        self.compiler.actions.push((self.start, self.compiler.code.len(), self.span, self.action));
+        if let Some(reason) = self.reason {
+            self.compiler.reasons.push((self.start, self.compiler.code.len(), reason));
+        }
+        self.compiler.code.len() - self.start
+    }
+}
+
+struct JumpWrapper<'a> {
+    compiler: &'a mut Compiler,
+    start: usize,
+}
+
+impl<'a> WrapCompiler for JumpWrapper<'a> {
+    fn compiler(&mut self) -> &mut Compiler {
+        self.compiler
+    }
+}
+
+impl<'a> JumpWrapper<'a> {
+    fn new(compiler: &'a mut Compiler) -> Self {
+        let start = compiler.code.len();
+        compiler.code.push(Instruction::Noop);
+        Self { compiler, start}
+    }
+
+    fn to_start<F: Fn(usize) -> Instruction>(mut self, to_start: F) -> Self {
+        let len = self.compiler().code.len() + 1 - self.start;
+        self.compiler.instruction(to_start(len));
+        self
+    }
+
+    fn finalize<F: Fn(usize) -> Instruction>(self, finalizer: F) -> usize {
+        let len = self.compiler.code.len() - self.start;
+        self.compiler.code[self.start] = finalizer(len - 1);
+        len
+    }
+}
+
 pub struct Compiler {
     constants: Vec<Object>,
     funcs: Vec<CompiledFunction>,
@@ -263,7 +540,7 @@ impl Compiler {
         compiler.instruction(Instruction::Discard);
 
         if let Some(kwargs) = keywords {
-            compiler.emit_map_binding(kwargs)?;
+            compiler.emit_map_binding(kwargs.unwrap())?;
         }
         compiler.instruction(Instruction::Discard);
 
@@ -274,34 +551,16 @@ impl Compiler {
 
     fn emit_expression(&mut self, expr: Expr) -> Res<usize> {
         match expr {
-            Expr::Constant(index) => {
-                self.instruction(Instruction::LoadConst(index));
-                Ok(1)
-            }
+            Expr::Constant(index) => Ok(self.instruction(Instruction::LoadConst(index))),
+            Expr::Slot(loc) => Ok(self.load_instruction(loc).unwrap()),
+            Expr::Builtin(index) => Ok(self.instruction(Instruction::LoadBuiltin(index))),
 
             Expr::String(elements) => {
-                self.instruction(Instruction::NewString);
-
-                let mut len = 0;
+                let mut len = self.instruction(Instruction::NewString);
                 for element in elements {
                     len += self.emit_string_element(element)?;
                 }
                 Ok(len + 1)
-            }
-
-            Expr::Slot(loc) => {
-                match self.load_instruction(loc) {
-                    Some(instruction) => {
-                        self.instruction(instruction);
-                        Ok(1)
-                    }
-                    None => { panic!("my god"); }
-                }
-            }
-
-            Expr::Builtin(index) => {
-                self.instruction(Instruction::LoadBuiltin(index));
-                Ok(1)
             }
 
             Expr::Transformed { operand, transform } => {
@@ -315,34 +574,30 @@ impl Compiler {
                 true_branch,
                 false_branch,
             } => {
-                let cond_len = self.emit_expression(condition.unwrap())?;
-                let cjump_index = self.instruction(Instruction::Noop);
-                let false_len = self.emit_expression(false_branch.unwrap())?;
-                let jump_index = self.instruction(Instruction::Noop);
-                let true_len = self.emit_expression(true_branch.unwrap())?;
-
-                self.code[cjump_index] = Instruction::CondJump(false_len + 1);
-                self.code[jump_index] = Instruction::Jump(true_len);
-
-                Ok(cond_len + false_len + true_len + 2)
+                let mut len = self.emit_expression(condition.unwrap())?;
+                len += self.with_jump()
+                    .emit_expression(false_branch.unwrap())?
+                    .finalize(|l| Instruction::CondJump(l + 1));
+                len += self.with_jump()
+                    .emit_expression(true_branch.unwrap())?
+                    .finalize(|l| Instruction::Jump(l));
+                Ok(len)
             }
 
             Expr::List(elements) => {
-                self.instruction(Instruction::NewList);
-                let mut len = 0;
+                let mut len = self.instruction(Instruction::NewList);
                 for element in elements {
                     len += self.emit_list_element(element.unwrap())?;
                 }
-                Ok(len + 1)
+                Ok(len)
             }
 
             Expr::Map(elements) => {
-                self.instruction(Instruction::NewMap);
-                let mut len = 0;
+                let mut len = self.instruction(Instruction::NewMap);
                 for element in elements {
                     len += self.emit_map_element(element.unwrap())?;
                 }
-                Ok(len + 1)
+                Ok(len)
             }
 
             Expr::Let { bindings, expression, slots } => {
@@ -362,137 +617,106 @@ impl Compiler {
                 let mut len = 0;
                 for (binding, path) in imports {
                     let index = self.import_path(path.as_ref().clone());
-                    let loc = self.code.len();
-                    self.instruction(Instruction::Import(index));
-                    self.actions.push((loc, loc + 1, path.span(), Action::Import));
-                    len += self.emit_binding(binding)? + 1;
+                    len += self.with_trace(path.span(), Action::Import)
+                        .instruction(Instruction::Import(index))
+                        .finalize();
+                    len += self.emit_binding(binding)?;
                 }
                 len += self.emit_expression(expression.unwrap())?;
                 len += self.pop_slots();
                 Ok(len)
             }
 
-            Expr::Func(function) => {
-                let load_index = self.instruction(Instruction::Noop);
+            Expr::Func(mut function) => {
+                let requires = function.requires.take();
 
-                let mut len = 0;
-                for loc in function.requires.iter() {
-                    match self.push_cell_instruction(*loc) {
-                        Some(instruction) => {
-                            self.instruction(instruction);
-                            len += 1;
-                        }
-                        None => { panic!("the stars"); }
+                let compiled = Compiler::compile(function)?;
+                let index = self.function(compiled);
+                let mut len = self.instruction(Instruction::LoadFunc(index));
+
+                if let Some(requires) = requires {
+                    for loc in requires {
+                        len += self.push_cell_instruction(loc).unwrap();
                     }
                 }
 
-                let compiled = Compiler::compile(function.clone())?;
-                let index = self.function(compiled);
-                self.code[load_index] = Instruction::LoadFunc(index);
-                Ok(len + 1)
+                Ok(len)
             }
         }
     }
 
     fn emit_binding(&mut self, binding: Tagged<Binding>) -> Res<usize> {
-        let loc = self.code.len();
         let (binding, span) = binding.decompose();
-
-        let retval = match binding {
-            Binding::Slot(slot) => {
-                match self.store_instruction(slot) {
-                    Some(instruction) => {
-                        self.instruction(instruction);
-                        Ok(1)
-                    }
-                    None => { panic!("oh shit"); }
-                }
-            }
-
-            Binding::List(binding) => {
-                let len = self.emit_list_binding(binding.unwrap())?;
-                self.instruction(Instruction::Discard);
-                Ok(len + 1)
-            }
-
-            Binding::Map(binding) => {
-                let len = self.emit_map_binding(binding)?;
-                self.instruction(Instruction::Discard);
-                Ok(len + 1)
-            }
-        };
-
-        let end = self.code.len();
-        self.actions.push((loc, end, span, Action::Bind));
-
-        retval
+        match binding {
+            Binding::Slot(slot) => Ok(
+                self.with_trace(span, Action::Bind)
+                    .store_instruction(slot).unwrap()
+                    .finalize()
+            ),
+            Binding::List(binding) => Ok(
+                self.with_trace(span, Action::Bind)
+                    .emit_list_binding(binding.unwrap())?
+                    .instruction(Instruction::Discard)
+                    .finalize()
+            ),
+            Binding::Map(binding) => Ok(
+                self.with_trace(span, Action::Bind)
+                    .emit_map_binding(binding.unwrap())?
+                    .instruction(Instruction::Discard)
+                    .finalize()
+            ),
+        }
     }
 
     fn emit_list_binding(&mut self, binding: ListBinding) -> Res<usize> {
         let mut len = 0;
 
         if binding.slurp.is_some() {
-            self.instruction(Instruction::AssertListMinLength(
+            len += self.instruction(Instruction::AssertListMinLength(
                 binding.num_front + binding.num_back,
             ));
-            len += 1;
         } else {
-            self.instruction(Instruction::AssertListMinMaxLength(
+            len += self.instruction(Instruction::AssertListMinMaxLength(
                 binding.num_front,
                 binding.num_front + binding.def_front,
             ));
-            len += 1;
         }
 
         if let Some(Some(slot)) = binding.slurp {
-            self.instruction(Instruction::IntSlice {
+            len += self.instruction(Instruction::IntSlice {
                 start: binding.num_front + binding.def_front,
                 from_end: binding.num_back + binding.def_back,
             });
-            match self.store_instruction(slot) {
-                Some(instruction) => {
-                    self.instruction(instruction);
-                    len += 1;
-                }
-                None => { panic!("oh shit"); }
-            }
-            len += 2;
+            len += self.store_instruction(slot).unwrap();
         }
 
         for (i, (sub_binding, default)) in binding.front.into_iter().enumerate() {
             if let Some(d) = default {
-                let index = self.instruction(Instruction::Noop);
-                let default_len = self.emit_expression(d.unwrap())?;
-                self.code[index] = Instruction::IntIndexLAndJump {
-                    index: i,
-                    jump: default_len,
-                };
-                len += default_len + 1;
+                len += self.with_jump()
+                    .emit_expression(d.unwrap())?
+                    .finalize(|l| Instruction::IntIndexLAndJump { index: i, jump: l });
             } else {
-                self.instruction(Instruction::IntIndexL(i));
-                len += 1;
+                len += self.instruction(Instruction::IntIndexL(i));
             }
             len += self.emit_binding(sub_binding)?;
         }
 
         for (i, (sub_binding, default)) in binding.back.into_iter().enumerate() {
             if let Some(d) = default {
-                let index = self.instruction(Instruction::Noop);
-                let default_len = self.emit_expression(d.unwrap())?;
-                self.code[index] = Instruction::IntIndexFromEndAndJump {
-                    index: i,
-                    root_front: binding.num_front + binding.def_front,
-                    root_back: binding.num_back + binding.def_back,
-                    jump: default_len,
-                };
-                len += default_len + 1;
+                len += self.with_jump()
+                    .emit_expression(d.unwrap())?
+                    .finalize(|l| Instruction::IntIndexFromEndAndJump {
+                        index: i,
+                        root_front: binding.num_front + binding.def_front,
+                        root_back: binding.num_back + binding.def_back,
+                        jump: l,
+                    });
             } else {
-                self.instruction(Instruction::IntIndexFromEnd {
+                len += self.instruction(Instruction::IntIndexFromEnd {
                     index: i,
                     root_front: binding.num_front + binding.def_front,
                     root_back: binding.num_back + binding.def_back,
                 });
-                len += 1;
             }
             len += self.emit_binding(sub_binding)?;
         }
@@ -500,48 +724,31 @@ impl Compiler {
         Ok(len)
     }
 
-    fn emit_map_binding(&mut self, binding: Tagged<MapBinding>) -> Res<usize> {
-        let mut len = 0;
-
-        self.instruction(Instruction::AssertMap);
-        len += 1;
-
-        let binding = binding.unwrap();
+    fn emit_map_binding(&mut self, binding: MapBinding) -> Res<usize> {
+        let mut len = self.instruction(Instruction::AssertMap);
 
         if let Some(slot) = binding.slurp {
-            self.instruction(Instruction::Duplicate);
-            len += 1;
-
+            len += self.instruction(Instruction::Duplicate);
             for MapBindingElement { key, .. } in binding.elements.iter() {
-                self.instruction(Instruction::DelKeyIfExists(*key.as_ref()));
-                len += 1;
+                len += self.instruction(Instruction::DelKeyIfExists(*key.as_ref()));
             }
-
-            match self.store_instruction(slot) {
-                Some(instruction) => {
-                    self.instruction(instruction);
-                    len += 1;
-                }
-                None => { panic!("oh shit"); }
-            }
-
-            len += 1;
+            len += self.store_instruction(slot).unwrap();
         }
 
         for MapBindingElement { key, binding, default} in binding.elements.into_iter() {
             if let Some(d) = default {
-                let index = self.instruction(Instruction::Noop);
-                let default_len = self.emit_expression(d.unwrap())?;
-                self.code[index] = Instruction::IntIndexMAndJump {
-                    key: *key.as_ref(),
-                    jump: default_len,
-                };
-                len += default_len + 1;
+                len += self.with_jump()
+                    .emit_expression(d.unwrap())?
+                    .finalize(|l| Instruction::IntIndexMAndJump {
+                        key: key.unwrap(),
+                        jump: l,
+                    });
             } else {
-                let loc = self.code.len();
-                self.instruction(Instruction::IntIndexM(*key.as_ref()));
-                self.actions.push((loc, loc + 1, key.span(), Action::Bind));
-                self.reasons.push((loc, loc + 1, Reason::from(Unpack::KeyMissing(*key))));
+                let (key, span) = key.decompose();
+                len += self.with_trace(span, Action::Bind)
+                    .reason(Unpack::KeyMissing(key))
+                    .instruction(Instruction::IntIndexM(key))
+                    .finalize();
             }
             len += self.emit_binding(binding)?;
         }
@@ -552,23 +759,23 @@ impl Compiler {
     fn emit_string_element(&mut self, element: StringElement) -> Res<usize> {
         match element {
             StringElement::Raw(index) => {
-                self.instruction(Instruction::LoadConst(index));
-                self.instruction(Instruction::Add);
-                Ok(2)
+                let mut len = self.instruction(Instruction::LoadConst(index));
+                len += self.instruction(Instruction::Add);
+                Ok(len)
             }
 
             StringElement::Interpolate(expr, spec) => {
                 let (expr, span) = expr.decompose();
-                let len = self.emit_expression(expr)?;
+                let mut len = self.emit_expression(expr)?;
                 if let Some(index) = spec {
-                    self.instruction(Instruction::FormatWithSpec(index));
+                    len += self.instruction(Instruction::FormatWithSpec(index));
                 } else {
-                    self.instruction(Instruction::FormatWithDefault);
+                    len += self.instruction(Instruction::FormatWithDefault);
                 }
-                let loc = self.code.len();
-                self.actions.push((loc, loc + 1, span, Action::Format));
-                self.instruction(Instruction::Add);
-                Ok(len + 2)
+                len += self.with_trace(span, Action::Format)
+                    .instruction(Instruction::Add)
+                    .finalize();
+                Ok(len)
             }
         }
     }
@@ -576,49 +783,50 @@ impl Compiler {
     fn emit_list_element(&mut self, element: ListElement) -> Res<usize> {
         match element {
             ListElement::Singleton(expr) => {
-                let len = self.emit_expression(expr.unwrap())?;
-                self.instruction(Instruction::PushToList);
-                Ok(len + 1)
+                let mut len = self.emit_expression(expr.unwrap())?;
+                len += self.instruction(Instruction::PushToList);
+                Ok(len)
             }
 
             ListElement::Splat(expr) => {
                 let (expr, span) = expr.decompose();
-                let len = self.emit_expression(expr)?;
-                let loc = self.code.len();
-                self.instruction(Instruction::SplatToCollection);
-                self.actions.push((loc, loc + 1, span, Action::Splat));
-                Ok(len + 1)
+                let mut len = self.emit_expression(expr)?;
+                len += self.with_trace(span, Action::Splat)
+                    .instruction(Instruction::SplatToCollection)
+                    .finalize();
+                Ok(len)
             }
 
             ListElement::Cond { condition, element } => {
-                let condition_len = self.emit_expression(condition.unwrap())?;
-                self.instruction(Instruction::LogicalNegate);
-                let index = self.instruction(Instruction::Noop);
-                let element_len = self.emit_list_element(element.unwrap())?;
-                self.code[index] = Instruction::CondJump(element_len);
-                Ok(condition_len + element_len + 2)
+                let mut len = self.emit_expression(condition.unwrap())?;
+                len += self.instruction(Instruction::LogicalNegate);
+                len += self.with_jump()
+                    .emit_list_element(element.unwrap())?
+                    .finalize(Instruction::CondJump);
+                Ok(len)
             }
 
             ListElement::Loop { binding, iterable, element, slots } => {
                 let (iterable, span) = iterable.decompose();
-                let iterable_len = self.emit_expression(iterable)?;
-                let loc = self.code.len();
-                self.instruction(Instruction::NewIterator);
-                self.actions.push((loc, loc + 1, span, Action::Iterate));
+                let mut len = self.emit_expression(iterable)?;
+
+                len += self.with_trace(span, Action::Iterate)
+                    .instruction(Instruction::NewIterator)
+                    .finalize();
 
                 self.push_slots(slots);
 
-                let index = self.instruction(Instruction::Noop);
-                let mut jump_len = self.emit_binding(binding)?;
-                self.instruction(Instruction::Interchange);
-                jump_len += self.emit_list_element(element.unwrap())?;
-                self.instruction(Instruction::Interchange);
-                self.instruction(Instruction::JumpBack(jump_len + 4));
-                self.code[index] = Instruction::NextOrJump(jump_len + 3);
-                self.instruction(Instruction::Discard);
+                len += self.with_jump()
+                    .emit_binding(binding)?
+                    .instruction(Instruction::Interchange)
+                    .emit_list_element(element.unwrap())?
+                    .instruction(Instruction::Interchange)
+                    .to_start(Instruction::JumpBack)
+                    .finalize(Instruction::NextOrJump);
 
-                let pop_len = self.pop_slots();
-                Ok(iterable_len + jump_len + pop_len + 6)
+                len += self.instruction(Instruction::Discard);
+                len += self.pop_slots();
+                Ok(len)
             }
         }
     }
@@ -626,53 +834,54 @@ impl Compiler {
     fn emit_map_element(&mut self, element: MapElement) -> Res<usize> {
         match element {
             MapElement::Singleton { key, value } => {
-                let loc = self.code.len();
                 let (key, span) = key.decompose();
-                let mut len = self.emit_expression(key)?;
-                self.actions.push((loc, self.code.len(), span, Action::Assign));
+                let mut len = self.with_trace(span, Action::Assign)
+                    .emit_expression(key)?
+                    .finalize();
                 len += self.emit_expression(value.unwrap())?;
-                self.instruction(Instruction::PushToMap);
-                Ok(len + 1)
+                len += self.instruction(Instruction::PushToMap);
+                Ok(len)
             }
 
             MapElement::Splat(expr) => {
                 let (expr, span) = expr.decompose();
-                let len = self.emit_expression(expr)?;
-                let loc = self.code.len();
-                self.instruction(Instruction::SplatToCollection);
-                self.actions.push((loc, loc + 1, span, Action::Splat));
-                Ok(len + 1)
+                let mut len = self.emit_expression(expr)?;
+                len += self.with_trace(span, Action::Splat)
+                    .instruction(Instruction::SplatToCollection)
+                    .finalize();
+                Ok(len)
             }
 
             MapElement::Cond { condition, element } => {
-                let condition_len = self.emit_expression(condition.unwrap())?;
-                self.instruction(Instruction::LogicalNegate);
-                let index = self.instruction(Instruction::Noop);
-                let element_len = self.emit_map_element(element.unwrap())?;
-                self.code[index] = Instruction::CondJump(element_len);
-                Ok(condition_len + element_len + 2)
+                let mut len = self.emit_expression(condition.unwrap())?;
+                len += self.instruction(Instruction::LogicalNegate);
+                len += self.with_jump()
+                    .emit_map_element(element.unwrap())?
+                    .finalize(Instruction::CondJump);
+                Ok(len)
             }
 
             MapElement::Loop { binding, iterable, element, slots } => {
                 let (iterable, span) = iterable.decompose();
-                let iterable_len = self.emit_expression(iterable)?;
-                let loc = self.code.len();
-                self.instruction(Instruction::NewIterator);
-                self.actions.push((loc, loc + 1, span, Action::Iterate));
+                let mut len = self.emit_expression(iterable)?;
+
+                len += self.with_trace(span, Action::Iterate)
+                    .instruction(Instruction::NewIterator)
+                    .finalize();
 
                 self.push_slots(slots);
 
-                let index = self.instruction(Instruction::Noop);
-                let mut jump_len = self.emit_binding(binding)?;
-                self.instruction(Instruction::Interchange);
-                jump_len += self.emit_map_element(element.unwrap())?;
-                self.instruction(Instruction::Interchange);
-                self.instruction(Instruction::JumpBack(jump_len + 4));
-                self.code[index] = Instruction::NextOrJump(jump_len + 3);
-                self.instruction(Instruction::Discard);
+                len += self.with_jump()
+                    .emit_binding(binding)?
+                    .instruction(Instruction::Interchange)
+                    .emit_map_element(element.unwrap())?
+                    .instruction(Instruction::Interchange)
+                    .to_start(Instruction::JumpBack)
+                    .finalize(Instruction::NextOrJump);
 
-                let pop_len = self.pop_slots();
-                Ok(iterable_len + jump_len + pop_len + 6)
+                len += self.instruction(Instruction::Discard);
+                len += self.pop_slots();
+                Ok(len)
             }
         }
     }
@@ -680,120 +889,65 @@ impl Compiler {
     fn emit_transform(&mut self, transform: Transform) -> Res<usize> {
         match transform {
             Transform::UnOp(op) => {
-                let loc = self.code.len();
-                let len = match op.as_ref() {
-                    UnOp::Passthrough => 0,
-                    UnOp::ArithmeticalNegate => {
-                        self.code.push(Instruction::ArithmeticalNegate);
-                        1
-                    }
-                    UnOp::LogicalNegate => {
-                        self.code.push(Instruction::LogicalNegate);
-                        1
-                    }
-                };
-
-                if len > 0 {
-                    self.actions
-                        .push((loc, loc + len, op.span(), Action::Evaluate));
+                let (op, span) = op.decompose();
+                if let Some(op) = op {
+                    let len = self.with_trace(span, Action::Evaluate)
+                        .instruction(op.instruction())
+                        .finalize();
+                    Ok(len)
+                } else {
+                    Ok(0)
                 }
-                Ok(len)
             }
 
             Transform::BinOp(operator, operand) => {
                 let (operator, span) = operator.decompose();
-
                 match operator {
-                    BinOp::Or => {
-                        self.instruction(Instruction::Duplicate);
-                        let cjump_index = self.instruction(Instruction::Noop);
-                        self.instruction(Instruction::Discard);
-                        let false_len = self.emit_expression(operand.unwrap())?;
-                        self.code[cjump_index] = Instruction::CondJump(false_len + 1);
-                        return Ok(false_len + 3);
+                    BinOp::Logic(LogicOp::Or) => {
+                        let mut len = self.instruction(Instruction::Duplicate);
+                        len += self.with_jump()
+                            .instruction(Instruction::Discard)
+                            .emit_expression(operand.unwrap())?
+                            .finalize(Instruction::CondJump);
+                        Ok(len)
                     }
-                    BinOp::And => {
-                        self.instruction(Instruction::Duplicate);
-                        self.instruction(Instruction::CondJump(1));
-                        let jump_index = self.instruction(Instruction::Noop);
-                        self.instruction(Instruction::Discard);
-                        let true_len = self.emit_expression(operand.unwrap())?;
-                        self.code[jump_index] = Instruction::Jump(true_len + 1);
-                        return Ok(true_len + 4);
+                    BinOp::Logic(LogicOp::And) => {
+                        let mut len = self.instruction(Instruction::Duplicate);
+                        len += self.instruction(Instruction::CondJump(1));
+                        len += self.with_jump()
+                            .instruction(Instruction::Discard)
+                            .emit_expression(operand.unwrap())?
+                            .finalize(Instruction::Jump);
+                        Ok(len)
                     }
-                    _ => {}
+                    BinOp::Eager(op) => {
+                        let mut len = self.emit_expression(operand.unwrap())?;
+                        len += self.with_trace(span, Action::Evaluate)
+                            .instruction(op.instruction())
+                            .finalize();
+                        Ok(len)
+                    }
                 }
-
-                let len = self.emit_expression(operand.unwrap())?;
-                let loc = self.code.len();
-
-                match operator {
-                    BinOp::Power => {
-                        self.code.push(Instruction::Power);
-                    }
-                    BinOp::Multiply => {
-                        self.code.push(Instruction::Multiply);
-                    }
-                    BinOp::IntegerDivide => {
-                        self.code.push(Instruction::IntegerDivide);
-                    }
-                    BinOp::Divide => {
-                        self.code.push(Instruction::Divide);
-                    }
-                    BinOp::Add => {
-                        self.code.push(Instruction::Add);
-                    }
-                    BinOp::Subtract => {
-                        self.code.push(Instruction::Subtract);
-                    }
-                    BinOp::Less => {
-                        self.code.push(Instruction::Less);
-                    }
-                    BinOp::Greater => {
-                        self.code.push(Instruction::Greater);
-                    }
-                    BinOp::LessEqual => {
-                        self.code.push(Instruction::LessEqual);
-                    }
-                    BinOp::GreaterEqual => {
-                        self.code.push(Instruction::GreaterEqual);
-                    }
-                    BinOp::Equal => {
-                        self.code.push(Instruction::Equal);
-                    }
-                    BinOp::NotEqual => {
-                        self.code.push(Instruction::NotEqual);
-                    }
-                    BinOp::Contains => {
-                        self.code.push(Instruction::Contains);
-                    }
-                    BinOp::Index => {
-                        self.code.push(Instruction::Index);
-                    }
-                    BinOp::Or | BinOp::And => {}
-                };
-
-                self.actions.push((loc, loc + 1, span, Action::Evaluate));
-                Ok(len + 1)
             }
 
             Transform::FunCall(args, add_action) => {
-                self.instruction(Instruction::NewMap);
-                self.instruction(Instruction::NewList);
+                let mut len = self.instruction(Instruction::NewMap);
+                len += self.instruction(Instruction::NewList);
 
-                let mut len = 0;
                 let (args, span) = args.decompose();
                 for arg in args.into_iter() {
                     len += self.emit_arg_element(arg.unwrap())?;
                 }
 
-                let loc = self.code.len();
-                self.instruction(Instruction::Call);
                 if add_action {
-                    self.actions.push((loc, loc + 1, span, Action::Evaluate));
+                    len += self.with_trace(span, Action::Evaluate)
+                        .instruction(Instruction::Call)
+                        .finalize();
+                } else {
+                    len += self.instruction(Instruction::Call);
                 }
 
-                Ok(len + 3)
+                Ok(len)
             }
         }
     }
@@ -801,30 +955,29 @@ impl Compiler {
     fn emit_arg_element(&mut self, arg: ArgElement) -> Res<usize> {
         match arg {
             ArgElement::Singleton(expr) => {
-                let len = self.emit_expression(expr.unwrap())?;
-                self.instruction(Instruction::PushToList);
-                Ok(len + 1)
+                let mut len = self.emit_expression(expr.unwrap())?;
+                len += self.instruction(Instruction::PushToList);
+                Ok(len)
             }
 
             ArgElement::Keyword(key, expr) => {
-                let len = self.emit_expression(expr.unwrap())?;
-                self.instruction(Instruction::IntPushToKwargs(*key));
-                Ok(len + 1)
+                let mut len = self.emit_expression(expr.unwrap())?;
+                len += self.instruction(Instruction::IntPushToKwargs(*key));
+                Ok(len)
             }
 
             ArgElement::Splat(expr) => {
                 let (expr, span) = expr.decompose();
-                let len = self.emit_expression(expr)?;
-                let loc = self.code.len();
-                self.instruction(Instruction::IntArgSplat);
-                self.actions.push((loc, loc + 1, span, Action::Splat));
-                Ok(len + 1)
+                let mut len = self.emit_expression(expr)?;
+                len += self.with_trace(span, Action::Splat)
+                    .instruction(Instruction::IntArgSplat)
+                    .finalize();
+                Ok(len)
             }
         }
     }
 
     fn instruction(&mut self, instruction: Instruction) -> usize {
-        let r = self.code.len();
         self.code.push(instruction);
 
         match instruction {
@@ -843,20 +996,24 @@ impl Compiler {
             _ => {}
         }
 
-        r
+        1
     }
 
-    fn push_cell_instruction(&mut self, loc: BindingLoc) -> Option<Instruction> {
+    fn push_cell_instruction(&mut self, loc: BindingLoc) -> Option<usize> {
         match loc {
-            BindingLoc::Enclosed(i) => Some(Instruction::PushEnclosedToClosure(i)),
-            _ => match self.load_instruction(loc) {
-                Some(Instruction::LoadCell(i)) => Some(Instruction::PushCellToClosure(i)),
+            BindingLoc::Enclosed(i) => {
+                Some(self.instruction(Instruction::PushEnclosedToClosure(i)))
+            },
+            _ => match self.load_instruction_impl(loc) {
+                Some(Instruction::LoadCell(i)) => {
+                    Some(self.instruction(Instruction::PushCellToClosure(i)))
+                },
                 _ => None,
             }
         }
     }
 
-    fn load_instruction(&mut self, loc: BindingLoc) -> Option<Instruction> {
+    fn load_instruction_impl(&mut self, loc: BindingLoc) -> Option<Instruction> {
         match loc {
             BindingLoc::Enclosed(i) => { Some(Instruction::LoadEnclosed(i)) }
             BindingLoc::Slot(index) => {
@@ -871,11 +1028,18 @@ impl Compiler {
         }
     }
 
-    fn store_instruction(&mut self, index: usize) -> Option<Instruction> {
+    fn load_instruction(&mut self, loc: BindingLoc) -> Option<usize> {
+        match self.load_instruction_impl(loc) {
+            Some(instruction) => Some(self.instruction(instruction)),
+            None => None,
+        }
+    }
+
+    fn store_instruction(&mut self, index: usize) -> Option<usize> {
         for map in self.slots.iter_mut().rev() {
             let result = map.store_instruction(index);
-            if result.is_some() {
-                return result;
+            if let Some(instruction) = result {
+                return Some(self.instruction(instruction));
             }
         }
         None
@@ -901,6 +1065,14 @@ impl Compiler {
         let r = self.import_paths.len();
         self.import_paths.push(path);
         r
+    }
+
+    fn with_trace<'a>(&'a mut self, span: Span, action: Action) -> TraceWrapper<'a> {
+        TraceWrapper::new(self, span, action)
+    }
+
+    fn with_jump<'a>(&'a mut self) -> JumpWrapper<'a> {
+        JumpWrapper::new(self)
     }
 
     fn build_trace(&mut self) -> IntervalTree<usize, (Span, Action), Reason> {

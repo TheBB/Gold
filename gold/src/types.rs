@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize, Serializer, Deserializer};
 use serde::de::Visitor;
 use symbol_table::GlobalSymbol;
 
+use crate::compile::Instruction;
 use crate::{Error, Object};
 use crate::builtins::BUILTINS;
 
@@ -254,9 +255,6 @@ impl<K: Hash + Eq, V> FromIterator<(K, V)> for OrderedMap<K, V> {
 /// Enumerates all the unary operators in the Gold language.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum UnOp {
-    /// Passthrough (do-nothing) operator, e.g. the unary plus
-    Passthrough,
-
     /// Arithmetical negation (unary minus)
     ArithmeticalNegate,
 
@@ -264,9 +262,27 @@ pub enum UnOp {
     LogicalNegate,
 }
 
-/// Enumerates all the binary operators in the Gold language.
+impl UnOp {
+    pub fn instruction(&self) -> Instruction {
+        match self {
+            Self::ArithmeticalNegate => Instruction::ArithmeticalNegate,
+            Self::LogicalNegate => Instruction::LogicalNegate,
+        }
+    }
+}
+
+impl Display for UnOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ArithmeticalNegate => f.write_str("-"),
+            Self::LogicalNegate => f.write_str("not"),
+        }
+    }
+}
+
+/// Enumerates all eager (non-short-circuiting) binary operators in the Gold language.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum BinOp {
+pub enum EagerOp {
     /// Index or subscripting operator
     Index,
 
@@ -308,10 +324,81 @@ pub enum BinOp {
 
     /// Containment
     Contains,
+}
 
+impl EagerOp {
+    pub fn instruction(&self) -> Instruction {
+        match self {
+            Self::Index => Instruction::Index,
+            Self::Power => Instruction::Power,
+            Self::Multiply => Instruction::Multiply,
+            Self::IntegerDivide => Instruction::IntegerDivide,
+            Self::Divide => Instruction::Divide,
+            Self::Add => Instruction::Add,
+            Self::Subtract => Instruction::Subtract,
+            Self::Less => Instruction::Less,
+            Self::Greater => Instruction::Greater,
+            Self::LessEqual => Instruction::LessEqual,
+            Self::GreaterEqual => Instruction::GreaterEqual,
+            Self::Equal => Instruction::Equal,
+            Self::NotEqual => Instruction::NotEqual,
+            Self::Contains => Instruction::Contains,
+        }
+    }
+}
+
+impl Display for EagerOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Index => f.write_str("subscript"),
+            Self::Power => f.write_str("^"),
+            Self::Multiply => f.write_str("*"),
+            Self::IntegerDivide => f.write_str("//"),
+            Self::Divide => f.write_str("/"),
+            Self::Add => f.write_str("+"),
+            Self::Subtract => f.write_str("-"),
+            Self::Less => f.write_str("<"),
+            Self::Greater => f.write_str(">"),
+            Self::LessEqual => f.write_str("<="),
+            Self::GreaterEqual => f.write_str(">="),
+            Self::Equal => f.write_str("=="),
+            Self::NotEqual => f.write_str("!="),
+            Self::Contains => f.write_str("in"),
+        }
+    }
+}
+
+/// Enumerates all the short-circuiting (non-eager) binary operators in the Gold language.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum LogicOp {
     /// Logical conjunction
     And,
 
     /// Logical disjunction
     Or,
+}
+
+impl Display for LogicOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::And => f.write_str("and"),
+            Self::Or => f.write_str("or"),
+        }
+    }
+}
+
+/// Enumerates all the binary operators in the Gold language.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum BinOp {
+    Eager(EagerOp),
+    Logic(LogicOp),
+}
+
+impl Display for BinOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Eager(x) => Display::fmt(x, f),
+            Self::Logic(x) => Display::fmt(x, f),
+        }
+    }
 }

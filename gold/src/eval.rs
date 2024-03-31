@@ -15,7 +15,7 @@ use crate::builtins::BUILTINS;
 use crate::compile::{CompiledFunction, Instruction};
 use crate::error::{BindingType, Error, Internal, Reason, TypeMismatch, Unpack};
 use crate::formatting::FormatSpec;
-use crate::types::{BinOp, Cell, GcCell, Res};
+use crate::types::{BinOp, Cell, GcCell, Res, EagerOp};
 use crate::{eval_file, eval_raw as eval_str};
 use crate::{List, Map, Object, Type};
 
@@ -506,7 +506,7 @@ impl<'a> Vm<'a> {
                             self.err().with_reason(TypeMismatch::BinOp(
                                 lhs.type_of(),
                                 rhs.type_of(),
-                                BinOp::Less,
+                                BinOp::Eager(EagerOp::Less),
                             ))
                         })
                         .map(Object::from)?;
@@ -522,7 +522,7 @@ impl<'a> Vm<'a> {
                             self.err().with_reason(TypeMismatch::BinOp(
                                 lhs.type_of(),
                                 rhs.type_of(),
-                                BinOp::Greater,
+                                BinOp::Eager(EagerOp::Greater),
                             ))
                         })
                         .map(Object::from)?;
@@ -538,7 +538,7 @@ impl<'a> Vm<'a> {
                             self.err().with_reason(TypeMismatch::BinOp(
                                 lhs.type_of(),
                                 rhs.type_of(),
-                                BinOp::LessEqual,
+                                BinOp::Eager(EagerOp::LessEqual),
                             ))
                         })
                         .map(|x| Object::from(!x))?;
@@ -554,7 +554,7 @@ impl<'a> Vm<'a> {
                             self.err().with_reason(TypeMismatch::BinOp(
                                 lhs.type_of(),
                                 rhs.type_of(),
-                                BinOp::GreaterEqual,
+                                BinOp::Eager(EagerOp::GreaterEqual),
                             ))
                         })
                         .map(|x| Object::from(!x))?;
@@ -793,7 +793,7 @@ impl<'a> Vm<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{BinOp, UnOp, Key, Res};
+    use crate::types::{BinOp, UnOp, Key, Res, EagerOp};
     use crate::error::{Action, BindingType, Error, Reason, Span, TypeMismatch, Types, Unpack};
     use crate::{eval_raw, Object, Type};
 
@@ -1701,70 +1701,70 @@ mod tests {
         assert_eq!(
             eval("1 + true"),
             err!(
-                TypeMismatch::BinOp(Type::Integer, Type::Boolean, BinOp::Add),
+                TypeMismatch::BinOp(Type::Integer, Type::Boolean, BinOp::Eager(EagerOp::Add)),
                 loc!(2, Evaluate)
             )
         );
         assert_eq!(
             eval("\"t\" - 9"),
             err!(
-                TypeMismatch::BinOp(Type::String, Type::Integer, BinOp::Subtract),
+                TypeMismatch::BinOp(Type::String, Type::Integer, BinOp::Eager(EagerOp::Subtract)),
                 loc!(4, Evaluate)
             )
         );
         assert_eq!(
             eval("[] * 9"),
             err!(
-                TypeMismatch::BinOp(Type::List, Type::Integer, BinOp::Multiply),
+                TypeMismatch::BinOp(Type::List, Type::Integer, BinOp::Eager(EagerOp::Multiply)),
                 loc!(3, Evaluate)
             )
         );
         assert_eq!(
             eval("9 / {}"),
             err!(
-                TypeMismatch::BinOp(Type::Integer, Type::Map, BinOp::Divide),
+                TypeMismatch::BinOp(Type::Integer, Type::Map, BinOp::Eager(EagerOp::Divide)),
                 loc!(2, Evaluate)
             )
         );
         assert_eq!(
             eval("null // {}"),
             err!(
-                TypeMismatch::BinOp(Type::Null, Type::Map, BinOp::IntegerDivide),
+                TypeMismatch::BinOp(Type::Null, Type::Map, BinOp::Eager(EagerOp::IntegerDivide)),
                 loc!(5..7, Evaluate)
             )
         );
         assert_eq!(
             eval("null < true"),
             err!(
-                TypeMismatch::BinOp(Type::Null, Type::Boolean, BinOp::Less),
+                TypeMismatch::BinOp(Type::Null, Type::Boolean, BinOp::Eager(EagerOp::Less)),
                 loc!(5, Evaluate)
             )
         );
         assert_eq!(
             eval("1 > \"\""),
             err!(
-                TypeMismatch::BinOp(Type::Integer, Type::String, BinOp::Greater),
+                TypeMismatch::BinOp(Type::Integer, Type::String, BinOp::Eager(EagerOp::Greater)),
                 loc!(2, Evaluate)
             )
         );
         assert_eq!(
             eval("[] <= 2.1"),
             err!(
-                TypeMismatch::BinOp(Type::List, Type::Float, BinOp::LessEqual),
+                TypeMismatch::BinOp(Type::List, Type::Float, BinOp::Eager(EagerOp::LessEqual)),
                 loc!(3..5, Evaluate)
             )
         );
         assert_eq!(
             eval("{} >= false"),
             err!(
-                TypeMismatch::BinOp(Type::Map, Type::Boolean, BinOp::GreaterEqual),
+                TypeMismatch::BinOp(Type::Map, Type::Boolean, BinOp::Eager(EagerOp::GreaterEqual)),
                 loc!(3..5, Evaluate)
             )
         );
         assert_eq!(
             eval("1 has 2"),
             err!(
-                TypeMismatch::BinOp(Type::Integer, Type::Integer, BinOp::Contains),
+                TypeMismatch::BinOp(Type::Integer, Type::Integer, BinOp::Eager(EagerOp::Contains)),
                 loc!(2..5, Evaluate)
             )
         );
@@ -1786,21 +1786,21 @@ mod tests {
         assert_eq!(
             eval("null[2]"),
             err!(
-                TypeMismatch::BinOp(Type::Null, Type::Integer, BinOp::Index),
+                TypeMismatch::BinOp(Type::Null, Type::Integer, BinOp::Eager(EagerOp::Index)),
                 loc!(4..7, Evaluate)
             )
         );
         assert_eq!(
             eval("2[null]"),
             err!(
-                TypeMismatch::BinOp(Type::Integer, Type::Null, BinOp::Index),
+                TypeMismatch::BinOp(Type::Integer, Type::Null, BinOp::Eager(EagerOp::Index)),
                 loc!(1..7, Evaluate)
             )
         );
         assert_eq!(
             eval("(2).x"),
             err!(
-                TypeMismatch::BinOp(Type::Integer, Type::String, BinOp::Index),
+                TypeMismatch::BinOp(Type::Integer, Type::String, BinOp::Eager(EagerOp::Index)),
                 loc!(3, Evaluate)
             )
         );

@@ -20,7 +20,7 @@ use crate::formatting::{
     StringAlignSpec, UppercaseSpec,
 };
 use crate::lexing::{CachedLexResult, CachedLexer, Lexer, TokenType};
-use crate::types::{UnOp, BinOp, Key, Res};
+use crate::types::{UnOp, BinOp, EagerOp, Key, Res};
 use crate::Object;
 
 trait ExplainError {
@@ -1072,7 +1072,7 @@ fn object_access<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
         tuple((dot, fail(identifier, SyntaxElement::Identifier))),
         |(dot, out)| {
             Transform::BinOp(
-                BinOp::Index.tag(&dot),
+                BinOp::Eager(EagerOp::Index).tag(&dot),
                 Box::new(out.map(Object::from).map(Expr::Literal)),
             )
             .tag(dot.span()..out.span())
@@ -1092,7 +1092,7 @@ fn object_index<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
         )),
         |(a, expr, b)| {
             let span = Span::from(a.span()..b.span());
-            Transform::BinOp(BinOp::Index.tag(span), Box::new(expr.inner())).tag(span)
+            Transform::BinOp(BinOp::Eager(EagerOp::Index).tag(span), Box::new(expr.inner())).tag(span)
         },
     )(input)
 }
@@ -1189,9 +1189,9 @@ fn prefixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
         map(
             tuple((
                 many1(alt((
-                    map(plus, |x| x.map(|_| UnOp::Passthrough)),
-                    map(minus, |x| x.map(|_| UnOp::ArithmeticalNegate)),
-                    map(keyword("not"), |x| x.map(|_| UnOp::LogicalNegate)),
+                    map(plus, |x| x.map(|_| None)),
+                    map(minus, |x| x.map(|_| Some(UnOp::ArithmeticalNegate))),
+                    map(keyword("not"), |x| x.map(|_| Some(UnOp::LogicalNegate))),
                 ))),
                 fail(power, SyntaxElement::Operand),
             )),
