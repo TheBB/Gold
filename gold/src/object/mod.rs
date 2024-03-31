@@ -36,7 +36,7 @@ use symbol_table::GlobalSymbol;
 use crate::compile::CompiledFunction;
 use crate::error::{Error, Internal, Reason, TypeMismatch, Value};
 use crate::formatting::FormatSpec;
-use crate::types::{Cell, Gc, GcCell, Res, UnOp, BinOp, Key, List, Map, Type};
+use crate::types::{Cell, Gc, GcCell, Res, UnOp, BinOp, Key, List, Map, Type, EagerOp};
 
 #[cfg(feature = "python")]
 use crate::types::NativeClosure;
@@ -512,23 +512,23 @@ impl Object {
                 Ok(result)
             }
             (ObjV::Str(x), ObjV::Str(y)) => Ok(Self(ObjV::Str(x.add(y)))),
-            _ => self.operate(other, Int::add, |x, y| x + y, BinOp::Add),
+            _ => self.operate(other, Int::add, |x, y| x + y, BinOp::Eager(EagerOp::Add)),
         }
     }
 
     /// The minus operator: mathematical subtraction.
     pub fn sub(&self, other: &Self) -> Res<Self> {
-        self.operate(other, Int::sub, |x, y| x - y, BinOp::Subtract)
+        self.operate(other, Int::sub, |x, y| x - y, BinOp::Eager(EagerOp::Subtract))
     }
 
     /// The asterisk operator: mathematical multiplication.
     pub fn mul(&self, other: &Self) -> Res<Self> {
-        self.operate(other, Int::mul, |x, y| x * y, BinOp::Multiply)
+        self.operate(other, Int::mul, |x, y| x * y, BinOp::Eager(EagerOp::Multiply))
     }
 
     /// The slash operator: mathematical division.
     pub fn div(&self, other: &Self) -> Res<Self> {
-        self.operate(other, Int::div, |x, y| x / y, BinOp::Divide)
+        self.operate(other, Int::div, |x, y| x / y, BinOp::Eager(EagerOp::Divide))
     }
 
     /// The double slash operator: integer division.
@@ -537,7 +537,7 @@ impl Object {
             other,
             Int::idiv,
             |x, y| (x / y).floor() as f64,
-            BinOp::IntegerDivide,
+            BinOp::Eager(EagerOp::IntegerDivide),
         )
     }
 
@@ -561,7 +561,7 @@ impl Object {
                 Error::new(TypeMismatch::BinOp(
                     self.type_of(),
                     other.type_of(),
-                    BinOp::Power,
+                    BinOp::Eager(EagerOp::Power),
                 ))
             })?;
         Ok(Self::from(xx.powf(yy)))
@@ -869,7 +869,7 @@ impl Object {
             _ => Err(Error::new(TypeMismatch::BinOp(
                 self.type_of(),
                 other.type_of(),
-                BinOp::Index,
+                BinOp::Eager(EagerOp::Index),
             ))),
         }
     }
@@ -890,7 +890,7 @@ impl Object {
         Err(Error::new(TypeMismatch::BinOp(
             self.type_of(),
             other.type_of(),
-            BinOp::Contains,
+            BinOp::Eager(EagerOp::Contains),
         )))
     }
 

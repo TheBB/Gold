@@ -1,7 +1,6 @@
-use std::fmt::Display;
 use std::rc::Rc;
 
-use crate::{builtins::BUILTINS, error::{Reason, Span, Syntax}};
+use crate::{builtins::BUILTINS, error::{Reason, Span, Syntax}, types::LogicOp};
 use crate::formatting::FormatSpec;
 
 use crate::error::{Action, Error, Tagged, Taggable};
@@ -9,7 +8,7 @@ use crate::Object;
 use crate::types::Key;
 use super::low;
 use super::scope::{SubScope, Scope, LocalScope};
-use crate::types::{UnOp, BinOp, Res};
+use crate::types::{UnOp, BinOp, Res, EagerOp};
 
 // Utility
 // ----------------------------------------------------------------
@@ -438,7 +437,7 @@ impl Lower for ArgElement {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Transform {
     /// Unary operator
-    UnOp(Tagged<UnOp>),
+    UnOp(Tagged<Option<UnOp>>),
 
     /// Binary operator with right operand
     BinOp(Tagged<BinOp>, Box<Tagged<Expr>>),
@@ -455,7 +454,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Index.tag(loc), Box::new(subscript))
+        Transform::BinOp(BinOp::Eager(EagerOp::Index).tag(loc), Box::new(subscript))
     }
 
     /// Construct an exponentiation transform.
@@ -465,7 +464,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Power.tag(loc), Box::new(exponent))
+        Transform::BinOp(BinOp::Eager(EagerOp::Power).tag(loc), Box::new(exponent))
     }
 
     /// Construct a multiplication transform.
@@ -475,7 +474,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Multiply.tag(loc), Box::new(multiplicand))
+        Transform::BinOp(BinOp::Eager(EagerOp::Multiply).tag(loc), Box::new(multiplicand))
     }
 
     /// Construct an integer division transform.
@@ -485,7 +484,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::IntegerDivide.tag(loc), Box::new(divisor))
+        Transform::BinOp(BinOp::Eager(EagerOp::IntegerDivide).tag(loc), Box::new(divisor))
     }
 
     /// Construct a mathematical division transform.
@@ -495,7 +494,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Divide.tag(loc), Box::new(divisor))
+        Transform::BinOp(BinOp::Eager(EagerOp::Divide).tag(loc), Box::new(divisor))
     }
 
     /// Construct an addition transform.
@@ -505,7 +504,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Add.tag(loc), Box::new(addend))
+        Transform::BinOp(BinOp::Eager(EagerOp::Add).tag(loc), Box::new(addend))
     }
 
     /// Construct a subtraction transform.
@@ -515,7 +514,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Subtract.tag(loc), Box::new(subtrahend))
+        Transform::BinOp(BinOp::Eager(EagerOp::Subtract).tag(loc), Box::new(subtrahend))
     }
 
     /// Construct a less-than transform.
@@ -525,7 +524,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Less.tag(loc), Box::new(rhs))
+        Transform::BinOp(BinOp::Eager(EagerOp::Less).tag(loc), Box::new(rhs))
     }
 
     /// Construct a greater-than transform.
@@ -535,7 +534,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Greater.tag(loc), Box::new(rhs))
+        Transform::BinOp(BinOp::Eager(EagerOp::Greater).tag(loc), Box::new(rhs))
     }
 
     /// Construct a less-than-or-equal transform.
@@ -545,7 +544,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::LessEqual.tag(loc), Box::new(rhs))
+        Transform::BinOp(BinOp::Eager(EagerOp::LessEqual).tag(loc), Box::new(rhs))
     }
 
     /// Construct a greater-than-or-equal transform.
@@ -555,7 +554,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::GreaterEqual.tag(loc), Box::new(rhs))
+        Transform::BinOp(BinOp::Eager(EagerOp::GreaterEqual).tag(loc), Box::new(rhs))
     }
 
     /// Construct an equality check transform.
@@ -565,7 +564,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Equal.tag(loc), Box::new(rhs))
+        Transform::BinOp(BinOp::Eager(EagerOp::Equal).tag(loc), Box::new(rhs))
     }
 
     /// Construct an inequality check transform.
@@ -575,7 +574,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::NotEqual.tag(loc), Box::new(rhs))
+        Transform::BinOp(BinOp::Eager(EagerOp::NotEqual).tag(loc), Box::new(rhs))
     }
 
     /// Construct a containment check transform.
@@ -585,7 +584,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Contains.tag(loc), Box::new(rhs))
+        Transform::BinOp(BinOp::Eager(EagerOp::Contains).tag(loc), Box::new(rhs))
     }
 
     /// Construct a logical conjunction transform.
@@ -595,7 +594,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::And.tag(loc), Box::new(rhs))
+        Transform::BinOp(BinOp::Logic(LogicOp::And).tag(loc), Box::new(rhs))
     }
 
     /// Construct a logical disjunction transform.
@@ -605,7 +604,7 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Or.tag(loc), Box::new(rhs))
+        Transform::BinOp(BinOp::Logic(LogicOp::Or).tag(loc), Box::new(rhs))
     }
 }
 
@@ -624,39 +623,6 @@ impl Lower for Transform {
                 }
                 Ok(low::Transform::FunCall(elements.tag(span), true))
             }
-        }
-    }
-}
-
-impl Display for UnOp {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Passthrough => f.write_str(""),
-            Self::ArithmeticalNegate => f.write_str("-"),
-            Self::LogicalNegate => f.write_str("not"),
-        }
-    }
-}
-
-impl Display for BinOp {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Index => f.write_str("subscript"),
-            Self::Power => f.write_str("^"),
-            Self::Multiply => f.write_str("*"),
-            Self::IntegerDivide => f.write_str("//"),
-            Self::Divide => f.write_str("/"),
-            Self::Add => f.write_str("+"),
-            Self::Subtract => f.write_str("-"),
-            Self::Less => f.write_str("<"),
-            Self::Greater => f.write_str(">"),
-            Self::LessEqual => f.write_str("<="),
-            Self::GreaterEqual => f.write_str(">="),
-            Self::Equal => f.write_str("=="),
-            Self::NotEqual => f.write_str("!="),
-            Self::Contains => f.write_str("in"),
-            Self::And => f.write_str("and"),
-            Self::Or => f.write_str("or"),
         }
     }
 }
@@ -882,7 +848,7 @@ impl Tagged<Expr> {
     where
         Span: From<U>,
     {
-        self.transform(Transform::UnOp(UnOp::ArithmeticalNegate.tag(loc)))
+        self.transform(Transform::UnOp(Some(UnOp::ArithmeticalNegate).tag(loc)))
     }
 
     /// Logically negate this expression.
@@ -892,7 +858,7 @@ impl Tagged<Expr> {
     where
         Span: From<U>,
     {
-        self.transform(Transform::UnOp(UnOp::LogicalNegate.tag(loc)))
+        self.transform(Transform::UnOp(Some(UnOp::LogicalNegate).tag(loc)))
     }
 
     /// Form a function call expression from by calling this function with a
