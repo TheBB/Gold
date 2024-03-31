@@ -3,12 +3,15 @@ use std::collections::{HashMap, HashSet};
 use gc::{Finalize, Trace};
 use serde::{Deserialize, Serialize};
 
-use crate::ast::low::{Binding, Expr, Function, ListBinding, ListElement, MapBinding, MapBindingElement, MapElement, StringElement, Transform, ArgElement};
+use crate::ast::low::{
+    ArgElement, Binding, Expr, Function, ListBinding, ListElement, MapBinding, MapBindingElement,
+    MapElement, StringElement, Transform,
+};
+use crate::ast::{BindingLoc, SlotCatalog, SlotType};
 use crate::error::{Action, IntervalTree, Reason, Span, Tagged, Unpack};
 use crate::formatting::FormatSpec;
-use crate::types::{BinOp, Key, Res, LogicOp};
+use crate::types::{BinOp, Key, LogicOp, Res};
 use crate::Object;
-use crate::ast::{BindingLoc, SlotCatalog, SlotType};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
 pub struct CompiledFunction {
@@ -35,7 +38,6 @@ pub struct CompiledFunction {
 pub enum Instruction {
     // Loading
     // ------------------------------------------------------------------------------------------------
-
     /// Load the given object from the constants array and push it on the stack.
     LoadConst(usize),
 
@@ -59,7 +61,6 @@ pub enum Instruction {
 
     // Storing
     // ------------------------------------------------------------------------------------------------
-
     /// Pop the stack and push the object to the local array at the given index.
     StoreLocal(usize),
 
@@ -68,7 +69,6 @@ pub enum Instruction {
 
     // Destroying
     // ------------------------------------------------------------------------------------------------
-
     /// Reset the slot in the local array at the given index.
     DestroyLocal(usize),
 
@@ -78,7 +78,6 @@ pub enum Instruction {
 
     // Control flow
     // ------------------------------------------------------------------------------------------------
-
     /// Pop the stack and push the object to the lower frame's stack.
     Return,
 
@@ -107,8 +106,8 @@ pub enum Instruction {
     /// Interchange the top two objects on the stack.
     Interchange,
 
-    /// Call the function at stack[2] using stack[0] as arguments (must be a
-    /// list) and stack[1] as keyword arguments (must be a map).
+    /// Call the function at `stack[2]` using `stack[0]` as arguments (must be a
+    /// list) and `stack[1]` as keyword arguments (must be a map).
     Call,
 
     /// Do nothing.
@@ -116,7 +115,6 @@ pub enum Instruction {
 
     // Asserts
     // ------------------------------------------------------------------------------------------------
-
     /// Throw an error unless the top of the stack is a list with at least the
     /// given length.
     AssertListMinLength(usize),
@@ -130,7 +128,6 @@ pub enum Instruction {
 
     // Unary operators
     // ------------------------------------------------------------------------------------------------
-
     /// Apply the unary mathematical negation operator to the top of the stack and push the result.
     ArithmeticalNegate,
 
@@ -145,7 +142,6 @@ pub enum Instruction {
 
     // Binary mathematical operators
     // ------------------------------------------------------------------------------------------------
-
     /// Pop y and x from the stack, then push `x + y`.
     Add,
 
@@ -166,7 +162,6 @@ pub enum Instruction {
 
     // Binary comparison operators
     // ------------------------------------------------------------------------------------------------
-
     /// Pop y and x from the stack, then push `x < y`.
     Less,
 
@@ -190,13 +185,11 @@ pub enum Instruction {
 
     // Other operators
     // ------------------------------------------------------------------------------------------------
-
     /// Pop y and x from the stack, then push `x[y]`.
     Index,
 
     // Constructors
     // ------------------------------------------------------------------------------------------------
-
     /// Push a new empty list on the stack.
     NewList,
 
@@ -211,7 +204,6 @@ pub enum Instruction {
 
     // Mutability
     // ------------------------------------------------------------------------------------------------
-
     /// Pop the stack and push the object to the list on the top of the stack.
     PushToList,
 
@@ -242,7 +234,6 @@ pub enum Instruction {
 
     // Shortcuts for internal use
     // ------------------------------------------------------------------------------------------------
-
     /// Get the element from the list at the top of the stack at the given
     /// index, and push it on the stack.
     IntIndexL(usize),
@@ -250,10 +241,7 @@ pub enum Instruction {
     /// Get the element from the list at the top of the stack at the given
     /// index, push it on the stack and then jump the given delta. Do not error
     /// or jump if the index does not exist.
-    IntIndexLAndJump {
-        index: usize,
-        jump: usize,
-    },
+    IntIndexLAndJump { index: usize, jump: usize },
 
     /// Get the element from the list at the top of the stack at the given index
     /// counted from the end, and push it on the stack.
@@ -275,10 +263,7 @@ pub enum Instruction {
 
     /// Extract the given slice from the list at the top of the stack and push
     /// it to the stack.
-    IntSlice {
-        start: usize,
-        from_end: usize,
-    },
+    IntSlice { start: usize, from_end: usize },
 
     /// Get the element from the map at the top of the stack and push it on the
     /// stack.
@@ -287,17 +272,14 @@ pub enum Instruction {
     /// Get the element from the map at the top of the stack, push it on the
     /// stack and then jump the given delta. Do not error or jump if the key
     /// does not exist.
-    IntIndexMAndJump {
-        key: Key,
-        jump: usize,
-    },
+    IntIndexMAndJump { key: Key, jump: usize },
 
     /// Pop the stack and push the object to the kwargs map (located at
-    /// stack[1]) with the given key.
+    /// `stack[1]`) with the given key.
     IntPushToKwargs(Key),
 
     /// Pop the stack and insert the elements into either the args list (located
-    /// at stack[0]) or the kwargs map (located at stack[1]), depending on
+    /// at `stack[0]`) or the kwargs map (located at `stack[1]`), depending on
     /// whether it's a list or a map.
     IntArgSplat,
 }
@@ -328,8 +310,12 @@ impl SlotMap {
 
     fn load_instruction(&mut self, index: usize) -> Option<Instruction> {
         match self.map.get(&index) {
-            Some(Slot::Local(i)) => { return Some(Instruction::LoadLocal(*i)); }
-            Some(Slot::Cell(i)) => { return Some(Instruction::LoadCell(*i)); }
+            Some(Slot::Local(i)) => {
+                return Some(Instruction::LoadLocal(*i));
+            }
+            Some(Slot::Cell(i)) => {
+                return Some(Instruction::LoadCell(*i));
+            }
             None => {}
         }
 
@@ -352,8 +338,12 @@ impl SlotMap {
 
     fn store_instruction(&mut self, index: usize) -> Option<Instruction> {
         match self.map.get(&index) {
-            Some(Slot::Local(i)) => { return Some(Instruction::StoreLocal(*i)); }
-            Some(Slot::Cell(i)) => { return Some(Instruction::StoreCell(*i)); }
+            Some(Slot::Local(i)) => {
+                return Some(Instruction::StoreLocal(*i));
+            }
+            Some(Slot::Cell(i)) => {
+                return Some(Instruction::StoreCell(*i));
+            }
             None => {}
         }
 
@@ -378,8 +368,12 @@ impl SlotMap {
         let mut len = 0;
         for (_, slot) in self.map.iter() {
             match slot {
-                Slot::Local(i) => { compiler.instruction(Instruction::DestroyLocal(*i)); }
-                Slot::Cell(i) => { compiler.instruction(Instruction::DestroyCell(*i)); }
+                Slot::Local(i) => {
+                    compiler.instruction(Instruction::DestroyLocal(*i));
+                }
+                Slot::Cell(i) => {
+                    compiler.instruction(Instruction::DestroyCell(*i));
+                }
             }
             len += 1;
         }
@@ -449,7 +443,13 @@ impl<'a> WrapCompiler for TraceWrapper<'a> {
 impl<'a> TraceWrapper<'a> {
     fn new(compiler: &'a mut Compiler, span: Span, action: Action) -> Self {
         let start = compiler.code.len();
-        Self { compiler, span, action, start, reason: None }
+        Self {
+            compiler,
+            span,
+            action,
+            start,
+            reason: None,
+        }
     }
 
     fn reason<T>(mut self, reason: T) -> Self
@@ -461,9 +461,13 @@ impl<'a> TraceWrapper<'a> {
     }
 
     fn finalize(self) -> usize {
-        self.compiler.actions.push((self.start, self.compiler.code.len(), self.span, self.action));
+        self.compiler
+            .actions
+            .push((self.start, self.compiler.code.len(), self.span, self.action));
         if let Some(reason) = self.reason {
-            self.compiler.reasons.push((self.start, self.compiler.code.len(), reason));
+            self.compiler
+                .reasons
+                .push((self.start, self.compiler.code.len(), reason));
         }
         self.compiler.code.len() - self.start
     }
@@ -484,7 +488,7 @@ impl<'a> JumpWrapper<'a> {
     fn new(compiler: &'a mut Compiler) -> Self {
         let start = compiler.code.len();
         compiler.code.push(Instruction::Noop);
-        Self { compiler, start}
+        Self { compiler, start }
     }
 
     fn to_start<F: Fn(usize) -> Instruction>(mut self, to_start: F) -> Self {
@@ -519,7 +523,15 @@ pub struct Compiler {
 
 impl Compiler {
     pub fn compile(function: Function) -> Res<CompiledFunction> {
-        let Function { constants, expression, slots, fmt_specs, positional, keywords, .. } = function;
+        let Function {
+            constants,
+            expression,
+            slots,
+            fmt_specs,
+            positional,
+            keywords,
+            ..
+        } = function;
         let mut compiler = Compiler {
             constants,
             funcs: Vec::new(),
@@ -575,10 +587,12 @@ impl Compiler {
                 false_branch,
             } => {
                 let mut len = self.emit_expression(condition.unwrap())?;
-                len += self.with_jump()
+                len += self
+                    .with_jump()
                     .emit_expression(false_branch.unwrap())?
                     .finalize(|l| Instruction::CondJump(l + 1));
-                len += self.with_jump()
+                len += self
+                    .with_jump()
                     .emit_expression(true_branch.unwrap())?
                     .finalize(|l| Instruction::Jump(l));
                 Ok(len)
@@ -600,7 +614,11 @@ impl Compiler {
                 Ok(len)
             }
 
-            Expr::Let { bindings, expression, slots } => {
+            Expr::Let {
+                bindings,
+                expression,
+                slots,
+            } => {
                 self.push_slots(slots);
                 let mut len = 0;
                 for (binding, expr) in bindings {
@@ -612,12 +630,17 @@ impl Compiler {
                 Ok(len)
             }
 
-            Expr::Imports { imports, expression, slots } => {
+            Expr::Imports {
+                imports,
+                expression,
+                slots,
+            } => {
                 self.push_slots(slots);
                 let mut len = 0;
                 for (binding, path) in imports {
                     let index = self.import_path(path.as_ref().clone());
-                    len += self.with_trace(path.span(), Action::Import)
+                    len += self
+                        .with_trace(path.span(), Action::Import)
                         .instruction(Instruction::Import(index))
                         .finalize();
                     len += self.emit_binding(binding)?;
@@ -648,23 +671,21 @@ impl Compiler {
     fn emit_binding(&mut self, binding: Tagged<Binding>) -> Res<usize> {
         let (binding, span) = binding.decompose();
         match binding {
-            Binding::Slot(slot) => Ok(
-                self.with_trace(span, Action::Bind)
-                    .store_instruction(slot).unwrap()
-                    .finalize()
-            ),
-            Binding::List(binding) => Ok(
-                self.with_trace(span, Action::Bind)
-                    .emit_list_binding(binding.unwrap())?
-                    .instruction(Instruction::Discard)
-                    .finalize()
-            ),
-            Binding::Map(binding) => Ok(
-                self.with_trace(span, Action::Bind)
-                    .emit_map_binding(binding.unwrap())?
-                    .instruction(Instruction::Discard)
-                    .finalize()
-            ),
+            Binding::Slot(slot) => Ok(self
+                .with_trace(span, Action::Bind)
+                .store_instruction(slot)
+                .unwrap()
+                .finalize()),
+            Binding::List(binding) => Ok(self
+                .with_trace(span, Action::Bind)
+                .emit_list_binding(binding.unwrap())?
+                .instruction(Instruction::Discard)
+                .finalize()),
+            Binding::Map(binding) => Ok(self
+                .with_trace(span, Action::Bind)
+                .emit_map_binding(binding.unwrap())?
+                .instruction(Instruction::Discard)
+                .finalize()),
         }
     }
 
@@ -692,7 +713,8 @@ impl Compiler {
 
         for (i, (sub_binding, default)) in binding.front.into_iter().enumerate() {
             if let Some(d) = default {
-                len += self.with_jump()
+                len += self
+                    .with_jump()
                     .emit_expression(d.unwrap())?
                     .finalize(|l| Instruction::IntIndexLAndJump { index: i, jump: l });
             } else {
@@ -703,14 +725,14 @@ impl Compiler {
 
         for (i, (sub_binding, default)) in binding.back.into_iter().enumerate() {
             if let Some(d) = default {
-                len += self.with_jump()
-                    .emit_expression(d.unwrap())?
-                    .finalize(|l| Instruction::IntIndexFromEndAndJump {
+                len += self.with_jump().emit_expression(d.unwrap())?.finalize(|l| {
+                    Instruction::IntIndexFromEndAndJump {
                         index: i,
                         root_front: binding.num_front + binding.def_front,
                         root_back: binding.num_back + binding.def_back,
                         jump: l,
-                    });
+                    }
+                });
             } else {
                 len += self.instruction(Instruction::IntIndexFromEnd {
                     index: i,
@@ -735,17 +757,23 @@ impl Compiler {
             len += self.store_instruction(slot).unwrap();
         }
 
-        for MapBindingElement { key, binding, default} in binding.elements.into_iter() {
+        for MapBindingElement {
+            key,
+            binding,
+            default,
+        } in binding.elements.into_iter()
+        {
             if let Some(d) = default {
-                len += self.with_jump()
-                    .emit_expression(d.unwrap())?
-                    .finalize(|l| Instruction::IntIndexMAndJump {
+                len += self.with_jump().emit_expression(d.unwrap())?.finalize(|l| {
+                    Instruction::IntIndexMAndJump {
                         key: key.unwrap(),
                         jump: l,
-                    });
+                    }
+                });
             } else {
                 let (key, span) = key.decompose();
-                len += self.with_trace(span, Action::Bind)
+                len += self
+                    .with_trace(span, Action::Bind)
                     .reason(Unpack::KeyMissing(key))
                     .instruction(Instruction::IntIndexM(key))
                     .finalize();
@@ -772,7 +800,8 @@ impl Compiler {
                 } else {
                     len += self.instruction(Instruction::FormatWithDefault);
                 }
-                len += self.with_trace(span, Action::Format)
+                len += self
+                    .with_trace(span, Action::Format)
                     .instruction(Instruction::Add)
                     .finalize();
                 Ok(len)
@@ -791,7 +820,8 @@ impl Compiler {
             ListElement::Splat(expr) => {
                 let (expr, span) = expr.decompose();
                 let mut len = self.emit_expression(expr)?;
-                len += self.with_trace(span, Action::Splat)
+                len += self
+                    .with_trace(span, Action::Splat)
                     .instruction(Instruction::SplatToCollection)
                     .finalize();
                 Ok(len)
@@ -800,23 +830,31 @@ impl Compiler {
             ListElement::Cond { condition, element } => {
                 let mut len = self.emit_expression(condition.unwrap())?;
                 len += self.instruction(Instruction::LogicalNegate);
-                len += self.with_jump()
+                len += self
+                    .with_jump()
                     .emit_list_element(element.unwrap())?
                     .finalize(Instruction::CondJump);
                 Ok(len)
             }
 
-            ListElement::Loop { binding, iterable, element, slots } => {
+            ListElement::Loop {
+                binding,
+                iterable,
+                element,
+                slots,
+            } => {
                 let (iterable, span) = iterable.decompose();
                 let mut len = self.emit_expression(iterable)?;
 
-                len += self.with_trace(span, Action::Iterate)
+                len += self
+                    .with_trace(span, Action::Iterate)
                     .instruction(Instruction::NewIterator)
                     .finalize();
 
                 self.push_slots(slots);
 
-                len += self.with_jump()
+                len += self
+                    .with_jump()
                     .emit_binding(binding)?
                     .instruction(Instruction::Interchange)
                     .emit_list_element(element.unwrap())?
@@ -835,7 +873,8 @@ impl Compiler {
         match element {
             MapElement::Singleton { key, value } => {
                 let (key, span) = key.decompose();
-                let mut len = self.with_trace(span, Action::Assign)
+                let mut len = self
+                    .with_trace(span, Action::Assign)
                     .emit_expression(key)?
                     .finalize();
                 len += self.emit_expression(value.unwrap())?;
@@ -846,7 +885,8 @@ impl Compiler {
             MapElement::Splat(expr) => {
                 let (expr, span) = expr.decompose();
                 let mut len = self.emit_expression(expr)?;
-                len += self.with_trace(span, Action::Splat)
+                len += self
+                    .with_trace(span, Action::Splat)
                     .instruction(Instruction::SplatToCollection)
                     .finalize();
                 Ok(len)
@@ -855,23 +895,31 @@ impl Compiler {
             MapElement::Cond { condition, element } => {
                 let mut len = self.emit_expression(condition.unwrap())?;
                 len += self.instruction(Instruction::LogicalNegate);
-                len += self.with_jump()
+                len += self
+                    .with_jump()
                     .emit_map_element(element.unwrap())?
                     .finalize(Instruction::CondJump);
                 Ok(len)
             }
 
-            MapElement::Loop { binding, iterable, element, slots } => {
+            MapElement::Loop {
+                binding,
+                iterable,
+                element,
+                slots,
+            } => {
                 let (iterable, span) = iterable.decompose();
                 let mut len = self.emit_expression(iterable)?;
 
-                len += self.with_trace(span, Action::Iterate)
+                len += self
+                    .with_trace(span, Action::Iterate)
                     .instruction(Instruction::NewIterator)
                     .finalize();
 
                 self.push_slots(slots);
 
-                len += self.with_jump()
+                len += self
+                    .with_jump()
                     .emit_binding(binding)?
                     .instruction(Instruction::Interchange)
                     .emit_map_element(element.unwrap())?
@@ -891,7 +939,8 @@ impl Compiler {
             Transform::UnOp(op) => {
                 let (op, span) = op.decompose();
                 if let Some(op) = op {
-                    let len = self.with_trace(span, Action::Evaluate)
+                    let len = self
+                        .with_trace(span, Action::Evaluate)
                         .instruction(op.instruction())
                         .finalize();
                     Ok(len)
@@ -905,7 +954,8 @@ impl Compiler {
                 match operator {
                     BinOp::Logic(LogicOp::Or) => {
                         let mut len = self.instruction(Instruction::Duplicate);
-                        len += self.with_jump()
+                        len += self
+                            .with_jump()
                             .instruction(Instruction::Discard)
                             .emit_expression(operand.unwrap())?
                             .finalize(Instruction::CondJump);
@@ -914,7 +964,8 @@ impl Compiler {
                     BinOp::Logic(LogicOp::And) => {
                         let mut len = self.instruction(Instruction::Duplicate);
                         len += self.instruction(Instruction::CondJump(1));
-                        len += self.with_jump()
+                        len += self
+                            .with_jump()
                             .instruction(Instruction::Discard)
                             .emit_expression(operand.unwrap())?
                             .finalize(Instruction::Jump);
@@ -922,7 +973,8 @@ impl Compiler {
                     }
                     BinOp::Eager(op) => {
                         let mut len = self.emit_expression(operand.unwrap())?;
-                        len += self.with_trace(span, Action::Evaluate)
+                        len += self
+                            .with_trace(span, Action::Evaluate)
                             .instruction(op.instruction())
                             .finalize();
                         Ok(len)
@@ -940,7 +992,8 @@ impl Compiler {
                 }
 
                 if add_action {
-                    len += self.with_trace(span, Action::Evaluate)
+                    len += self
+                        .with_trace(span, Action::Evaluate)
                         .instruction(Instruction::Call)
                         .finalize();
                 } else {
@@ -969,7 +1022,8 @@ impl Compiler {
             ArgElement::Splat(expr) => {
                 let (expr, span) = expr.decompose();
                 let mut len = self.emit_expression(expr)?;
-                len += self.with_trace(span, Action::Splat)
+                len += self
+                    .with_trace(span, Action::Splat)
                     .instruction(Instruction::IntArgSplat)
                     .finalize();
                 Ok(len)
@@ -1003,19 +1057,19 @@ impl Compiler {
         match loc {
             BindingLoc::Enclosed(i) => {
                 Some(self.instruction(Instruction::PushEnclosedToClosure(i)))
-            },
+            }
             _ => match self.load_instruction_impl(loc) {
                 Some(Instruction::LoadCell(i)) => {
                     Some(self.instruction(Instruction::PushCellToClosure(i)))
-                },
+                }
                 _ => None,
-            }
+            },
         }
     }
 
     fn load_instruction_impl(&mut self, loc: BindingLoc) -> Option<Instruction> {
         match loc {
-            BindingLoc::Enclosed(i) => { Some(Instruction::LoadEnclosed(i)) }
+            BindingLoc::Enclosed(i) => Some(Instruction::LoadEnclosed(i)),
             BindingLoc::Slot(index) => {
                 for map in self.slots.iter_mut().rev() {
                     let result = map.load_instruction(index);

@@ -5,7 +5,7 @@ use std::fmt::Display;
 use nom::InputLength;
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Position, Syntax, SyntaxElement, SyntaxError, Tagged, Taggable};
+use crate::error::{Position, Syntax, SyntaxElement, SyntaxError, Taggable, Tagged};
 
 /// Result type for calls to the lexer: either a new lexer and a token, or a syntax error.
 type LexResult<'a> = Result<(Lexer<'a>, Tagged<Token<'a>>), SyntaxError>;
@@ -1064,7 +1064,8 @@ mod tests {
         lex = tok!(lex.next_token(), closebrace().tag(15));
         stop!(lex);
 
-        let mut lex = Lexer::new("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}").with_cache(&cache);
+        let mut lex =
+            Lexer::new("{a: 1, b: true, c: 2.e1, d: \"hoho\", e: 1e1}").with_cache(&cache);
         lex = tok!(lex.next_token(), openbrace().tag(0));
         lex = tok!(lex.next_key(), name("a").tag(1));
         lex = tok!(lex.next_token(), colon().tag(2));

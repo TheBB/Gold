@@ -1,16 +1,4 @@
-//! A Gold object is represented by the [`Object`] type. Internally an Object
-//!
-//! just wraps the [`ObjectVariant`] enumeration, which is hidden for
-//! encapsulation purposes.
-//!
-//! The [`ObjectVariant`] type, in turn, has only unit wrappers for each of its
-//! variants. Some of those variants are implemented in this module (e.g.
-//! [`StrVariant`] for interned and non-interned string and [`IntVariant`] for
-//! machine integers and bignums).
-//!
-//! User code should consider the internal structure of [`ObjectVariant`] and
-//! all its variants to be unstable. Public methods on [`Object`] and
-//! [`ObjectVariant`] (`Object` implements `Deref<ObjectVariant>`) are stable.
+//! A Gold object is represented by the [`Object`] type.
 
 mod function;
 mod integer;
@@ -29,14 +17,14 @@ use std::rc::Rc;
 use gc::{Finalize, GcCellRef, GcCellRefMut, Trace};
 use json::JsonValue;
 use num_bigint::BigInt;
-use rmp_serde::{encode, decode};
+use rmp_serde::{decode, encode};
 use serde::{Deserialize, Serialize};
 use symbol_table::GlobalSymbol;
 
 use crate::compile::CompiledFunction;
 use crate::error::{Error, Internal, Reason, TypeMismatch, Value};
 use crate::formatting::FormatSpec;
-use crate::types::{Cell, Gc, GcCell, Res, UnOp, BinOp, Key, List, Map, Type, EagerOp};
+use crate::types::{BinOp, Cell, EagerOp, Gc, GcCell, Key, List, Map, Res, Type, UnOp};
 
 #[cfg(feature = "python")]
 use crate::types::NativeClosure;
@@ -45,15 +33,14 @@ pub use function::Func;
 pub use integer::Int;
 pub use string::Str;
 
-#[cfg(feature="python")]
-use pyo3::{IntoPy, PyObject, Python, FromPyObject, PyAny, PyResult, PyErr, Py};
+#[cfg(feature = "python")]
+use pyo3::{FromPyObject, IntoPy, Py, PyAny, PyErr, PyObject, PyResult, Python};
 
-#[cfg(feature="python")]
-use pyo3::types::{PyList, PyDict, PyTuple};
+#[cfg(feature = "python")]
+use pyo3::types::{PyDict, PyList, PyTuple};
 
 #[cfg(feature = "python")]
 use pyo3::exceptions::PyTypeError;
-
 
 /// The object variant implements all possible variants of Gold objects,
 /// although it's not the user-facing type, which is [`Object`], an opaque
@@ -219,12 +206,6 @@ macro_rules! signature {
 }
 
 /// The general type of Gold objects.
-///
-/// While this type wraps [`ObjectVariant`], a fact which can be revealed using
-/// the [`Object::variant`] method, this should be considered an implementation
-/// detail.
-///
-/// `Object` is `Deref<ObjectVariant>`, so supports all methods defined there.
 #[derive(Clone, Debug, Serialize, Deserialize, Trace, Finalize)]
 pub struct Object(ObjV);
 
@@ -266,7 +247,10 @@ impl Object {
     // ------------------------------------------------------------------------------------------------
 
     /// Construct an interned string.
-    pub(crate) fn new_str_interned<T>(val: T) -> Self where Key: From<T> {
+    pub(crate) fn new_str_interned<T>(val: T) -> Self
+    where
+        Key: From<T>,
+    {
         Self(ObjV::Str(Str::interned(val)))
     }
 
@@ -276,7 +260,11 @@ impl Object {
     }
 
     /// Construct a string, deciding based on length whether to intern or not.
-    fn new_str<T>(val: T) -> Self where Key: From<T>, T: AsRef<str> {
+    fn new_str<T>(val: T) -> Self
+    where
+        Key: From<T>,
+        T: AsRef<str>,
+    {
         if val.as_ref().len() < 20 {
             Self::new_str_interned(val)
         } else {
@@ -286,9 +274,10 @@ impl Object {
 
     /// Construct a big integer from a decimal string representation.
     pub fn new_int_from_str(x: impl AsRef<str>) -> Option<Self> {
-        i64::from_str(x.as_ref()).ok().map(Self::from).or_else(
-            || BigInt::from_str(x.as_ref()).ok().map(Self::from)
-        )
+        i64::from_str(x.as_ref())
+            .ok()
+            .map(Self::from)
+            .or_else(|| BigInt::from_str(x.as_ref()).ok().map(Self::from))
     }
 
     /// Construct an empty list.
@@ -317,10 +306,7 @@ impl Object {
     /// Construct an iterator
     pub fn new_iterator(obj: &Object) -> Res<Self> {
         if let Object(ObjV::List(l)) = obj {
-            Ok(Object(ObjV::ListIter(
-                GcCell::new(0),
-                l.clone(),
-            )))
+            Ok(Object(ObjV::ListIter(GcCell::new(0), l.clone())))
         } else {
             Err(Error::new(TypeMismatch::Iterate(obj.type_of())))
         }
@@ -351,7 +337,7 @@ impl Object {
     pub fn push_cell(&self, other: Cell) -> Res<()> {
         let Self(this) = self;
         match this {
-            ObjV::Func(func) => { func.push_cell(other) },
+            ObjV::Func(func) => func.push_cell(other),
             _ => Err(Internal::PushCellNotClosure.err()),
         }
     }
@@ -518,12 +504,22 @@ impl Object {
 
     /// The minus operator: mathematical subtraction.
     pub fn sub(&self, other: &Self) -> Res<Self> {
-        self.operate(other, Int::sub, |x, y| x - y, BinOp::Eager(EagerOp::Subtract))
+        self.operate(
+            other,
+            Int::sub,
+            |x, y| x - y,
+            BinOp::Eager(EagerOp::Subtract),
+        )
     }
 
     /// The asterisk operator: mathematical multiplication.
     pub fn mul(&self, other: &Self) -> Res<Self> {
-        self.operate(other, Int::mul, |x, y| x * y, BinOp::Eager(EagerOp::Multiply))
+        self.operate(
+            other,
+            Int::mul,
+            |x, y| x * y,
+            BinOp::Eager(EagerOp::Multiply),
+        )
     }
 
     /// The slash operator: mathematical division.
@@ -541,7 +537,7 @@ impl Object {
         )
     }
 
-    /// The exponentiation operator. This uses [`IntVariant::pow`] if both
+    /// The exponentiation operator. This uses integer exponentiation if both
     /// operands are integers and if the exponent is non-negative. Otherwise it
     /// delegates to floating-point exponentiation.
     pub fn pow(&self, other: &Self) -> Res<Self> {
@@ -610,7 +606,7 @@ impl Object {
         }
     }
 
-    /// Extract the bool variant if applicable. (See also [`ObjectVariant::truthy`].)
+    /// Extract the bool variant if applicable. (See also [`Object::truthy`].)
     pub fn get_bool(&self) -> Option<bool> {
         match &self.0 {
             ObjV::Boolean(x) => Some(*x),
@@ -1016,9 +1012,7 @@ impl From<Map> for Object {
 
 impl FromIterator<Object> for Object {
     fn from_iter<T: IntoIterator<Item = Object>>(iter: T) -> Self {
-        Object(ObjV::List(GcCell::new(
-            iter.into_iter().collect(),
-        )))
+        Object(ObjV::List(GcCell::new(iter.into_iter().collect())))
     }
 }
 
@@ -1081,7 +1075,9 @@ impl<'s> FromPyObject<'s> for Object {
         } else if let Ok(x) = obj.extract::<List>() {
             Ok(Object::from(x))
         } else if let Ok(x) = obj.extract::<HashMap<String, Object>>() {
-            Ok(Object::from(Map::from_iter(x.into_iter().map(|(k,v)| (Key::new(k), v)))))
+            Ok(Object::from(Map::from_iter(
+                x.into_iter().map(|(k, v)| (Key::new(k), v)),
+            )))
         } else if obj.is_none() {
             Ok(Object::null())
         } else if obj.is_callable() {
@@ -1140,8 +1136,8 @@ mod tests {
     use core::cmp::Ordering;
 
     use crate::formatting::{
-        AlignSpec, FloatFormatType, FormatSpec, FormatType, GroupingSpec, IntegerFormatType, SignSpec,
-        UppercaseSpec,
+        AlignSpec, FloatFormatType, FormatSpec, FormatType, GroupingSpec, IntegerFormatType,
+        SignSpec, UppercaseSpec,
     };
 
     use super::Object;
@@ -1151,7 +1147,9 @@ mod tests {
         assert_eq!(Object::from(1).to_string(), "1");
         assert_eq!(Object::from(-1).to_string(), "-1");
         assert_eq!(
-            Object::new_int_from_str("9223372036854775808").unwrap().to_string(),
+            Object::new_int_from_str("9223372036854775808")
+                .unwrap()
+                .to_string(),
             "9223372036854775808"
         );
 
@@ -1954,9 +1952,7 @@ mod test_serialization {
 
     fn check(x: Object) {
         assert_eq!(
-            x.serialize()
-                .map(|y| Object::deserialize(&y))
-                .flatten(),
+            x.serialize().map(|y| Object::deserialize(&y)).flatten(),
             Some(x)
         )
     }

@@ -3,8 +3,8 @@
 use std::cmp::Ordering;
 use std::fmt::Display;
 use std::iter::Step;
-use std::str::FromStr;
 use std::rc::Rc;
+use std::str::FromStr;
 
 use num_bigint::{BigInt, BigUint};
 use num_traits::{checked_pow, ToPrimitive};
@@ -16,7 +16,7 @@ use crate::formatting::{
 };
 use crate::types::Res;
 
-#[cfg(feature="python")]
+#[cfg(feature = "python")]
 use pyo3::{IntoPy, PyObject, Python};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -254,7 +254,8 @@ impl Int {
     /// algorithms, from fast for small numbers to slow for large numbers.
     /// Should only return None if the exponent is negative.
     pub fn pow(&self, other: &Int) -> Option<Int> {
-        let mut r = self.small_pow(other)
+        let mut r = self
+            .small_pow(other)
             .or_else(|| self.medium_pow(other))
             .or_else(|| self.big_pow(other))?;
         r.normalize();
@@ -293,7 +294,7 @@ impl Int {
     /// User (not structural) equality does not differentiatie between bignums
     /// and machine integers, even though it should be impossible to create two
     /// distinct representations of the same number, as all arithmetic uses
-    /// [`IntVariant::normalize`] as a postprocessing step.
+    /// [`Int::normalize()`] as a postprocessing step.
     pub fn user_eq(&self, other: &Int) -> bool {
         let Self(this) = self;
         let Self(that) = other;

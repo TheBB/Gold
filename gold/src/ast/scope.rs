@@ -7,7 +7,7 @@ use crate::Object;
 #[derive(Debug, Clone, Copy)]
 pub enum BindingLoc {
     Enclosed(usize),
-    Slot(usize)
+    Slot(usize),
 }
 
 pub trait Scope {
@@ -44,13 +44,14 @@ impl<'a> ClosureScope<'a> {
     }
 
     pub fn finalize(self) -> (Vec<Object>, Vec<FormatSpec>, Vec<BindingLoc>, SlotCatalog) {
-        let Self { manager, constants, fmt_specs, requires, .. } = self;
-        (
+        let Self {
+            manager,
             constants,
             fmt_specs,
             requires,
-            manager.catalog(),
-        )
+            ..
+        } = self;
+        (constants, fmt_specs, requires, manager.catalog())
     }
 }
 
@@ -85,7 +86,12 @@ impl<'a> Scope for ClosureScope<'a> {
             return Some(BindingLoc::Enclosed(*loc));
         }
 
-        match self.parent.as_mut().map(|p| (*p).lookup_load(name, true)).flatten() {
+        match self
+            .parent
+            .as_mut()
+            .map(|p| (*p).lookup_load(name, true))
+            .flatten()
+        {
             None => None,
             Some(parent_loc) => {
                 self.requires.push(parent_loc);
@@ -142,9 +148,13 @@ impl LocalScopeManager {
     fn announce_binding(&mut self, name: Key) {
         let current = self.binding_status.get(&name).copied();
         match current {
-            None => { self.binding_status.insert(name, BindingStatus::Expected); }
-            Some(BindingStatus::Expected) => { }
-            _ => { panic!("announced future binding too late"); }
+            None => {
+                self.binding_status.insert(name, BindingStatus::Expected);
+            }
+            Some(BindingStatus::Expected) => {}
+            _ => {
+                panic!("announced future binding too late");
+            }
         }
     }
 
@@ -154,7 +164,8 @@ impl LocalScopeManager {
             None => None,
             Some(BindingStatus::Expected) => {
                 self.next_slot += 1;
-                self.binding_status.insert(name, BindingStatus::Local(self.next_slot - 1));
+                self.binding_status
+                    .insert(name, BindingStatus::Local(self.next_slot - 1));
                 Some(self.next_slot - 1)
             }
             Some(BindingStatus::ExpectedCell(index)) => {
@@ -173,7 +184,8 @@ impl LocalScopeManager {
             (Some(BindingStatus::Expected), false) => None,
             (Some(BindingStatus::Expected), true) => {
                 self.next_slot += 1;
-                self.binding_status.insert(name, BindingStatus::ExpectedCell(self.next_slot - 1));
+                self.binding_status
+                    .insert(name, BindingStatus::ExpectedCell(self.next_slot - 1));
                 Some(BindingLoc::Slot(self.next_slot - 1))
             }
             (Some(BindingStatus::ExpectedCell(_)), false) => None,
@@ -191,9 +203,15 @@ impl LocalScopeManager {
         let mut modes: HashMap<usize, SlotType> = HashMap::new();
         for (_, status) in self.binding_status {
             match status {
-                BindingStatus::Cell(index) => { modes.insert(index, SlotType::Cell); },
-                BindingStatus::Local(index) => { modes.insert(index, SlotType::Local); },
-                _ => { panic!("expected binding but never used"); },
+                BindingStatus::Cell(index) => {
+                    modes.insert(index, SlotType::Cell);
+                }
+                BindingStatus::Local(index) => {
+                    modes.insert(index, SlotType::Local);
+                }
+                _ => {
+                    panic!("expected binding but never used");
+                }
             }
         }
         SlotCatalog { map: modes }
@@ -232,11 +250,15 @@ impl<'a> Scope for LocalScope<'a> {
     }
 
     fn lookup_store(&mut self, name: Key) -> Option<usize> {
-        self.manager.lookup_store(name).or_else(|| self.parent.lookup_store(name))
+        self.manager
+            .lookup_store(name)
+            .or_else(|| self.parent.lookup_store(name))
     }
 
     fn lookup_load(&mut self, name: Key, require_cell: bool) -> Option<BindingLoc> {
-        self.manager.lookup_load(name, require_cell).or_else(|| self.parent.lookup_load(name, require_cell))
+        self.manager
+            .lookup_load(name, require_cell)
+            .or_else(|| self.parent.lookup_load(name, require_cell))
     }
 
     fn next_slot(&self) -> usize {

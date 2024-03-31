@@ -70,7 +70,10 @@ impl Display for Str {
 
 impl Str {
     /// Construct a new interned string.
-    pub fn interned<T>(x: T) -> Self where Key: From<T> {
+    pub fn interned<T>(x: T) -> Self
+    where
+        Key: From<T>,
+    {
         Self(StrV::Interned(Key::from(x)))
     }
 

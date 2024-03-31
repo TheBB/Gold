@@ -1,14 +1,18 @@
 use std::rc::Rc;
 
-use crate::{builtins::BUILTINS, error::{Reason, Span, Syntax}, types::LogicOp};
 use crate::formatting::FormatSpec;
+use crate::{
+    builtins::BUILTINS,
+    error::{Reason, Span, Syntax},
+    types::LogicOp,
+};
 
-use crate::error::{Action, Error, Tagged, Taggable};
-use crate::Object;
-use crate::types::Key;
 use super::low;
-use super::scope::{SubScope, Scope, LocalScope};
-use crate::types::{UnOp, BinOp, Res, EagerOp};
+use super::scope::{LocalScope, Scope, SubScope};
+use crate::error::{Action, Error, Taggable, Tagged};
+use crate::types::Key;
+use crate::types::{BinOp, EagerOp, Res, UnOp};
+use crate::Object;
 
 // Utility
 // ----------------------------------------------------------------
@@ -54,9 +58,13 @@ pub enum ListBindingElement {
 impl ListBindingElement {
     fn announce_bindings(&self, scope: &mut dyn SubScope) {
         match self {
-            Self::Binding { binding, .. } => { binding.announce_bindings(scope); }
-            Self::SlurpTo(name) => { scope.announce_binding(*name.as_ref()); }
-            Self::Slurp => { }
+            Self::Binding { binding, .. } => {
+                binding.announce_bindings(scope);
+            }
+            Self::SlurpTo(name) => {
+                scope.announce_binding(*name.as_ref());
+            }
+            Self::Slurp => {}
         }
     }
 }
@@ -84,8 +92,12 @@ pub enum MapBindingElement {
 impl MapBindingElement {
     fn announce_bindings(&self, scope: &mut dyn SubScope) {
         match self {
-            Self::Binding { binding, .. } => { binding.announce_bindings(scope); }
-            Self::SlurpTo(name) => { scope.announce_binding(*name.as_ref()); }
+            Self::Binding { binding, .. } => {
+                binding.announce_bindings(scope);
+            }
+            Self::SlurpTo(name) => {
+                scope.announce_binding(*name.as_ref());
+            }
         }
     }
 }
@@ -120,10 +132,18 @@ impl Lower for ListBinding {
             match element {
                 ListBindingElement::Binding { binding, default } => {
                     match (default.is_some(), retval.slurp) {
-                        (true, Some(_)) => { retval.def_back += 1; }
-                        (true, None) => { retval.def_front += 1; }
-                        (false, Some(_)) => { retval.num_back += 1; }
-                        (false, None) => { retval.num_front += 1; }
+                        (true, Some(_)) => {
+                            retval.def_back += 1;
+                        }
+                        (true, None) => {
+                            retval.def_front += 1;
+                        }
+                        (false, Some(_)) => {
+                            retval.num_back += 1;
+                        }
+                        (false, None) => {
+                            retval.num_front += 1;
+                        }
                     }
 
                     let new_default = default.lower(scope)?;
@@ -137,12 +157,13 @@ impl Lower for ListBinding {
                     if let ListBindingElement::SlurpTo(key) = element {
                         match scope.lookup_store(*key.as_ref()) {
                             None => {
-                                return Err(Error::new(Reason::Unbound(*key.as_ref())).tag(key.span(), Action::LookupName));
+                                return Err(Error::new(Reason::Unbound(*key.as_ref()))
+                                    .tag(key.span(), Action::LookupName));
                             }
                             Some(index) => {
                                 retval.slurp = Some(Some(index));
                                 continue;
-                            },
+                            }
                         }
                     } else {
                         retval.slurp = Some(None);
@@ -187,7 +208,11 @@ impl Lower for MapBinding {
         for element in self.0 {
             let (element, span) = element.decompose();
             match element {
-                MapBindingElement::Binding { key, binding, default } => {
+                MapBindingElement::Binding {
+                    key,
+                    binding,
+                    default,
+                } => {
                     let new_default = default.lower(scope)?;
                     let new_binding = binding.lower(scope)?;
                     retval.elements.push(low::MapBindingElement {
@@ -201,7 +226,10 @@ impl Lower for MapBinding {
                         return Err(Error::new(Syntax::MultiSlurp).tag(span, Action::Parse));
                     }
                     match scope.lookup_store(*key.as_ref()) {
-                        None => return Err(Error::new(Reason::Unbound(*key.as_ref())).tag(key.span(), Action::LookupName)),
+                        None => {
+                            return Err(Error::new(Reason::Unbound(*key.as_ref()))
+                                .tag(key.span(), Action::LookupName))
+                        }
                         Some(index) => retval.slurp = Some(index),
                     }
                 }
@@ -228,9 +256,15 @@ pub enum Binding {
 impl Binding {
     fn announce_bindings(&self, scope: &mut dyn SubScope) {
         match self {
-            Self::Identifier(key) => { scope.announce_binding(*key.as_ref()); }
-            Self::List(binding) => { binding.announce_bindings(scope); }
-            Self::Map(binding) => { binding.announce_bindings(scope); }
+            Self::Identifier(key) => {
+                scope.announce_binding(*key.as_ref());
+            }
+            Self::List(binding) => {
+                binding.announce_bindings(scope);
+            }
+            Self::Map(binding) => {
+                binding.announce_bindings(scope);
+            }
         }
     }
 }
@@ -240,9 +274,12 @@ impl Lower for Binding {
 
     fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
         match self {
-            Self::Identifier(key) => match scope.lookup_store(*key.as_ref()) {
-                None => Err(Error::new(Reason::Unbound(*key.as_ref())).tag(key.span(), Action::LookupName)),
-                Some(index) => Ok(low::Binding::Slot(index)),
+            Self::Identifier(key) => {
+                match scope.lookup_store(*key.as_ref()) {
+                    None => Err(Error::new(Reason::Unbound(*key.as_ref()))
+                        .tag(key.span(), Action::LookupName)),
+                    Some(index) => Ok(low::Binding::Slot(index)),
+                }
             }
             Self::List(binding) => Ok(low::Binding::List(binding.lower(scope)?)),
             Self::Map(binding) => Ok(low::Binding::Map(binding.lower(scope)?)),
@@ -320,7 +357,11 @@ impl Lower for ListElement {
                 condition: condition.lower(scope)?,
                 element: Box::new(element.lower(scope)?),
             }),
-            Self::Loop { binding, iterable, element } => {
+            Self::Loop {
+                binding,
+                iterable,
+                element,
+            } => {
                 let mut subscope = LocalScope::new(scope);
                 binding.announce_bindings(&mut subscope);
 
@@ -379,7 +420,11 @@ impl Lower for MapElement {
                 condition: condition.lower(scope)?,
                 element: Box::new(element.lower(scope)?),
             }),
-            Self::Loop { binding, iterable, element } => {
+            Self::Loop {
+                binding,
+                iterable,
+                element,
+            } => {
                 let mut subscope = LocalScope::new(scope);
                 binding.announce_bindings(&mut subscope);
 
@@ -474,7 +519,10 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Eager(EagerOp::Multiply).tag(loc), Box::new(multiplicand))
+        Transform::BinOp(
+            BinOp::Eager(EagerOp::Multiply).tag(loc),
+            Box::new(multiplicand),
+        )
     }
 
     /// Construct an integer division transform.
@@ -484,7 +532,10 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Eager(EagerOp::IntegerDivide).tag(loc), Box::new(divisor))
+        Transform::BinOp(
+            BinOp::Eager(EagerOp::IntegerDivide).tag(loc),
+            Box::new(divisor),
+        )
     }
 
     /// Construct a mathematical division transform.
@@ -514,7 +565,10 @@ impl Transform {
     where
         Span: From<U>,
     {
-        Transform::BinOp(BinOp::Eager(EagerOp::Subtract).tag(loc), Box::new(subtrahend))
+        Transform::BinOp(
+            BinOp::Eager(EagerOp::Subtract).tag(loc),
+            Box::new(subtrahend),
+        )
     }
 
     /// Construct a less-than transform.
@@ -913,17 +967,14 @@ impl Lower for Expr {
                 }
                 Ok(low::Expr::String(new_elements))
             }
-            Self::Identifier(name) => {
-                match scope.lookup_load(*name.as_ref(), false) {
-                    None => {
-                        match BUILTINS.0.get(name.as_str()) {
-                            Some(index) => Ok(low::Expr::Builtin(*index)),
-                            None => Err(Error::new(Reason::Unbound(*name.as_ref())).tag(name.span(), Action::LookupName)),
-                        }
-                    }
-                    Some(slot) => Ok(low::Expr::Slot(slot)),
-                }
-            }
+            Self::Identifier(name) => match scope.lookup_load(*name.as_ref(), false) {
+                None => match BUILTINS.0.get(name.as_str()) {
+                    Some(index) => Ok(low::Expr::Builtin(*index)),
+                    None => Err(Error::new(Reason::Unbound(*name.as_ref()))
+                        .tag(name.span(), Action::LookupName)),
+                },
+                Some(slot) => Ok(low::Expr::Slot(slot)),
+            },
             Self::List(elements) => {
                 let mut new_elements = Vec::new();
                 for element in elements {
@@ -938,7 +989,10 @@ impl Lower for Expr {
                 }
                 Ok(low::Expr::Map(new_elements))
             }
-            Self::Let { bindings, expression } => {
+            Self::Let {
+                bindings,
+                expression,
+            } => {
                 let mut builder = low::LetBuilder::new(scope);
                 for (binding, _) in bindings.iter() {
                     binding.announce_bindings(builder.scope());
@@ -958,16 +1012,25 @@ impl Lower for Expr {
             Self::Transformed { operand, transform } => {
                 let operand = operand.lower(scope)?;
                 let transform = transform.lower(scope)?;
-                Ok(low::Expr::Transformed { operand: Box::new(operand), transform })
-            }
-            Self::Branch { condition, true_branch, false_branch } => {
-                Ok(low::Expr::Branch {
-                    condition: Box::new(condition.lower(scope)?),
-                    true_branch: Box::new(true_branch.lower(scope)?),
-                    false_branch: Box::new(false_branch.lower(scope)?),
+                Ok(low::Expr::Transformed {
+                    operand: Box::new(operand),
+                    transform,
                 })
             }
-            Self::Function { positional, keywords, expression } => {
+            Self::Branch {
+                condition,
+                true_branch,
+                false_branch,
+            } => Ok(low::Expr::Branch {
+                condition: Box::new(condition.lower(scope)?),
+                true_branch: Box::new(true_branch.lower(scope)?),
+                false_branch: Box::new(false_branch.lower(scope)?),
+            }),
+            Self::Function {
+                positional,
+                keywords,
+                expression,
+            } => {
                 let mut builder = low::FunctionBuilder::new(Some(scope));
 
                 positional.announce_bindings(builder.scope());
@@ -1039,7 +1102,8 @@ impl File {
         let call_expr = low::Expr::Transformed {
             operand: Box::new(import_expr),
             transform: low::Transform::FunCall(vec![].tag(0), false),
-        }.tag(0);
+        }
+        .tag(0);
         outer.expression(call_expr);
 
         Ok(outer.finalize())

@@ -10,10 +10,10 @@ use serde::{Deserialize, Serialize};
 use pyo3::FromPyObject;
 
 #[cfg(feature = "python")]
-use pyo3::{Py, PyAny, Python, pymethods, pyclass, PyObject, IntoPy};
+use pyo3::{pyclass, pymethods, IntoPy, Py, PyAny, PyObject, Python};
 
 #[cfg(feature = "python")]
-use pyo3::types::{PyTuple, PyDict};
+use pyo3::types::{PyDict, PyTuple};
 
 #[cfg(feature = "python")]
 use pyo3::exceptions::PyTypeError;
@@ -50,11 +50,7 @@ impl Clone for FuncV {
 impl Debug for FuncV {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Closure(x, e) => f
-                .debug_tuple("Func::Closure")
-                .field(x)
-                .field(e)
-                .finish(),
+            Self::Closure(x, e) => f.debug_tuple("Func::Closure").field(x).field(e).finish(),
             Self::Builtin(b) => f.debug_tuple("Func::Builtin").field(b).finish(),
             Self::NativeClosure(_) => f.debug_tuple("Func::NativeClosure").finish(),
         }

@@ -12,10 +12,13 @@ use serde::{Deserialize, Serialize};
 use pyo3::PyErr;
 
 #[cfg(feature = "python")]
-use pyo3::exceptions::{PyException, PySyntaxError, PyNameError, PyKeyError, PyTypeError, PyOSError, PyImportError, PyValueError};
+use pyo3::exceptions::{
+    PyException, PyImportError, PyKeyError, PyNameError, PyOSError, PySyntaxError, PyTypeError,
+    PyValueError,
+};
 
-use crate::types::{BinOp, UnOp, Key, Type};
 use crate::lexing::TokenType;
+use crate::types::{BinOp, Key, Type, UnOp};
 
 /// Marks a position in a text buffer.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -1241,7 +1244,9 @@ impl<'a> Display for ErrorRenderer<'a> {
 
         f.write_fmt(format_args!(
             "Error: {}",
-            err.reason.as_ref().unwrap_or(&Reason::from(Internal::UnknownError))
+            err.reason
+                .as_ref()
+                .unwrap_or(&Reason::from(Internal::UnknownError))
         ))?;
         if let Some(locs) = err.locations.as_ref() {
             for (loc, act) in locs.iter() {
@@ -1350,7 +1355,8 @@ impl<I: Copy + PartialOrd + Debug> IntervalTree<I, (Span, Action), Reason> {
             None => Error::new(Internal::UnknownError),
 
             Some(root) => {
-                let mut err = root.most_specific_second(loc)
+                let mut err = root
+                    .most_specific_second(loc)
                     .cloned()
                     .map(Error::new)
                     .unwrap_or_else(|| Error::new(Internal::UnknownError));

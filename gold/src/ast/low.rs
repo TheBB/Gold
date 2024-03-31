@@ -1,9 +1,9 @@
-use crate::compile::{Compiler, CompiledFunction};
+use super::scope::{BindingLoc, ClosureScope, LocalScope, Scope, SlotCatalog};
+use crate::compile::{CompiledFunction, Compiler};
 use crate::error::Tagged;
 use crate::formatting::FormatSpec;
+use crate::types::{BinOp, Key, Res, UnOp};
 use crate::Object;
-use crate::types::{UnOp, BinOp, Key, Res};
-use super::scope::{BindingLoc, ClosureScope, LocalScope, Scope, SlotCatalog};
 
 #[derive(Debug, Clone)]
 pub enum Binding {
@@ -27,8 +27,12 @@ pub struct ListBinding {
 impl ListBinding {
     pub fn push(&mut self, binding: Tagged<Binding>, default: Option<Tagged<Expr>>) {
         match self.slurp {
-            Some(_) => { self.back.push((binding, default)); }
-            None => { self.front.push((binding, default)); }
+            Some(_) => {
+                self.back.push((binding, default));
+            }
+            None => {
+                self.front.push((binding, default));
+            }
         }
     }
 }
@@ -161,7 +165,7 @@ impl<'a> FunctionBuilder<'a> {
             scope: ClosureScope::new(parent),
             expression: None,
             positional: None,
-            keywords: None
+            keywords: None,
         }
     }
 

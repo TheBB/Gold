@@ -3,13 +3,13 @@ use std::hash::Hash;
 
 use gc::custom_trace;
 use indexmap::{map::Iter, IndexMap};
-use serde::{Deserialize, Serialize, Serializer, Deserializer};
 use serde::de::Visitor;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use symbol_table::GlobalSymbol;
 
+use crate::builtins::BUILTINS;
 use crate::compile::Instruction;
 use crate::{Error, Object};
-use crate::builtins::BUILTINS;
 
 pub use gc::Gc;
 
@@ -91,7 +91,6 @@ impl<'a> Deserialize<'a> for Builtin {
     }
 }
 
-
 /// Enumeration of all the different types a Gold object can have.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Type {
@@ -107,10 +106,10 @@ pub enum Type {
     /// bool
     Boolean,
 
-    /// Vec<Object>
+    /// Vector of [`Object`]s.
     List,
 
-    /// IndexMap<Key, Object>
+    /// Mapping of [`Key`] to [`Object`].
     Map,
 
     /// FuncVariant

@@ -41,11 +41,11 @@ use std::path::Path;
 use error::FileSystem;
 use eval::Vm;
 
-pub use parsing::parse;
-pub use eval::ImportConfig;
 pub use error::Error;
+pub use eval::ImportConfig;
 pub use object::Object;
-pub use types::{List, Map, Type, Res};
+pub use parsing::parse;
+pub use types::{Key, List, Map, Res, Type};
 
 #[cfg(feature = "python")]
 pub use eval::PyImportConfig;
@@ -65,14 +65,14 @@ pub fn eval(input: &str, importer: &ImportConfig) -> Res<Object> {
 
 /// Evaluate Gold code and return the result.
 ///
-/// This is equivalent to calling [`eval`] with no path and an import resolver that always fails.
+/// This is equivalent to calling [`eval()`] with no path and an import resolver that always fails.
 pub fn eval_raw(input: &str) -> Res<Object> {
     eval(input, &ImportConfig::default())
 }
 
 /// Evaluate a Gold file and return the result.
 ///
-/// This is equivalent to reading the file and calling [`eval`] with the source
+/// This is equivalent to reading the file and calling [`eval()`] with the source
 /// code, the file's path and an import resolver that always fails. Relative
 /// path imports will succeed.
 pub fn eval_file(input: &Path) -> Res<Object> {

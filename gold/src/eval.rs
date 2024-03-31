@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 #[cfg(feature = "python")]
-use pyo3::{Py, FromPyObject, PyAny, PyResult, Python, pyclass, pymethods};
+use pyo3::{pyclass, pymethods, FromPyObject, Py, PyAny, PyResult, Python};
 
 #[cfg(feature = "python")]
 use pyo3::exceptions::PyTypeError;
@@ -15,7 +15,7 @@ use crate::builtins::BUILTINS;
 use crate::compile::{CompiledFunction, Instruction};
 use crate::error::{BindingType, Error, Internal, Reason, TypeMismatch, Unpack};
 use crate::formatting::FormatSpec;
-use crate::types::{BinOp, Cell, GcCell, Res, EagerOp};
+use crate::types::{BinOp, Cell, EagerOp, GcCell, Res};
 use crate::{eval_file, eval_raw as eval_str};
 use crate::{List, Map, Object, Type};
 
@@ -120,7 +120,10 @@ impl PyImportConfig {
     #[new]
     #[args(root = "None", custom = "None")]
     fn new(root: Option<String>, custom: Option<PyImportCallable>) -> Self {
-        PyImportConfig { root_path: root, custom: custom }
+        PyImportConfig {
+            root_path: root,
+            custom: custom,
+        }
     }
 }
 
@@ -130,11 +133,10 @@ impl PyImportConfig {
     pub fn to_gold(&self) -> ImportConfig {
         ImportConfig {
             root_path: self.root_path.as_ref().map(PathBuf::from),
-            custom: self.custom.as_ref().map(|x| x.0.clone())
+            custom: self.custom.as_ref().map(|x| x.0.clone()),
         }
     }
 }
-
 
 struct Frame {
     function: CompiledFunction,
@@ -370,7 +372,9 @@ impl<'a> Vm<'a> {
 
                     if let Some(f) = func.get_native_callable() {
                         let x = args.get_list().ok_or_else(|| Internal::ArgsNotList.err())?;
-                        let y = kwargs.get_map().ok_or_else(|| Internal::KwargsNotMap.err())?;
+                        let y = kwargs
+                            .get_map()
+                            .ok_or_else(|| Internal::KwargsNotMap.err())?;
                         let result = f(&x, Some(&y)).map_err(|e| e.with_locations(self.err()))?;
                         self.push(result);
                     } else if let Some((f, e)) = func.get_closure() {
@@ -379,7 +383,7 @@ impl<'a> Vm<'a> {
                         self.push(kwargs);
                         self.push(args);
                     } else {
-                        return Err(self.err().with_reason(TypeMismatch::Call(func.type_of())))
+                        return Err(self.err().with_reason(TypeMismatch::Call(func.type_of())));
                     }
                 }
 
@@ -388,10 +392,12 @@ impl<'a> Vm<'a> {
                 Instruction::AssertListMinLength(len) => {
                     let obj = self.peek();
                     match obj.get_list() {
-                        None => return Err(self.err().with_reason(Unpack::TypeMismatch(
-                            BindingType::List,
-                            obj.type_of(),
-                        ))),
+                        None => {
+                            return Err(self.err().with_reason(Unpack::TypeMismatch(
+                                BindingType::List,
+                                obj.type_of(),
+                            )))
+                        }
                         Some(l) => {
                             if l.len() < len {
                                 return Err(self.err().with_reason(Unpack::ListTooShort));
@@ -598,7 +604,9 @@ impl<'a> Vm<'a> {
 
                 Instruction::NewIterator => {
                     let obj = self.pop();
-                    self.push(Object::new_iterator(&obj).map_err(|e| e.with_locations(self.err()))?);
+                    self.push(
+                        Object::new_iterator(&obj).map_err(|e| e.with_locations(self.err()))?,
+                    );
                 }
 
                 Instruction::NewString => {
@@ -664,7 +672,9 @@ impl<'a> Vm<'a> {
                             .peek()
                             .get_list()
                             .ok_or_else(|| Internal::IndexNotList.err())?;
-                        l.get(i).ok_or_else(|| Internal::IndexOutOfBounds.err())?.clone()
+                        l.get(i)
+                            .ok_or_else(|| Internal::IndexOutOfBounds.err())?
+                            .clone()
                     };
                     self.push(obj);
                 }
@@ -695,7 +705,9 @@ impl<'a> Vm<'a> {
                             .get_list()
                             .ok_or_else(|| Internal::IndexNotList.err())?;
                         let i = (l.len() - root_back).max(root_front) + index;
-                        l.get(i).ok_or_else(|| Internal::IndexOutOfBounds.err())?.clone()
+                        l.get(i)
+                            .ok_or_else(|| Internal::IndexOutOfBounds.err())?
+                            .clone()
                     };
                     self.push(obj);
                 }
@@ -793,8 +805,8 @@ impl<'a> Vm<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{BinOp, UnOp, Key, Res, EagerOp};
     use crate::error::{Action, BindingType, Error, Reason, Span, TypeMismatch, Types, Unpack};
+    use crate::types::{BinOp, EagerOp, Key, Res, UnOp};
     use crate::{eval_raw, Object, Type};
 
     fn eval(input: &str) -> Res<Object> {
@@ -853,7 +865,10 @@ mod tests {
     #[test]
     fn strings() {
         assert_seq!(eval("\"\""), Object::new_str_interned(""));
-        assert_seq!(eval("\"simsalabim\""), Object::new_str_interned("simsalabim"));
+        assert_seq!(
+            eval("\"simsalabim\""),
+            Object::new_str_interned("simsalabim")
+        );
         assert_seq!(
             eval("\"simsalabim ${-1} abracadabra\""),
             Object::new_str_natural("simsalabim -1 abracadabra")
@@ -880,25 +895,25 @@ mod tests {
     fn lists() {
         assert_seq!(eval("[]"), Object::new_list());
 
-        assert_seq!(eval("[1]"), Object::from(vec![
-            Object::from(1),
-        ]));
+        assert_seq!(eval("[1]"), Object::from(vec![Object::from(1),]));
 
-        assert_seq!(eval("[1, 2, false]"), Object::from(vec![
-            Object::from(1),
-            Object::from(2),
-            Object::from(false),
-        ]));
+        assert_seq!(
+            eval("[1, 2, false]"),
+            Object::from(vec![Object::from(1), Object::from(2), Object::from(false),])
+        );
 
         assert_seq!(eval("[1, 2, 3, 4, 5]"), (1..6).map(Object::from).collect());
 
-        assert_seq!(eval("[1, false, \"dingbob\", 2.2, null]"), Object::from(vec![
-            Object::from(1),
-            Object::from(false),
-            Object::new_str_interned("dingbob"),
-            Object::from(2.2),
-            Object::null(),
-        ]));
+        assert_seq!(
+            eval("[1, false, \"dingbob\", 2.2, null]"),
+            Object::from(vec![
+                Object::from(1),
+                Object::from(false),
+                Object::new_str_interned("dingbob"),
+                Object::from(2.2),
+                Object::null(),
+            ])
+        );
     }
 
     #[test]
@@ -1757,14 +1772,22 @@ mod tests {
         assert_eq!(
             eval("{} >= false"),
             err!(
-                TypeMismatch::BinOp(Type::Map, Type::Boolean, BinOp::Eager(EagerOp::GreaterEqual)),
+                TypeMismatch::BinOp(
+                    Type::Map,
+                    Type::Boolean,
+                    BinOp::Eager(EagerOp::GreaterEqual)
+                ),
                 loc!(3..5, Evaluate)
             )
         );
         assert_eq!(
             eval("1 has 2"),
             err!(
-                TypeMismatch::BinOp(Type::Integer, Type::Integer, BinOp::Eager(EagerOp::Contains)),
+                TypeMismatch::BinOp(
+                    Type::Integer,
+                    Type::Integer,
+                    BinOp::Eager(EagerOp::Contains)
+                ),
                 loc!(2..5, Evaluate)
             )
         );
@@ -1811,7 +1834,9 @@ mod tests {
         assert_eq!(
             eval("{a: 1}[\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"]"),
             err!(
-                Reason::Unassigned("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".key()),
+                Reason::Unassigned(
+                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".key()
+                ),
                 loc!(6..66, Evaluate)
             )
         );
@@ -1875,9 +1900,8 @@ mod tests {
         assert!(eval_errstr("\n\na\n").is_some_and(|x| x.contains("\na\n^\n")));
         assert!(eval_errstr("  a  \n").is_some_and(|x| x.contains("\n  a  \n  ^\n")));
         assert!(eval_errstr("\n  a  \n").is_some_and(|x| x.contains("\n  a  \n  ^\n")));
-        assert!(
-            eval_errstr("\n  bingbong  \n").is_some_and(|x| x.contains("\n  bingbong  \n  ^^^^^^^^\n"))
-        );
+        assert!(eval_errstr("\n  bingbong  \n")
+            .is_some_and(|x| x.contains("\n  bingbong  \n  ^^^^^^^^\n")));
 
         assert!(eval_errstr(concat!(
             "let f = fn (x) x + 1\n",
@@ -1885,21 +1909,20 @@ mod tests {
             "let h = fn (x) g(x)\n",
             "in h(null)",
         ))
-        .is_some_and(
-            |x| x.contains(concat!("let f = fn (x) x + 1\n", "                 ^",))
-                && x.contains(concat!("let g = fn (x) f(x)\n", "                ^^^",))
-                && x.contains(concat!("let h = fn (x) g(x)\n", "                ^^^",))
-                && x.contains(concat!("in h(null)\n", "    ^^^^^",))
-        ));
+        .is_some_and(|x| x
+            .contains(concat!("let f = fn (x) x + 1\n", "                 ^",))
+            && x.contains(concat!("let g = fn (x) f(x)\n", "                ^^^",))
+            && x.contains(concat!("let h = fn (x) g(x)\n", "                ^^^",))
+            && x.contains(concat!("in h(null)\n", "    ^^^^^",))));
     }
 }
 
 #[cfg(test)]
 mod examples {
+    use crate::types::Res;
+    use crate::{eval_file, Error, Object};
     use std::env;
     use std::path::PathBuf;
-    use crate::{Object, Error, eval_file};
-    use crate::types::Res;
 
     fn eval(example: &str) -> Res<Object> {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -1936,7 +1959,10 @@ mod examples {
                     ("category", Object::from("nonfiction")),
                     ("department", Object::from("books")),
                     ("publisher", Object::from("O'Reilly Media")),
-                    ("title", Object::from("Parallel and Concurrent Programming in Haskell"))
+                    (
+                        "title",
+                        Object::from("Parallel and Concurrent Programming in Haskell")
+                    )
                 ]),
             ]),
         );
@@ -1962,18 +1988,24 @@ mod examples {
                 Object::from(vec![
                     ("age", Object::from(23)),
                     ("name", Object::from("John Doe")),
-                    ("position", Object::from(vec![
-                        ("department", Object::from("Data Platform")),
-                        ("title", Object::from("Software Engineer")),
-                    ]))
+                    (
+                        "position",
+                        Object::from(vec![
+                            ("department", Object::from("Data Platform")),
+                            ("title", Object::from("Software Engineer")),
+                        ])
+                    )
                 ]),
                 Object::from(vec![
                     ("age", Object::from(24)),
                     ("name", Object::from("Alice Smith")),
-                    ("position", Object::from(vec![
-                        ("department", Object::from("Data Platform")),
-                        ("title", Object::from("Software Engineer")),
-                    ]))
+                    (
+                        "position",
+                        Object::from(vec![
+                            ("department", Object::from("Data Platform")),
+                            ("title", Object::from("Software Engineer")),
+                        ])
+                    )
                 ]),
             ]),
         )
@@ -2025,52 +2057,82 @@ mod examples {
                 Object::from(vec![
                     ("home", Object::new_str_natural("/home/build0")),
                     ("privateKey", Object::from("/home/build0/.ssh/id_ed25519")),
-                    ("publicKey", Object::from("/home/build0/.ssh/id_ed25519.pub")),
+                    (
+                        "publicKey",
+                        Object::from("/home/build0/.ssh/id_ed25519.pub")
+                    ),
                 ]),
                 Object::from(vec![
                     ("home", Object::new_str_natural("/home/build1")),
                     ("privateKey", Object::from("/home/build1/.ssh/id_ed25519")),
-                    ("publicKey", Object::from("/home/build1/.ssh/id_ed25519.pub")),
+                    (
+                        "publicKey",
+                        Object::from("/home/build1/.ssh/id_ed25519.pub")
+                    ),
                 ]),
                 Object::from(vec![
                     ("home", Object::new_str_natural("/home/build2")),
                     ("privateKey", Object::from("/home/build2/.ssh/id_ed25519")),
-                    ("publicKey", Object::from("/home/build2/.ssh/id_ed25519.pub")),
+                    (
+                        "publicKey",
+                        Object::from("/home/build2/.ssh/id_ed25519.pub")
+                    ),
                 ]),
                 Object::from(vec![
                     ("home", Object::new_str_natural("/home/build3")),
                     ("privateKey", Object::from("/home/build3/.ssh/id_ed25519")),
-                    ("publicKey", Object::from("/home/build3/.ssh/id_ed25519.pub")),
+                    (
+                        "publicKey",
+                        Object::from("/home/build3/.ssh/id_ed25519.pub")
+                    ),
                 ]),
                 Object::from(vec![
                     ("home", Object::new_str_natural("/home/build4")),
                     ("privateKey", Object::from("/home/build4/.ssh/id_ed25519")),
-                    ("publicKey", Object::from("/home/build4/.ssh/id_ed25519.pub")),
+                    (
+                        "publicKey",
+                        Object::from("/home/build4/.ssh/id_ed25519.pub")
+                    ),
                 ]),
                 Object::from(vec![
                     ("home", Object::new_str_natural("/home/build5")),
                     ("privateKey", Object::from("/home/build5/.ssh/id_ed25519")),
-                    ("publicKey", Object::from("/home/build5/.ssh/id_ed25519.pub")),
+                    (
+                        "publicKey",
+                        Object::from("/home/build5/.ssh/id_ed25519.pub")
+                    ),
                 ]),
                 Object::from(vec![
                     ("home", Object::new_str_natural("/home/build6")),
                     ("privateKey", Object::from("/home/build6/.ssh/id_ed25519")),
-                    ("publicKey", Object::from("/home/build6/.ssh/id_ed25519.pub")),
+                    (
+                        "publicKey",
+                        Object::from("/home/build6/.ssh/id_ed25519.pub")
+                    ),
                 ]),
                 Object::from(vec![
                     ("home", Object::new_str_natural("/home/build7")),
                     ("privateKey", Object::from("/home/build7/.ssh/id_ed25519")),
-                    ("publicKey", Object::from("/home/build7/.ssh/id_ed25519.pub")),
+                    (
+                        "publicKey",
+                        Object::from("/home/build7/.ssh/id_ed25519.pub")
+                    ),
                 ]),
                 Object::from(vec![
                     ("home", Object::new_str_natural("/home/build8")),
                     ("privateKey", Object::from("/home/build8/.ssh/id_ed25519")),
-                    ("publicKey", Object::from("/home/build8/.ssh/id_ed25519.pub")),
+                    (
+                        "publicKey",
+                        Object::from("/home/build8/.ssh/id_ed25519.pub")
+                    ),
                 ]),
                 Object::from(vec![
                     ("home", Object::new_str_natural("/home/build9")),
                     ("privateKey", Object::from("/home/build9/.ssh/id_ed25519")),
-                    ("publicKey", Object::from("/home/build9/.ssh/id_ed25519.pub")),
+                    (
+                        "publicKey",
+                        Object::from("/home/build9/.ssh/id_ed25519.pub")
+                    ),
                 ]),
             ]),
         );

@@ -14,13 +14,13 @@ use nom::{
 };
 
 use crate::ast::high::*;
-use crate::error::{Error, Span, Syntax, SyntaxElement, SyntaxError, Tagged, Taggable};
+use crate::error::{Error, Span, Syntax, SyntaxElement, SyntaxError, Taggable, Tagged};
 use crate::formatting::{
     AlignSpec, FloatFormatType, FormatSpec, FormatType, GroupingSpec, IntegerFormatType, SignSpec,
     StringAlignSpec, UppercaseSpec,
 };
 use crate::lexing::{CachedLexResult, CachedLexer, Lexer, TokenType};
-use crate::types::{UnOp, BinOp, EagerOp, Key, Res};
+use crate::types::{BinOp, EagerOp, Key, Res, UnOp};
 use crate::Object;
 
 trait ExplainError {
@@ -1092,7 +1092,11 @@ fn object_index<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
         )),
         |(a, expr, b)| {
             let span = Span::from(a.span()..b.span());
-            Transform::BinOp(BinOp::Eager(EagerOp::Index).tag(span), Box::new(expr.inner())).tag(span)
+            Transform::BinOp(
+                BinOp::Eager(EagerOp::Index).tag(span),
+                Box::new(expr.inner()),
+            )
+            .tag(span)
         },
     )(input)
 }
@@ -1743,8 +1747,8 @@ fn keyword_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
 
 /// Matches a function.
 ///
-/// The heavy lifting of this function is done by [`normal_function`] or
-/// [`keyword_function`].
+/// The heavy lifting of this function is done by [`function_new_style`],
+/// [`normal_function_old_style`] or [`keyword_function_old_style`].
 fn function<'a>(input: In<'a>) -> Out<'a, PExpr> {
     alt((
         function_new_style,
@@ -1879,7 +1883,7 @@ fn file<'a>(input: In<'a>) -> Out<'a, File> {
     )(input)
 }
 
-/// Parse the input and return a [`File`] object.
+/// Parse the input and return a File object.
 pub fn parse(input: &str) -> Res<File> {
     let cache = Lexer::cache();
     let lexer = Lexer::new(input).with_cache(&cache);
@@ -1888,21 +1892,21 @@ pub fn parse(input: &str) -> Res<File> {
             NomError::Incomplete(_) => Err(Error::default()),
             NomError::Error(e) | NomError::Failure(e) => Err(e.to_error()),
         },
-        |(_, node)| {
-            Ok(node)
-        },
+        |(_, node)| Ok(node),
     )
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Object, Error};
+    use super::parse as parse_file;
     use crate::ast::high::*;
-    use crate::error::{Tagged, Taggable, Span, Action, Syntax, SyntaxElement as S};
-    use crate::formatting::{FormatSpec, AlignSpec, FormatType, GroupingSpec, SignSpec, StringAlignSpec};
+    use crate::error::{Action, Span, Syntax, SyntaxElement as S, Taggable, Tagged};
+    use crate::formatting::{
+        AlignSpec, FormatSpec, FormatType, GroupingSpec, SignSpec, StringAlignSpec,
+    };
     use crate::lexing::TokenType as T;
     use crate::types::{Key, Res};
-    use super::parse as parse_file;
+    use crate::{Error, Object};
 
     trait ToExpr {
         fn expr<T>(self, loc: T) -> Tagged<Expr>
@@ -2069,7 +2073,9 @@ mod tests {
         );
         assert_eq!(
             expr("9223372036854776000"),
-            Ok(Object::new_int_from_str("9223372036854776000").unwrap().expr(0..19))
+            Ok(Object::new_int_from_str("9223372036854776000")
+                .unwrap()
+                .expr(0..19))
         );
     }
 
@@ -2332,7 +2338,10 @@ mod tests {
     fn nested_lists() {
         assert_eq!(
             expr("[[]]"),
-            Ok(Expr::List(vec![Expr::List(vec![]).tag(1..3).wrap(ListElement::Singleton),]).tag(0..4)),
+            Ok(Expr::List(vec![Expr::List(vec![])
+                .tag(1..3)
+                .wrap(ListElement::Singleton),])
+            .tag(0..4)),
         );
 
         assert_eq!(
@@ -2905,10 +2914,7 @@ mod tests {
             ),
         };
 
-        assert_eq!(
-            expr("a[b]"),
-            Ok("a".id(0).index("b".id(2), 1..4).tag(0..4)),
-        );
+        assert_eq!(expr("a[b]"), Ok("a".id(0).index("b".id(2), 1..4).tag(0..4)),);
 
         assert_eq!(
             expr("a.b.c"),

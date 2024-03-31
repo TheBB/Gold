@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use crate::error::{Error, TypeMismatch, Types, Value};
 use crate::object::Int;
-use crate::types::{Key, List, Map, Builtin, Res};
+use crate::types::{Builtin, Key, List, Map, Res};
 use crate::{Object, Type};
 
 /// Convert a function by name to a [`Builtin`] object and append it to a
