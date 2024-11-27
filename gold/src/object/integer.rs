@@ -83,8 +83,14 @@ impl Display for Int {
 }
 
 impl Step for Int {
-    fn steps_between(start: &Self, end: &Self) -> Option<usize> {
-        usize::try_from(&end.sub(start)).ok()
+    fn steps_between(start: &Self, end: &Self) -> (usize, Option<usize>) {
+        if start > end {
+            (0, Some(0))
+        } else if let Some(x) = usize::try_from(&end.sub(start)).ok() {
+            (x, Some(x))
+        } else {
+            (usize::MAX, None)
+        }
     }
 
     fn forward_checked(start: Self, count: usize) -> Option<Self> {

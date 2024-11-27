@@ -615,7 +615,7 @@ impl Object {
     }
 
     /// Extract the list variant if applicable.
-    pub fn get_list<'a>(&'a self) -> Option<GcCellRef<'_, List>> {
+    pub fn get_list<'a>(&'a self) -> Option<GcCellRef<'a, List>> {
         match &self.0 {
             ObjV::List(x) => Some(x.borrow()),
             _ => None,
@@ -623,7 +623,7 @@ impl Object {
     }
 
     /// Extract the map variant if applicable.
-    pub fn get_map<'a>(&'a self) -> Option<GcCellRef<'_, Map>> {
+    pub fn get_map<'a>(&'a self) -> Option<GcCellRef<'a, Map>> {
         match &self.0 {
             ObjV::Map(x) => Some(x.borrow()),
             _ => None,
@@ -631,7 +631,7 @@ impl Object {
     }
 
     /// Extract the map variant if applicable.
-    pub fn get_map_mut<'a>(&'a self) -> Option<GcCellRefMut<'_, Map>> {
+    pub fn get_map_mut<'a>(&'a self) -> Option<GcCellRefMut<'a, Map>> {
         match &self.0 {
             ObjV::Map(x) => Some(x.borrow_mut()),
             _ => None,

@@ -394,13 +394,13 @@ fn token<'a>(
 
 macro_rules! tok {
     ($pname:ident, $toktype:ident) => {
-        fn $pname<'a>(input: In<'a>) -> Out<Tagged<&'a str>> {
+        fn $pname<'a>(input: In<'a>) -> Out<'a, Tagged<&'a str>> {
             token(CachedLexer::next_token, TokenType::$toktype).parse(input)
         }
     };
 
     ($pname:ident, $toktype:ident, $getter:ident) => {
-        fn $pname<'a>(input: In<'a>) -> Out<Tagged<&'a str>> {
+        fn $pname<'a>(input: In<'a>) -> Out<'a, Tagged<&'a str>> {
             token(CachedLexer::$getter, TokenType::$toktype).parse(input)
         }
     };
