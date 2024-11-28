@@ -20,7 +20,7 @@ fn eval_file(x: String) -> Object {
 }
 
 #[pymodule]
-fn goldpy(_py: Python, m: &PyModule) -> PyResult<()> {
+fn goldpy<'py>(_py: Python<'py>, m: &Bound<'py, PyModule>) -> PyResult<()> {
     m.add_class::<PyImportConfig>()?;
     m.add_function(wrap_pyfunction!(eval, m)?)?;
     m.add_function(wrap_pyfunction!(eval_raw, m)?)?;

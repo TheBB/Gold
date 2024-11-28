@@ -109,8 +109,23 @@ impl Str {
 }
 
 #[cfg(feature = "python")]
-impl pyo3::IntoPy<pyo3::PyObject> for &Str {
-    fn into_py(self, py: pyo3::prelude::Python<'_>) -> pyo3::PyObject {
-        self.as_str().into_py(py)
+impl<'py> pyo3::IntoPyObject<'py> for Str {
+    type Target = pyo3::types::PyString;
+    type Output = pyo3::Bound<'py, Self::Target>;
+    type Error = std::convert::Infallible;
+
+    fn into_pyobject(self, py: pyo3::prelude::Python<'py>) -> Result<Self::Output, Self::Error> {
+        self.as_str().into_pyobject(py)
+    }
+}
+
+#[cfg(feature = "python")]
+impl<'py, 'a> pyo3::IntoPyObject<'py> for &'a Str {
+    type Target = pyo3::types::PyString;
+    type Output = pyo3::Bound<'py, Self::Target>;
+    type Error = std::convert::Infallible;
+
+    fn into_pyobject(self, py: pyo3::prelude::Python<'py>) -> Result<Self::Output, Self::Error> {
+        self.as_str().into_pyobject(py)
     }
 }

@@ -34,10 +34,13 @@ pub use integer::Int;
 pub use string::Str;
 
 #[cfg(feature = "python")]
-use pyo3::{FromPyObject, IntoPy, Py, PyAny, PyErr, PyObject, PyResult, Python};
+use pyo3::{FromPyObject, Bound, Borrowed, Py, PyAny, PyErr, PyResult, Python};
 
 #[cfg(feature = "python")]
-use pyo3::types::{PyDict, PyList, PyTuple};
+use pyo3::prelude::PyAnyMethods;
+
+#[cfg(feature = "python")]
+use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
 
 #[cfg(feature = "python")]
 use pyo3::exceptions::PyTypeError;
@@ -1058,7 +1061,7 @@ impl TryFrom<&Object> for JsonValue {
 
 #[cfg(feature = "python")]
 impl<'s> FromPyObject<'s> for Object {
-    fn extract(obj: &'s PyAny) -> PyResult<Self> {
+    fn extract_bound(obj: &pyo3::Bound<'s, PyAny>) -> PyResult<Self> {
         // Nothing magical here, just a prioritized list of possible Python types and their Gold equivalents
         if let Ok(x) = obj.extract::<Func>() {
             Ok(Object::new_func(x))
@@ -1081,17 +1084,17 @@ impl<'s> FromPyObject<'s> for Object {
         } else if obj.is_none() {
             Ok(Object::null())
         } else if obj.is_callable() {
-            let func: Py<PyAny> = obj.into();
+            let func: Py<PyAny> = obj.to_owned().unbind();
             let closure: Rc<NativeClosure> = Rc::new(move |args: &List, kwargs: Option<&Map>| {
                 let result = Python::with_gil(|py| {
-                    let a = PyTuple::new(py, args.iter().map(|x| x.clone().into_py(py)));
+                    let a = PyTuple::new(py, args.iter().map(Object::clone))?;
                     let b = PyDict::new(py);
                     if let Some(kws) = kwargs {
                         for (k, v) in kws {
-                            b.set_item(k.as_str(), v.clone().into_py(py))?;
+                            b.set_item(k.as_str(), v.clone())?;
                         }
                     }
-                    let result = func.call(py, a, Some(b))?.extract::<Object>(py)?;
+                    let result = func.call(py, a, Some(&b))?.extract::<Object>(py)?;
                     Ok(result)
                 });
                 result.map_err(|e: PyErr| Error::new(Reason::External(format!("{}", e))))
@@ -1100,33 +1103,40 @@ impl<'s> FromPyObject<'s> for Object {
         } else {
             Err(PyTypeError::new_err(format!(
                 "uncovertible type: {}",
-                obj.get_type().name().unwrap_or("unknown")
+                obj.get_type().to_string()
             )))
         }
     }
 }
 
 #[cfg(feature = "python")]
-impl pyo3::IntoPy<PyObject> for Object {
-    fn into_py(self, py: Python<'_>) -> PyObject {
+impl<'py> pyo3::IntoPyObject<'py> for Object {
+    type Target = PyAny;
+    type Output = Bound<'py, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         match &self.0 {
-            ObjV::Int(x) => x.into_py(py),
-            ObjV::Float(x) => x.into_py(py),
-            ObjV::Str(x) => x.as_str().into_py(py),
-            ObjV::Boolean(x) => x.into_py(py),
+            ObjV::Int(x) => x.into_pyobject(py).map(Bound::into_any),
+            ObjV::Float(x) => x.into_pyobject(py).map(Bound::into_any).map_err(|_| unreachable!()),
+            ObjV::Str(x) => x.into_pyobject(py).map(Bound::into_any).map_err(|_| unreachable!()),
+            ObjV::Boolean(x) => (*x).into_pyobject(py).map(Borrowed::to_owned).map(Bound::into_any).map_err(|_| unreachable!()),
             ObjV::List(x) => {
-                PyList::new(py, x.borrow().iter().map(|x| x.clone().into_py(py))).into()
+                PyList::new(
+                    py,
+                    x.borrow().iter().map(Object::clone),
+                ).map(Bound::into_any)
             }
             ObjV::Map(x) => {
                 let r = PyDict::new(py);
                 for (k, v) in x.borrow().iter() {
-                    r.set_item(k.as_str(), v.clone().into_py(py)).unwrap();
+                    r.set_item(k.as_str(), v.clone())?;
                 }
-                r.into()
+                Ok(r.into_any())
             }
-            ObjV::Null => (None as Option<bool>).into_py(py),
-            ObjV::ListIter(_, _) => 1.into_py(py), // TODO
-            ObjV::Func(x) => x.into_py(py),
+            ObjV::Null => Ok(py.None().into_bound(py)),
+            ObjV::ListIter(_, _) => Ok(py.None().into_bound(py)),
+            ObjV::Func(x) => x.into_pyobject(py).map(Bound::into_any),
         }
     }
 }

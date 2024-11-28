@@ -7,13 +7,10 @@ use gc::{Finalize, Gc, Trace};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "python")]
-use pyo3::FromPyObject;
+use pyo3::{pyclass, pymethods, FromPyObject, PyErr, IntoPyObject, Bound, PyAny, Python};
 
 #[cfg(feature = "python")]
-use pyo3::{pyclass, pymethods, IntoPy, Py, PyAny, PyObject, Python};
-
-#[cfg(feature = "python")]
-use pyo3::types::{PyDict, PyTuple};
+use pyo3::types::{PyAnyMethods, PyDict, PyTuple};
 
 #[cfg(feature = "python")]
 use pyo3::exceptions::PyTypeError;
@@ -138,18 +135,19 @@ impl Func {
 #[cfg(feature = "python")]
 #[pyclass(unsendable)]
 #[derive(Clone)]
-struct PyFunction(Func);
+pub struct PyFunction(Func);
 
 #[cfg(feature = "python")]
 #[pymethods]
 impl PyFunction {
-    #[args(args = "*", kwargs = "**")]
-    fn __call__(
+    #[pyo3(signature = (*args, **kwargs))]
+    fn __call__<'py>(
         &self,
-        py: Python<'_>,
-        args: &PyTuple,
-        kwargs: Option<&PyDict>,
-    ) -> pyo3::PyResult<Py<PyAny>> {
+        py: Python<'py>,
+        args: &Bound<'py, PyTuple>,
+        kwargs: Option<&Bound<'py, PyDict>>,
+    ) -> pyo3::PyResult<Bound<'py, PyAny>> {
+    // ) -> pyo3::PyResult<Py<PyAny>> {
         let func = Object::new_func(self.0.clone());
 
         let posargs_obj = args.extract::<Object>()?;
@@ -173,26 +171,41 @@ impl PyFunction {
         }
         .map_err(Error::to_py)?;
 
-        Ok(result.into_py(py))
+        result.into_pyobject(py)
     }
 }
 
 #[cfg(feature = "python")]
-impl IntoPy<PyObject> for &Func {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        PyFunction(self.clone()).into_py(py)
+impl<'py> IntoPyObject<'py> for Func {
+    type Target = PyFunction;
+    type Output = Bound<'py, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        PyFunction(self).into_pyobject(py)
+    }
+}
+
+#[cfg(feature = "python")]
+impl<'py, 'a> IntoPyObject<'py> for &'a Func {
+    type Target = PyFunction;
+    type Output = Bound<'py, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        PyFunction(self.clone()).into_pyobject(py)
     }
 }
 
 #[cfg(feature = "python")]
 impl<'s> FromPyObject<'s> for Func {
-    fn extract(obj: &'s PyAny) -> pyo3::prelude::PyResult<Self> {
+    fn extract_bound(obj: &pyo3::Bound<'s, PyAny>) -> pyo3::PyResult<Self> {
         if let Ok(PyFunction(x)) = obj.extract::<PyFunction>() {
             Ok(x)
         } else {
             Err(PyTypeError::new_err(format!(
                 "uncovertible type: {}",
-                obj.get_type().name().unwrap_or("unknown")
+                obj.get_type().to_string()
             )))
         }
     }
