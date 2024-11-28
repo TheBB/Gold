@@ -3,12 +3,12 @@ requires = ["maturin>=0.13,<0.14"]
 build-backend = "maturin"
 
 [project]
+dynamic = ["version"]
 name = "goldpy"
-requires-python = ">=3.7"
+requires-python = ">=3.9"
+readme = "README.md"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
-
-
