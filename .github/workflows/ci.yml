@@ -12,6 +12,12 @@ on:
 
 jobs:
 
+  debug:
+    name: debug
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hmarr/debug-action@v3
+
   rutest:
     name: Test Rust
     strategy:
