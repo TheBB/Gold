@@ -8,10 +8,15 @@ on:
     branches:
       - master
   create:
-    tags:
   workflow_dispatch:
 
 jobs:
+
+  debug:
+    name: Debug
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hmarr/debug-action@v3
 
   rutest:
     name: Test Rust
@@ -36,7 +41,7 @@ jobs:
     strategy:
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
-        py: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        py: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     runs-on: ${{ matrix.os }}
     steps:
 
@@ -75,74 +80,86 @@ jobs:
 
   build-wheels:
     name: Build wheels
-    if: "startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'"
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     needs: pytest
     strategy:
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     runs-on: ${{ matrix.os }}
     steps:
 
       - uses: actions/checkout@v3
 
-      - uses: messense/maturin-action@v1
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python }}
+
+      - uses: PyO3/maturin-action@v1
         if: ${{ matrix.os == 'ubuntu-latest' }}
         with:
           manylinux: auto
           rust-toolchain: nightly
           command: build
-          args: --release --sdist -o dist --find-interpreter -m goldpy/Cargo.toml
+          args: --release -o dist -m goldpy/Cargo.toml --interpreter python${{ matrix.python }}
 
-      - uses: messense/maturin-action@v1
+      - uses: PyO3/maturin-action@v1
         if: ${{ matrix.os == 'windows-latest' }}
         with:
           manylinux: auto
           rust-toolchain: nightly
           command: build
-          args: --release -o dist --find-interpreter -m goldpy/Cargo.toml
+          args: --release -o dist -m goldpy/Cargo.toml --interpreter python${{ matrix.python }}
 
-      - uses: actions/setup-python@v4
-        if: ${{ matrix.os == 'macos-latest' }}
-        with:
-          python-version: '3.12'
-
-      - uses: actions/setup-python@v4
-        if: ${{ matrix.os == 'macos-latest' }}
-        with:
-          python-version: '3.9'
-
-      - uses: actions/setup-python@v4
-        if: ${{ matrix.os == 'macos-latest' }}
-        with:
-          python-version: '3.8'
-
-      - uses: messense/maturin-action@v1
+      - uses: PyO3/maturin-action@v1
         if: ${{ matrix.os == 'macos-latest' }}
         with:
           manylinux: auto
           rust-toolchain: nightly
           command: build
-          args: --release -o dist --universal2 --find-interpreter -m goldpy/Cargo.toml
+          args: --release -o dist --universal2 -m goldpy/Cargo.toml --interpreter python${{ matrix.python }}
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
-          path: dist
+          name: wheel-${{ matrix.os }}-${{ matrix.python }}
+          path: ./dist/*.whl
 
-  release:
-    name: Release
-    if: "startsWith(github.ref, 'refs/tags/')"
+  deploy:
+    name: Deploy
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     needs: build-wheels
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/goldpy
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          path: dist
+          merge-multiple: true
       - name: Publish to PyPI
-        uses: messense/maturin-action@v1
-        env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  test-deploy:
+    name: Test Deploy
+    if: github.event_name == 'workflow_dispatch'
+    needs: build-wheels
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-test
+      url: https://test.pypi.org/p/goldpy
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          command: upload
-          args: --skip-existing *
+          path: dist
+          merge-multiple: true
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+          repository-url: https://test.pypi.org/legacy/

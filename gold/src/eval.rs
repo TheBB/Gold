@@ -9,7 +9,7 @@ use pyo3::{pyclass, pymethods, FromPyObject, Py, PyAny, PyResult, Python};
 use pyo3::exceptions::PyTypeError;
 
 #[cfg(feature = "python")]
-use pyo3::types::{PyString, PyTuple};
+use pyo3::types::{PyString, PyTuple, PyAnyMethods};
 
 use crate::builtins::BUILTINS;
 use crate::compile::{CompiledFunction, Instruction};
@@ -82,13 +82,13 @@ struct PyImportCallable(Rc<ImportCallable>);
 
 #[cfg(feature = "python")]
 impl<'s> FromPyObject<'s> for PyImportCallable {
-    fn extract(obj: &'s PyAny) -> PyResult<Self> {
+    fn extract_bound(obj: &pyo3::Bound<'s, PyAny>) -> PyResult<Self> {
         if obj.is_callable() {
-            let func: Py<PyAny> = obj.into();
+            let func: Py<PyAny> = obj.to_owned().unbind();
             let closure = move |path: &str| {
                 let result = Python::with_gil(|py| {
                     let pypath = PyString::new(py, path);
-                    let pyargs = PyTuple::new(py, vec![pypath]);
+                    let pyargs = PyTuple::new(py, vec![pypath])?;
                     let result = func.call(py, pyargs, None)?;
                     result.extract::<Option<Object>>(py)
                 });
@@ -99,7 +99,7 @@ impl<'s> FromPyObject<'s> for PyImportCallable {
         } else {
             Err(PyTypeError::new_err(format!(
                 "got {}, expected callable",
-                obj.get_type().name().unwrap_or("unknown")
+                obj.get_type().to_string()
             )))
         }
     }
@@ -118,7 +118,7 @@ pub struct PyImportConfig {
 #[pymethods]
 impl PyImportConfig {
     #[new]
-    #[args(root = "None", custom = "None")]
+    #[pyo3(signature = (root = None, custom = None))]
     fn new(root: Option<String>, custom: Option<PyImportCallable>) -> Self {
         PyImportConfig {
             root_path: root,

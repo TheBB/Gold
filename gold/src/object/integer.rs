@@ -17,7 +17,10 @@ use crate::formatting::{
 use crate::types::Res;
 
 #[cfg(feature = "python")]
-use pyo3::{IntoPy, PyObject, Python};
+use pyo3::{Bound, Python, IntoPyObject, PyErr};
+
+#[cfg(feature = "python")]
+use pyo3::types::PyInt;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 enum IntV {
@@ -83,8 +86,14 @@ impl Display for Int {
 }
 
 impl Step for Int {
-    fn steps_between(start: &Self, end: &Self) -> Option<usize> {
-        usize::try_from(&end.sub(start)).ok()
+    fn steps_between(start: &Self, end: &Self) -> (usize, Option<usize>) {
+        if start > end {
+            (0, Some(0))
+        } else if let Some(x) = usize::try_from(&end.sub(start)).ok() {
+            (x, Some(x))
+        } else {
+            (usize::MAX, None)
+        }
     }
 
     fn forward_checked(start: Self, count: usize) -> Option<Self> {
@@ -505,11 +514,29 @@ fn f64_to_bigs(x: f64) -> (BigInt, BigInt) {
 }
 
 #[cfg(feature = "python")]
-impl IntoPy<PyObject> for &Int {
-    fn into_py(self, py: Python<'_>) -> PyObject {
+impl<'py> IntoPyObject<'py> for Int {
+    type Target = PyInt;
+    type Output = Bound<'py, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
         match &self.0 {
-            IntV::Small(x) => x.into_py(py),
-            IntV::Big(x) => x.as_ref().clone().into_py(py),
+            IntV::Small(x) => Ok(x.into_pyobject(py).unwrap()),
+            IntV::Big(x) => x.as_ref().into_pyobject(py),
+        }
+    }
+}
+
+#[cfg(feature = "python")]
+impl<'a, 'py> IntoPyObject<'py> for &'a Int {
+    type Target = PyInt;
+    type Output = Bound<'py, Self::Target>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        match &self.0 {
+            IntV::Small(x) => Ok(x.into_pyobject(py).unwrap()),
+            IntV::Big(x) => x.as_ref().into_pyobject(py),
         }
     }
 }

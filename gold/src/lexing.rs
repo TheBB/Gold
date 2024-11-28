@@ -605,31 +605,31 @@ mod tests {
         };
     }
 
-    fn name(s: &'static str) -> Token {
+    fn name(s: &'static str) -> Token<'static> {
         Token {
             kind: TokenType::Name,
             text: s,
         }
     }
-    fn float(s: &'static str) -> Token {
+    fn float(s: &'static str) -> Token<'static> {
         Token {
             kind: TokenType::Float,
             text: s,
         }
     }
-    fn int(s: &'static str) -> Token {
+    fn int(s: &'static str) -> Token<'static> {
         Token {
             kind: TokenType::Integer,
             text: s,
         }
     }
-    fn stringlit(s: &'static str) -> Token {
+    fn stringlit(s: &'static str) -> Token<'static> {
         Token {
             kind: TokenType::StringLit,
             text: s,
         }
     }
-    fn multistring(s: &'static str) -> Token {
+    fn multistring(s: &'static str) -> Token<'static> {
         Token {
             kind: TokenType::MultiString,
             text: s,
