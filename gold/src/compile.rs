@@ -1,3 +1,5 @@
+#![allow(non_local_definitions)]
+
 use std::collections::{HashMap, HashSet};
 
 use gc::{Finalize, Trace};

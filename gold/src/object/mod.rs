@@ -1,5 +1,7 @@
 //! A Gold object is represented by the [`Object`] type.
 
+#![allow(non_local_definitions)]
+
 mod function;
 mod integer;
 mod string;
