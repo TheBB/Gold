@@ -143,9 +143,9 @@ checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 
 [[package]]
 name = "gc"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f73a03797d58caede765f4b19522d1a63d737088bbef81de06d2dd117d7bc8c3"
+checksum = "1bd7fce06a0aabc277bd4605d94ad766841b88ab9c48f45bbef7ee3f14084dd3"
 dependencies = [
  "gc_derive",
  "serde",
