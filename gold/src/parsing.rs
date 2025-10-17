@@ -1732,7 +1732,7 @@ fn keyword_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         )),
         |(kwargs, expr)| {
             let span = kwargs.span()..expr.outer();
-            eprintln!("gold: {{|...|}} syntax is deprecated, use fn {{...}} instead");
+            // eprintln!("gold: {{|...|}} syntax is deprecated, use fn {{...}} instead");
             PExpr::Naked(
                 Expr::Function {
                     positional: ListBinding::new(vec![]).tag(kwargs.span().with_length(1)),
