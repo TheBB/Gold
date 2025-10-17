@@ -50,6 +50,9 @@ lazy_static! {
         builtin!(m, t, log);
         builtin!(m, t, ord);
         builtin!(m, t, chr);
+        builtin!(m, t, startswith);
+        builtin!(m, t, endswith);
+
         builtin!(m, t, isint);
         builtin!(m, t, isstr);
         builtin!(m, t, isnull);
@@ -366,6 +369,24 @@ fn chr(args: &List, _: Option<&Map>) -> Res<Object> {
     signature!(args = [x: any] { expected_pos!(0, x, Integer) });
 
     argcount!(1, args)
+}
+
+/// Check if a string starts with a prefix
+fn startswith(args: &List, _: Option<&Map>) -> Res<Object> {
+    signature!(args = [x: str, y: str] { return Ok(Object::from(x.starts_with(y))) });
+    signature!(args = [x: any, _y: str] { expected_pos!(0, x, String) });
+    signature!(args = [_x: str, y: any] { expected_pos!(1, y, String) });
+
+    argcount!(2, args)
+}
+
+/// Check if a string ends with a suffix
+fn endswith(args: &List, _: Option<&Map>) -> Res<Object> {
+    signature!(args = [x: str, y: str] { return Ok(Object::from(x.ends_with(y))) });
+    signature!(args = [x: any, _y: str] { expected_pos!(0, x, String) });
+    signature!(args = [_x: str, y: any] { expected_pos!(1, y, String) });
+
+    argcount!(2, args)
 }
 
 /// Check whether the argument is an integer.

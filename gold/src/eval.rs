@@ -1639,6 +1639,22 @@ mod tests {
         assert_seq!(eval("float(true)"), Object::from(1.0));
         assert_seq!(eval("float(false)"), Object::from(0.0));
         assert_seq!(eval("float(\"1.2\")"), Object::from(1.2));
+
+        assert_seq!(eval("startswith(\"a\", \"a\")"), Object::from(true));
+        assert_seq!(eval("startswith(\"ab\", \"a\")"), Object::from(true));
+        assert_seq!(eval("startswith(\"ab\", \"b\")"), Object::from(false));
+        assert_seq!(eval("startswith(\"a\", \"ab\")"), Object::from(false));
+
+        assert_seq!(eval("endswith(\"a\", \"a\")"), Object::from(true));
+        assert_seq!(eval("endswith(\"ab\", \"a\")"), Object::from(false));
+        assert_seq!(eval("endswith(\"a\", \"ab\")"), Object::from(false));
+        assert_seq!(eval("endswith(\"ab\", \"b\")"), Object::from(true));
+
+        assert_seq!(eval("startswith(\"\", \"\")"), Object::from(true));
+        assert_seq!(eval("startswith(\"donkidonk\", \"\")"), Object::from(true));
+
+        assert_seq!(eval("endswith(\"\", \"\")"), Object::from(true));
+        assert_seq!(eval("endswith(\"donkidonk\", \"\")"), Object::from(true));
     }
 
     macro_rules! loc {
