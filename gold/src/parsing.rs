@@ -1711,7 +1711,7 @@ fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
         .tag(span),
     );
 
-    eprintln!("gold: |...| syntax is deprecated, use fn (...) instead");
+    // eprintln!("gold: |...| syntax is deprecated, use fn (...) instead");
     Ok((l, result))
 }
 
