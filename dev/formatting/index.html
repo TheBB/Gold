@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        <link rel="canonical" href="https://TheBB.github.io/Gold/dev/formatting/">
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>String formatting - Gold</title>
+        <link href="../css/bootstrap.min.css" rel="stylesheet">
+        <link href="../css/fontawesome.min.css" rel="stylesheet">
+        <link href="../css/brands.min.css" rel="stylesheet">
+        <link href="../css/solid.min.css" rel="stylesheet">
+        <link href="../css/v4-font-face.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <link href="../css/version-select.css" rel="stylesheet">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body>
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href="..">Gold</a>
+                <!-- Expander button -->
+                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse" aria-controls="navbar-collapse" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li class="nav-item">
+                                <a href=".." class="nav-link">Home</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="./" class="nav-link active" aria-current="page">String formatting</a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="../whirlwind/" class="nav-link">Whirlwind tour</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                            <li class="nav-item">
+                                <a rel="prev" href=".." class="nav-link">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a rel="next" href="../whirlwind/" class="nav-link">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#string-formatting" class="nav-link">String formatting</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#fill-and-align" class="nav-link">Fill and align</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#sign" class="nav-link">Sign</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#alternate-form" class="nav-link">Alternate form</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#zero-padding" class="nav-link">Zero padding</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#width" class="nav-link">Width</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#grouping" class="nav-link">Grouping</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#precision" class="nav-link">Precision</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#formatting-type" class="nav-link">Formatting type</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="string-formatting">String formatting</h1>
+<p>Gold supports string formatting specifiers, similar to what you see in many
+other languages, for specifying how a value should be formatted when used in a
+string interpolation context:</p>
+<pre><code>&quot;Here is a number: ${number:.2f}&quot;
+</code></pre>
+<p>This will format a number using two digits after the decimal point.</p>
+<p>The format specifier follows the expression to interpolate and is separated from
+it by a colon.</p>
+<pre><code>&quot;${expr:format}
+</code></pre>
+<p>The format string adheres to the following syntax, which should be fairly
+familiar if you have used such features in other languages:</p>
+<pre><code>[[fill]align][sign]['#']['0'][width][grouping][.precision][type]
+</code></pre>
+<h2 id="fill-and-align">Fill and align</h2>
+<p>The alignment <code>align</code>, if present, should be one of the following characters:</p>
+<ul>
+<li><code>&lt;</code>: indicates that the value should be left-aligned within its space.</li>
+<li><code>&gt;</code>: indecates that the value should be right-aligned within its space.</li>
+<li><code>^</code>: indicates that the value should be centered within its space. In case
+  there is an odd number of available columns, the value will be shifted one
+  character to the left.</li>
+<li><code>=</code>: for numbers, indicates that the sign (if any) should be left-aligned and
+  that the value should be right-aligned.</li>
+</ul>
+<p>The <code>fill</code> character, if present, is used to fill the remaining columns. The
+default fill is a whitespace.</p>
+<p>By default, numbers are aligned to the right and text values are aligned to the
+left.</p>
+<p>In most cases the fill and align settings are not useful unless <code>width</code> is also
+specified, since then the value will be formatted using exactly the required
+amount of space.</p>
+<h2 id="sign">Sign</h2>
+<p>For numbers, <code>sign</code> should be one of the following characters:</p>
+<ul>
+<li><code>+</code>: indicates that the sign should always be printed, using <code>+</code> for
+  nonnegative numbers and <code>-</code> for negative ones.</li>
+<li><code>-</code>: indicates that the sign should only be printed for negative numbers.</li>
+<li><code></code> (a whitespace): indicates that the sign only be printed for negative
+  numbers, and that a single whitespace be used in place for plus for
+  nonnegative numbers.</li>
+</ul>
+<h2 id="alternate-form">Alternate form</h2>
+<p>The presence of <code>#</code> indicates printing in alternate form. For numbers printed in
+non-decimal form, this will add a <code>0x</code>, <code>0X</code>, <code>0b</code> or <code>0o</code> for hexadecimals
+(lowercase or uppercase), binary or octal numbers, respectively. This indicator
+will be placed <em>before</em> the number but <em>after</em> the sign (if present). In case
+the alignment option <code>=</code> is used, it will also be placed <em>before</em> the fill
+characters.</p>
+<h2 id="zero-padding">Zero padding</h2>
+<p>The presence of <code>0</code> is equivalent to a fill and align specifier of <code>0=</code>. That
+is, numbers will be zero-padded to the left to fill the available space, after
+the sign (if any).</p>
+<h2 id="width">Width</h2>
+<p>The <code>width</code> specifier should be any nonnegative integer indicating the <em>minimum
+width</em> that the value should take up. There is no requirement that the value
+cannot use more space if required.</p>
+<h2 id="grouping">Grouping</h2>
+<p>Enable the <em>grouping</em> option to print separators between every third digit (in
+decimal form) or every fourth digit (in binary, octal or hexadecimal form). The
+available options are:</p>
+<ul>
+<li><code>,</code>: use a comma as separator</li>
+<li><code>_</code>: use an underscore as separator</li>
+</ul>
+<h2 id="precision">Precision</h2>
+<p>For floating-point numbers, the precision should be a nonnegative integer
+indicating how many digits after the decimal separator to print.</p>
+<h2 id="formatting-type">Formatting type</h2>
+<p>The final character, if present, indicates what type of formatting to use. They
+are divided into three major families: strings, integers and floating-point
+numbers. The family used influences how certain types are interpreted:</p>
+<ul>
+<li>Strings must be formatted as strings, and cannot be used with numerical format
+  specifiers.</li>
+<li>Integers must be formatted as integers or floating-point numbers.</li>
+<li>Booleans are formatted as strings if possible, then integers or floating-point
+  numbers if not. When interpreted as numbers, <code>true</code> is 1 and <code>false</code> is 0.</li>
+<li>Null is interpreted as a string, never as a number.</li>
+<li>Lists and objects cannot be formatted this way.</li>
+</ul>
+<h3 id="formatting-strings">Formatting strings</h3>
+<p>The only string formatting type is <code>s</code>. This is the default if the value being
+formatted is a string, a boolean or null.</p>
+<h3 id="formatting-integers">Formatting integers</h3>
+<p>The available formatting types are:</p>
+<ul>
+<li><code>b</code>: format the number in binary form.</li>
+<li><code>c</code>: interpret the number as a unicode codepoint and print the respective
+  character.</li>
+<li><code>d</code>: format the number in decimal form. This is the default if the value being
+  formatted is an integer.</li>
+<li><code>o</code>: format the number in octal form.</li>
+<li><code>x</code>: format the number in hexadecimal form using lowercase letters a-f.</li>
+<li><code>X</code>: format the number in hexadecimal form using uppercase letters A-F.</li>
+</ul>
+<h3 id="formatting-floating-point-numbers">Formatting floating-point numbers</h3>
+<p>The available formatting types are:</p>
+<ul>
+<li><code>e</code>: format the number in scientific form (mantissa and exponent) using a
+  lowercase 'e'.</li>
+<li><code>E</code>: format the number in scientific form (mantissa and exponent) using an
+  uppercase 'E'.</li>
+<li><code>f</code>: format the number in fixed-point form, using a number of digits indicated
+  by the precision specifier (default 6).</li>
+<li><code>g</code>: format the number using the number of digits required for an unambiguous
+  representation. This is the default if the value being formatted is a
+  floating-point number. If the precision is provided, the default is <code>f</code>
+  instead.</li>
+<li><code>%</code>: multiply the number by 100 and format as with <code>f</code>, printing a trailing
+  percentage symbol.</li>
+</ul></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="../js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js"></script>
+        <script src="../js/version-select.js"></script>
+
+        <div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
