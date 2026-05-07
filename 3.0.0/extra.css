@@ -1,5 +1,0 @@
-/* Hide the auto-generated H1 on the index page only */
-[data-md-page-icon="home"] h1, 
-.md-content h1:first-child {
-    display: none;
-}
