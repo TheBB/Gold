@@ -1,4 +1,6 @@
-# The Gold language
+<p align="center">
+  <img src="assets/logo-large.png" width="200px" alt="Large Logo">
+</p>
 
 The Gold language is a programmable configuration language. Gold serves as an
 alternative to other configuration languages, such as
