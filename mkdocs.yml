@@ -1,4 +1,0 @@
-site_name: "Gold" # Must match your zensical.toml
-site_url: "https://TheBB.github.io/Gold/"
-plugins:
-  - mike

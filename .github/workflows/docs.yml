@@ -23,7 +23,7 @@ jobs:
 
       - name: Install Zensical and Mike
         run: |
-          pip install zensical mike
+          pip install zensical git+https://github.com/squidfunk/mike
 
       - name: Configure Git
         run: |
