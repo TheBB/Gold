@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-    <url>
-         <loc>https://TheBB.github.io/Gold/dev/</loc>
-         <lastmod>2026-05-07</lastmod>
-    </url>
-    <url>
-         <loc>https://TheBB.github.io/Gold/dev/formatting/</loc>
-         <lastmod>2026-05-07</lastmod>
-    </url>
-    <url>
-         <loc>https://TheBB.github.io/Gold/dev/whirlwind/</loc>
-         <lastmod>2026-05-07</lastmod>
-    </url>
+      <url>
+        <loc>https://TheBB.github.io/Gold/dev/</loc>
+      </url>
+      <url>
+        <loc>https://TheBB.github.io/Gold/dev/whirlwind/</loc>
+      </url>
+      <url>
+        <loc>https://TheBB.github.io/Gold/dev/formatting/</loc>
+      </url>
 </urlset>
