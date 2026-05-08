@@ -38,4 +38,5 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           VERSION=${GITHUB_REF_NAME#v}
+          VERSION=${VERSION%.*}
           mike deploy --push --update-aliases $VERSION latest
