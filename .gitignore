@@ -2,3 +2,4 @@
 /.vscode
 /contrib
 /site
+__pycache__
