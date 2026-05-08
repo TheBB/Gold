@@ -7,7 +7,7 @@ use gc::{Finalize, Gc, Trace};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "python")]
-use pyo3::{pyclass, pymethods, FromPyObject, PyErr, IntoPyObject, Bound, PyAny, Python};
+use pyo3::{pyclass, pymethods, FromPyObject, PyErr, IntoPyObject, Bound, Borrowed, PyAny, Python};
 
 #[cfg(feature = "python")]
 use pyo3::types::{PyAnyMethods, PyDict, PyTuple};
@@ -133,7 +133,7 @@ impl Func {
 }
 
 #[cfg(feature = "python")]
-#[pyclass(unsendable)]
+#[pyclass(unsendable, from_py_object)]
 #[derive(Clone)]
 pub struct PyFunction(Func);
 
@@ -198,8 +198,9 @@ impl<'py, 'a> IntoPyObject<'py> for &'a Func {
 }
 
 #[cfg(feature = "python")]
-impl<'s> FromPyObject<'s> for Func {
-    fn extract_bound(obj: &pyo3::Bound<'s, PyAny>) -> pyo3::PyResult<Self> {
+impl<'a, 'py> FromPyObject<'a, 'py> for Func {
+    type Error = PyErr;
+    fn extract(obj: Borrowed<'a, 'py, PyAny>) -> pyo3::PyResult<Self> {
         if let Ok(PyFunction(x)) = obj.extract::<PyFunction>() {
             Ok(x)
         } else {

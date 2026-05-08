@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 #[cfg(feature = "python")]
-use pyo3::{pyclass, pymethods, FromPyObject, Py, PyAny, PyResult, Python};
+use pyo3::{pyclass, pymethods, Borrowed, FromPyObject, Py, PyAny, PyErr, PyResult, Python};
 
 #[cfg(feature = "python")]
 use pyo3::exceptions::PyTypeError;
@@ -81,17 +81,18 @@ impl ImportConfig {
 struct PyImportCallable(Rc<ImportCallable>);
 
 #[cfg(feature = "python")]
-impl<'s> FromPyObject<'s> for PyImportCallable {
-    fn extract_bound(obj: &pyo3::Bound<'s, PyAny>) -> PyResult<Self> {
+impl<'a, 'py> FromPyObject<'a, 'py> for PyImportCallable {
+    type Error = PyErr;
+    fn extract(obj: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
         if obj.is_callable() {
             let func: Py<PyAny> = obj.to_owned().unbind();
             let closure = move |path: &str| {
-                let result = Python::with_gil(|py| {
+                let result = Python::try_attach(|py| {
                     let pypath = PyString::new(py, path);
                     let pyargs = PyTuple::new(py, vec![pypath])?;
                     let result = func.call(py, pyargs, None)?;
                     result.extract::<Option<Object>>(py)
-                });
+                }).expect("Python not initialized");
 
                 result.map_err(|err| Error::new(Reason::External(err.to_string())))
             };
@@ -106,7 +107,7 @@ impl<'s> FromPyObject<'s> for PyImportCallable {
 }
 
 #[cfg(feature = "python")]
-#[pyclass(unsendable, name = "ImportConfig")]
+#[pyclass(unsendable, from_py_object, name = "ImportConfig")]
 #[derive(Clone)]
 /// Import config that can be constructed by Python code.
 pub struct PyImportConfig {

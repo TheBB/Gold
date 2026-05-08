@@ -1062,8 +1062,9 @@ impl TryFrom<&Object> for JsonValue {
 }
 
 #[cfg(feature = "python")]
-impl<'s> FromPyObject<'s> for Object {
-    fn extract_bound(obj: &pyo3::Bound<'s, PyAny>) -> PyResult<Self> {
+impl<'a, 'py> FromPyObject<'a, 'py> for Object {
+    type Error = PyErr;
+    fn extract(obj: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
         // Nothing magical here, just a prioritized list of possible Python types and their Gold equivalents
         if let Ok(x) = obj.extract::<Func>() {
             Ok(Object::new_func(x))
@@ -1088,7 +1089,7 @@ impl<'s> FromPyObject<'s> for Object {
         } else if obj.is_callable() {
             let func: Py<PyAny> = obj.to_owned().unbind();
             let closure: Rc<NativeClosure> = Rc::new(move |args: &List, kwargs: Option<&Map>| {
-                let result = Python::with_gil(|py| {
+                let result = Python::try_attach(|py| {
                     let a = PyTuple::new(py, args.iter().map(Object::clone))?;
                     let b = PyDict::new(py);
                     if let Some(kws) = kwargs {
@@ -1098,7 +1099,7 @@ impl<'s> FromPyObject<'s> for Object {
                     }
                     let result = func.call(py, a, Some(&b))?.extract::<Object>(py)?;
                     Ok(result)
-                });
+                }).expect("Python not initialized");
                 result.map_err(|e: PyErr| Error::new(Reason::External(format!("{}", e))))
             });
             Ok(Object::new_func(closure))
