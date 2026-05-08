@@ -21,9 +21,9 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install Zensical and Mike
+      - name: Install Zensical, Mike, and Gold lexer
         run: |
-          pip install zensical git+https://github.com/squidfunk/mike
+          pip install zensical git+https://github.com/squidfunk/mike ./docs/lexer
 
       - name: Configure Git
         run: |
@@ -39,4 +39,9 @@ jobs:
         run: |
           VERSION=${GITHUB_REF_NAME#v}
           VERSION=${VERSION%.*}
-          mike deploy --push --update-aliases $VERSION latest
+          LATEST_TAG=$(git tag --list 'v*' | sort -V | tail -1)
+          if [ "$GITHUB_REF_NAME" = "$LATEST_TAG" ]; then
+            mike deploy --push --update-aliases $VERSION latest
+          else
+            mike deploy --push $VERSION
+          fi

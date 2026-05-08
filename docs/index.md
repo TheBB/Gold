@@ -26,7 +26,7 @@ jobs:
 
 can be written in Gold in a more natural way
 
-```
+```gold
 {
   jobs: {
     production-deploy: {

@@ -47,19 +47,19 @@ Gold support all the JSON-like types, with the important addition of
 Lists are constructed with square brackets surrounding a comma-separated list of
 values.
 
-```
+```gold
 [0, 1.0, "here is a string"]
 ```
 
 An empty list is just
 
-```
+```gold
 []
 ```
 
 Use square brackets to index a list and extract its elements
 
-```
+```gold
 ["a", "b", "c"][1]   # => "b"
 ```
 
@@ -70,7 +70,7 @@ In Gold, indexing is zero-based.
 
 Objects are constructed with curly brackets surrounding a comma-separated list of key-value pairs. The key and the value are themselves separated by a colon. In most cases it's not necessary to quote the key.
 
-```
+```gold
 {
     my-key: "value",
     my-other-key: "some other value",
@@ -79,7 +79,7 @@ Objects are constructed with curly brackets surrounding a comma-separated list o
 
 Quoting the key is necessary if it contains a colon, or if it starts with a quotation mark.
 
-```
+```gold
 {
     "with-colon:": true,
     "\"with-quote": true,
@@ -88,7 +88,7 @@ Quoting the key is necessary if it contains a colon, or if it starts with a quot
 
 An empty object is just
 
-```
+```gold
 {}
 ```
 
@@ -96,19 +96,19 @@ Gold does not currently support objects whose keys are not strings.
 
 Use dot-access syntax to access values from an object, in case the key is compatible with Gold syntax:
 
-```
+```gold
 {x: 1}.x   # => 1
 ```
 
 But this wouldn't work, since the hyphen is interpreted as a minus operator:
 
-```
+```gold
 {some-key: 1}.some-key
 ```
 
 In this case, rely on explicit indexing with square brackets:
 
-```
+```gold
 {some-key: 1}["some-key"]   # => 1
 ```
 
@@ -117,14 +117,14 @@ In this case, rely on explicit indexing with square brackets:
 
 To bind values to names, use the *let* expression:
 
-```
+```gold
 let x = 1
 in 2 + x
 ```
 
 You can bind multiple names at once:
 
-```
+```gold
 let x = 1
 let y = 2
 in x + y
@@ -143,14 +143,14 @@ Gold support destructuring assingments.
 
 You can destructure lists:
 
-```
+```gold
 let [a, b, c] = [1, 2, 3]
 in a + b + c
 ```
 
 and objects:
 
-```
+```gold
 let {a, b, c} = {a: 1, b: 2, c: 3}
 in a + b + c
 ```
@@ -158,7 +158,7 @@ in a + b + c
 Use the `as` keyword in object destructuring to use a different bound name than
 the key in the object:
 
-```
+```gold
 let {a as x, b as y, c as z} = {a: 1, b: 2, c: 3}
 in x + y + z
 ```
@@ -166,7 +166,7 @@ in x + y + z
 In both list and object destructuring contexts, you can provide default values
 if the right hand side lacks the relevant values:
 
-```
+```gold
 let [a, b, c = 3] = [1, 2]
 in a + b + c
 
@@ -176,7 +176,7 @@ in a + b + c
 
 Destructuring a list that is too long is an error:
 
-```
+```gold
 let [a, b, c] = [1, 2, 3, 4]   # Error here!
 in a + b + c
 ```
@@ -184,7 +184,7 @@ in a + b + c
 To explicitly ignore extraneous values, slurp them by using the ellipsis
 operator:
 
-```
+```gold
 let [a, b, c, ...] = [1, 2, 3, 4]
 in a + b + c
 ```
@@ -192,14 +192,14 @@ in a + b + c
 or, if the extraneous values are important, bind them to a name too. This will
 produce a list called `rest`:
 
-```
+```gold
 let [a, b, c, ...rest] = [1, 2, 3, 4]
 in a + b + c + rest[0]
 ```
 
 You can also collect extraneous key-value pairs in an object:
 
-```
+```gold
 let {a, b, ...rest} = {a: 1, b: 2, c: 3, d: 4}
 in a + b + rest.c + rest.d
 ```
@@ -207,14 +207,14 @@ in a + b + rest.c + rest.d
 Note that destructuring an object with too many keys *is not an error*, so there
 is no need to do something like this:
 
-```
+```gold
 let {a, b, ...} = {a: 1, b: 2, c: 3}
 in a + b
 ```
 
 And, in fact, that syntax is not valid. Instead, his will work just fine:
 
-```
+```gold
 let {a, b} = {a: 1, b: 2, c: 3}
 in a + b
 ```
@@ -223,7 +223,7 @@ You can also perform destructuring several levels deep. This pattern, for
 example, will extract the key `c: 1` inside a list in an object in a list in an
 object:
 
-```
+```gold
 let {a as [{b as [{c}]}]} = {a: [{b: [{c: 1}]}]}
 in a
 ```
@@ -233,7 +233,7 @@ in a
 
 Gold has a single branching expression:
 
-```
+```gold
 if condition then expression else expression
 ```
 
@@ -264,7 +264,7 @@ mylist = []
 
 First, it's possible to conditionally add elements:
 
-```
+```gold
 [
     1,
     if condition: 2,
@@ -275,7 +275,7 @@ First, it's possible to conditionally add elements:
 This may evaluate to `[1, 2, 3]` or `[1, 3]` depending on whether the condition
 is satisfed. Note that this is very different from the following:
 
-```
+```gold
 [
     1,
     if condition 2 else null,
@@ -289,7 +289,7 @@ which is a list that *always* contains three elements: either `[1, 2, 3]` or
 It's also possible to loop over an existing collection to add its elements to a
 new collection:
 
-```
+```gold
 let numbers = [3, 4]
 in [
     1,
@@ -302,7 +302,7 @@ in [
 which evaluates to `[1, 2, 3, 4, 5]`. For this usage, the following usage of the
 splicing operator `...` is equivalent, and probably preferred:
 
-```
+```gold
 let numbers = [3, 4]
 in [1, 2, ...numbers, 5]
 ```
@@ -310,7 +310,7 @@ in [1, 2, ...numbers, 5]
 But the `for x in y` syntax has two important advantages. First, it is possible
 to perform destructuring:
 
-```
+```gold
 let numbers = [[3], [4]]
 in [
     1,
@@ -322,7 +322,7 @@ in [
 
 Second, the value produced may be any expression, so that this will also work:
 
-```
+```gold
 let numbers = [[3], [4]]
 in [
     1,
@@ -334,7 +334,7 @@ in [
 
 And, indeed, loops and conditions may be nested arbitrarily deep:
 
-```
+```gold
 # Extract the names of all adults
 let people = [
     {name: "Bob", age: 42},
@@ -353,7 +353,7 @@ All the above works equally well with objects as with lists, with one important
 caveat. Consider the following modification of the above code to filter a list
 of people to obtain a list of adults.
 
-```
+```gold
 # Extract ages of all adults
 # ...
 in {
@@ -370,7 +370,7 @@ work as expected. The reason is that in an object, `{name: age}` interprets
 
 This can be fixed using [string interpolation](#advanced-strings):
 
-```
+```gold
 # ...
 in {
     for {name, age} in people:
@@ -383,7 +383,7 @@ However, this particular use-case is common enough that Gold supports the
 alternative syntax `$key: value`
 
 
-```
+```gold
 # ...
 in {
     for {name, age} in people:
@@ -397,7 +397,7 @@ in {
 
 Gold supports string interpolation of other values:
 
-```
+```gold
 let a = "Gold"
 in "This language is ${a}"
 ```
@@ -405,7 +405,7 @@ in "This language is ${a}"
 The curly braces are mandatory. The expression to be interpolated can of course
 be more sophisticated than just a name:
 
-```
+```gold
 "1 + 2 is ${1 + 2}"
 ```
 
@@ -413,7 +413,7 @@ Gold also supports format specifiers, see [string formatting](formatting.md).
 
 To facilitate long strings, Gold supports juxtaposition:
 
-```
+```gold
 "here\n"
 "is\a"
 "multiline\n"
@@ -426,7 +426,7 @@ concatenation - no extra characters are added between each part.
 To facilitate writing objects with string values, which is common in many
 configuration files, Gold provides the following long-form string syntax:
 
-```
+```gold
 {
     key:: Some text goes here
     normal-key: false,
@@ -445,7 +445,7 @@ syntactical element.
 
 You can use this to create multiline strings too:
 
-```
+```gold
 {
     key:: This is the first line,
         this is the second line,
@@ -457,13 +457,13 @@ You can use this to create multiline strings too:
 From the second line forward, the greatest common indentation is stripped from
 all lines. Thus the string above could also be rendered as
 
-```
+```gold
 "This is the first line,\nthis is the second line,\nand this is the third line."
 ```
 
 If the first line is empty, it is ignored. Extra indentation is not stripped:
 
-```
+```gold
 {
     example::
         # This is a faithful representation of Python code with indentation
@@ -478,7 +478,7 @@ If the first line is empty, it is ignored. Extra indentation is not stripped:
 
 Functions are defined using the syntax
 
-```
+```gold
 fn (param1, parm2, ...) expression
 ```
 
@@ -487,21 +487,21 @@ Where *expression* may depend on the values of *param1*, *param2*, etc.
 Functions in Gold are always anonymous, and must be called immediately or bound
 to a name to have an effect. For example:
 
-```
+```gold
 let add = fn (x, y) x + y
 in add(1, 2)
 ```
 
 or
 
-```
+```gold
 (fn (x, y) x + y)(1, 2)
 ```
 
 Functions may take any number of parameters (including none at all), and form
 closures around non-local names. For example:
 
-```
+```gold
 let make_adder = fn (x) fn (y) x + y
 let adder = make_adder(3)
 let x = 4
@@ -515,20 +515,20 @@ later binding of *x* to 4.
 Functions may take positional as well as keyword parameters. The two kinds of
 parameters are separated by a semicolon:
 
-```
+```gold
 fn (x; y) x + y
 ```
 
 This function can be called in this way:
 
-```
+```gold
 let add = fn (x; y) x + y
 in add(1, y: 2)
 ```
 
 but not in either of these ways:
 
-```
+```gold
 add(1, 2)
 add(x: 1, y: 2)
 ```
@@ -538,13 +538,13 @@ In Gold, positional and keyword parameters are strictly distinct.
 Functions which only accept keyword parameters can be defined with the
 alternative syntax:
 
-```
+```gold
 fn {x, y, z} x + y + z
 ```
 
 Althouth this is perfectly valid (although somewhat ugly):
 
-```
+```gold
 fn (; x, y, z) x + y + z
 ```
 
@@ -552,14 +552,14 @@ Function parameters are syntactically equivalent to list and object
 destructuring expressions, respectively. Anything that works in those contexts
 also works in function definitions:
 
-```
+```gold
 let sum_first_elements = fn ([x, ...], [y, ...]) x + y
 in sum_first_elements([1, 2], [3, 4])
 ```
 
 Most notably, default parameter values:
 
-```
+```gold
 fn (x, y = 2; multiply = false) if multiply then x * y else x + y
 ```
 
@@ -574,7 +574,7 @@ or a destructuring pattern.
 This can be used to write libraries of functions. If this is the contents of the
 file `mylib.gold`:
 
-```
+```gold
 {
     add: fn (x, y) x + y,
 }
@@ -582,14 +582,14 @@ file `mylib.gold`:
 
 The function *add* can then be used from another file like this:
 
-```
+```gold
 import "mylib.gold" as mylib
 mylib.add(1, 2)
 ```
 
 or like this:
 
-```
+```gold
 import "mylib.gold" as {add}
 add(1, 2)
 ```
@@ -598,7 +598,7 @@ Of course, there is no requirement that the value of an imported file must be an
 object - only a convention (although a strong one). For the single function
 *add*, the following would work just as well:
 
-```
+```gold
 # mylib.gold
 fn (x, y) x + y
 

@@ -4,7 +4,7 @@ Gold supports string formatting specifiers, similar to what you see in many
 other languages, for specifying how a value should be formatted when used in a
 string interpolation context:
 
-```
+```gold
 "Here is a number: ${number:.2f}"
 ```
 
@@ -13,8 +13,8 @@ This will format a number using two digits after the decimal point.
 The format specifier follows the expression to interpolate and is separated from
 it by a colon.
 
-```
-"${expr:format}
+```gold
+"${expr:format}"
 ```
 
 The format string adheres to the following syntax, which should be fairly
