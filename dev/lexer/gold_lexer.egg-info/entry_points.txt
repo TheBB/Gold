@@ -1,0 +1,2 @@
+[pygments.lexers]
+gold = gold_lexer:GoldLexer

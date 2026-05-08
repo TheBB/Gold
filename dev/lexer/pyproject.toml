@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gold-lexer"
+version = "1.0.0"
+dependencies = ["pygments"]
+
+[project.entry-points."pygments.lexers"]
+gold = "gold_lexer:GoldLexer"

@@ -763,12 +763,12 @@
 <p>Gold supports string formatting specifiers, similar to what you see in many
 other languages, for specifying how a value should be formatted when used in a
 string interpolation context:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>&quot;Here is a number: ${number:.2f}&quot;
+<div class="language-gold highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="s">&quot;Here is a number: </span><span class="si">${</span><span class="n">number</span><span class="err">:.2</span><span class="n">f</span><span class="si">}</span><span class="s">&quot;</span>
 </span></code></pre></div>
 <p>This will format a number using two digits after the decimal point.</p>
 <p>The format specifier follows the expression to interpolate and is separated from
 it by a colon.</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>&quot;${expr:format}
+<div class="language-gold highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="s">&quot;</span><span class="si">${</span><span class="n">expr</span><span class="err">:</span><span class="n">format</span><span class="si">}</span><span class="s">&quot;</span>
 </span></code></pre></div>
 <p>The format string adheres to the following syntax, which should be fairly
 familiar if you have used such features in other languages:</p>

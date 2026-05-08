@@ -1,0 +1,8 @@
+gold_lexer.py
+pyproject.toml
+gold_lexer.egg-info/PKG-INFO
+gold_lexer.egg-info/SOURCES.txt
+gold_lexer.egg-info/dependency_links.txt
+gold_lexer.egg-info/entry_points.txt
+gold_lexer.egg-info/requires.txt
+gold_lexer.egg-info/top_level.txt
