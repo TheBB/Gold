@@ -7,7 +7,9 @@ authors = [
     { name = "Eivind Fonn", email = "evfonn@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "click>=8.3.3",
+]
 
 [dependency-groups]
 dev = [

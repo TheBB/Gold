@@ -521,12 +521,12 @@ def test_lists():
     assert expr("[ (1) , ... (x), when x: (y) , for x in y: (z) ]") == tag(
         ListExpr(
             [
-                tag(SingletonLE(expr=lit(1, 2, 5)), S(2, 5)),
-                tag(SplatLE(expr=retag(ident("x", 13), 12, 15)), S(8, 15)),
+                tag(SingletonLE(expr=lit(1, 3, 4)), S(3, 4)),
+                tag(SplatLE(expr=ident("x", 13, 14)), S(8, 15)),
                 tag(
                     CondLE(
                         condition=ident("x", 22),
-                        element=tag(SingletonLE(expr=retag(ident("y", 26), 25, 28)), S(25, 28)),
+                        element=tag(SingletonLE(expr=ident("y", 26, 27)), S(26, 27)),
                     ),
                     S(17, 28),
                 ),
@@ -534,7 +534,7 @@ def test_lists():
                     LoopLE(
                         binding=bid("x", 35),
                         iterable=ident("y", 40),
-                        element=tag(SingletonLE(expr=retag(ident("z", 44), 43, 46)), S(43, 46)),
+                        element=tag(SingletonLE(expr=ident("z", 44, 45)), S(44, 45)),
                     ),
                     S(31, 46),
                 ),
@@ -974,7 +974,7 @@ def test_let_blocks():
                                 ListBinding(
                                     [
                                         tag(
-                                            ListBEBinding(binding=bid("y", 6), default=lit(1, 10, 13)),
+                                            ListBEBinding(binding=bid("y", 6), default=lit(1, 11, 12)),
                                             S(6, 13),
                                         ),
                                     ]
@@ -1005,7 +1005,7 @@ def test_let_blocks():
                                             MapBEBinding(
                                                 key=tag("y", S(6)),
                                                 binding=tag(IdentifierBinding(name=tag("y", S(6))), S(6)),
-                                                default=lit(1, 10, 13),
+                                                default=lit(1, 11, 12),
                                             ),
                                             S(6, 13),
                                         ),
@@ -1097,28 +1097,32 @@ def test_funcall():
     )
 
     # Immediately invoked function
-    assert expr("(fn (x,y) x+y)(1,2)") == funcall(
-        tag(
-            FunctionExpr(
-                positional=tag(
-                    ListBinding(
-                        [
-                            tag(ListBEBinding(binding=bid("x", 5), default=None), S(5)),
-                            tag(ListBEBinding(binding=bid("y", 7), default=None), S(7)),
-                        ]
+    assert expr("(fn (x,y) x+y)(1,2)") == retag(
+        funcall(
+            tag(
+                FunctionExpr(
+                    positional=tag(
+                        ListBinding(
+                            [
+                                tag(ListBEBinding(binding=bid("x", 5), default=None), S(5)),
+                                tag(ListBEBinding(binding=bid("y", 7), default=None), S(7)),
+                            ]
+                        ),
+                        S(4, 9),
                     ),
-                    S(4, 9),
+                    keywords=None,
+                    expression=add(ident("x", 10), ident("y", 12), 11),
                 ),
-                keywords=None,
-                expression=add(ident("x", 10), ident("y", 12), 11),
+                S(1, 13),  # inner span of fn expr (without surrounding parens)
             ),
-            S(0, 14),
+            [
+                tag(SingletonAE(expr=lit(1, 15)), S(15)),
+                tag(SingletonAE(expr=lit(2, 17)), S(17)),
+            ],
+            14,
+            19,
         ),
-        [
-            tag(SingletonAE(expr=lit(1, 15)), S(15)),
-            tag(SingletonAE(expr=lit(2, 17)), S(17)),
-        ],
-        14,
+        0,
         19,
     )
 
@@ -1207,11 +1211,7 @@ def test_operators():
         0,
     )
 
-    assert expr("(1 + 2) * 5") == mul(
-        retag(add(lit(1, 1), lit(2, 5), 3), 0, 7),
-        lit(5, 10),
-        8,
-    )
+    assert expr("(1 + 2) * 5") == retag(mul(add(lit(1, 1), lit(2, 5), 3), lit(5, 10), 8), 0, 11)
 
 
 def test_functions():

@@ -1,0 +1,129 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..208]
+        bindings:
+          [0]:
+            IdentifierBinding [4..7]
+              name: "fib" [4..7]
+            LetExpr [16..195]
+              bindings:
+                [0]:
+                  IdentifierBinding [20..27]
+                    name: "recurse" [20..27]
+                  FunctionExpr [30..144]
+                    positional: ListBinding [33..44]
+                      elements:
+                        ListBEBinding [34..35]
+                          binding: IdentifierBinding [34..35]
+                            name: "n" [34..35]
+                          default: null
+                        ListBEBinding [37..43]
+                          binding: ListPatternBinding [37..43]
+                            binding: ListBinding [37..43]
+                              elements:
+                                ListBEBinding [38..39]
+                                  binding: IdentifierBinding [38..39]
+                                    name: "a" [38..39]
+                                  default: null
+                                ListBEBinding [41..42]
+                                  binding: IdentifierBinding [41..42]
+                                    name: "b" [41..42]
+                                  default: null
+                          default: null
+                    keywords: null
+                    expression: BranchExpr [55..138]
+                      condition: TransformedExpr [58..64]
+                        operand: IdentifierExpr [58..59]
+                          name: "n" [58..59]
+                        transform: BinOpTransform
+                          op: Equal [60..62]
+                          operand: LiteralExpr [63..64]
+                            value: 0
+                      true_branch: ListExpr [82..88]
+                        elements:
+                          SingletonLE [83..84]
+                            expr: IdentifierExpr [83..84]
+                              name: "a" [83..84]
+                          SingletonLE [86..87]
+                            expr: IdentifierExpr [86..87]
+                              name: "b" [86..87]
+                      false_branch: TransformedExpr [114..138]
+                        operand: IdentifierExpr [114..121]
+                          name: "recurse" [114..121]
+                        transform: FunCallTransform
+                          args: [121..138]
+                            SingletonAE [122..125]
+                              expr: TransformedExpr [122..125]
+                                operand: IdentifierExpr [122..123]
+                                  name: "n" [122..123]
+                                transform: BinOpTransform
+                                  op: Subtract [123..124]
+                                  operand: LiteralExpr [124..125]
+                                    value: 1
+                            SingletonAE [127..137]
+                              expr: ListExpr [127..137]
+                                elements:
+                                  SingletonLE [128..129]
+                                    expr: IdentifierExpr [128..129]
+                                      name: "b" [128..129]
+                                  SingletonLE [131..136]
+                                    expr: TransformedExpr [131..136]
+                                      operand: IdentifierExpr [131..132]
+                                        name: "a" [131..132]
+                                      transform: BinOpTransform
+                                        op: Add [133..134]
+                                        operand: IdentifierExpr [135..136]
+                                          name: "b" [135..136]
+              expression: FunctionExpr [152..195]
+                positional: ListBinding [155..158]
+                  elements:
+                    ListBEBinding [156..157]
+                      binding: IdentifierBinding [156..157]
+                        name: "n" [156..157]
+                      default: null
+                keywords: null
+                expression: LetExpr [159..195]
+                  bindings:
+                    [0]:
+                      ListPatternBinding [163..169]
+                        binding: ListBinding [163..169]
+                          elements:
+                            ListBEBinding [164..165]
+                              binding: IdentifierBinding [164..165]
+                                name: "_" [164..165]
+                              default: null
+                            ListBEBinding [167..168]
+                              binding: IdentifierBinding [167..168]
+                                name: "x" [167..168]
+                              default: null
+                      TransformedExpr [172..190]
+                        operand: IdentifierExpr [172..179]
+                          name: "recurse" [172..179]
+                        transform: FunCallTransform
+                          args: [179..190]
+                            SingletonAE [180..181]
+                              expr: IdentifierExpr [180..181]
+                                name: "n" [180..181]
+                            SingletonAE [183..189]
+                              expr: ListExpr [183..189]
+                                elements:
+                                  SingletonLE [184..185]
+                                    expr: LiteralExpr [184..185]
+                                      value: 1
+                                  SingletonLE [187..188]
+                                    expr: LiteralExpr [187..188]
+                                      value: 1
+                  expression: IdentifierExpr [194..195]
+                    name: "x" [194..195]
+        expression: TransformedExpr [202..208]
+          operand: IdentifierExpr [202..205]
+            name: "fib" [202..205]
+          transform: FunCallTransform
+            args: [205..208]
+              SingletonAE [206..207]
+                expr: LiteralExpr [206..207]
+                  value: 5

@@ -125,3 +125,41 @@ class Tagged[T]:
 def tag[T](value: T, span: Span) -> Tagged[T]:
     """Wrap `value` with `span` (Python equivalent of the Taggable trait)."""
     return Tagged(span=span, contents=value)
+
+
+@dataclass(frozen=True)
+class Paren[T]:
+    """An expression that may be wrapped in parentheses.
+
+    Mirrors the Rust ``Paren<T>`` enum:
+
+    - ``Naked(Tagged<T>)``                  inner span == outer span
+    - ``Parenthesized(Tagged<Tagged<T>>)``  inner span is the expression itself;
+                                            outer span includes surrounding parens
+
+    Use ``inner()`` when storing an expression in an AST node.
+    Use ``outer()`` when computing the span of the enclosing construct.
+    """
+
+    _inner: Tagged[T]
+    _outer: Span | None = None  # None → Naked (outer == _inner.span)
+
+    @classmethod
+    def naked(cls, expr: Tagged[T]) -> Paren[T]:
+        return cls(_inner=expr)
+
+    @classmethod
+    def parenthesized(cls, inner: Tagged[T], outer: Span) -> Paren[T]:
+        return cls(_inner=inner, _outer=outer)
+
+    def inner(self) -> Tagged[T]:
+        """The expression with its own span (parentheses excluded)."""
+        return self._inner
+
+    def outer(self) -> Span:
+        """The outermost span, including any surrounding parentheses."""
+        return self._outer if self._outer is not None else self._inner.span
+
+    def map_wrap[U](self, f: Callable[[Tagged[T]], U]) -> Paren[U]:
+        """Wrap the inner content with *f* while preserving paren structure."""
+        return Paren(_inner=self._inner.wrap(f), _outer=self._outer)

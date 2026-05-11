@@ -1,0 +1,136 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..553]
+        bindings:
+          [0]:
+            IdentifierBinding [4..15]
+              name: "smallServer" [4..15]
+            MapExpr [18..66]
+              elements:
+                SingletonME [19..26]
+                  key: LiteralExpr [19..23]
+                    value: "cpus"
+                  value: LiteralExpr [25..26]
+                    value: 1
+                SingletonME [28..45]
+                  key: LiteralExpr [28..42]
+                    value: "gigabytesOfRAM"
+                  value: LiteralExpr [44..45]
+                    value: 1
+                SingletonME [47..65]
+                  key: LiteralExpr [47..62]
+                    value: "terabytesOfDisk"
+                  value: LiteralExpr [64..65]
+                    value: 1
+          [1]:
+            IdentifierBinding [71..83]
+              name: "mediumServer" [71..83]
+            MapExpr [86..135]
+              elements:
+                SingletonME [87..94]
+                  key: LiteralExpr [87..91]
+                    value: "cpus"
+                  value: LiteralExpr [93..94]
+                    value: 8
+                SingletonME [96..114]
+                  key: LiteralExpr [96..110]
+                    value: "gigabytesOfRAM"
+                  value: LiteralExpr [112..114]
+                    value: 16
+                SingletonME [116..134]
+                  key: LiteralExpr [116..131]
+                    value: "terabytesOfDisk"
+                  value: LiteralExpr [133..134]
+                    value: 4
+          [2]:
+            IdentifierBinding [140..151]
+              name: "largeServer" [140..151]
+            MapExpr [154..206]
+              elements:
+                SingletonME [155..163]
+                  key: LiteralExpr [155..159]
+                    value: "cpus"
+                  value: LiteralExpr [161..163]
+                    value: 64
+                SingletonME [165..184]
+                  key: LiteralExpr [165..179]
+                    value: "gigabytesOfRAM"
+                  value: LiteralExpr [181..184]
+                    value: 256
+                SingletonME [186..205]
+                  key: LiteralExpr [186..201]
+                    value: "terabytesOfDisk"
+                  value: LiteralExpr [203..205]
+                    value: 16
+        expression: ListExpr [211..553]
+          elements:
+            SingletonLE [217..266]
+              expr: MapExpr [217..266]
+                elements:
+                  SplatME [218..232]
+                    expr: IdentifierExpr [221..232]
+                      name: "smallServer" [221..232]
+                  SingletonME [234..265]
+                    key: LiteralExpr [234..242]
+                      value: "hostname"
+                    value: LiteralExpr [244..265]
+                      value: "eu-west.example.com"
+            SingletonLE [272..321]
+              expr: MapExpr [272..321]
+                elements:
+                  SplatME [273..287]
+                    expr: IdentifierExpr [276..287]
+                      name: "largeServer" [276..287]
+                  SingletonME [289..320]
+                    key: LiteralExpr [289..297]
+                      value: "hostname"
+                    value: LiteralExpr [299..320]
+                      value: "us-east.example.com"
+            SingletonLE [327..381]
+              expr: MapExpr [327..381]
+                elements:
+                  SplatME [328..342]
+                    expr: IdentifierExpr [331..342]
+                      name: "largeServer" [331..342]
+                  SingletonME [344..380]
+                    key: LiteralExpr [344..352]
+                      value: "hostname"
+                    value: LiteralExpr [354..380]
+                      value: "ap-northeast.example.com"
+            SingletonLE [387..437]
+              expr: MapExpr [387..437]
+                elements:
+                  SplatME [388..403]
+                    expr: IdentifierExpr [391..403]
+                      name: "mediumServer" [391..403]
+                  SingletonME [405..436]
+                    key: LiteralExpr [405..413]
+                      value: "hostname"
+                    value: LiteralExpr [415..436]
+                      value: "us-west.example.com"
+            SingletonLE [443..492]
+              expr: MapExpr [443..492]
+                elements:
+                  SplatME [444..458]
+                    expr: IdentifierExpr [447..458]
+                      name: "smallServer" [447..458]
+                  SingletonME [460..491]
+                    key: LiteralExpr [460..468]
+                      value: "hostname"
+                    value: LiteralExpr [470..491]
+                      value: "sa-east.example.com"
+            SingletonLE [498..550]
+              expr: MapExpr [498..550]
+                elements:
+                  SplatME [499..513]
+                    expr: IdentifierExpr [502..513]
+                      name: "largeServer" [502..513]
+                  SingletonME [515..549]
+                    key: LiteralExpr [515..523]
+                      value: "hostname"
+                    value: LiteralExpr [525..549]
+                      value: "ca-central.example.com"

@@ -1,0 +1,90 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..295]
+        bindings:
+          [0]:
+            IdentifierBinding [4..12]
+              name: "makeUser" [4..12]
+            FunctionExpr [15..243]
+              positional: ListBinding [18..24]
+                elements:
+                  ListBEBinding [19..23]
+                    binding: IdentifierBinding [19..23]
+                      name: "user" [19..23]
+                    default: null
+              keywords: null
+              expression: LetExpr [31..241]
+                bindings:
+                  [0]:
+                    IdentifierBinding [35..39]
+                      name: "home" [35..39]
+                    StringExpr [42..57]
+                      elements:
+                        RawStringElement
+                          value: "/home/"
+                        InterpolateStringElement
+                          expr: IdentifierExpr [51..55]
+                            name: "user" [51..55]
+                          fmt: null
+                  [1]:
+                    IdentifierBinding [66..76]
+                      name: "privateKey" [66..76]
+                    StringExpr [79..104]
+                      elements:
+                        InterpolateStringElement
+                          expr: IdentifierExpr [82..86]
+                            name: "home" [82..86]
+                          fmt: null
+                        RawStringElement
+                          value: "/.ssh/id_ed25519"
+                  [2]:
+                    IdentifierBinding [113..122]
+                      name: "publicKey" [113..122]
+                    TransformedExpr [125..144]
+                      operand: IdentifierExpr [125..135]
+                        name: "privateKey" [125..135]
+                      transform: BinOpTransform
+                        op: Add [136..137]
+                        operand: LiteralExpr [138..144]
+                          value: ".pub"
+                expression: MapExpr [152..241]
+                  elements:
+                    SingletonME [162..172]
+                      key: LiteralExpr [162..166]
+                        value: "home"
+                      value: IdentifierExpr [168..172]
+                        name: "home" [168..172]
+                    SingletonME [182..204]
+                      key: LiteralExpr [182..192]
+                        value: "privateKey"
+                      value: IdentifierExpr [194..204]
+                        name: "privateKey" [194..204]
+                    SingletonME [214..234]
+                      key: LiteralExpr [214..223]
+                        value: "publicKey"
+                      value: IdentifierExpr [225..234]
+                        name: "publicKey" [225..234]
+        expression: ListExpr [248..295]
+          elements:
+            SingletonLE [254..270]
+              expr: TransformedExpr [254..270]
+                operand: IdentifierExpr [254..262]
+                  name: "makeUser" [254..262]
+                transform: FunCallTransform
+                  args: [262..270]
+                    SingletonAE [263..269]
+                      expr: LiteralExpr [263..269]
+                        value: "bill"
+            SingletonLE [276..292]
+              expr: TransformedExpr [276..292]
+                operand: IdentifierExpr [276..284]
+                  name: "makeUser" [276..284]
+                transform: FunCallTransform
+                  args: [284..292]
+                    SingletonAE [285..291]
+                      expr: LiteralExpr [285..291]
+                        value: "jane"
