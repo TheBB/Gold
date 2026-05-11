@@ -69,6 +69,7 @@ class GroupingSpec(Enum):
 
 class FormatTypeSpec(Enum):
     """Flattened form of Rust's FormatType / IntegerFormatType / FloatFormatType."""
+
     String = auto()
     # integer subtypes
     Binary = auto()
