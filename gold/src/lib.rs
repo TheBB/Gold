@@ -35,6 +35,9 @@ mod compile;
 
 mod types;
 
+/// Pretty-printing for parse results.
+pub mod pprint;
+
 use std::fs::read_to_string;
 use std::path::Path;
 

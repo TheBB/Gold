@@ -3398,4 +3398,30 @@ mod tests {
         //     Syntax::MultiSlurp
         // );
     }
+
+    #[test]
+    fn example_fixtures() {
+        use crate::pprint::{pprint, PprintOptions};
+        use std::path::Path;
+
+        let examples = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().join("examples");
+        let testdata = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().join("testdata/examples");
+        let opts = PprintOptions { show_spans: true, max_str_len: None };
+
+        for entry in std::fs::read_dir(&examples).expect("examples/ not found") {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) != Some("gold") {
+                continue;
+            }
+            let name = path.file_stem().unwrap().to_str().unwrap();
+            let source = std::fs::read_to_string(&path).unwrap().replace("\r\n", "\n");
+            let result = parse_file(&source).map_err(|e| e.unrender());
+            let actual = pprint(&result, &opts);
+            let expected_path = testdata.join(format!("{name}.out"));
+            let expected = std::fs::read_to_string(&expected_path)
+                .unwrap_or_else(|_| panic!("{name}.out not found in testdata/examples/"));
+            let expected = expected.replace("\r\n", "\n");
+            assert_eq!(actual, expected.trim_end_matches('\n'), "mismatch for {name}");
+        }
+    }
 }

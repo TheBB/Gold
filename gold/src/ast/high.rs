@@ -114,6 +114,10 @@ impl ListBinding {
         Self(elements)
     }
 
+    pub fn elements(&self) -> &[Tagged<ListBindingElement>] {
+        &self.0
+    }
+
     fn announce_bindings(&self, scope: &mut dyn SubScope) {
         for element in &self.0 {
             element.announce_bindings(scope);
@@ -187,6 +191,10 @@ pub struct MapBinding(Vec<Tagged<MapBindingElement>>);
 impl MapBinding {
     pub fn new(elements: Vec<Tagged<MapBindingElement>>) -> Self {
         Self(elements)
+    }
+
+    pub fn elements(&self) -> &[Tagged<MapBindingElement>] {
+        &self.0
     }
 
     fn announce_bindings(&self, scope: &mut dyn SubScope) {
