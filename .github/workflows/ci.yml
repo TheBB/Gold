@@ -77,11 +77,25 @@ jobs:
           maturin develop -m goldpy/Cargo.toml
           pytest goldpy/test
 
+  pytest-ref:
+    name: Test Python reference
+    strategy:
+      matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+    runs-on: ${{ matrix.os }}
+    steps:
+
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v5
+
+      - run: make test
+        working-directory: ref
 
   build-wheels:
     name: Build wheels
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-    needs: pytest
+    needs: [pytest, pytest-ref]
     strategy:
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
