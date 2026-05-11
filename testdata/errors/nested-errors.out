@@ -1,0 +1,31 @@
+ParseResult
+  ok: false
+  errors:
+    ParseError [12..12]
+      "expected operand"
+    ParseError [12..12]
+      "expected ')'"
+    ParseError [21..21]
+      "expected '}'"
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..21]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "x" [4..5]
+            TransformedExpr [9..12]
+              operand: LiteralExpr [9..10]
+                value: 1
+              transform: BinOpTransform
+                op: Add [11..12]
+                operand: LiteralExpr [12..12]
+                  value: null
+        expression: MapExpr [16..21]
+          elements:
+            SingletonME [17..21]
+              key: LiteralExpr [17..18]
+                value: "y"
+              value: LiteralExpr [20..21]
+                value: 2

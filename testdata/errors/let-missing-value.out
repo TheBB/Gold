@@ -1,0 +1,17 @@
+ParseResult
+  ok: false
+  errors:
+    ParseError [7..7]
+      "expected expression"
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..12]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "x" [4..5]
+            LiteralExpr [7..7]
+              value: null
+        expression: IdentifierExpr [11..12]
+          name: "x" [11..12]

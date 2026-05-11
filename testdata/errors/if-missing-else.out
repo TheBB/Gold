@@ -1,0 +1,17 @@
+ParseResult
+  ok: false
+  errors:
+    ParseError [14..14]
+      "expected 'else'"
+    ParseError [14..14]
+      "expected expression"
+  tree:
+    File
+      statements: []
+      expression: BranchExpr [0..14]
+        condition: LiteralExpr [3..7]
+          value: true
+        true_branch: LiteralExpr [13..14]
+          value: 1
+        false_branch: LiteralExpr [14..14]
+          value: null
