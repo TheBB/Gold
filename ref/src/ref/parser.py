@@ -9,11 +9,12 @@ if TYPE_CHECKING:
 from .ast import (
     AlignSpec,
     ArgElement,
+    ArgKeyword,
+    ArgSingleton,
+    ArgSplat,
     Binding,
     BinOpTransform,
     BranchExpr,
-    ListCond,
-    MapCond,
     EagerOp,
     File,
     FormatSpec,
@@ -24,40 +25,39 @@ from .ast import (
     IdentifierBinding,
     IdentifierExpr,
     ImportStatement,
-    StringInterpolate,
-    ArgKeyword,
     LetExpr,
+    ListBinding,
+    ListBindingElement,
     ListBindingSingleton,
     ListBindingSlurp,
     ListBindingSlurpTo,
-    ListBinding,
-    ListBindingElement,
+    ListCond,
     ListElement,
     ListExpr,
+    ListLoop,
     ListPatternBinding,
+    ListSingleton,
+    ListSplat,
     LiteralExpr,
     LogicOp,
-    ListLoop,
-    MapLoop,
-    MapBindingSingleton,
-    MapBindingSlurpTo,
     MapBinding,
     MapBindingElement,
+    MapBindingSingleton,
+    MapBindingSlurpTo,
+    MapCond,
     MapElement,
     MapExpr,
+    MapLoop,
     MapPatternBinding,
+    MapSingleton,
+    MapSplat,
     MissingBinding,
     MissingExpr,
-    StringRaw,
     SignSpec,
-    ArgSingleton,
-    ListSingleton,
-    MapSingleton,
-    ArgSplat,
-    ListSplat,
-    MapSplat,
     StringElement,
     StringExpr,
+    StringInterpolate,
+    StringRaw,
     TopLevel,
     TransformedExpr,
     UnOp,
@@ -497,7 +497,7 @@ class Parser:
                 pass
         return None
 
-    def _try_atomic(self) -> Tagged[LiteralExpr] | None:
+    def _try_atomic(self) -> Tagged[LiteralExpr | StringExpr] | None:
         """null | true | false | number | string."""
         for kw, val in (("null", None), ("true", True), ("false", False)):
             tok = self._try_keyword(kw)
@@ -508,7 +508,7 @@ class Parser:
             return n
         s = self._try_string()
         if s is not None:
-            return s  # type: ignore[return-value]
+            return s
         return None
 
     # ── List ──────────────────────────────────────────────────────────────────
@@ -668,7 +668,9 @@ class Parser:
         # : expr
         self._expect_tok(TokenType.Colon, mode="key")
         value = self._require_expr()
-        return tag(MapSingleton(key=key, value=value.inner()), Span.covering(elem_start, value.outer())), False
+        return tag(
+            MapSingleton(key=key, value=value.inner()), Span.covering(elem_start, value.outer())
+        ), False
 
     def _require_map_element(self) -> tuple[Tagged[MapElement], bool]:
         el = self._parse_map_element()
