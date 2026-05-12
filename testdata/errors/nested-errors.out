@@ -20,11 +20,10 @@ ParseResult
                 value: 1
               transform: BinOpTransform
                 op: Add [11..12]
-                operand: LiteralExpr [12..12]
-                  value: null
+                operand: MissingExpr [12..12]
         expression: MapExpr [16..21]
           elements:
-            SingletonME [17..21]
+            MapSingleton [17..21]
               key: LiteralExpr [17..18]
                 value: "y"
               value: LiteralExpr [20..21]

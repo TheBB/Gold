@@ -8,9 +8,9 @@ ParseResult
       statements: []
       expression: ListExpr [0..5]
         elements:
-          SingletonLE [1..2]
+          ListSingleton [1..2]
             expr: LiteralExpr [1..2]
               value: 1
-          SingletonLE [4..5]
+          ListSingleton [4..5]
             expr: LiteralExpr [4..5]
               value: 2

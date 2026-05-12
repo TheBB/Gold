@@ -11,17 +11,17 @@ ParseResult
               name: "alice" [4..9]
             MapExpr [12..64]
               elements:
-                SingletonME [18..31]
+                MapSingleton [18..31]
                   key: LiteralExpr [18..22]
                     value: "name"
                   value: LiteralExpr [24..31]
                     value: "Alice"
-                SingletonME [37..44]
+                MapSingleton [37..44]
                   key: LiteralExpr [37..40]
                     value: "age"
                   value: LiteralExpr [42..44]
                     value: 24
-                SingletonME [50..61]
+                MapSingleton [50..61]
                   key: LiteralExpr [50..55]
                     value: "admin"
                   value: LiteralExpr [57..61]
@@ -31,17 +31,17 @@ ParseResult
               name: "bob" [70..73]
             MapExpr [76..126]
               elements:
-                SingletonME [82..93]
+                MapSingleton [82..93]
                   key: LiteralExpr [82..86]
                     value: "name"
                   value: LiteralExpr [88..93]
                     value: "Bob"
-                SingletonME [99..106]
+                MapSingleton [99..106]
                   key: LiteralExpr [99..102]
                     value: "age"
                   value: LiteralExpr [104..106]
                     value: 49
-                SingletonME [112..123]
+                MapSingleton [112..123]
                   key: LiteralExpr [112..117]
                     value: "admin"
                   value: LiteralExpr [119..123]
@@ -51,17 +51,17 @@ ParseResult
               name: "carlo" [132..137]
             MapExpr [140..193]
               elements:
-                SingletonME [146..159]
+                MapSingleton [146..159]
                   key: LiteralExpr [146..150]
                     value: "name"
                   value: LiteralExpr [152..159]
                     value: "Carlo"
-                SingletonME [165..172]
+                MapSingleton [165..172]
                   key: LiteralExpr [165..168]
                     value: "age"
                   value: LiteralExpr [170..172]
                     value: 20
-                SingletonME [178..190]
+                MapSingleton [178..190]
                   key: LiteralExpr [178..183]
                     value: "admin"
                   value: LiteralExpr [185..190]
@@ -72,7 +72,7 @@ ParseResult
             FunctionExpr [209..233]
               positional: ListBinding [212..220]
                 elements:
-                  ListBEBinding [213..219]
+                  ListBindingSingleton [213..219]
                     binding: IdentifierBinding [213..219]
                       name: "person" [213..219]
                     default: null
@@ -90,32 +90,32 @@ ParseResult
             FunctionExpr [248..302]
               positional: ListBinding [251..263]
                 elements:
-                  ListBEBinding [252..256]
+                  ListBindingSingleton [252..256]
                     binding: IdentifierBinding [252..256]
                       name: "pred" [252..256]
                     default: null
-                  ListBEBinding [258..262]
+                  ListBindingSingleton [258..262]
                     binding: IdentifierBinding [258..262]
                       name: "list" [258..262]
                     default: null
               keywords: null
               expression: ListExpr [264..302]
                 elements:
-                  LoopLE [270..300]
+                  ListLoop [270..300]
                     binding: IdentifierBinding [274..275]
                       name: "x" [274..275]
                     iterable: IdentifierExpr [279..283]
                       name: "list" [279..283]
-                    element: CondLE [285..300]
+                    element: ListCond [285..300]
                       condition: TransformedExpr [290..297]
                         operand: IdentifierExpr [290..294]
                           name: "pred" [290..294]
                         transform: FunCallTransform
                           args: [294..297]
-                            SingletonAE [295..296]
+                            ArgSingleton [295..296]
                               expr: IdentifierExpr [295..296]
                                 name: "x" [295..296]
-                      element: SingletonLE [299..300]
+                      element: ListSingleton [299..300]
                         expr: IdentifierExpr [299..300]
                           name: "x" [299..300]
         expression: TransformedExpr [307..343]
@@ -123,18 +123,18 @@ ParseResult
             name: "filter" [307..313]
           transform: FunCallTransform
             args: [313..343]
-              SingletonAE [314..321]
+              ArgSingleton [314..321]
                 expr: IdentifierExpr [314..321]
                   name: "isAdmin" [314..321]
-              SingletonAE [323..342]
+              ArgSingleton [323..342]
                 expr: ListExpr [323..342]
                   elements:
-                    SingletonLE [324..329]
+                    ListSingleton [324..329]
                       expr: IdentifierExpr [324..329]
                         name: "alice" [324..329]
-                    SingletonLE [331..334]
+                    ListSingleton [331..334]
                       expr: IdentifierExpr [331..334]
                         name: "bob" [331..334]
-                    SingletonLE [336..341]
+                    ListSingleton [336..341]
                       expr: IdentifierExpr [336..341]
                         name: "carlo" [336..341]

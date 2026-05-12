@@ -17,23 +17,23 @@ ParseResult
                   FunctionExpr [30..143]
                     positional: ListBinding [33..46]
                       elements:
-                        ListBEBinding [34..35]
+                        ListBindingSingleton [34..35]
                           binding: IdentifierBinding [34..35]
                             name: "f" [34..35]
                           default: null
-                        ListBEBinding [37..38]
+                        ListBindingSingleton [37..38]
                           binding: IdentifierBinding [37..38]
                             name: "n" [37..38]
                           default: null
-                        ListBEBinding [40..45]
+                        ListBindingSingleton [40..45]
                           binding: ListPatternBinding [40..45]
                             binding: ListBinding [40..45]
                               elements:
-                                ListBEBinding [41..42]
+                                ListBindingSingleton [41..42]
                                   binding: IdentifierBinding [41..42]
                                     name: "a" [41..42]
                                   default: null
-                                ListBEBinding [43..44]
+                                ListBindingSingleton [43..44]
                                   binding: IdentifierBinding [43..44]
                                     name: "b" [43..44]
                                   default: null
@@ -49,10 +49,10 @@ ParseResult
                             value: 0
                       true_branch: ListExpr [84..90]
                         elements:
-                          SingletonLE [85..86]
+                          ListSingleton [85..86]
                             expr: IdentifierExpr [85..86]
                               name: "a" [85..86]
-                          SingletonLE [88..89]
+                          ListSingleton [88..89]
                             expr: IdentifierExpr [88..89]
                               name: "b" [88..89]
                       false_branch: TransformedExpr [116..137]
@@ -60,10 +60,10 @@ ParseResult
                           name: "f" [116..117]
                         transform: FunCallTransform
                           args: [117..137]
-                            SingletonAE [118..119]
+                            ArgSingleton [118..119]
                               expr: IdentifierExpr [118..119]
                                 name: "f" [118..119]
-                            SingletonAE [121..124]
+                            ArgSingleton [121..124]
                               expr: TransformedExpr [121..124]
                                 operand: IdentifierExpr [121..122]
                                   name: "n" [121..122]
@@ -71,13 +71,13 @@ ParseResult
                                   op: Subtract [122..123]
                                   operand: LiteralExpr [123..124]
                                     value: 1
-                            SingletonAE [126..136]
+                            ArgSingleton [126..136]
                               expr: ListExpr [126..136]
                                 elements:
-                                  SingletonLE [127..128]
+                                  ListSingleton [127..128]
                                     expr: IdentifierExpr [127..128]
                                       name: "b" [127..128]
-                                  SingletonLE [130..135]
+                                  ListSingleton [130..135]
                                     expr: TransformedExpr [130..135]
                                       operand: IdentifierExpr [130..131]
                                         name: "a" [130..131]
@@ -88,7 +88,7 @@ ParseResult
               expression: FunctionExpr [151..203]
                 positional: ListBinding [154..157]
                   elements:
-                    ListBEBinding [155..156]
+                    ListBindingSingleton [155..156]
                       binding: IdentifierBinding [155..156]
                         name: "n" [155..156]
                       default: null
@@ -99,11 +99,11 @@ ParseResult
                       ListPatternBinding [162..168]
                         binding: ListBinding [162..168]
                           elements:
-                            ListBEBinding [163..164]
+                            ListBindingSingleton [163..164]
                               binding: IdentifierBinding [163..164]
                                 name: "_" [163..164]
                               default: null
-                            ListBEBinding [166..167]
+                            ListBindingSingleton [166..167]
                               binding: IdentifierBinding [166..167]
                                 name: "x" [166..167]
                               default: null
@@ -112,19 +112,19 @@ ParseResult
                           name: "recurse" [171..178]
                         transform: FunCallTransform
                           args: [178..198]
-                            SingletonAE [179..186]
+                            ArgSingleton [179..186]
                               expr: IdentifierExpr [179..186]
                                 name: "recurse" [179..186]
-                            SingletonAE [188..189]
+                            ArgSingleton [188..189]
                               expr: IdentifierExpr [188..189]
                                 name: "n" [188..189]
-                            SingletonAE [191..197]
+                            ArgSingleton [191..197]
                               expr: ListExpr [191..197]
                                 elements:
-                                  SingletonLE [192..193]
+                                  ListSingleton [192..193]
                                     expr: LiteralExpr [192..193]
                                       value: 1
-                                  SingletonLE [195..196]
+                                  ListSingleton [195..196]
                                     expr: LiteralExpr [195..196]
                                       value: 1
                   expression: IdentifierExpr [202..203]
@@ -134,6 +134,6 @@ ParseResult
             name: "fib" [210..213]
           transform: FunCallTransform
             args: [213..216]
-              SingletonAE [214..215]
+              ArgSingleton [214..215]
                 expr: LiteralExpr [214..215]
                   value: 5

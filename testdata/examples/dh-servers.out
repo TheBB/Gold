@@ -12,29 +12,29 @@ ParseResult
             FunctionExpr [18..118]
               positional: ListBinding [21..31]
                 elements:
-                  ListBEBinding [22..30]
+                  ListBindingSingleton [22..30]
                     binding: IdentifierBinding [22..30]
                       name: "hostname" [22..30]
                     default: null
               keywords: null
               expression: MapExpr [32..118]
                 elements:
-                  SingletonME [38..45]
+                  MapSingleton [38..45]
                     key: LiteralExpr [38..42]
                       value: "cpus"
                     value: LiteralExpr [44..45]
                       value: 1
-                  SingletonME [51..68]
+                  MapSingleton [51..68]
                     key: LiteralExpr [51..65]
                       value: "gigabytesOfRAM"
                     value: LiteralExpr [67..68]
                       value: 1
-                  SingletonME [74..92]
+                  MapSingleton [74..92]
                     key: LiteralExpr [74..82]
                       value: "hostname"
                     value: IdentifierExpr [84..92]
                       name: "hostname" [84..92]
-                  SingletonME [98..116]
+                  MapSingleton [98..116]
                     key: LiteralExpr [98..113]
                       value: "terabytesOfDisk"
                     value: LiteralExpr [115..116]
@@ -45,29 +45,29 @@ ParseResult
             FunctionExpr [139..241]
               positional: ListBinding [142..152]
                 elements:
-                  ListBEBinding [143..151]
+                  ListBindingSingleton [143..151]
                     binding: IdentifierBinding [143..151]
                       name: "hostname" [143..151]
                     default: null
               keywords: null
               expression: MapExpr [153..241]
                 elements:
-                  SingletonME [159..166]
+                  MapSingleton [159..166]
                     key: LiteralExpr [159..163]
                       value: "cpus"
                     value: LiteralExpr [165..166]
                       value: 8
-                  SingletonME [172..190]
+                  MapSingleton [172..190]
                     key: LiteralExpr [172..186]
                       value: "gigabytesOfRAM"
                     value: LiteralExpr [188..190]
                       value: 16
-                  SingletonME [196..214]
+                  MapSingleton [196..214]
                     key: LiteralExpr [196..204]
                       value: "hostname"
                     value: IdentifierExpr [206..214]
                       name: "hostname" [206..214]
-                  SingletonME [220..238]
+                  MapSingleton [220..238]
                     key: LiteralExpr [220..235]
                       value: "terabytesOfDisk"
                     value: LiteralExpr [237..238]
@@ -78,86 +78,86 @@ ParseResult
             FunctionExpr [261..366]
               positional: ListBinding [264..274]
                 elements:
-                  ListBEBinding [265..273]
+                  ListBindingSingleton [265..273]
                     binding: IdentifierBinding [265..273]
                       name: "hostname" [265..273]
                     default: null
               keywords: null
               expression: MapExpr [275..366]
                 elements:
-                  SingletonME [281..289]
+                  MapSingleton [281..289]
                     key: LiteralExpr [281..285]
                       value: "cpus"
                     value: LiteralExpr [287..289]
                       value: 64
-                  SingletonME [295..314]
+                  MapSingleton [295..314]
                     key: LiteralExpr [295..309]
                       value: "gigabytesOfRAM"
                     value: LiteralExpr [311..314]
                       value: 256
-                  SingletonME [320..338]
+                  MapSingleton [320..338]
                     key: LiteralExpr [320..328]
                       value: "hostname"
                     value: IdentifierExpr [330..338]
                       name: "hostname" [330..338]
-                  SingletonME [344..363]
+                  MapSingleton [344..363]
                     key: LiteralExpr [344..359]
                       value: "terabytesOfDisk"
                     value: LiteralExpr [361..363]
                       value: 16
         expression: ListExpr [371..623]
           elements:
-            SingletonLE [377..411]
+            ListSingleton [377..411]
               expr: TransformedExpr [377..411]
                 operand: IdentifierExpr [377..388]
                   name: "smallServer" [377..388]
                 transform: FunCallTransform
                   args: [388..411]
-                    SingletonAE [389..410]
+                    ArgSingleton [389..410]
                       expr: LiteralExpr [389..410]
                         value: "eu-west.example.com"
-            SingletonLE [417..451]
+            ListSingleton [417..451]
               expr: TransformedExpr [417..451]
                 operand: IdentifierExpr [417..428]
                   name: "largeServer" [417..428]
                 transform: FunCallTransform
                   args: [428..451]
-                    SingletonAE [429..450]
+                    ArgSingleton [429..450]
                       expr: LiteralExpr [429..450]
                         value: "us-east.example.com"
-            SingletonLE [457..496]
+            ListSingleton [457..496]
               expr: TransformedExpr [457..496]
                 operand: IdentifierExpr [457..468]
                   name: "largeServer" [457..468]
                 transform: FunCallTransform
                   args: [468..496]
-                    SingletonAE [469..495]
+                    ArgSingleton [469..495]
                       expr: LiteralExpr [469..495]
                         value: "ap-northeast.example.com"
-            SingletonLE [502..537]
+            ListSingleton [502..537]
               expr: TransformedExpr [502..537]
                 operand: IdentifierExpr [502..514]
                   name: "mediumServer" [502..514]
                 transform: FunCallTransform
                   args: [514..537]
-                    SingletonAE [515..536]
+                    ArgSingleton [515..536]
                       expr: LiteralExpr [515..536]
                         value: "us-west.example.com"
-            SingletonLE [543..577]
+            ListSingleton [543..577]
               expr: TransformedExpr [543..577]
                 operand: IdentifierExpr [543..554]
                   name: "smallServer" [543..554]
                 transform: FunCallTransform
                   args: [554..577]
-                    SingletonAE [555..576]
+                    ArgSingleton [555..576]
                       expr: LiteralExpr [555..576]
                         value: "sa-east.example.com"
-            SingletonLE [583..620]
+            ListSingleton [583..620]
               expr: TransformedExpr [583..620]
                 operand: IdentifierExpr [583..594]
                   name: "largeServer" [583..594]
                 transform: FunCallTransform
                   args: [594..620]
-                    SingletonAE [595..619]
+                    ArgSingleton [595..619]
                       expr: LiteralExpr [595..619]
                         value: "ca-central.example.com"

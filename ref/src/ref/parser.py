@@ -12,8 +12,8 @@ from .ast import (
     Binding,
     BinOpTransform,
     BranchExpr,
-    CondLE,
-    CondME,
+    ListCond,
+    MapCond,
     EagerOp,
     File,
     FormatSpec,
@@ -24,12 +24,12 @@ from .ast import (
     IdentifierBinding,
     IdentifierExpr,
     ImportStatement,
-    InterpolateStringElement,
-    KeywordAE,
+    StringInterpolate,
+    ArgKeyword,
     LetExpr,
-    ListBEBinding,
-    ListBESlurp,
-    ListBESlurpTo,
+    ListBindingSingleton,
+    ListBindingSlurp,
+    ListBindingSlurpTo,
     ListBinding,
     ListBindingElement,
     ListElement,
@@ -37,23 +37,25 @@ from .ast import (
     ListPatternBinding,
     LiteralExpr,
     LogicOp,
-    LoopLE,
-    LoopME,
-    MapBEBinding,
-    MapBESlurpTo,
+    ListLoop,
+    MapLoop,
+    MapBindingSingleton,
+    MapBindingSlurpTo,
     MapBinding,
     MapBindingElement,
     MapElement,
     MapExpr,
     MapPatternBinding,
-    RawStringElement,
+    MissingBinding,
+    MissingExpr,
+    StringRaw,
     SignSpec,
-    SingletonAE,
-    SingletonLE,
-    SingletonME,
-    SplatAE,
-    SplatLE,
-    SplatME,
+    ArgSingleton,
+    ListSingleton,
+    MapSingleton,
+    ArgSplat,
+    ListSplat,
+    MapSplat,
     StringElement,
     StringExpr,
     TopLevel,
@@ -61,7 +63,7 @@ from .ast import (
     UnOp,
     UnOpTransform,
 )
-from .lexer import Lexer, LexError, Token, TokenType
+from .lexer import Lexer, LexError, MissingToken, Token, TokenType
 from .span import Paren, Span, Tagged, tag
 
 KEYWORDS: frozenset[str] = frozenset(
@@ -107,8 +109,8 @@ class ParseResult:
     Result of parsing a Gold source file.
 
     ``tree`` is non-None whenever any expression could be recovered.  It may
-    contain ``LiteralExpr(None)`` sentinels at positions where sub-expressions
-    were missing, so it is always structurally complete.
+    contain ``MissingExpr`` and ``MissingBinding`` sentinels at positions where
+    sub-expressions were absent, so it is always structurally complete.
 
     ``errors`` is non-empty on invalid or incomplete input.  An LSP consumer
     should always render ``tree`` and surface ``errors`` as diagnostics.
@@ -179,16 +181,15 @@ class Parser:
     def _here(self) -> Span:
         return self._lexer.position.with_length(0)
 
-    def _sentinel(self) -> Tagged[LiteralExpr]:
-        """A null-literal sentinel used where a required expression is absent."""
-        return tag(LiteralExpr(None), self._here())
+    def _missing_expr(self) -> Tagged[MissingExpr]:
+        """Sentinel for a required expression that could not be parsed."""
+        return tag(MissingExpr(), self._here())
 
-    def _sentinel_paren(self) -> Paren[LiteralExpr]:
-        return Paren.naked(self._sentinel())
+    def _missing_paren(self) -> Paren[MissingExpr]:
+        return Paren.naked(self._missing_expr())
 
-    def _dummy_binding(self) -> Tagged[IdentifierBinding]:
-        sp = self._here()
-        return tag(IdentifierBinding(tag("_", sp)), sp)
+    def _missing_binding(self) -> Tagged[MissingBinding]:
+        return tag(MissingBinding(), self._here())
 
     # ── Token helpers ──────────────────────────────────────────────────────────
 
@@ -216,14 +217,14 @@ class Parser:
         except LexError:
             return None
 
-    def _expect_tok(self, kind: TokenType, mode: str = "default") -> Tagged[Token]:
+    def _expect_tok(self, kind: TokenType, mode: str = "default") -> Tagged[Token | MissingToken]:
         """Consume a required token; record error and return dummy if missing."""
         tok = self._try_tok(kind, mode)
         if tok is not None:
             return tok
         sp = self._here()
         self._error(sp, f"expected {kind}")
-        return tag(Token(kind, ""), sp)
+        return tag(MissingToken(kind), sp)
 
     def _try_keyword(self, kw: str) -> Tagged[str] | None:
         try:
@@ -433,7 +434,7 @@ class Parser:
             self._expect_tok(TokenType.CloseBrace, mode="fmtspec")
         else:
             self._expect_tok(TokenType.CloseBrace)
-        return InterpolateStringElement(expr=expr.inner(), fmt=fmt)
+        return StringInterpolate(expr=expr.inner(), fmt=fmt)
 
     def _parse_string_part(self) -> Tagged[list[StringElement]] | None:
         """Parse one ``"..."`` string part; returns elements tagged with outer span."""
@@ -448,7 +449,7 @@ class Parser:
                 continue
             raw = self._parse_raw_string_content()
             if raw:
-                elements.append(RawStringElement(raw))
+                elements.append(StringRaw(raw))
                 continue
             break
         close_q = self._expect_tok(TokenType.DoubleQuote, mode="string")
@@ -475,7 +476,7 @@ class Parser:
     def _make_string_expr(elements: list[StringElement], span: Span) -> Tagged[LiteralExpr | StringExpr]:
         if not elements:
             return tag(LiteralExpr(""), span)
-        if len(elements) == 1 and isinstance(elements[0], RawStringElement):
+        if len(elements) == 1 and isinstance(elements[0], StringRaw):
             return tag(LiteralExpr(elements[0].value), span)
         return tag(StringExpr(elements), span)
 
@@ -516,7 +517,7 @@ class Parser:
         # Splat
         if (ellipsis := self._try_tok(TokenType.Ellipsis)) is not None:
             expr = self._require_expr()
-            return Paren.naked(tag(SplatLE(expr=expr.inner()), Span.covering(ellipsis.span, expr.outer())))
+            return Paren.naked(tag(ListSplat(expr=expr.inner()), Span.covering(ellipsis.span, expr.outer())))
 
         # For-loop: for binding in iterable : element
         if (kw := self._try_keyword("for")) is not None:
@@ -527,7 +528,7 @@ class Parser:
             element = self._require_list_element()
             return Paren.naked(
                 tag(
-                    LoopLE(binding=binding, iterable=iterable.inner(), element=element.inner()),
+                    ListLoop(binding=binding, iterable=iterable.inner(), element=element.inner()),
                     Span.covering(kw.span, element.outer()),
                 )
             )
@@ -539,7 +540,7 @@ class Parser:
             element = self._require_list_element()
             return Paren.naked(
                 tag(
-                    CondLE(condition=condition.inner(), element=element.inner()),
+                    ListCond(condition=condition.inner(), element=element.inner()),
                     Span.covering(kw.span, element.outer()),
                 )
             )
@@ -548,7 +549,7 @@ class Parser:
         expr = self._try_expr()
         if expr is None:
             return None
-        return expr.map_wrap(SingletonLE)
+        return expr.map_wrap(ListSingleton)
 
     def _require_list_element(self) -> Paren[ListElement]:
         el = self._parse_list_element()
@@ -556,7 +557,7 @@ class Parser:
             return el
         sp = self._here()
         self._error(sp, "expected list element")
-        return Paren.naked(tag(SingletonLE(self._sentinel()), sp))
+        return Paren.naked(tag(ListSingleton(self._missing_expr()), sp))
 
     def _try_list(self) -> Tagged[ListExpr] | None:
         open_b = self._try_tok(TokenType.OpenBracket)
@@ -600,7 +601,7 @@ class Parser:
         # Splat
         if (ellipsis := self._try_tok(TokenType.Ellipsis, mode="key")) is not None:
             expr = self._require_expr()
-            return tag(SplatME(expr=expr.inner()), Span.covering(ellipsis.span, expr.outer())), False
+            return tag(MapSplat(expr=expr.inner()), Span.covering(ellipsis.span, expr.outer())), False
 
         # For-loop
         if (kw := self._try_map_keyword("for")) is not None:
@@ -610,7 +611,7 @@ class Parser:
             self._expect_tok(TokenType.Colon)
             inner, skip = self._require_map_element()
             return tag(
-                LoopME(binding=binding, iterable=iterable.inner(), element=inner),
+                MapLoop(binding=binding, iterable=iterable.inner(), element=inner),
                 Span.covering(kw.span, inner.span),
             ), skip
 
@@ -620,7 +621,7 @@ class Parser:
             self._expect_tok(TokenType.Colon)
             inner, skip = self._require_map_element()
             span = Span.covering(kw.span, inner.span)
-            return tag(CondME(condition=condition.inner(), element=inner), span), skip
+            return tag(MapCond(condition=condition.inner(), element=inner), span), skip
 
         # Dynamic key: $identifier or $(expr)
         if (dollar := self._try_tok(TokenType.Dollar, mode="key")) is not None:
@@ -632,13 +633,15 @@ class Parser:
                 ident_name = self._try_identifier()
                 if ident_name is None:
                     self._error(self._here(), "expected expression")
-                    return tag(SingletonME(key=self._sentinel(), value=self._sentinel()), dollar.span), False
+                    return tag(
+                        MapSingleton(key=self._missing_expr(), value=self._missing_expr()), dollar.span
+                    ), False
                 key = ident_name.wrap(IdentifierExpr)
             elem_start = dollar.span
             self._expect_tok(TokenType.Colon, mode="key")
             value = self._require_expr()
             span = Span.covering(elem_start, value.outer())
-            return tag(SingletonME(key=key, value=value.inner()), span), False
+            return tag(MapSingleton(key=key, value=value.inner()), span), False
 
         # Literal key: string | identifier
         lit_key = self._parse_map_key()
@@ -657,15 +660,15 @@ class Parser:
                 val_str = _multiline(ms_tok.contents.text)
                 value_tagged = tag(LiteralExpr(val_str), ms_tok.span)
             except LexError:
-                value_tagged = self._sentinel()
+                value_tagged = self._missing_expr()
                 self._error(self._here(), "expected multiline string")
             span = Span.covering(elem_start, value_tagged.span)
-            return tag(SingletonME(key=key, value=value_tagged), span), True
+            return tag(MapSingleton(key=key, value=value_tagged), span), True
 
         # : expr
         self._expect_tok(TokenType.Colon, mode="key")
         value = self._require_expr()
-        return tag(SingletonME(key=key, value=value.inner()), Span.covering(elem_start, value.outer())), False
+        return tag(MapSingleton(key=key, value=value.inner()), Span.covering(elem_start, value.outer())), False
 
     def _require_map_element(self) -> tuple[Tagged[MapElement], bool]:
         el = self._parse_map_element()
@@ -673,8 +676,8 @@ class Parser:
             return el
         sp = self._here()
         self._error(sp, "expected map element")
-        dummy_key: Tagged[LiteralExpr] = tag(LiteralExpr(""), sp)
-        return tag(SingletonME(key=dummy_key, value=self._sentinel()), sp), False
+        dummy_key: Tagged[MissingExpr] = tag(MissingExpr(), sp)
+        return tag(MapSingleton(key=dummy_key, value=self._missing_expr()), sp), False
 
     def _try_map(self) -> Tagged[MapExpr] | None:
         open_b = self._try_tok(TokenType.OpenBrace)
@@ -807,7 +810,7 @@ class Parser:
         # Splat
         if (ellipsis := self._try_tok(TokenType.Ellipsis)) is not None:
             expr = self._require_expr()
-            return tag(SplatAE(expr=expr.inner()), Span.covering(ellipsis.span, expr.outer()))
+            return tag(ArgSplat(expr=expr.inner()), Span.covering(ellipsis.span, expr.outer()))
 
         # Keyword arg: name: expr — only when ':' immediately follows the name
         saved = self._lexer
@@ -815,13 +818,13 @@ class Parser:
         if name is not None:
             if self._try_tok(TokenType.Colon) is not None:
                 expr = self._require_expr()
-                return tag(KeywordAE(key=name, expr=expr.inner()), Span.covering(name.span, expr.outer()))
+                return tag(ArgKeyword(key=name, expr=expr.inner()), Span.covering(name.span, expr.outer()))
             self._lexer = saved  # not a keyword arg; restore and fall through
 
         expr = self._try_expr()
         if expr is None:
             return None
-        return tag(SingletonAE(expr.inner()), expr.outer())
+        return tag(ArgSingleton(expr.inner()), expr.outer())
 
     # ── Operator precedence ───────────────────────────────────────────────────
 
@@ -835,7 +838,7 @@ class Parser:
         rhs = self._try_prefixed()
         if rhs is None:
             self._error(self._here(), "expected operand after '^'")
-            rhs = self._sentinel_paren()
+            rhs = self._missing_paren()
         return Paren.naked(
             tag(
                 TransformedExpr(
@@ -863,7 +866,7 @@ class Parser:
         if operand is None:
             if ops:
                 self._error(self._here(), "expected operand")
-                operand = self._sentinel_paren()
+                operand = self._missing_paren()
             else:
                 return None
 
@@ -899,7 +902,7 @@ class Parser:
             rhs = sub()
             if rhs is None:
                 self._error(self._here(), "expected operand")
-                rhs = self._sentinel_paren()
+                rhs = self._missing_paren()
             assert matched_op is not None
             lhs = Paren.naked(
                 tag(
@@ -1139,7 +1142,7 @@ class Parser:
                 FunctionExpr(
                     positional=tag(ListBinding([]), fn_kw.span),
                     keywords=None,
-                    expression=self._sentinel(),
+                    expression=self._missing_expr(),
                 ),
                 fn_kw.span,
             )
@@ -1203,7 +1206,7 @@ class Parser:
             return expr
         sp = self._here()
         self._error(sp, "expected expression")
-        return self._sentinel_paren()
+        return self._missing_paren()
 
     # ── Bindings ──────────────────────────────────────────────────────────────
 
@@ -1212,8 +1215,8 @@ class Parser:
         if (ellipsis := self._try_tok(TokenType.Ellipsis)) is not None:
             name = self._try_identifier()
             if name is not None:
-                return tag(ListBESlurpTo(name=name.contents), Span.covering(ellipsis.span, name.span))
-            return tag(ListBESlurp(), ellipsis.span)
+                return tag(ListBindingSlurpTo(name=name.contents), Span.covering(ellipsis.span, name.span))
+            return tag(ListBindingSlurp(), ellipsis.span)
 
         b = self._try_binding()
         if b is None:
@@ -1221,8 +1224,8 @@ class Parser:
         if self._try_tok(TokenType.Eq) is not None:
             default = self._require_expr()
             span = Span.covering(b.span, default.outer())
-            return tag(ListBEBinding(binding=b, default=default.inner()), span)
-        return tag(ListBEBinding(binding=b, default=None), b.span)
+            return tag(ListBindingSingleton(binding=b, default=default.inner()), span)
+        return tag(ListBindingSingleton(binding=b, default=None), b.span)
 
     def _try_map_binding_element(self) -> Tagged[MapBindingElement] | None:
         # Named slurp: ...name
@@ -1230,8 +1233,8 @@ class Parser:
             name = self._try_identifier()
             if name is None:
                 self._error(self._here(), "expected identifier after '...'")
-                return tag(MapBESlurpTo(name="_"), ellipsis.span)
-            return tag(MapBESlurpTo(name=name.contents), Span.covering(ellipsis.span, name.span))
+                return tag(MapBindingSlurpTo(name="_"), ellipsis.span)
+            return tag(MapBindingSlurpTo(name=name.contents), Span.covering(ellipsis.span, name.span))
 
         # name (as binding)? (= default)?
         name = self._try_identifier()
@@ -1252,7 +1255,7 @@ class Parser:
         end = default.outer() if default is not None else sub_binding.span
         default_inner = default.inner() if default is not None else None
         return tag(
-            MapBEBinding(key=name, binding=sub_binding, default=default_inner),
+            MapBindingSingleton(key=name, binding=sub_binding, default=default_inner),
             Span.covering(name.span, end),
         )
 
@@ -1290,7 +1293,7 @@ class Parser:
             return b
         sp = self._here()
         self._error(sp, "expected binding")
-        return self._dummy_binding()
+        return self._missing_binding()
 
     # ── Top-level statements ───────────────────────────────────────────────────
 
@@ -1320,7 +1323,7 @@ class Parser:
             if not statements:
                 return None
             self._error(self._here(), "expected expression")
-            return File(statements=statements, expression=self._sentinel())
+            return File(statements=statements, expression=self._missing_expr())
 
         return File(statements=statements, expression=pexpr.inner())
 

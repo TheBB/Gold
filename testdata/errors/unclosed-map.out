@@ -8,12 +8,12 @@ ParseResult
       statements: []
       expression: MapExpr [0..11]
         elements:
-          SingletonME [1..5]
+          MapSingleton [1..5]
             key: LiteralExpr [1..2]
               value: "x"
             value: LiteralExpr [4..5]
               value: 1
-          SingletonME [7..11]
+          MapSingleton [7..11]
             key: LiteralExpr [7..8]
               value: "y"
             value: LiteralExpr [10..11]

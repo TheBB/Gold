@@ -11,7 +11,6 @@ ParseResult
           [0]:
             IdentifierBinding [4..5]
               name: "x" [4..5]
-            LiteralExpr [7..7]
-              value: null
+            MissingExpr [7..7]
         expression: IdentifierExpr [11..12]
           name: "x" [11..12]

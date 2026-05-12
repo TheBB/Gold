@@ -9,10 +9,9 @@ ParseResult
       expression: FunctionExpr [0..6]
         positional: ListBinding [3..6]
           elements:
-            ListBEBinding [4..5]
+            ListBindingSingleton [4..5]
               binding: IdentifierBinding [4..5]
                 name: "x" [4..5]
               default: null
         keywords: null
-        expression: LiteralExpr [6..6]
-          value: null
+        expression: MissingExpr [6..6]

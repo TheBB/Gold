@@ -43,7 +43,7 @@ class LogicOp(Enum):
 
 
 # In Rust: BinOp = Eager(EagerOp) | Logic(LogicOp). In Python a plain union suffices.
-BinOp = EagerOp | LogicOp
+type BinOp = EagerOp | LogicOp
 
 
 # ── Format spec ───────────────────────────────────────────────────────────────
@@ -101,12 +101,12 @@ class FormatSpec:
 # ── Bindings (patterns) ───────────────────────────────────────────────────────
 
 
-class ListBindingElement:
+class AbstractListBindingElement:
     """Base for elements inside a list pattern."""
 
 
 @dataclass(frozen=True)
-class ListBEBinding(ListBindingElement):
+class ListBindingSingleton(AbstractListBindingElement):
     """An ordinary sub-pattern with an optional default value."""
 
     binding: Tagged[Binding]
@@ -114,23 +114,23 @@ class ListBEBinding(ListBindingElement):
 
 
 @dataclass(frozen=True)
-class ListBESlurpTo(ListBindingElement):
+class ListBindingSlurpTo(AbstractListBindingElement):
     """Collect remaining list elements into a named binding."""
 
     name: str
 
 
 @dataclass(frozen=True)
-class ListBESlurp(ListBindingElement):
+class ListBindingSlurp(AbstractListBindingElement):
     """Consume remaining list elements, discarding them."""
 
 
-class MapBindingElement:
+class AbstractMapBindingElement:
     """Base for elements inside a map pattern."""
 
 
 @dataclass(frozen=True)
-class MapBEBinding(MapBindingElement):
+class MapBindingSingleton(AbstractMapBindingElement):
     """A key matched to a sub-pattern, with an optional default value."""
 
     key: Tagged[str]
@@ -139,7 +139,7 @@ class MapBEBinding(MapBindingElement):
 
 
 @dataclass(frozen=True)
-class MapBESlurpTo(MapBindingElement):
+class MapBindingSlurpTo(AbstractMapBindingElement):
     """Collect remaining map entries into a named binding."""
 
     name: str
@@ -159,47 +159,52 @@ class MapBinding:
     elements: list[Tagged[MapBindingElement]]
 
 
-class Binding:
+class AbstractBinding:
     """Base for all pattern/binding forms."""
 
 
 @dataclass(frozen=True)
-class IdentifierBinding(Binding):
+class IdentifierBinding(AbstractBinding):
     """A simple named binding."""
 
     name: Tagged[str]
 
 
 @dataclass(frozen=True)
-class ListPatternBinding(Binding):
+class ListPatternBinding(AbstractBinding):
     """A list-destructuring binding."""
 
     binding: Tagged[ListBinding]
 
 
 @dataclass(frozen=True)
-class MapPatternBinding(Binding):
+class MapPatternBinding(AbstractBinding):
     """A map-destructuring binding."""
 
     binding: Tagged[MapBinding]
 
 
+@dataclass(frozen=True)
+class MissingBinding(AbstractBinding):
+    """Sentinel used in error recovery when a required binding could not be parsed."""
+
+
 # ── String elements ───────────────────────────────────────────────────────────
 
 
-class StringElement:
+class AbstractStringElement:
     """Base for elements of an interpolated string."""
 
 
 @dataclass(frozen=True)
-class RawStringElement(StringElement):
+class StringRaw(AbstractStringElement):
     """A literal chunk of string text."""
 
     value: str
 
 
 @dataclass(frozen=True)
-class InterpolateStringElement(StringElement):
+class StringInterpolate(AbstractStringElement):
     """An interpolated expression with an optional format spec."""
 
     expr: Tagged[Expr]
@@ -209,26 +214,26 @@ class InterpolateStringElement(StringElement):
 # ── List elements ─────────────────────────────────────────────────────────────
 
 
-class ListElement:
+class AbstractListElement:
     """Base for elements of a list literal."""
 
 
 @dataclass(frozen=True)
-class SingletonLE(ListElement):
+class ListSingleton(AbstractListElement):
     """A single value expression."""
 
     expr: Tagged[Expr]
 
 
 @dataclass(frozen=True)
-class SplatLE(ListElement):
+class ListSplat(AbstractListElement):
     """Spread an iterable into the list."""
 
     expr: Tagged[Expr]
 
 
 @dataclass(frozen=True)
-class LoopLE(ListElement):
+class ListLoop(AbstractListElement):
     """A for-comprehension that produces list elements."""
 
     binding: Tagged[Binding]
@@ -237,7 +242,7 @@ class LoopLE(ListElement):
 
 
 @dataclass(frozen=True)
-class CondLE(ListElement):
+class ListCond(AbstractListElement):
     """A conditional element (if-guard) in a list literal."""
 
     condition: Tagged[Expr]
@@ -247,12 +252,12 @@ class CondLE(ListElement):
 # ── Map elements ──────────────────────────────────────────────────────────────
 
 
-class MapElement:
+class AbstractMapElement:
     """Base for elements of a map literal."""
 
 
 @dataclass(frozen=True)
-class SingletonME(MapElement):
+class MapSingleton(AbstractMapElement):
     """A single key→value pair."""
 
     key: Tagged[Expr]
@@ -260,14 +265,14 @@ class SingletonME(MapElement):
 
 
 @dataclass(frozen=True)
-class SplatME(MapElement):
+class MapSplat(AbstractMapElement):
     """Merge another map into this literal."""
 
     expr: Tagged[Expr]
 
 
 @dataclass(frozen=True)
-class LoopME(MapElement):
+class MapLoop(AbstractMapElement):
     """A for-comprehension that produces map entries."""
 
     binding: Tagged[Binding]
@@ -276,7 +281,7 @@ class LoopME(MapElement):
 
 
 @dataclass(frozen=True)
-class CondME(MapElement):
+class MapCond(AbstractMapElement):
     """A conditional element (if-guard) in a map literal."""
 
     condition: Tagged[Expr]
@@ -286,19 +291,19 @@ class CondME(MapElement):
 # ── Argument elements ─────────────────────────────────────────────────────────
 
 
-class ArgElement:
+class AbstractArgElement:
     """Base for elements of a function call argument list."""
 
 
 @dataclass(frozen=True)
-class SingletonAE(ArgElement):
+class ArgSingleton(AbstractArgElement):
     """A positional argument."""
 
     expr: Tagged[Expr]
 
 
 @dataclass(frozen=True)
-class KeywordAE(ArgElement):
+class ArgKeyword(AbstractArgElement):
     """A named (keyword) argument."""
 
     key: Tagged[str]
@@ -306,7 +311,7 @@ class KeywordAE(ArgElement):
 
 
 @dataclass(frozen=True)
-class SplatAE(ArgElement):
+class ArgSplat(AbstractArgElement):
     """A splatted argument (list splat or map splat depending on runtime type)."""
 
     expr: Tagged[Expr]
@@ -315,19 +320,19 @@ class SplatAE(ArgElement):
 # ── Transforms ────────────────────────────────────────────────────────────────
 
 
-class Transform:
+class AbstractTransform:
     """Base for expression transforms (operand → result)."""
 
 
 @dataclass(frozen=True)
-class UnOpTransform(Transform):
+class UnOpTransform(AbstractTransform):
     """A unary operator. None means the identity/pass-through (Rust: Tagged<Option<UnOp>>)."""
 
     op: Tagged[UnOp | None]
 
 
 @dataclass(frozen=True)
-class BinOpTransform(Transform):
+class BinOpTransform(AbstractTransform):
     """A binary operator with its right-hand operand."""
 
     op: Tagged[BinOp]
@@ -335,7 +340,7 @@ class BinOpTransform(Transform):
 
 
 @dataclass(frozen=True)
-class FunCallTransform(Transform):
+class FunCallTransform(AbstractTransform):
     """A function call with its argument list."""
 
     args: Tagged[list[Tagged[ArgElement]]]
@@ -344,47 +349,47 @@ class FunCallTransform(Transform):
 # ── Expressions ───────────────────────────────────────────────────────────────
 
 
-class Expr:
+class AbstractExpr:
     """Base for all expression AST nodes."""
 
 
 @dataclass(frozen=True)
-class LiteralExpr(Expr):
+class LiteralExpr(AbstractExpr):
     """A scalar literal value (int, float, bool, str, or null)."""
 
     value: GoldValue
 
 
 @dataclass(frozen=True)
-class StringExpr(Expr):
+class StringExpr(AbstractExpr):
     """An interpolated string (contains at least one interpolation)."""
 
     elements: list[StringElement]
 
 
 @dataclass(frozen=True)
-class IdentifierExpr(Expr):
+class IdentifierExpr(AbstractExpr):
     """A name looked up in the current scope."""
 
     name: Tagged[str]
 
 
 @dataclass(frozen=True)
-class ListExpr(Expr):
+class ListExpr(AbstractExpr):
     """A list literal."""
 
     elements: list[Tagged[ListElement]]
 
 
 @dataclass(frozen=True)
-class MapExpr(Expr):
+class MapExpr(AbstractExpr):
     """A map literal."""
 
     elements: list[Tagged[MapElement]]
 
 
 @dataclass(frozen=True)
-class LetExpr(Expr):
+class LetExpr(AbstractExpr):
     """A let-block: bind patterns to expressions, then evaluate a body."""
 
     bindings: list[tuple[Tagged[Binding], Tagged[Expr]]]
@@ -392,7 +397,7 @@ class LetExpr(Expr):
 
 
 @dataclass(frozen=True)
-class TransformedExpr(Expr):
+class TransformedExpr(AbstractExpr):
     """An operand with a transform applied (binary op, unary op, or function call)."""
 
     operand: Tagged[Expr]
@@ -400,7 +405,7 @@ class TransformedExpr(Expr):
 
 
 @dataclass(frozen=True)
-class FunctionExpr(Expr):
+class FunctionExpr(AbstractExpr):
     """A function (lambda) definition."""
 
     positional: Tagged[ListBinding]
@@ -409,7 +414,7 @@ class FunctionExpr(Expr):
 
 
 @dataclass(frozen=True)
-class BranchExpr(Expr):
+class BranchExpr(AbstractExpr):
     """An if/else conditional expression. Gold has no else-less branches."""
 
     condition: Tagged[Expr]
@@ -417,15 +422,20 @@ class BranchExpr(Expr):
     false_branch: Tagged[Expr]
 
 
+@dataclass(frozen=True)
+class MissingExpr(AbstractExpr):
+    """Sentinel used in error recovery when a required expression could not be parsed."""
+
+
 # ── Top-level statements ──────────────────────────────────────────────────────
 
 
-class TopLevel:
+class AbstractTopLevel:
     """Base for file-scope statements (currently only imports)."""
 
 
 @dataclass(frozen=True)
-class ImportStatement(TopLevel):
+class ImportStatement(AbstractTopLevel):
     """Import a Gold file and bind its value to a pattern."""
 
     path: Tagged[str]
@@ -441,3 +451,30 @@ class File:
 
     statements: list[TopLevel]
     expression: Tagged[Expr]
+
+
+# ── Union type aliases ────────────────────────────────────────────────────────
+# Use these in type hints for exhaustiveness checking.
+# Use the Abstract* base classes for isinstance() checks at runtime.
+
+type ListBindingElement = ListBindingSingleton | ListBindingSlurpTo | ListBindingSlurp
+type MapBindingElement = MapBindingSingleton | MapBindingSlurpTo
+type Binding = IdentifierBinding | ListPatternBinding | MapPatternBinding | MissingBinding
+type StringElement = StringRaw | StringInterpolate
+type ListElement = ListSingleton | ListSplat | ListLoop | ListCond
+type MapElement = MapSingleton | MapSplat | MapLoop | MapCond
+type ArgElement = ArgSingleton | ArgKeyword | ArgSplat
+type Transform = UnOpTransform | BinOpTransform | FunCallTransform
+type Expr = (
+    LiteralExpr
+    | StringExpr
+    | IdentifierExpr
+    | ListExpr
+    | MapExpr
+    | LetExpr
+    | TransformedExpr
+    | FunctionExpr
+    | BranchExpr
+    | MissingExpr
+)
+type TopLevel = ImportStatement

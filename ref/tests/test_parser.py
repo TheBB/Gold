@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from ref.ast import (
     AlignSpec,
+    ArgKeyword,
+    ArgSingleton,
+    ArgSplat,
     BinOpTransform,
     BranchExpr,
-    CondLE,
-    CondME,
     EagerOp,
     Expr,
     FormatSpec,
@@ -16,32 +17,31 @@ from ref.ast import (
     GroupingSpec,
     IdentifierBinding,
     IdentifierExpr,
-    InterpolateStringElement,
-    KeywordAE,
     LetExpr,
-    ListBEBinding,
-    ListBESlurp,
-    ListBESlurpTo,
     ListBinding,
+    ListBindingSingleton,
+    ListBindingSlurp,
+    ListBindingSlurpTo,
+    ListCond,
     ListExpr,
+    ListLoop,
     ListPatternBinding,
+    ListSingleton,
+    ListSplat,
     LiteralExpr,
     LogicOp,
-    LoopLE,
-    LoopME,
-    MapBEBinding,
     MapBinding,
+    MapBindingSingleton,
+    MapCond,
     MapExpr,
+    MapLoop,
     MapPatternBinding,
-    RawStringElement,
+    MapSingleton,
+    MapSplat,
     SignSpec,
-    SingletonAE,
-    SingletonLE,
-    SingletonME,
-    SplatAE,
-    SplatLE,
-    SplatME,
     StringExpr,
+    StringInterpolate,
+    StringRaw,
     TransformedExpr,
     UnOp,
     UnOpTransform,
@@ -76,9 +76,9 @@ def bid(name: str, start: int, end: int | None = None) -> Tagged[IdentifierBindi
     return tag(IdentifierBinding(name=tag(name, sp)), sp)
 
 
-def lel(value: GoldValue, start: int, end: int | None = None) -> Tagged[SingletonLE]:
+def lel(value: GoldValue, start: int, end: int | None = None) -> Tagged[ListSingleton]:
     e = lit(value, start, end)
-    return tag(SingletonLE(expr=e), e.span)
+    return tag(ListSingleton(expr=e), e.span)
 
 
 def retag[T](inner: Tagged[T], start: int, end: int | None = None) -> Tagged[T]:
@@ -86,8 +86,8 @@ def retag[T](inner: Tagged[T], start: int, end: int | None = None) -> Tagged[T]:
     return tag(inner.contents, S(start, end))
 
 
-def mel(key: Tagged[Expr], value: Tagged[Expr]) -> Tagged[SingletonME]:
-    return tag(SingletonME(key=key, value=value), Span.covering(key.span, value.span))
+def mel(key: Tagged[Expr], value: Tagged[Expr]) -> Tagged[MapSingleton]:
+    return tag(MapSingleton(key=key, value=value), Span.covering(key.span, value.span))
 
 
 def binop(
@@ -340,8 +340,8 @@ def test_strings():
     assert expr('"dingbob${a}"') == tag(
         StringExpr(
             [
-                RawStringElement("dingbob"),
-                InterpolateStringElement(expr=ident("a", 10), fmt=None),
+                StringRaw("dingbob"),
+                StringInterpolate(expr=ident("a", 10), fmt=None),
             ]
         ),
         S(0, 13),
@@ -350,8 +350,8 @@ def test_strings():
     assert expr('"dingbob${ a}"') == tag(
         StringExpr(
             [
-                RawStringElement("dingbob"),
-                InterpolateStringElement(expr=ident("a", 11), fmt=None),
+                StringRaw("dingbob"),
+                StringInterpolate(expr=ident("a", 11), fmt=None),
             ]
         ),
         S(0, 14),
@@ -359,26 +359,26 @@ def test_strings():
 
     # Adjacent string parts are concatenated
     assert expr('"alpha" "bravo"') == tag(
-        StringExpr([RawStringElement("alpha"), RawStringElement("bravo")]),
+        StringExpr([StringRaw("alpha"), StringRaw("bravo")]),
         S(0, 15),
     )
 
 
 def test_string_format():
     assert expr('"${a}"') == tag(
-        StringExpr([InterpolateStringElement(expr=ident("a", 3), fmt=None)]),
+        StringExpr([StringInterpolate(expr=ident("a", 3), fmt=None)]),
         S(0, 6),
     )
 
     assert expr('"${a:}"') == tag(
-        StringExpr([InterpolateStringElement(expr=ident("a", 3), fmt=FormatSpec())]),
+        StringExpr([StringInterpolate(expr=ident("a", 3), fmt=FormatSpec())]),
         S(0, 7),
     )
 
     assert expr('"${a: >+30}"') == tag(
         StringExpr(
             [
-                InterpolateStringElement(
+                StringInterpolate(
                     expr=ident("a", 3),
                     fmt=FormatSpec(align=AlignSpec.Right, sign=SignSpec.Plus, width=30),
                 )
@@ -390,7 +390,7 @@ def test_string_format():
     assert expr('"${a:$^#.3}"') == tag(
         StringExpr(
             [
-                InterpolateStringElement(
+                StringInterpolate(
                     expr=ident("a", 3),
                     fmt=FormatSpec(fill="$", align=AlignSpec.Center, alternate=True, precision=3),
                 )
@@ -402,7 +402,7 @@ def test_string_format():
     assert expr('"${a:0,.5s}"') == tag(
         StringExpr(
             [
-                InterpolateStringElement(
+                StringInterpolate(
                     expr=ident("a", 3),
                     fmt=FormatSpec(
                         fill="0",
@@ -443,7 +443,7 @@ def test_lists():
                 lel(False, 4, 9),
                 lel(2.3, 11, 14),
                 lel("fable", 16, 23),
-                tag(SingletonLE(expr=ident("lel", 25, 28)), S(25, 28)),
+                tag(ListSingleton(expr=ident("lel", 25, 28)), S(25, 28)),
             ]
         ),
         S(0, 29),
@@ -453,8 +453,8 @@ def test_lists():
         ListExpr(
             [
                 lel(1, 1),
-                tag(SplatLE(expr=ident("x", 7)), S(4, 8)),
-                tag(SingletonLE(expr=ident("y", 10)), S(10)),
+                tag(ListSplat(expr=ident("x", 7)), S(4, 8)),
+                tag(ListSingleton(expr=ident("y", 10)), S(10)),
             ]
         ),
         S(0, 12),
@@ -465,10 +465,10 @@ def test_lists():
             [
                 lel(1, 1),
                 tag(
-                    LoopLE(
+                    ListLoop(
                         binding=bid("x", 8),
                         iterable=ident("y", 13),
-                        element=tag(SingletonLE(expr=ident("x", 16)), S(16)),
+                        element=tag(ListSingleton(expr=ident("x", 16)), S(16)),
                     ),
                     S(4, 17),
                 ),
@@ -482,9 +482,11 @@ def test_lists():
         ListExpr(
             [
                 tag(
-                    CondLE(
-                        condition=funcall(ident("f", 6), [tag(SingletonAE(expr=ident("x", 8)), S(8))], 7, 10),
-                        element=tag(SingletonLE(expr=ident("x", 12)), S(12)),
+                    ListCond(
+                        condition=funcall(
+                            ident("f", 6), [tag(ArgSingleton(expr=ident("x", 8)), S(8))], 7, 10
+                        ),
+                        element=tag(ListSingleton(expr=ident("x", 12)), S(12)),
                     ),
                     S(1, 13),
                 ),
@@ -497,19 +499,19 @@ def test_lists():
         ListExpr(
             [
                 lel(1, 2),
-                tag(SplatLE(expr=ident("x", 10)), S(6, 11)),
+                tag(ListSplat(expr=ident("x", 10)), S(6, 11)),
                 tag(
-                    CondLE(
+                    ListCond(
                         condition=ident("x", 19),
-                        element=tag(SingletonLE(expr=ident("y", 23)), S(23)),
+                        element=tag(ListSingleton(expr=ident("y", 23)), S(23)),
                     ),
                     S(14, 24),
                 ),
                 tag(
-                    LoopLE(
+                    ListLoop(
                         binding=bid("x", 31),
                         iterable=ident("y", 36),
-                        element=tag(SingletonLE(expr=ident("z", 40)), S(40)),
+                        element=tag(ListSingleton(expr=ident("z", 40)), S(40)),
                     ),
                     S(27, 41),
                 ),
@@ -521,20 +523,20 @@ def test_lists():
     assert expr("[ (1) , ... (x), when x: (y) , for x in y: (z) ]") == tag(
         ListExpr(
             [
-                tag(SingletonLE(expr=lit(1, 3, 4)), S(3, 4)),
-                tag(SplatLE(expr=ident("x", 13, 14)), S(8, 15)),
+                tag(ListSingleton(expr=lit(1, 3, 4)), S(3, 4)),
+                tag(ListSplat(expr=ident("x", 13, 14)), S(8, 15)),
                 tag(
-                    CondLE(
+                    ListCond(
                         condition=ident("x", 22),
-                        element=tag(SingletonLE(expr=ident("y", 26, 27)), S(26, 27)),
+                        element=tag(ListSingleton(expr=ident("y", 26, 27)), S(26, 27)),
                     ),
                     S(17, 28),
                 ),
                 tag(
-                    LoopLE(
+                    ListLoop(
                         binding=bid("x", 35),
                         iterable=ident("y", 40),
-                        element=tag(SingletonLE(expr=ident("z", 44, 45)), S(44, 45)),
+                        element=tag(ListSingleton(expr=ident("z", 44, 45)), S(44, 45)),
                     ),
                     S(31, 46),
                 ),
@@ -546,7 +548,7 @@ def test_lists():
 
 def test_nested_lists():
     assert expr("[[]]") == tag(
-        ListExpr([tag(SingletonLE(expr=tag(ListExpr([]), S(1, 3))), S(1, 3))]),
+        ListExpr([tag(ListSingleton(expr=tag(ListExpr([]), S(1, 3))), S(1, 3))]),
         S(0, 4),
     )
 
@@ -554,7 +556,7 @@ def test_nested_lists():
         ListExpr(
             [
                 lel(1, 1),
-                tag(SingletonLE(expr=tag(ListExpr([lel(2, 5)]), S(4, 7))), S(4, 7)),
+                tag(ListSingleton(expr=tag(ListExpr([lel(2, 5)]), S(4, 7))), S(4, 7)),
             ]
         ),
         S(0, 8),
@@ -609,13 +611,13 @@ def test_maps():
 
     # $identifier key — key span is just the identifier (not the $)
     assert expr("{$z: y}") == tag(
-        MapExpr([tag(SingletonME(key=ident("z", 2), value=ident("y", 5)), S(1, 6))]),
+        MapExpr([tag(MapSingleton(key=ident("z", 2), value=ident("y", 5)), S(1, 6))]),
         S(0, 7),
     )
 
     # $(expr) key — key span is the inner expression
     assert expr("{$(z): y}") == tag(
-        MapExpr([tag(SingletonME(key=ident("z", 3), value=ident("y", 7)), S(1, 8))]),
+        MapExpr([tag(MapSingleton(key=ident("z", 3), value=ident("y", 7)), S(1, 8))]),
         S(0, 9),
     )
 
@@ -638,7 +640,7 @@ def test_maps():
     assert expr("{...y, x: 1}") == tag(
         MapExpr(
             [
-                tag(SplatME(expr=ident("y", 4)), S(1, 5)),
+                tag(MapSplat(expr=ident("y", 4)), S(1, 5)),
                 mel(lit("x", 7), lit(1, 10)),
             ]
         ),
@@ -649,14 +651,18 @@ def test_maps():
         MapExpr(
             [
                 tag(
-                    LoopME(
+                    MapLoop(
                         binding=tag(
                             ListPatternBinding(
                                 binding=tag(
                                     ListBinding(
                                         [
-                                            tag(ListBEBinding(binding=bid("x", 6), default=None), S(6)),
-                                            tag(ListBEBinding(binding=bid("y", 8), default=None), S(8)),
+                                            tag(
+                                                ListBindingSingleton(binding=bid("x", 6), default=None), S(6)
+                                            ),
+                                            tag(
+                                                ListBindingSingleton(binding=bid("y", 8), default=None), S(8)
+                                            ),
                                         ]
                                     ),
                                     S(5, 10),
@@ -678,8 +684,10 @@ def test_maps():
         MapExpr(
             [
                 tag(
-                    CondME(
-                        condition=funcall(ident("f", 6), [tag(SingletonAE(expr=ident("x", 8)), S(8))], 7, 10),
+                    MapCond(
+                        condition=funcall(
+                            ident("f", 6), [tag(ArgSingleton(expr=ident("x", 8)), S(8))], 7, 10
+                        ),
                         element=mel(lit("z", 12), ident("y", 15)),
                     ),
                     S(1, 16),
@@ -693,16 +701,16 @@ def test_maps():
         MapExpr(
             [
                 mel(lit("a", 2), lit(1, 6)),
-                tag(SplatME(expr=ident("x", 14)), S(10, 15)),
+                tag(MapSplat(expr=ident("x", 14)), S(10, 15)),
                 tag(
-                    CondME(
+                    MapCond(
                         condition=ident("x", 23),
                         element=mel(lit("b", 27), ident("y", 31)),
                     ),
                     S(18, 32),
                 ),
                 tag(
-                    LoopME(
+                    MapLoop(
                         binding=bid("x", 39),
                         iterable=ident("y", 44),
                         element=mel(lit("c", 48), ident("z", 52)),
@@ -710,7 +718,7 @@ def test_maps():
                     S(35, 53),
                 ),
                 tag(
-                    SingletonME(key=ident("f", 58), value=lit(2, 62)),
+                    MapSingleton(key=ident("f", 58), value=lit(2, 62)),
                     S(56, 63),
                 ),
             ]
@@ -742,9 +750,12 @@ def test_let_blocks():
                             binding=tag(
                                 ListBinding(
                                     [
-                                        tag(ListBEBinding(binding=bid("a", 5), default=None), S(5)),
-                                        tag(ListBEBinding(binding=bid("b", 8), default=lit(1, 10)), S(8, 11)),
-                                        tag(ListBESlurp(), S(13, 16)),
+                                        tag(ListBindingSingleton(binding=bid("a", 5), default=None), S(5)),
+                                        tag(
+                                            ListBindingSingleton(binding=bid("b", 8), default=lit(1, 10)),
+                                            S(8, 11),
+                                        ),
+                                        tag(ListBindingSlurp(), S(13, 16)),
                                     ]
                                 ),
                                 S(4, 17),
@@ -758,8 +769,8 @@ def test_let_blocks():
             expression=tag(
                 ListExpr(
                     [
-                        tag(SingletonLE(expr=ident("a", 26)), S(26)),
-                        tag(SingletonLE(expr=ident("b", 29)), S(29)),
+                        tag(ListSingleton(expr=ident("a", 26)), S(26)),
+                        tag(ListSingleton(expr=ident("b", 29)), S(29)),
                     ]
                 ),
                 S(25, 31),
@@ -777,8 +788,8 @@ def test_let_blocks():
                             binding=tag(
                                 ListBinding(
                                     [
-                                        tag(ListBEBinding(binding=bid("_", 5), default=None), S(5)),
-                                        tag(ListBESlurpTo(name="rest"), S(8, 15)),
+                                        tag(ListBindingSingleton(binding=bid("_", 5), default=None), S(5)),
+                                        tag(ListBindingSlurpTo(name="rest"), S(8, 15)),
                                     ]
                                 ),
                                 S(4, 16),
@@ -801,7 +812,7 @@ def test_let_blocks():
                     tag(
                         ListPatternBinding(
                             binding=tag(
-                                ListBinding([tag(ListBESlurpTo(name="a"), S(5, 9))]),
+                                ListBinding([tag(ListBindingSlurpTo(name="a"), S(5, 9))]),
                                 S(4, 10),
                             )
                         ),
@@ -822,7 +833,7 @@ def test_let_blocks():
                     tag(
                         ListPatternBinding(
                             binding=tag(
-                                ListBinding([tag(ListBESlurpTo(name="a"), S(5, 9))]),
+                                ListBinding([tag(ListBindingSlurpTo(name="a"), S(5, 9))]),
                                 S(4, 11),
                             )
                         ),
@@ -846,7 +857,7 @@ def test_let_blocks():
                                 MapBinding(
                                     [
                                         tag(
-                                            MapBEBinding(
+                                            MapBindingSingleton(
                                                 key=tag("a", S(5)),
                                                 binding=tag(IdentifierBinding(name=tag("a", S(5))), S(5)),
                                                 default=None,
@@ -878,7 +889,7 @@ def test_let_blocks():
                                 MapBinding(
                                     [
                                         tag(
-                                            MapBEBinding(
+                                            MapBindingSingleton(
                                                 key=tag("a", S(5)),
                                                 binding=bid("b", 10),
                                                 default=None,
@@ -910,7 +921,7 @@ def test_let_blocks():
                                 MapBinding(
                                     [
                                         tag(
-                                            MapBEBinding(
+                                            MapBindingSingleton(
                                                 key=tag("a", S(5)),
                                                 binding=tag(IdentifierBinding(name=tag("a", S(5))), S(5)),
                                                 default=ident("y", 9),
@@ -942,7 +953,7 @@ def test_let_blocks():
                                 MapBinding(
                                     [
                                         tag(
-                                            MapBEBinding(
+                                            MapBindingSingleton(
                                                 key=tag("a", S(5)),
                                                 binding=bid("b", 10),
                                                 default=ident("y", 14),
@@ -974,7 +985,7 @@ def test_let_blocks():
                                 ListBinding(
                                     [
                                         tag(
-                                            ListBEBinding(binding=bid("y", 6), default=lit(1, 11, 12)),
+                                            ListBindingSingleton(binding=bid("y", 6), default=lit(1, 11, 12)),
                                             S(6, 13),
                                         ),
                                     ]
@@ -1002,7 +1013,7 @@ def test_let_blocks():
                                 MapBinding(
                                     [
                                         tag(
-                                            MapBEBinding(
+                                            MapBindingSingleton(
                                                 key=tag("y", S(6)),
                                                 binding=tag(IdentifierBinding(name=tag("y", S(6))), S(6)),
                                                 default=lit(1, 11, 12),
@@ -1067,9 +1078,9 @@ def test_funcall():
     assert expr("func(1, 2, 3,)") == funcall(
         ident("func", 0, 4),
         [
-            tag(SingletonAE(expr=lit(1, 5)), S(5)),
-            tag(SingletonAE(expr=lit(2, 8)), S(8)),
-            tag(SingletonAE(expr=lit(3, 11)), S(11)),
+            tag(ArgSingleton(expr=lit(1, 5)), S(5)),
+            tag(ArgSingleton(expr=lit(2, 8)), S(8)),
+            tag(ArgSingleton(expr=lit(3, 11)), S(11)),
         ],
         4,
         14,
@@ -1078,9 +1089,9 @@ def test_funcall():
     assert expr("func(1, 2, a: 3)") == funcall(
         ident("func", 0, 4),
         [
-            tag(SingletonAE(expr=lit(1, 5)), S(5)),
-            tag(SingletonAE(expr=lit(2, 8)), S(8)),
-            tag(KeywordAE(key=tag("a", S(11)), expr=lit(3, 14)), S(11, 15)),
+            tag(ArgSingleton(expr=lit(1, 5)), S(5)),
+            tag(ArgSingleton(expr=lit(2, 8)), S(8)),
+            tag(ArgKeyword(key=tag("a", S(11)), expr=lit(3, 14)), S(11, 15)),
         ],
         4,
         16,
@@ -1089,8 +1100,8 @@ def test_funcall():
     assert expr("func(a: 2, b: 3)") == funcall(
         ident("func", 0, 4),
         [
-            tag(KeywordAE(key=tag("a", S(5)), expr=lit(2, 8)), S(5, 9)),
-            tag(KeywordAE(key=tag("b", S(11)), expr=lit(3, 14)), S(11, 15)),
+            tag(ArgKeyword(key=tag("a", S(5)), expr=lit(2, 8)), S(5, 9)),
+            tag(ArgKeyword(key=tag("b", S(11)), expr=lit(3, 14)), S(11, 15)),
         ],
         4,
         16,
@@ -1104,8 +1115,8 @@ def test_funcall():
                     positional=tag(
                         ListBinding(
                             [
-                                tag(ListBEBinding(binding=bid("x", 5), default=None), S(5)),
-                                tag(ListBEBinding(binding=bid("y", 7), default=None), S(7)),
+                                tag(ListBindingSingleton(binding=bid("x", 5), default=None), S(5)),
+                                tag(ListBindingSingleton(binding=bid("y", 7), default=None), S(7)),
                             ]
                         ),
                         S(4, 9),
@@ -1116,8 +1127,8 @@ def test_funcall():
                 S(1, 13),  # inner span of fn expr (without surrounding parens)
             ),
             [
-                tag(SingletonAE(expr=lit(1, 15)), S(15)),
-                tag(SingletonAE(expr=lit(2, 17)), S(17)),
+                tag(ArgSingleton(expr=lit(1, 15)), S(15)),
+                tag(ArgSingleton(expr=lit(2, 17)), S(17)),
             ],
             14,
             19,
@@ -1129,10 +1140,10 @@ def test_funcall():
     assert expr("func(1, ...y, z: 2, ...q)") == funcall(
         ident("func", 0, 4),
         [
-            tag(SingletonAE(expr=lit(1, 5)), S(5)),
-            tag(SplatAE(expr=ident("y", 11)), S(8, 12)),
-            tag(KeywordAE(key=tag("z", S(14)), expr=lit(2, 17)), S(14, 18)),
-            tag(SplatAE(expr=ident("q", 23)), S(20, 24)),
+            tag(ArgSingleton(expr=lit(1, 5)), S(5)),
+            tag(ArgSplat(expr=ident("y", 11)), S(8, 12)),
+            tag(ArgKeyword(key=tag("z", S(14)), expr=lit(2, 17)), S(14, 18)),
+            tag(ArgSplat(expr=ident("q", 23)), S(20, 24)),
         ],
         4,
         25,
@@ -1245,7 +1256,7 @@ def test_functions():
     assert expr("fn (a) let b = a in b") == tag(
         FunctionExpr(
             positional=tag(
-                ListBinding([tag(ListBEBinding(binding=bid("a", 4), default=None), S(4))]), S(3, 6)
+                ListBinding([tag(ListBindingSingleton(binding=bid("a", 4), default=None), S(4))]), S(3, 6)
             ),
             keywords=None,
             expression=tag(
@@ -1266,7 +1277,7 @@ def test_functions():
                 MapBinding(
                     [
                         tag(
-                            MapBEBinding(
+                            MapBindingSingleton(
                                 key=tag("x", S(4)),
                                 binding=tag(IdentifierBinding(name=tag("x", S(4))), S(4)),
                                 default=lit(1, 6),
@@ -1274,7 +1285,7 @@ def test_functions():
                             S(4, 7),
                         ),
                         tag(
-                            MapBEBinding(
+                            MapBindingSingleton(
                                 key=tag("y", S(9)),
                                 binding=tag(IdentifierBinding(name=tag("y", S(9))), S(9)),
                                 default=lit(2, 11),
@@ -1421,7 +1432,7 @@ def _multistring_val(src: str) -> GoldValue:
     mp = result.tree.expression.contents
     assert isinstance(mp, MapExpr)
     elem = mp.elements[0].contents
-    assert isinstance(elem, SingletonME)
+    assert isinstance(elem, MapSingleton)
     val = elem.value.contents
     assert isinstance(val, LiteralExpr)
     return val.value

@@ -15,5 +15,4 @@ ParseResult
               name: "x" [4..5]
             LiteralExpr [8..9]
               value: 1
-        expression: LiteralExpr [9..9]
-          value: null
+        expression: MissingExpr [9..9]

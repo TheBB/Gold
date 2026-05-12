@@ -12,33 +12,33 @@ ParseResult
             FunctionExpr [22..144]
               positional: ListBinding [25..43]
                 elements:
-                  ListBEBinding [26..35]
+                  ListBindingSingleton [26..35]
                     binding: IdentifierBinding [26..35]
                       name: "publisher" [26..35]
                     default: null
-                  ListBEBinding [37..42]
+                  ListBindingSingleton [37..42]
                     binding: IdentifierBinding [37..42]
                       name: "title" [37..42]
                     default: null
               keywords: null
               expression: MapExpr [44..144]
                 elements:
-                  SingletonME [50..72]
+                  MapSingleton [50..72]
                     key: LiteralExpr [50..58]
                       value: "category"
                     value: LiteralExpr [60..72]
                       value: "nonfiction"
-                  SingletonME [78..97]
+                  MapSingleton [78..97]
                     key: LiteralExpr [78..88]
                       value: "department"
                     value: LiteralExpr [90..97]
                       value: "books"
-                  SingletonME [103..123]
+                  MapSingleton [103..123]
                     key: LiteralExpr [103..112]
                       value: "publisher"
                     value: IdentifierExpr [114..123]
                       name: "publisher" [114..123]
-                  SingletonME [129..141]
+                  MapSingleton [129..141]
                     key: LiteralExpr [129..134]
                       value: "title"
                     value: IdentifierExpr [136..141]
@@ -49,7 +49,7 @@ ParseResult
             FunctionExpr [164..215]
               positional: ListBinding [167..174]
                 elements:
-                  ListBEBinding [168..173]
+                  ListBindingSingleton [168..173]
                     binding: IdentifierBinding [168..173]
                       name: "title" [168..173]
                     default: null
@@ -59,41 +59,41 @@ ParseResult
                   name: "educationalBook" [175..190]
                 transform: FunCallTransform
                   args: [190..215]
-                    SingletonAE [191..207]
+                    ArgSingleton [191..207]
                       expr: LiteralExpr [191..207]
                         value: "O'Reilly Media"
-                    SingletonAE [209..214]
+                    ArgSingleton [209..214]
                       expr: IdentifierExpr [209..214]
                         name: "title" [209..214]
         expression: ListExpr [220..414]
           elements:
-            SingletonLE [226..274]
+            ListSingleton [226..274]
               expr: TransformedExpr [226..274]
                 operand: IdentifierExpr [226..237]
                   name: "makeOreilly" [226..237]
                 transform: FunCallTransform
                   args: [237..274]
-                    SingletonAE [238..273]
+                    ArgSingleton [238..273]
                       expr: LiteralExpr [238..273]
                         value: "Microservices for Java Developers"
-            SingletonLE [280..344]
+            ListSingleton [280..344]
               expr: TransformedExpr [280..344]
                 operand: IdentifierExpr [280..295]
                   name: "educationalBook" [280..295]
                 transform: FunCallTransform
                   args: [295..344]
-                    SingletonAE [296..312]
+                    ArgSingleton [296..312]
                       expr: LiteralExpr [296..312]
                         value: "Addison Wesley"
-                    SingletonAE [314..343]
+                    ArgSingleton [314..343]
                       expr: LiteralExpr [314..343]
                         value: "The Go Programming Language"
-            SingletonLE [350..411]
+            ListSingleton [350..411]
               expr: TransformedExpr [350..411]
                 operand: IdentifierExpr [350..361]
                   name: "makeOreilly" [350..361]
                 transform: FunCallTransform
                   args: [361..411]
-                    SingletonAE [362..410]
+                    ArgSingleton [362..410]
                       expr: LiteralExpr [362..410]
                         value: "Parallel and Concurrent Programming in Haskell"

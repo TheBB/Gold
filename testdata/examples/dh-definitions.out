@@ -13,40 +13,40 @@ ParseResult
               value: "bill"
         expression: MapExpr [21..152]
           elements:
-            SingletonME [27..48]
+            MapSingleton [27..48]
               key: LiteralExpr [27..31]
                 value: "home"
               value: StringExpr [33..48]
                 elements:
-                  RawStringElement
+                  StringRaw
                     value: "/home/"
-                  InterpolateStringElement
+                  StringInterpolate
                     expr: IdentifierExpr [42..46]
                       name: "user" [42..46]
                     fmt: null
-            SingletonME [54..97]
+            MapSingleton [54..97]
               key: LiteralExpr [54..64]
                 value: "privateKey"
               value: StringExpr [66..97]
                 elements:
-                  RawStringElement
+                  StringRaw
                     value: "/home/"
-                  InterpolateStringElement
+                  StringInterpolate
                     expr: IdentifierExpr [75..79]
                       name: "user" [75..79]
                     fmt: null
-                  RawStringElement
+                  StringRaw
                     value: "/.ssh/id_ed25519"
-            SingletonME [103..149]
+            MapSingleton [103..149]
               key: LiteralExpr [103..112]
                 value: "publicKey"
               value: StringExpr [114..149]
                 elements:
-                  RawStringElement
+                  StringRaw
                     value: "/home/"
-                  InterpolateStringElement
+                  StringInterpolate
                     expr: IdentifierExpr [123..127]
                       name: "user" [123..127]
                     fmt: null
-                  RawStringElement
+                  StringRaw
                     value: "/.ssh/id_ed25519.pub"

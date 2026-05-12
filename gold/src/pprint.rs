@@ -242,11 +242,11 @@ impl<'a> Pp<'a> {
     fn string_element(&mut self, elem: &StringElement, indent: usize) {
         match elem {
             StringElement::Raw(s) => {
-                self.emit(indent, "RawStringElement");
+                self.emit(indent, "StringRaw");
                 self.emit(indent + 1, format!("value: {}", self.json_str(s.as_str())));
             }
             StringElement::Interpolate(expr, fmt) => {
-                self.emit(indent, "InterpolateStringElement");
+                self.emit(indent, "StringInterpolate");
                 self.field_expr("expr", expr, indent + 1);
                 match fmt {
                     None => self.emit(indent + 1, "fmt: null"),
@@ -525,42 +525,42 @@ fn binding_type_name(b: &Binding) -> &'static str {
 
 fn list_element_type_name(e: &ListElement) -> &'static str {
     match e {
-        ListElement::Singleton(_) => "SingletonLE",
-        ListElement::Splat(_) => "SplatLE",
-        ListElement::Loop { .. } => "LoopLE",
-        ListElement::Cond { .. } => "CondLE",
+        ListElement::Singleton(_) => "ListSingleton",
+        ListElement::Splat(_) => "ListSplat",
+        ListElement::Loop { .. } => "ListLoop",
+        ListElement::Cond { .. } => "ListCond",
     }
 }
 
 fn map_element_type_name(e: &MapElement) -> &'static str {
     match e {
-        MapElement::Singleton { .. } => "SingletonME",
-        MapElement::Splat(_) => "SplatME",
-        MapElement::Loop { .. } => "LoopME",
-        MapElement::Cond { .. } => "CondME",
+        MapElement::Singleton { .. } => "MapSingleton",
+        MapElement::Splat(_) => "MapSplat",
+        MapElement::Loop { .. } => "MapLoop",
+        MapElement::Cond { .. } => "MapCond",
     }
 }
 
 fn arg_element_type_name(e: &ArgElement) -> &'static str {
     match e {
-        ArgElement::Singleton(_) => "SingletonAE",
-        ArgElement::Keyword(_, _) => "KeywordAE",
-        ArgElement::Splat(_) => "SplatAE",
+        ArgElement::Singleton(_) => "ArgSingleton",
+        ArgElement::Keyword(_, _) => "ArgKeyword",
+        ArgElement::Splat(_) => "ArgSplat",
     }
 }
 
 fn list_be_type_name(e: &ListBindingElement) -> &'static str {
     match e {
-        ListBindingElement::Binding { .. } => "ListBEBinding",
-        ListBindingElement::SlurpTo(_) => "ListBESlurpTo",
-        ListBindingElement::Slurp => "ListBESlurp",
+        ListBindingElement::Binding { .. } => "ListBindingSingleton",
+        ListBindingElement::SlurpTo(_) => "ListBindingSlurpTo",
+        ListBindingElement::Slurp => "ListBindingSlurp",
     }
 }
 
 fn map_be_type_name(e: &MapBindingElement) -> &'static str {
     match e {
-        MapBindingElement::Binding { .. } => "MapBEBinding",
-        MapBindingElement::SlurpTo(_) => "MapBESlurpTo",
+        MapBindingElement::Binding { .. } => "MapBindingSingleton",
+        MapBindingElement::SlurpTo(_) => "MapBindingSlurpTo",
     }
 }
 

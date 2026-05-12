@@ -12,7 +12,7 @@ ParseResult
             FunctionExpr [15..243]
               positional: ListBinding [18..24]
                 elements:
-                  ListBEBinding [19..23]
+                  ListBindingSingleton [19..23]
                     binding: IdentifierBinding [19..23]
                       name: "user" [19..23]
                     default: null
@@ -24,9 +24,9 @@ ParseResult
                       name: "home" [35..39]
                     StringExpr [42..57]
                       elements:
-                        RawStringElement
+                        StringRaw
                           value: "/home/"
-                        InterpolateStringElement
+                        StringInterpolate
                           expr: IdentifierExpr [51..55]
                             name: "user" [51..55]
                           fmt: null
@@ -35,36 +35,36 @@ ParseResult
                       name: "privateKey" [66..76]
                     StringExpr [79..104]
                       elements:
-                        InterpolateStringElement
+                        StringInterpolate
                           expr: IdentifierExpr [82..86]
                             name: "home" [82..86]
                           fmt: null
-                        RawStringElement
+                        StringRaw
                           value: "/.ssh/id_ed25519"
                   [2]:
                     IdentifierBinding [113..122]
                       name: "publicKey" [113..122]
                     StringExpr [125..144]
                       elements:
-                        InterpolateStringElement
+                        StringInterpolate
                           expr: IdentifierExpr [128..138]
                             name: "privateKey" [128..138]
                           fmt: null
-                        RawStringElement
+                        StringRaw
                           value: ".pub"
                 expression: MapExpr [152..241]
                   elements:
-                    SingletonME [162..172]
+                    MapSingleton [162..172]
                       key: LiteralExpr [162..166]
                         value: "home"
                       value: IdentifierExpr [168..172]
                         name: "home" [168..172]
-                    SingletonME [182..204]
+                    MapSingleton [182..204]
                       key: LiteralExpr [182..192]
                         value: "privateKey"
                       value: IdentifierExpr [194..204]
                         name: "privateKey" [194..204]
-                    SingletonME [214..234]
+                    MapSingleton [214..234]
                       key: LiteralExpr [214..223]
                         value: "publicKey"
                       value: IdentifierExpr [225..234]
@@ -75,7 +75,7 @@ ParseResult
             FunctionExpr [261..297]
               positional: ListBinding [264..271]
                 elements:
-                  ListBEBinding [265..270]
+                  ListBindingSingleton [265..270]
                     binding: IdentifierBinding [265..270]
                       name: "index" [265..270]
                     default: null
@@ -85,18 +85,18 @@ ParseResult
                   name: "makeUser" [272..280]
                 transform: FunCallTransform
                   args: [280..297]
-                    SingletonAE [281..296]
+                    ArgSingleton [281..296]
                       expr: StringExpr [281..296]
                         elements:
-                          RawStringElement
+                          StringRaw
                             value: "build"
-                          InterpolateStringElement
+                          StringInterpolate
                             expr: IdentifierExpr [289..294]
                               name: "index" [289..294]
                             fmt: null
         expression: ListExpr [302..336]
           elements:
-            LoopLE [303..335]
+            ListLoop [303..335]
               binding: IdentifierBinding [307..308]
                 name: "x" [307..308]
               iterable: TransformedExpr [312..321]
@@ -104,15 +104,15 @@ ParseResult
                   name: "range" [312..317]
                 transform: FunCallTransform
                   args: [317..321]
-                    SingletonAE [318..320]
+                    ArgSingleton [318..320]
                       expr: LiteralExpr [318..320]
                         value: 10
-              element: SingletonLE [323..335]
+              element: ListSingleton [323..335]
                 expr: TransformedExpr [323..335]
                   operand: IdentifierExpr [323..332]
                     name: "buildUser" [323..332]
                   transform: FunCallTransform
                     args: [332..335]
-                      SingletonAE [333..334]
+                      ArgSingleton [333..334]
                         expr: IdentifierExpr [333..334]
                           name: "x" [333..334]

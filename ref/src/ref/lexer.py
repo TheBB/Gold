@@ -163,6 +163,13 @@ class Token:
     text: str
 
 
+@dataclass(frozen=True)
+class MissingToken:
+    """Sentinel for a token that was expected but not present in the source."""
+
+    kind: TokenType
+
+
 # ── Errors ────────────────────────────────────────────────────────────────────
 
 

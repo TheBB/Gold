@@ -6,17 +6,17 @@ ParseResult
       statements: []
       expression: MapExpr [0..122]
         elements:
-          SingletonME [6..24]
+          MapSingleton [6..24]
             key: LiteralExpr [6..10]
               value: "home"
             value: LiteralExpr [12..24]
               value: "/home/bill"
-          SingletonME [30..70]
+          MapSingleton [30..70]
             key: LiteralExpr [30..40]
               value: "privateKey"
             value: LiteralExpr [42..70]
               value: "/home/bill/.ssh/id_ed25519"
-          SingletonME [76..119]
+          MapSingleton [76..119]
             key: LiteralExpr [76..85]
               value: "publicKey"
             value: LiteralExpr [87..119]

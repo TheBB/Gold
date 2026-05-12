@@ -13,5 +13,4 @@ ParseResult
           value: true
         true_branch: LiteralExpr [13..14]
           value: 1
-        false_branch: LiteralExpr [14..14]
-          value: null
+        false_branch: MissingExpr [14..14]
