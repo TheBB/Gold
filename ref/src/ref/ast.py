@@ -1,16 +1,46 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .evaluation import Namespace
     from .span import Tagged
 
-# ── Primitive value types ─────────────────────────────────────────────────────
 
-type GoldValue = int | float | str | bool | None | dict[str, GoldValue] | list[GoldValue]
+# ── Values ─────────────────────────────────────────────────────────────────
 
+
+@dataclass
+class GoldFunction:
+    """A Gold closure: parameter bindings, body AST, and captured scope."""
+
+    positional: ListBinding
+    keywords: MapBinding | None
+    body: Tagged[Expr]
+    captured: Namespace
+
+
+@dataclass(frozen=True)
+class GoldBuiltin:
+    """A named built-in function."""
+
+    name: str
+
+
+type GoldValue = (
+    int
+    | float
+    | str
+    | bool
+    | None
+    | Mapping[str, GoldValue]
+    | Sequence[GoldValue]
+    | GoldFunction
+    | GoldBuiltin
+)
 
 # ── Operators ─────────────────────────────────────────────────────────────────
 

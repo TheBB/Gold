@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pathlib import Path  # noqa: TC003
-from typing import Any
+from typing import Any, TypeGuard
 
 from .ast import (
     AlignSpec,
@@ -19,6 +18,9 @@ from .ast import (
     FormatTypeSpec,
     FunCallTransform,
     FunctionExpr,
+    GoldBuiltin,
+    GoldFunction,
+    GoldValue,
     GroupingSpec,
     IdentifierBinding,
     IdentifierExpr,
@@ -57,30 +59,6 @@ from .ast import (
 )
 from .span import Tagged  # noqa: TC001
 
-# ── Value types ───────────────────────────────────────────────────────────────
-
-
-@dataclass
-class GoldFunction:
-    """A Gold closure: parameter bindings, body AST, and captured scope."""
-
-    positional: ListBinding
-    keywords: MapBinding | None
-    body: Tagged[Any]
-    captured: Namespace
-
-
-@dataclass(frozen=True)
-class GoldBuiltin:
-    """A named built-in function."""
-
-    name: str
-
-
-type EvalValue = (
-    int | float | str | bool | None | dict[str, EvalValue] | list[EvalValue] | GoldFunction | GoldBuiltin
-)
-
 # ── Errors ────────────────────────────────────────────────────────────────────
 
 
@@ -91,7 +69,7 @@ class EvalError(Exception):
 # ── Truthiness ────────────────────────────────────────────────────────────────
 
 
-def _truthy(v: EvalValue) -> bool:
+def _truthy(v: GoldValue) -> bool:
     if v is None or v is False:
         return False
     if isinstance(v, bool):
@@ -106,7 +84,7 @@ def _truthy(v: EvalValue) -> bool:
 # ── String conversion ─────────────────────────────────────────────────────────
 
 
-def _gold_str(v: EvalValue) -> str:
+def _gold_str(v: GoldValue) -> str:
     if v is None:
         return "null"
     if isinstance(v, bool):
@@ -127,7 +105,7 @@ def _gold_str(v: EvalValue) -> str:
 # ── Format spec application ───────────────────────────────────────────────────
 
 
-def _format_value(v: EvalValue, fmt: FormatSpec) -> str:
+def _format_value(v: GoldValue, fmt: FormatSpec) -> str:
     spec = ""
     if fmt.align is not None:
         spec += fmt.fill
@@ -200,9 +178,9 @@ class Namespace:
 
     def __init__(self, parent: Namespace | None = None) -> None:
         self._parent = parent
-        self._bindings: dict[str, EvalValue] = {}
+        self._bindings: dict[str, GoldValue] = {}
 
-    def lookup(self, name: str) -> EvalValue:
+    def lookup(self, name: str) -> GoldValue:
         ns: Namespace | None = self
         while ns is not None:
             if name in ns._bindings:
@@ -210,7 +188,7 @@ class Namespace:
             ns = ns._parent
         raise EvalError(f"undefined name: {name!r}")
 
-    def bind(self, name: str, value: EvalValue) -> None:
+    def bind(self, name: str, value: GoldValue) -> None:
         self._bindings[name] = value
 
     def child(self) -> Namespace:
@@ -222,14 +200,14 @@ class Namespace:
 
 class AbstractImportResolver(ABC):
     @abstractmethod
-    def resolve(self, path: str) -> EvalValue: ...
+    def resolve(self, path: str) -> GoldValue: ...
 
 
 class PathImportResolver(AbstractImportResolver):
     def __init__(self, root: Path) -> None:
         self._root = root
 
-    def resolve(self, path: str) -> EvalValue:
+    def resolve(self, path: str) -> GoldValue:
         from .parser import parse
 
         full_path = self._root / path
@@ -244,7 +222,7 @@ class PathImportResolver(AbstractImportResolver):
 # ── Binding resolution ────────────────────────────────────────────────────────
 
 
-def _resolve_binding(binding_tagged: Tagged[Any], value: EvalValue, ns: Namespace) -> None:
+def _resolve_binding(binding_tagged: Tagged[Any], value: GoldValue, ns: Namespace) -> None:
     b = binding_tagged.contents
     if isinstance(b, IdentifierBinding):
         ns.bind(b.name.contents, value)
@@ -258,7 +236,7 @@ def _resolve_binding(binding_tagged: Tagged[Any], value: EvalValue, ns: Namespac
         raise EvalError(f"unknown binding type: {type(b).__name__!r}")
 
 
-def _resolve_list_binding(lb: ListBinding, value: EvalValue, ns: Namespace) -> None:
+def _resolve_list_binding(lb: ListBinding, value: GoldValue, ns: Namespace) -> None:
     if not isinstance(value, list):
         raise EvalError(f"cannot unpack {type(value).__name__!r} as list")
 
@@ -301,7 +279,7 @@ def _resolve_list_binding(lb: ListBinding, value: EvalValue, ns: Namespace) -> N
         _resolve_binding(elem.binding, value[len(value) - len(post) + i], ns)
 
 
-def _resolve_map_binding(mb: MapBinding, value: EvalValue, ns: Namespace) -> None:
+def _resolve_map_binding(mb: MapBinding, value: GoldValue, ns: Namespace) -> None:
     if not isinstance(value, dict):
         raise EvalError(f"cannot unpack {type(value).__name__!r} as map")
 
@@ -318,54 +296,54 @@ def _resolve_map_binding(mb: MapBinding, value: EvalValue, ns: Namespace) -> Non
             else:
                 raise EvalError(f"missing required key {k!r}")
         elif isinstance(elem, MapBindingSlurpTo):
-            rest: dict[str, EvalValue] = {k: v for k, v in value.items() if k not in consumed}
+            rest: dict[str, GoldValue] = {k: v for k, v in value.items() if k not in consumed}
             ns.bind(elem.name, rest)
 
 
 # ── Type helpers ──────────────────────────────────────────────────────────────
 
 
-def _is_int(v: EvalValue) -> bool:
+def _is_int(v: GoldValue) -> TypeGuard[int]:
     return isinstance(v, int) and not isinstance(v, bool)
 
 
-def _is_float(v: EvalValue) -> bool:
+def _is_float(v: GoldValue) -> TypeGuard[float]:
     return isinstance(v, float)
 
 
-def _is_numeric(v: EvalValue) -> bool:
+def _is_numeric(v: GoldValue) -> TypeGuard[int | float]:
     return _is_int(v) or _is_float(v)
 
 
 # ── Eager binary operators ────────────────────────────────────────────────────
 
 
-def _gold_eq(a: EvalValue, b: EvalValue) -> bool:
+def _gold_eq(a: GoldValue, b: GoldValue) -> bool:
     if isinstance(a, bool) or isinstance(b, bool):
         return type(a) is type(b) and a == b
     if _is_int(a) and _is_int(b):
-        return a == b  # type: ignore[operator]
+        return a == b
     if _is_numeric(a) and _is_numeric(b):
-        return float(a) == float(b)  # type: ignore[arg-type]
+        return float(a) == float(b)
     return type(a) is type(b) and a == b
 
 
-def _compare(a: EvalValue, b: EvalValue) -> int:
+def _compare(a: GoldValue, b: GoldValue) -> int:
     if _is_numeric(a) and _is_numeric(b):
-        fa, fb = float(a), float(b)  # type: ignore[arg-type]
+        fa, fb = float(a), float(b)
         return (fa > fb) - (fa < fb)
     if isinstance(a, str) and isinstance(b, str):
         return (a > b) - (a < b)
     raise EvalError(f"cannot compare {type(a).__name__!r} and {type(b).__name__!r}")
 
 
-def _eval_eager_op(op: EagerOp, lhs: EvalValue, rhs: EvalValue) -> EvalValue:
+def _eval_eager_op(op: EagerOp, lhs: GoldValue, rhs: GoldValue) -> GoldValue:
     match op:
         case EagerOp.Add:
             if _is_int(lhs) and _is_int(rhs):
-                return lhs + rhs  # type: ignore[operator]
+                return lhs + rhs
             if _is_numeric(lhs) and _is_numeric(rhs):
-                return float(lhs) + float(rhs)  # type: ignore[arg-type]
+                return float(lhs) + float(rhs)
             if isinstance(lhs, str) and isinstance(rhs, str):
                 return lhs + rhs
             if isinstance(lhs, list) and isinstance(rhs, list):
@@ -374,16 +352,16 @@ def _eval_eager_op(op: EagerOp, lhs: EvalValue, rhs: EvalValue) -> EvalValue:
 
         case EagerOp.Subtract:
             if _is_int(lhs) and _is_int(rhs):
-                return lhs - rhs  # type: ignore[operator]
+                return lhs - rhs
             if _is_numeric(lhs) and _is_numeric(rhs):
-                return float(lhs) - float(rhs)  # type: ignore[arg-type]
+                return float(lhs) - float(rhs)
             raise EvalError(f"cannot subtract {type(lhs).__name__!r} and {type(rhs).__name__!r}")
 
         case EagerOp.Multiply:
             if _is_int(lhs) and _is_int(rhs):
-                return lhs * rhs  # type: ignore[operator]
+                return lhs * rhs
             if _is_numeric(lhs) and _is_numeric(rhs):
-                return float(lhs) * float(rhs)  # type: ignore[arg-type]
+                return float(lhs) * float(rhs)
             raise EvalError(f"cannot multiply {type(lhs).__name__!r} and {type(rhs).__name__!r}")
 
         case EagerOp.Divide:
@@ -391,21 +369,21 @@ def _eval_eager_op(op: EagerOp, lhs: EvalValue, rhs: EvalValue) -> EvalValue:
                 raise EvalError("division requires numbers")
             if rhs == 0:
                 raise EvalError("division by zero")
-            return float(lhs) / float(rhs)  # type: ignore[arg-type]
+            return float(lhs) / float(rhs)
 
         case EagerOp.IntegerDivide:
             if not _is_int(lhs) or not _is_int(rhs):
                 raise EvalError("integer division requires integers")
             if rhs == 0:
                 raise EvalError("integer division by zero")
-            return lhs // rhs  # type: ignore[operator]
+            return lhs // rhs
 
         case EagerOp.Power:
             if not _is_numeric(lhs) or not _is_numeric(rhs):
                 raise EvalError("power requires numbers")
-            if _is_int(lhs) and _is_int(rhs) and rhs >= 0:  # type: ignore[operator]
-                return int(lhs) ** int(rhs)  # type: ignore[operator]
-            return float(lhs) ** float(rhs)  # type: ignore[operator]
+            if _is_int(lhs) and _is_int(rhs) and rhs >= 0:
+                return int(lhs) ** int(rhs)
+            return float(lhs) ** float(rhs)
 
         case EagerOp.Less:
             return _compare(lhs, rhs) < 0
@@ -423,7 +401,7 @@ def _eval_eager_op(op: EagerOp, lhs: EvalValue, rhs: EvalValue) -> EvalValue:
         case EagerOp.Index:
             if isinstance(lhs, list) and _is_int(rhs):
                 try:
-                    return lhs[int(rhs)]  # type: ignore[index]
+                    return lhs[int(rhs)]
                 except IndexError:
                     raise EvalError(f"list index {rhs} out of range") from None
             if isinstance(lhs, dict) and isinstance(rhs, str):
@@ -450,7 +428,7 @@ def _eval_eager_op(op: EagerOp, lhs: EvalValue, rhs: EvalValue) -> EvalValue:
 _Builtin = Any  # Callable[[list[EvalValue], dict[str, EvalValue]], EvalValue]
 
 
-def _builtin_len(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_len(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
         raise EvalError("len() takes exactly 1 positional argument")
     x = args[0]
@@ -459,24 +437,24 @@ def _builtin_len(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalVal
     raise EvalError("len() requires str, list, or map")
 
 
-def _builtin_range(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_range(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if kwargs:
         raise EvalError("range() takes no keyword arguments")
     if len(args) == 1 and _is_int(args[0]):
-        return list(range(int(args[0])))  # type: ignore[arg-type]
+        return list(range(int(args[0])))
     if len(args) == 2 and _is_int(args[0]) and _is_int(args[1]):
-        return list(range(int(args[0]), int(args[1])))  # type: ignore[arg-type]
+        return list(range(int(args[0]), int(args[1])))
     raise EvalError("range() takes 1 or 2 integer arguments")
 
 
-def _builtin_int(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_int(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
         raise EvalError("int() takes exactly 1 argument")
     x = args[0]
     if _is_int(x):
         return x
     if _is_float(x):
-        return int(round(float(x)))  # type: ignore[arg-type]
+        return int(round(float(x)))
     if isinstance(x, bool):
         return 1 if x else 0
     if isinstance(x, str):
@@ -487,14 +465,14 @@ def _builtin_int(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalVal
     raise EvalError(f"cannot convert {type(x).__name__!r} to integer")
 
 
-def _builtin_float(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_float(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
         raise EvalError("float() takes exactly 1 argument")
     x = args[0]
     if _is_float(x):
         return x
     if _is_int(x):
-        return float(int(x))  # type: ignore[arg-type]
+        return float(int(x))
     if isinstance(x, bool):
         return 1.0 if x else 0.0
     if isinstance(x, str):
@@ -505,19 +483,19 @@ def _builtin_float(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalV
     raise EvalError(f"cannot convert {type(x).__name__!r} to float")
 
 
-def _builtin_bool(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_bool(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
         raise EvalError("bool() takes exactly 1 argument")
     return _truthy(args[0])
 
 
-def _builtin_str(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_str(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
         raise EvalError("str() takes exactly 1 argument")
     return _gold_str(args[0])
 
 
-def _builtin_map_fn(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_map_fn(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 2 or kwargs:
         raise EvalError("map() takes exactly 2 positional arguments")
     f, xs = args[0], args[1]
@@ -528,7 +506,7 @@ def _builtin_map_fn(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> Eval
     return [_call(f, [x], {}) for x in xs]
 
 
-def _builtin_filter_fn(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_filter_fn(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 2 or kwargs:
         raise EvalError("filter() takes exactly 2 positional arguments")
     f, xs = args[0], args[1]
@@ -539,46 +517,46 @@ def _builtin_filter_fn(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> E
     return [x for x in xs if _truthy(_call(f, [x], {}))]
 
 
-def _builtin_items(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_items(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
         raise EvalError("items() takes exactly 1 argument")
     x = args[0]
     if not isinstance(x, dict):
         raise EvalError("items() argument must be a map")
-    return [[k, v] for k, v in x.items()]  # type: ignore[return-value]
+    return [[k, v] for k, v in x.items()]
 
 
-def _builtin_exp(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_exp(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1:
         raise EvalError("exp() takes exactly 1 positional argument")
     x = args[0]
     if not _is_numeric(x):
         raise EvalError("exp() argument must be a number")
-    xf = float(x)  # type: ignore[arg-type]
+    xf = float(x)
     if "base" in kwargs:
         base = kwargs["base"]
         if not _is_numeric(base):
             raise EvalError("exp() base must be a number")
-        return float(base) ** xf  # type: ignore[operator]
+        return float(base) ** xf
     return math.exp(xf)
 
 
-def _builtin_log(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_log(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1:
         raise EvalError("log() takes exactly 1 positional argument")
     x = args[0]
     if not _is_numeric(x):
         raise EvalError("log() argument must be a number")
-    xf = float(x)  # type: ignore[arg-type]
+    xf = float(x)
     if "base" in kwargs:
         base = kwargs["base"]
         if not _is_numeric(base):
             raise EvalError("log() base must be a number")
-        return math.log(xf, float(base))  # type: ignore[arg-type]
+        return math.log(xf, float(base))
     return math.log(xf)
 
 
-def _builtin_ord(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_ord(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
         raise EvalError("ord() takes exactly 1 argument")
     x = args[0]
@@ -587,19 +565,19 @@ def _builtin_ord(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalVal
     return ord(x)
 
 
-def _builtin_chr(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_chr(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
         raise EvalError("chr() takes exactly 1 argument")
     x = args[0]
     if not _is_int(x):
         raise EvalError("chr() argument must be an integer")
     try:
-        return chr(int(x))  # type: ignore[arg-type]
+        return chr(int(x))
     except (ValueError, OverflowError) as e:
         raise EvalError(f"invalid codepoint: {x}") from e
 
 
-def _builtin_startswith(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_startswith(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 2 or kwargs:
         raise EvalError("startswith() takes exactly 2 arguments")
     x, y = args
@@ -608,7 +586,7 @@ def _builtin_startswith(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> 
     return x.startswith(y)
 
 
-def _builtin_endswith(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _builtin_endswith(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 2 or kwargs:
         raise EvalError("endswith() takes exactly 2 arguments")
     x, y = args
@@ -617,39 +595,39 @@ def _builtin_endswith(args: list[EvalValue], kwargs: dict[str, EvalValue]) -> Ev
     return x.endswith(y)
 
 
-def _builtin_isint(args: list[EvalValue], _: dict[str, EvalValue]) -> EvalValue:
+def _builtin_isint(args: list[GoldValue], _: dict[str, GoldValue]) -> GoldValue:
     return len(args) == 1 and _is_int(args[0])
 
 
-def _builtin_isstr(args: list[EvalValue], _: dict[str, EvalValue]) -> EvalValue:
+def _builtin_isstr(args: list[GoldValue], _: dict[str, GoldValue]) -> GoldValue:
     return len(args) == 1 and isinstance(args[0], str)
 
 
-def _builtin_isnull(args: list[EvalValue], _: dict[str, EvalValue]) -> EvalValue:
+def _builtin_isnull(args: list[GoldValue], _: dict[str, GoldValue]) -> GoldValue:
     return len(args) == 1 and args[0] is None
 
 
-def _builtin_isbool(args: list[EvalValue], _: dict[str, EvalValue]) -> EvalValue:
+def _builtin_isbool(args: list[GoldValue], _: dict[str, GoldValue]) -> GoldValue:
     return len(args) == 1 and isinstance(args[0], bool)
 
 
-def _builtin_isfloat(args: list[EvalValue], _: dict[str, EvalValue]) -> EvalValue:
+def _builtin_isfloat(args: list[GoldValue], _: dict[str, GoldValue]) -> GoldValue:
     return len(args) == 1 and _is_float(args[0])
 
 
-def _builtin_isnumber(args: list[EvalValue], _: dict[str, EvalValue]) -> EvalValue:
+def _builtin_isnumber(args: list[GoldValue], _: dict[str, GoldValue]) -> GoldValue:
     return len(args) == 1 and _is_numeric(args[0])
 
 
-def _builtin_isobject(args: list[EvalValue], _: dict[str, EvalValue]) -> EvalValue:
+def _builtin_isobject(args: list[GoldValue], _: dict[str, GoldValue]) -> GoldValue:
     return len(args) == 1 and isinstance(args[0], dict)
 
 
-def _builtin_islist(args: list[EvalValue], _: dict[str, EvalValue]) -> EvalValue:
+def _builtin_islist(args: list[GoldValue], _: dict[str, GoldValue]) -> GoldValue:
     return len(args) == 1 and isinstance(args[0], list)
 
 
-def _builtin_isfunc(args: list[EvalValue], _: dict[str, EvalValue]) -> EvalValue:
+def _builtin_isfunc(args: list[GoldValue], _: dict[str, GoldValue]) -> GoldValue:
     return len(args) == 1 and isinstance(args[0], (GoldFunction, GoldBuiltin))
 
 
@@ -684,7 +662,7 @@ _BUILTIN_TABLE: dict[str, _Builtin] = {
 # ── Function calling ──────────────────────────────────────────────────────────
 
 
-def _call(func: EvalValue, args: list[EvalValue], kwargs: dict[str, EvalValue]) -> EvalValue:
+def _call(func: GoldValue, args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if isinstance(func, GoldBuiltin):
         return _BUILTIN_TABLE[func.name](args, kwargs)
     if isinstance(func, GoldFunction):
@@ -696,9 +674,9 @@ def _call(func: EvalValue, args: list[EvalValue], kwargs: dict[str, EvalValue]) 
     raise EvalError(f"cannot call {type(func).__name__!r}")
 
 
-def _eval_args(arg_elems: list[Tagged[Any]], ns: Namespace) -> tuple[list[EvalValue], dict[str, EvalValue]]:
-    pos: list[EvalValue] = []
-    kw: dict[str, EvalValue] = {}
+def _eval_args(arg_elems: list[Tagged[Any]], ns: Namespace) -> tuple[list[GoldValue], dict[str, GoldValue]]:
+    pos: list[GoldValue] = []
+    kw: dict[str, GoldValue] = {}
     for arg_tagged in arg_elems:
         a = arg_tagged.contents
         if isinstance(a, ArgSingleton):
@@ -719,7 +697,7 @@ def _eval_args(arg_elems: list[Tagged[Any]], ns: Namespace) -> tuple[list[EvalVa
 # ── List / map element helpers ────────────────────────────────────────────────
 
 
-def _eval_list_element(elem_tagged: Tagged[Any], ns: Namespace) -> list[EvalValue]:
+def _eval_list_element(elem_tagged: Tagged[Any], ns: Namespace) -> list[GoldValue]:
     e = elem_tagged.contents
     if isinstance(e, ListSingleton):
         return [_eval_expr(e.expr, ns)]
@@ -732,7 +710,7 @@ def _eval_list_element(elem_tagged: Tagged[Any], ns: Namespace) -> list[EvalValu
         items = _eval_expr(e.iterable, ns)
         if not isinstance(items, list):
             raise EvalError("for-loop iterable must be a list")
-        result: list[EvalValue] = []
+        result: list[GoldValue] = []
         for item in items:
             loop_ns = ns.child()
             _resolve_binding(e.binding, item, loop_ns)
@@ -745,7 +723,7 @@ def _eval_list_element(elem_tagged: Tagged[Any], ns: Namespace) -> list[EvalValu
     raise EvalError(f"unexpected list element type: {type(e).__name__!r}")
 
 
-def _eval_map_element(elem_tagged: Tagged[Any], ns: Namespace) -> dict[str, EvalValue]:
+def _eval_map_element(elem_tagged: Tagged[Any], ns: Namespace) -> dict[str, GoldValue]:
     e = elem_tagged.contents
     if isinstance(e, MapSingleton):
         k = _eval_expr(e.key, ns)
@@ -761,7 +739,7 @@ def _eval_map_element(elem_tagged: Tagged[Any], ns: Namespace) -> dict[str, Eval
         items = _eval_expr(e.iterable, ns)
         if not isinstance(items, list):
             raise EvalError("for-loop iterable must be a list")
-        result: dict[str, EvalValue] = {}
+        result: dict[str, GoldValue] = {}
         for item in items:
             loop_ns = ns.child()
             _resolve_binding(e.binding, item, loop_ns)
@@ -777,11 +755,11 @@ def _eval_map_element(elem_tagged: Tagged[Any], ns: Namespace) -> dict[str, Eval
 # ── Expression evaluation ─────────────────────────────────────────────────────
 
 
-def _eval_expr(expr: Tagged[Any], ns: Namespace) -> EvalValue:
+def _eval_expr(expr: Tagged[Any], ns: Namespace) -> GoldValue:
     node = expr.contents
 
     if isinstance(node, LiteralExpr):
-        return node.value  # type: ignore[return-value]
+        return node.value
 
     if isinstance(node, StringExpr):
         parts: list[str] = []
@@ -797,13 +775,13 @@ def _eval_expr(expr: Tagged[Any], ns: Namespace) -> EvalValue:
         return ns.lookup(node.name.contents)
 
     if isinstance(node, ListExpr):
-        result_list: list[EvalValue] = []
+        result_list: list[GoldValue] = []
         for elem_tagged in node.elements:
             result_list.extend(_eval_list_element(elem_tagged, ns))
         return result_list
 
     if isinstance(node, MapExpr):
-        result_map: dict[str, EvalValue] = {}
+        result_map: dict[str, GoldValue] = {}
         for elem_tagged in node.elements:
             result_map.update(_eval_map_element(elem_tagged, ns))
         return result_map
@@ -837,9 +815,9 @@ def _eval_expr(expr: Tagged[Any], ns: Namespace) -> EvalValue:
             match t.op.contents:
                 case UnOp.ArithmeticalNegate:
                     if _is_int(val):
-                        return -(val)  # type: ignore[operator]
+                        return -(val)
                     if _is_float(val):
-                        return -(val)  # type: ignore[operator]
+                        return -(val)
                     raise EvalError(f"cannot negate {type(val).__name__!r}")
                 case UnOp.LogicalNegate:
                     return not _truthy(val)
@@ -882,7 +860,7 @@ _BUILTINS_NS: Namespace = _make_builtins_namespace()
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
-def evaluate(file: File, resolver: AbstractImportResolver | None = None) -> EvalValue:
+def evaluate(file: File, resolver: AbstractImportResolver | None = None) -> GoldValue:
     """Evaluate a parsed Gold ``File`` AST and return the result value."""
     ns = _BUILTINS_NS.child()
 
@@ -896,7 +874,7 @@ def evaluate(file: File, resolver: AbstractImportResolver | None = None) -> Eval
     return _eval_expr(file.expression, ns)
 
 
-def evaluate_source(source: str, resolver: AbstractImportResolver | None = None) -> EvalValue:
+def evaluate_source(source: str, resolver: AbstractImportResolver | None = None) -> GoldValue:
     """Parse ``source`` and evaluate it, returning the result value."""
     from .parser import parse
 
