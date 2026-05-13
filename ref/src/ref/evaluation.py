@@ -10,6 +10,7 @@ from .ast import (
     ArgKeyword,
     ArgSingleton,
     ArgSplat,
+    Binding,
     BinOpTransform,
     BranchExpr,
     EagerOp,
@@ -176,9 +177,12 @@ def _format_value(v: GoldValue, fmt: FormatSpec) -> str:
 class Namespace:
     """A lexical scope: a dict with an optional parent chain."""
 
+    _parent: Namespace | None
+    _bindings: dict[str, GoldValue]
+
     def __init__(self, parent: Namespace | None = None) -> None:
         self._parent = parent
-        self._bindings: dict[str, GoldValue] = {}
+        self._bindings = {}
 
     def lookup(self, name: str) -> GoldValue:
         ns: Namespace | None = self
@@ -204,6 +208,8 @@ class AbstractImportResolver(ABC):
 
 
 class PathImportResolver(AbstractImportResolver):
+    _root: Path
+
     def __init__(self, root: Path) -> None:
         self._root = root
 
@@ -222,7 +228,7 @@ class PathImportResolver(AbstractImportResolver):
 # ── Binding resolution ────────────────────────────────────────────────────────
 
 
-def _resolve_binding(binding_tagged: Tagged[Any], value: GoldValue, ns: Namespace) -> None:
+def _resolve_binding(binding_tagged: Tagged[Binding], value: GoldValue, ns: Namespace) -> None:
     b = binding_tagged.contents
     if isinstance(b, IdentifierBinding):
         ns.bind(b.name.contents, value)

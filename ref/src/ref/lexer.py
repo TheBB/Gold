@@ -127,33 +127,6 @@ class TokenType(Enum):
                 return "character"
 
 
-# ── Lexer context ─────────────────────────────────────────────────────────────
-
-
-class CtxKind(Enum):
-    Default = auto()
-    String = auto()
-    Map = auto()
-    MultiString = auto()
-    FmtSpec = auto()
-
-
-@dataclass(frozen=True)
-class Ctx:
-    kind: CtxKind
-    col: int = 0  # only meaningful for MultiString
-
-
-CTX_DEFAULT = Ctx(CtxKind.Default)
-CTX_STRING = Ctx(CtxKind.String)
-CTX_MAP = Ctx(CtxKind.Map)
-CTX_FMT_SPEC = Ctx(CtxKind.FmtSpec)
-
-
-def CTX_MULTISTRING(col: int) -> Ctx:
-    return Ctx(CtxKind.MultiString, col)
-
-
 # ── Token ─────────────────────────────────────────────────────────────────────
 
 
@@ -174,6 +147,9 @@ class MissingToken:
 
 
 class LexError(Exception):
+    position: Position
+    reason: str
+
     def __init__(self, position: Position, reason: str) -> None:
         super().__init__(f"{reason} at {position.line + 1}:{position.column + 1}")
         self.position = position

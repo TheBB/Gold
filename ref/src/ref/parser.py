@@ -169,9 +169,12 @@ class Parser:
     - The lexer is only advanced on confirmed token consumption.
     """
 
+    _lexer: Lexer
+    _errors: list[ParseError]
+
     def __init__(self, source: str) -> None:
-        self._lexer: Lexer = Lexer.new(source)
-        self._errors: list[ParseError] = []
+        self._lexer = Lexer.new(source)
+        self._errors = []
 
     # ── Error helpers ──────────────────────────────────────────────────────────
 

@@ -70,6 +70,7 @@ cd ref && make test
 - New-style type aliases: `type X = ...`
 - New-style generic syntax: `def func[T](...) -> ...`
 - All functions fully typed — parameters and return type, including test functions
+- All classes should have attributes typed at the top level, before the constructor
 - Use `pyrefly` (not mypy/pyright) for type checking
 
 **Tooling:**
