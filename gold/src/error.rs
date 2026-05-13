@@ -952,6 +952,16 @@ impl Error {
         self.locations.as_ref()?.first().map(|(span, _)| *span)
     }
 
+    /// Get all recorded locations (span + action pairs).
+    pub fn locations(&self) -> &[(Span, Action)] {
+        self.locations.as_deref().unwrap_or(&[])
+    }
+
+    /// Get a plain string representation of the reason (without location context).
+    pub fn reason_display(&self) -> String {
+        self.reason.as_ref().map(|r| r.to_string()).unwrap_or_default()
+    }
+
     /// Override the error reason.
     pub fn with_reason<T>(mut self, reason: T) -> Self
     where

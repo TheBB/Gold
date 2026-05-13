@@ -33,6 +33,13 @@ pub fn pprint(result: &Result<File, Error>, opts: &PprintOptions) -> String {
     pp.out.join("\n")
 }
 
+/// Render an eval result as a human-readable string.
+pub fn pprint_eval(result: &Result<Object, Error>, opts: &PprintOptions) -> String {
+    let mut pp = Pp { opts, out: Vec::new() };
+    pp.eval_result(result, 0);
+    pp.out.join("\n")
+}
+
 // ── Internal renderer ─────────────────────────────────────────────────────────
 
 struct Pp<'a> {
@@ -103,6 +110,119 @@ impl<'a> Pp<'a> {
             return format!("{f:?}");
         }
         format!("{obj}")
+    }
+
+    // ── Gold value rendering ──────────────────────────────────────────────────
+
+    fn gold_label(&self, obj: &Object) -> String {
+        if obj.is_null() {
+            return "null".to_owned();
+        }
+        if let Some(b) = obj.get_bool() {
+            return if b { "true".to_owned() } else { "false".to_owned() };
+        }
+        if let Some(s) = obj.get_str() {
+            return self.json_str(s);
+        }
+        if let Some(i) = obj.get_int() {
+            return format!("{i}");
+        }
+        if let Some(f) = obj.get_float() {
+            return format!("{f:?}");
+        }
+        if let Some(list) = obj.get_list() {
+            return if list.is_empty() { "(list) []".to_owned() } else { "(list)".to_owned() };
+        }
+        if let Some(map) = obj.get_map() {
+            return if map.len() == 0 { "(map) {}".to_owned() } else { "(map)".to_owned() };
+        }
+        if obj.get_func().is_some() {
+            return "(function)".to_owned();
+        }
+        format!("{obj}")
+    }
+
+    fn gold_value(&mut self, obj: &Object, indent: usize) {
+        let label = self.gold_label(obj);
+        self.emit(indent, label);
+        if let Some(list) = obj.get_list() {
+            if !list.is_empty() {
+                let items: Vec<Object> = list.iter().cloned().collect();
+                drop(list);
+                for item in &items {
+                    self.gold_value(item, indent + 1);
+                }
+            }
+        } else if let Some(map) = obj.get_map() {
+            if map.len() > 0 {
+                let entries: Vec<(String, Object)> =
+                    map.iter().map(|(k, v)| (k.as_str().to_owned(), v.clone())).collect();
+                drop(map);
+                for (k, v) in &entries {
+                    self.gold_field(k, v, indent + 1);
+                }
+            }
+        }
+    }
+
+    fn gold_field(&mut self, name: &str, obj: &Object, indent: usize) {
+        let label = self.gold_label(obj);
+        self.emit(indent, format!("{name}: {label}"));
+        if let Some(list) = obj.get_list() {
+            if !list.is_empty() {
+                let items: Vec<Object> = list.iter().cloned().collect();
+                drop(list);
+                for item in &items {
+                    self.gold_value(item, indent + 1);
+                }
+            }
+        } else if let Some(map) = obj.get_map() {
+            if map.len() > 0 {
+                let entries: Vec<(String, Object)> =
+                    map.iter().map(|(k, v)| (k.as_str().to_owned(), v.clone())).collect();
+                drop(map);
+                for (k, v) in &entries {
+                    self.gold_field(k, v, indent + 1);
+                }
+            }
+        }
+    }
+
+    // ── EvalResult ────────────────────────────────────────────────────────────
+
+    fn eval_result(&mut self, result: &Result<Object, Error>, indent: usize) {
+        self.emit(indent, "EvalResult");
+        match result {
+            Ok(obj) => {
+                self.emit(indent + 1, "ok: true");
+                self.gold_field("value", obj, indent + 1);
+            }
+            Err(err) => {
+                self.emit(indent + 1, "ok: false");
+                self.emit(indent + 1, "error:");
+                self.error_node(err, indent + 2);
+            }
+        }
+    }
+
+    fn error_node(&mut self, err: &Error, indent: usize) {
+        self.emit(indent, "Error");
+        let reason = err.reason_display();
+        self.emit(indent + 1, format!("reason: {}", self.json_str(&reason)));
+        let locs = err.locations();
+        if locs.is_empty() {
+            self.emit(indent + 1, "locations: []");
+        } else {
+            self.emit(indent + 1, "locations:");
+            for (span, action) in locs {
+                let span_str = if self.opts.show_spans {
+                    format!("[{}..{}]", span.offset(), span.offset() + span.length())
+                } else {
+                    "[]".to_owned()
+                };
+                self.emit(indent + 2, format!("{span_str} {action:?}"));
+            }
+        }
     }
 
     // ── ParseResult ───────────────────────────────────────────────────────────

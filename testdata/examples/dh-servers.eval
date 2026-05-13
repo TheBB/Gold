@@ -1,0 +1,33 @@
+EvalResult
+  ok: true
+  value: (list)
+    (map)
+      cpus: 1
+      gigabytesOfRAM: 1
+      hostname: "eu-west.example.com"
+      terabytesOfDisk: 1
+    (map)
+      cpus: 64
+      gigabytesOfRAM: 256
+      hostname: "us-east.example.com"
+      terabytesOfDisk: 16
+    (map)
+      cpus: 64
+      gigabytesOfRAM: 256
+      hostname: "ap-northeast.example.com"
+      terabytesOfDisk: 16
+    (map)
+      cpus: 8
+      gigabytesOfRAM: 16
+      hostname: "us-west.example.com"
+      terabytesOfDisk: 4
+    (map)
+      cpus: 1
+      gigabytesOfRAM: 1
+      hostname: "sa-east.example.com"
+      terabytesOfDisk: 1
+    (map)
+      cpus: 64
+      gigabytesOfRAM: 256
+      hostname: "ca-central.example.com"
+      terabytesOfDisk: 16

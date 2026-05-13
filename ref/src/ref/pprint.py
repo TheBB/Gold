@@ -5,6 +5,7 @@ import json
 from enum import Enum
 from typing import Any
 
+from .ast import GoldBuiltin, GoldFunction, GoldValue
 from .span import Span, Tagged
 
 
@@ -63,10 +64,57 @@ class _PP:
 
     # ── Main dispatch ─────────────────────────────────────────────────────────
 
+    # ── Gold value rendering ──────────────────────────────────────────────────
+
+    def _gold_label(self, value: GoldValue) -> str:
+        """The inline label for a gold value (used on the same line as a field name)."""
+        if value is None:
+            return "null"
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, float):
+            return repr(value)
+        if isinstance(value, str):
+            return self._strval(value)
+        if isinstance(value, GoldBuiltin):
+            return f"(builtin {value.name})"
+        if isinstance(value, GoldFunction):
+            return "(function)"
+        if isinstance(value, list):
+            return "(list) []" if not value else "(list)"
+        if isinstance(value, dict):
+            return "(map) {}" if not value else "(map)"
+        return repr(value)
+
+    def _gold_value(self, value: GoldValue, indent: int) -> None:
+        """Emit the label for a value then its body (if non-scalar)."""
+        self._emit(indent, self._gold_label(value))
+        if isinstance(value, list) and value:
+            for item in value:
+                self._gold_value(item, indent + 1)
+        elif isinstance(value, dict) and value:
+            for k, v in value.items():
+                self._gold_field(k, v, indent + 1)
+
+    def _gold_field(self, name: str, value: GoldValue, indent: int) -> None:
+        """Emit  `name: <label>`  and, for non-empty collections, the body below."""
+        self._emit(indent, f"{name}: {self._gold_label(value)}")
+        if isinstance(value, list) and value:
+            for item in value:
+                self._gold_value(item, indent + 1)
+        elif isinstance(value, dict) and value:
+            for k, v in value.items():
+                self._gold_field(k, v, indent + 1)
+
+    # ── Main dispatch ─────────────────────────────────────────────────────────
+
     def _node(self, node: Any, indent: int) -> None:
         """Render an arbitrary node at the given indent level."""
         # Import here to avoid circular dependency at module load time
         from .error import Error
+        from .evaluation import EvalResult
         from .parser import ParseResult
 
         if isinstance(node, Tagged):
@@ -80,6 +128,14 @@ class _PP:
                 self._emit(indent + 1, "locations:")
                 for span, action in node.locations:
                     self._emit(indent + 2, f"{self._span(span).strip()} {action.name}")
+        elif isinstance(node, EvalResult):
+            self._emit(indent, "EvalResult")
+            self._emit(indent + 1, f"ok: {'true' if node.ok else 'false'}")
+            if node.error is not None:
+                self._emit(indent + 1, "error:")
+                self._node(node.error, indent + 2)
+            else:
+                self._gold_field("value", node.value, indent + 1)
         elif isinstance(node, ParseResult):
             self._emit(indent, "ParseResult")
             self._emit(indent + 1, f"ok: {'true' if node.ok else 'false'}")

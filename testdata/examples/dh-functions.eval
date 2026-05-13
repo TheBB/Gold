@@ -1,0 +1,11 @@
+EvalResult
+  ok: true
+  value: (list)
+    (map)
+      home: "/home/bill"
+      privateKey: "/home/bill/.ssh/id_ed25519"
+      publicKey: "/home/bill/.ssh/id_ed25519.pub"
+    (map)
+      home: "/home/jane"
+      privateKey: "/home/jane/.ssh/id_ed25519"
+      publicKey: "/home/jane/.ssh/id_ed25519.pub"

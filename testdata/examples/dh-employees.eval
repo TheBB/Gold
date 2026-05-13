@@ -1,0 +1,15 @@
+EvalResult
+  ok: true
+  value: (list)
+    (map)
+      age: 23
+      name: "John Doe"
+      position: (map)
+        department: "Data Platform"
+        title: "Software Engineer"
+    (map)
+      age: 24
+      name: "Alice Smith"
+      position: (map)
+        department: "Data Platform"
+        title: "Software Engineer"

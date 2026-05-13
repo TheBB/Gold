@@ -1,0 +1,18 @@
+EvalResult
+  ok: true
+  value: (list)
+    (map)
+      category: "nonfiction"
+      department: "books"
+      publisher: "O'Reilly Media"
+      title: "Microservices for Java Developers"
+    (map)
+      category: "nonfiction"
+      department: "books"
+      publisher: "Addison Wesley"
+      title: "The Go Programming Language"
+    (map)
+      category: "nonfiction"
+      department: "books"
+      publisher: "O'Reilly Media"
+      title: "Parallel and Concurrent Programming in Haskell"

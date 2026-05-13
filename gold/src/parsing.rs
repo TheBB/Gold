@@ -3417,9 +3417,9 @@ mod tests {
             let source = std::fs::read_to_string(&path).unwrap().replace("\r\n", "\n");
             let result = parse_file(&source).map_err(|e| e.unrender());
             let actual = pprint(&result, &opts);
-            let expected_path = testdata.join(format!("{name}.out"));
+            let expected_path = testdata.join(format!("{name}.parse"));
             let expected = std::fs::read_to_string(&expected_path)
-                .unwrap_or_else(|_| panic!("{name}.out not found in testdata/examples/"));
+                .unwrap_or_else(|_| panic!("{name}.parse not found in testdata/examples/"));
             let expected = expected.replace("\r\n", "\n");
             assert_eq!(actual, expected.trim_end_matches('\n'), "mismatch for {name}");
         }

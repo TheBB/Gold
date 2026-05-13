@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path  # noqa: TC003
 from typing import Any, TypeGuard
 
@@ -918,6 +919,21 @@ _BUILTINS_NS: Namespace = _make_builtins_namespace()
 # ── Public API ────────────────────────────────────────────────────────────────
 
 
+@dataclass
+class EvalResult:
+    value: GoldValue | None
+    error: Error | None
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None
+
+    def pprint(self, *, show_spans: bool = True, max_str_len: int | None = None) -> str:
+        from .pprint import pprint as _pprint
+
+        return _pprint(self, show_spans=show_spans, max_str_len=max_str_len)
+
+
 def evaluate(file: File, resolver: AbstractImportResolver | None = None) -> GoldValue:
     """Evaluate a parsed Gold ``File`` AST and return the result value."""
     ns = _BUILTINS_NS.child()
@@ -942,3 +958,21 @@ def evaluate_source(source: str, resolver: AbstractImportResolver | None = None)
             raise result.errors[0]
         raise Error.new(ReasonExternal("parse failed"))
     return evaluate(result.tree, resolver)
+
+
+def evaluate_source_result(source: str, resolver: AbstractImportResolver | None = None) -> EvalResult:
+    """Like ``evaluate_source`` but returns an ``EvalResult`` instead of raising."""
+    try:
+        return EvalResult(value=evaluate_source(source, resolver), error=None)
+    except Error as e:
+        return EvalResult(value=None, error=e)
+
+
+def evaluate_file_result(path: Path) -> EvalResult:
+    """Evaluate a Gold file (with import support) and return an ``EvalResult``."""
+    try:
+        source = path.read_text(encoding="utf-8")
+        resolver = PathImportResolver(path.parent)
+        return EvalResult(value=evaluate_source(source, resolver), error=None)
+    except Error as e:
+        return EvalResult(value=None, error=e)

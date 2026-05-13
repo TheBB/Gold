@@ -1,0 +1,11 @@
+EvalResult
+  ok: true
+  value: (list)
+    (map)
+      name: "Alice"
+      age: 24
+      admin: true
+    (map)
+      name: "Bob"
+      age: 49
+      admin: true
