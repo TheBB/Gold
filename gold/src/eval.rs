@@ -2298,6 +2298,43 @@ mod examples {
 }
 
 #[cfg(test)]
+mod eval_fixtures {
+    use crate::{eval_raw as eval_str, Error};
+    use crate::pprint::{pprint_eval, PprintOptions};
+    use std::path::Path;
+
+    fn testdata() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().join("testdata/eval")
+    }
+
+    fn opts() -> PprintOptions {
+        PprintOptions { show_spans: true, max_str_len: None }
+    }
+
+    #[test]
+    fn check() {
+        let testdata = testdata();
+        let opts = opts();
+        let mut entries: Vec<_> = std::fs::read_dir(&testdata)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("gold"))
+            .collect();
+        entries.sort_by_key(|e| e.file_name());
+        for entry in entries {
+            let gold_path = entry.path();
+            let name = gold_path.file_stem().unwrap().to_str().unwrap();
+            let eval_path = testdata.join(format!("{name}.eval"));
+            let source = std::fs::read_to_string(&gold_path).unwrap();
+            let result = eval_str(&source).map_err(Error::unrender);
+            let actual = pprint_eval(&result, &opts);
+            let expected = std::fs::read_to_string(&eval_path).unwrap().replace("\r\n", "\n");
+            assert_eq!(actual, expected.trim_end_matches('\n'), "mismatch for {name}");
+        }
+    }
+}
+
+#[cfg(test)]
 mod fixtures {
     use crate::pprint::{pprint_eval, PprintOptions};
     use crate::eval_file;

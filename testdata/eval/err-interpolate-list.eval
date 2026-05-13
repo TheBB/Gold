@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unsuitable type for interpolation: list"
+      locations:
+        [3..5] Format

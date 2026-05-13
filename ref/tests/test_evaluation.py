@@ -157,8 +157,8 @@ def test_contains_string() -> None:
 
 
 def test_contains_map() -> None:
-    assert ev('{a: 1} has "a"') is True
-    assert ev('{a: 1} has "z"') is False
+    with pytest.raises(Error):
+        ev('{a: 1} has "a"')
 
 
 # ── String interpolation ──────────────────────────────────────────────────────
@@ -231,7 +231,8 @@ def test_list_cond() -> None:
 
 def test_list_index() -> None:
     assert ev("[10, 20, 30][1]") == 20
-    assert ev("[10, 20, 30][-1]") == 30
+    with pytest.raises(Error):
+        ev("[10, 20, 30][-1]")
 
 
 # ── Maps ──────────────────────────────────────────────────────────────────────

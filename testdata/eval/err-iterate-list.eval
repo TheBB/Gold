@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "non-iterable type: int"
+      locations:
+        [10..11] Iterate

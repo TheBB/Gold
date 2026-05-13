@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unsuitable types for '<': null and bool"
+      locations:
+        [5..6] Evaluate

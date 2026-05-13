@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "expected list, found int"
+      locations:
+        [4..7] Bind

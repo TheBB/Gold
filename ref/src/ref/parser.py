@@ -193,6 +193,16 @@ class Parser:
     def _missing_binding(self) -> Tagged[MissingBinding]:
         return tag(MissingBinding(), self._here())
 
+    def _at_eof(self) -> bool:
+        """Return True if there is no more non-whitespace input."""
+        from .error import SyntaxUnexpectedEof
+
+        try:
+            self._lexer.next_token()
+            return False
+        except Error as e:
+            return isinstance(e.reason, ReasonSyntax) and isinstance(e.reason.syntax, SyntaxUnexpectedEof)
+
     # ── Token helpers ──────────────────────────────────────────────────────────
 
     def _try_tok(self, kind: TokenType, mode: str = "default") -> Tagged[Token] | None:
@@ -640,13 +650,13 @@ class Parser:
                 self._expect_tok(TokenType.CloseParen)
                 key: Tagged = inner_expr.inner()
             else:
-                ident_name = self._try_identifier()
-                if ident_name is None:
+                expr = self._try_expr()
+                if expr is None:
                     self._error(self._here(), ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Expression)))
                     return tag(
                         MapSingleton(key=self._missing_expr(), value=self._missing_expr()), dollar.span
                     ), False
-                key = ident_name.wrap(IdentifierExpr)
+                key = expr.inner()
             elem_start = dollar.span
             self._expect_tok(TokenType.Colon, mode="key")
             value = self._require_expr()
@@ -817,6 +827,19 @@ class Parser:
                 break
             args.append(arg)
             if self._try_tok(TokenType.Comma) is None:
+                saved2 = self._lexer
+                if self._try_tok(TokenType.CloseParen) is None:
+                    self._error(
+                        self._here(),
+                        ReasonSyntax(
+                            SyntaxExpectedTwo(
+                                SyntaxElementToken(TokenType.CloseParen),
+                                SyntaxElementToken(TokenType.Comma),
+                            )
+                        ),
+                    )
+                else:
+                    self._lexer = saved2
                 break
         return args
 
@@ -1367,9 +1390,11 @@ class Parser:
 
         pexpr = self._try_expr()
         if pexpr is None:
-            if not statements:
+            if not statements and self._at_eof():
                 return None
             self._error(self._here(), ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Expression)))
+            if not statements:
+                return None
             return File(statements=statements, expression=self._missing_expr())
 
         return File(statements=statements, expression=pexpr.inner())

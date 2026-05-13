@@ -4,12 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from ref.evaluation import evaluate_file_result
+from ref.evaluation import evaluate_file_result, evaluate_source_result
 from ref.parser import parse
 
 EXAMPLES = Path(__file__).parents[2] / "examples"
 TESTDATA = Path(__file__).parents[2] / "testdata" / "examples"
 ERRORS = Path(__file__).parents[2] / "testdata" / "errors"
+EVAL_FIXTURES = Path(__file__).parents[2] / "testdata" / "eval"
 
 
 def example_cases() -> list[str]:
@@ -40,4 +41,16 @@ def test_error(name: str) -> None:
 def test_eval(name: str) -> None:
     expected = (TESTDATA / f"{name}.eval").read_text()
     result = evaluate_file_result(EXAMPLES / f"{name}.gold")
+    assert result.pprint(show_spans=True) == expected.rstrip("\n")
+
+
+def eval_fixture_cases() -> list[str]:
+    return sorted(p.stem for p in EVAL_FIXTURES.glob("*.gold"))
+
+
+@pytest.mark.parametrize("name", eval_fixture_cases())
+def test_eval_fixture(name: str) -> None:
+    source = (EVAL_FIXTURES / f"{name}.gold").read_text()
+    expected = (EVAL_FIXTURES / f"{name}.eval").read_text()
+    result = evaluate_source_result(source)
     assert result.pprint(show_spans=True) == expected.rstrip("\n")

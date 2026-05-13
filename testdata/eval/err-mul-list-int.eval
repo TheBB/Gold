@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unsuitable types for '*': list and int"
+      locations:
+        [3..4] Evaluate

@@ -530,19 +530,39 @@ type Reason = (
 
 
 class Action(Enum):
-    Parse = "parsing"
-    LookupName = "evaluating"
-    Bind = "pattern matching"
-    Slurp = "slurping"
-    Splat = "splatting"
-    Iterate = "iterating"
-    Assign = "assigning"
-    Import = "importing"
-    Evaluate = "evaluating"
-    Format = "interpolating"
+    Parse = auto()
+    LookupName = auto()
+    Bind = auto()
+    Slurp = auto()
+    Splat = auto()
+    Iterate = auto()
+    Assign = auto()
+    Import = auto()
+    Evaluate = auto()
+    Format = auto()
 
     def __str__(self) -> str:
-        return self.value
+        match self:
+            case Action.Parse:
+                return "parsing"
+            case Action.LookupName:
+                return "evaluating"
+            case Action.Bind:
+                return "pattern matching"
+            case Action.Slurp:
+                return "slurping"
+            case Action.Splat:
+                return "splatting"
+            case Action.Iterate:
+                return "iterating"
+            case Action.Assign:
+                return "assigning"
+            case Action.Import:
+                return "importing"
+            case Action.Evaluate:
+                return "evaluating"
+            case Action.Format:
+                return "interpolating"
 
 
 # ── Error ─────────────────────────────────────────────────────────────────────

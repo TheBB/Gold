@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unsuitable types for '//': null and map"
+      locations:
+        [5..7] Evaluate
