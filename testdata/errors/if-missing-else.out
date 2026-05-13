@@ -1,10 +1,14 @@
 ParseResult
   ok: false
   errors:
-    ParseError [14..14]
-      "expected 'else'"
-    ParseError [14..14]
-      "expected expression"
+    Error
+      reason: "expected 'else'"
+      locations:
+        [14..14] Parse
+    Error
+      reason: "expected expression"
+      locations:
+        [14..14] Parse
   tree:
     File
       statements: []

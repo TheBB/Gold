@@ -4,7 +4,8 @@ import math
 
 import pytest
 
-from ref.evaluation import EvalError, GoldBuiltin, GoldFunction, evaluate_source
+from ref.error import Error
+from ref.evaluation import GoldBuiltin, GoldFunction, evaluate_source
 
 
 def ev(src: str) -> object:
@@ -403,22 +404,22 @@ def test_pass_builtin_to_map() -> None:
 
 
 def test_undefined_name() -> None:
-    with pytest.raises(EvalError, match="undefined name"):
+    with pytest.raises(Error, match="unbound name"):
         ev("x")
 
 
 def test_call_non_function() -> None:
-    with pytest.raises(EvalError):
+    with pytest.raises(Error):
         ev("42(1)")
 
 
 def test_division_by_zero() -> None:
-    with pytest.raises(EvalError):
+    with pytest.raises(Error):
         ev("1 / 0")
 
 
 def test_type_mismatch() -> None:
-    with pytest.raises(EvalError):
+    with pytest.raises(Error):
         ev("1 + true")
 
 

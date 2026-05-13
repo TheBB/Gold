@@ -49,6 +49,13 @@ class UnOp(Enum):
     ArithmeticalNegate = auto()
     LogicalNegate = auto()
 
+    def __str__(self) -> str:
+        match self:
+            case UnOp.ArithmeticalNegate:
+                return "-"
+            case UnOp.LogicalNegate:
+                return "not"
+
 
 class EagerOp(Enum):
     Index = auto()
@@ -66,10 +73,48 @@ class EagerOp(Enum):
     NotEqual = auto()
     Contains = auto()
 
+    def __str__(self) -> str:
+        match self:
+            case EagerOp.Index:
+                return "subscript"
+            case EagerOp.Power:
+                return "^"
+            case EagerOp.Multiply:
+                return "*"
+            case EagerOp.IntegerDivide:
+                return "//"
+            case EagerOp.Divide:
+                return "/"
+            case EagerOp.Add:
+                return "+"
+            case EagerOp.Subtract:
+                return "-"
+            case EagerOp.Less:
+                return "<"
+            case EagerOp.Greater:
+                return ">"
+            case EagerOp.LessEqual:
+                return "<="
+            case EagerOp.GreaterEqual:
+                return ">="
+            case EagerOp.Equal:
+                return "=="
+            case EagerOp.NotEqual:
+                return "!="
+            case EagerOp.Contains:
+                return "in"
+
 
 class LogicOp(Enum):
     And = auto()
     Or = auto()
+
+    def __str__(self) -> str:
+        match self:
+            case LogicOp.And:
+                return "and"
+            case LogicOp.Or:
+                return "or"
 
 
 # In Rust: BinOp = Eager(EagerOp) | Logic(LogicOp). In Python a plain union suffices.

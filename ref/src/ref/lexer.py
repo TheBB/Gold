@@ -5,6 +5,15 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import TYPE_CHECKING
 
+from .error import (
+    Action,
+    Error,
+    ReasonSyntax,
+    SyntaxElement,
+    SyntaxExpectedOne,
+    SyntaxUnexpectedChar,
+    SyntaxUnexpectedEof,
+)
 from .span import Position, Tagged, tag
 
 if TYPE_CHECKING:
@@ -143,17 +152,10 @@ class MissingToken:
     kind: TokenType
 
 
-# ── Errors ────────────────────────────────────────────────────────────────────
-
-
-class LexError(Exception):
-    position: Position
-    reason: str
-
-    def __init__(self, position: Position, reason: str) -> None:
-        super().__init__(f"{reason} at {position.line + 1}:{position.column + 1}")
-        self.position = position
-        self.reason = reason
+def _lex_err(position: Position, c: str | None) -> Error:
+    if c is None:
+        return Error.new(ReasonSyntax(SyntaxUnexpectedEof())).tag(position.with_length(0), Action.Parse)
+    return Error.new(ReasonSyntax(SyntaxUnexpectedChar(c))).tag(position.with_length(1), Action.Parse)
 
 
 # ── Regexes ───────────────────────────────────────────────────────────────────
@@ -205,9 +207,7 @@ class Lexer:
     def _traverse(self, pattern: re.Pattern[str], kind: TokenType) -> LexResult:
         m = pattern.match(self.code)
         if m is None:
-            c = self._peek()
-            reason = "unexpected end of input" if c is None else f"unexpected '{c}'"
-            raise LexError(self.position, reason)
+            raise _lex_err(self.position, self._peek())
         return self._skip_tag(m.end(), 0, kind)
 
     def _skip_indent(self) -> Lexer:
@@ -240,7 +240,9 @@ class Lexer:
             m = pattern.match(self.code)
             if m is not None:
                 return self._skip_tag(m.end(), 0, kind)
-        raise LexError(self.position, "expected number")
+        raise Error.new(ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Number))).tag(
+            self.position.with_length(0), Action.Parse
+        )
 
     def _next_name(self, pattern: re.Pattern[str]) -> LexResult:
         return self._traverse(pattern, TokenType.Name)
@@ -248,15 +250,15 @@ class Lexer:
     def _next_pure_integer(self) -> LexResult:
         return self._traverse(_PUREDIGITS, TokenType.Integer)
 
-    def error(self, reason: str) -> LexError:
-        return LexError(self.position, reason)
+    def error(self, c: str | None = None) -> Error:
+        return _lex_err(self.position, c)
 
     def _tokenize_default(self) -> LexResult:
         cur = self._skip_whitespace()
         c = cur._peek()
 
         if c is None:
-            raise LexError(cur.position, "unexpected end of input")
+            raise _lex_err(cur.position, None)
         if c.isascii() and (c.isalpha() or c == "_"):
             return cur._next_name(_NAME)
         if c.isdigit() or (c == "." and cur._satisfies_at(1, str.isdigit)):
@@ -319,14 +321,14 @@ class Lexer:
             return cur._skip_tag(1, 0, TokenType.Pipe)
         if c == ";":
             return cur._skip_tag(1, 0, TokenType.SemiColon)
-        raise LexError(cur.position, f"unexpected '{c}'")
+        raise _lex_err(cur.position, c)
 
     def _tokenize_map(self) -> LexResult:
         cur = self._skip_whitespace()
         c = cur._peek()
 
         if c is None:
-            raise LexError(cur.position, "unexpected end of input")
+            raise _lex_err(cur.position, None)
         if c == "}":
             return cur._skip_tag(1, 0, TokenType.CloseBrace)
         if c == "$":
@@ -344,13 +346,13 @@ class Lexer:
     def _tokenize_string(self) -> LexResult:
         c = self._peek()
         if c is None:
-            raise LexError(self.position, "unexpected end of input")
+            raise _lex_err(self.position, None)
         if c == '"':
             return self._skip_tag(1, 0, TokenType.DoubleQuote)
         if c == "$":
             return self._skip_tag(1, 0, TokenType.Dollar)
         if c == "\n":
-            raise LexError(self.position, "unexpected newline in string")
+            raise _lex_err(self.position, "\n")
 
         i = 0
         while i < len(self.code):
@@ -362,7 +364,7 @@ class Lexer:
                 if nc in ('"', "\\", "$"):
                     i += 2
                     continue
-                raise LexError(self._skip(i + 1, 0).position, f"unexpected '{nc}'")
+                raise _lex_err(self._skip(i + 1, 0).position, nc)
             i += 1
 
         return self._skip_tag(len(self.code), 0, TokenType.StringLit)
@@ -387,9 +389,9 @@ class Lexer:
     def _tokenize_fmtspec(self) -> LexResult:
         c = self._peek()
         if c is None:
-            raise LexError(self.position, "unexpected end of input")
+            raise _lex_err(self.position, None)
         if c == "\n":
-            raise LexError(self.position, "unexpected newline in format spec")
+            raise _lex_err(self.position, "\n")
         if c == "}":
             return self._skip_tag(1, 0, TokenType.CloseBrace)
         if "1" <= c <= "9":

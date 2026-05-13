@@ -1,12 +1,18 @@
 ParseResult
   ok: false
   errors:
-    ParseError [12..12]
-      "expected operand"
-    ParseError [12..12]
-      "expected ')'"
-    ParseError [21..21]
-      "expected '}'"
+    Error
+      reason: "expected operand"
+      locations:
+        [12..12] Parse
+    Error
+      reason: "expected ')'"
+      locations:
+        [12..12] Parse
+    Error
+      reason: "expected '}'"
+      locations:
+        [21..21] Parse
   tree:
     File
       statements: []

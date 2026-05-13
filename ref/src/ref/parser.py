@@ -63,7 +63,18 @@ from .ast import (
     UnOp,
     UnOpTransform,
 )
-from .lexer import Lexer, LexError, MissingToken, Token, TokenType
+from .error import (
+    Action,
+    AnySyntaxElement,
+    Error,
+    Reason,
+    ReasonSyntax,
+    SyntaxElement,
+    SyntaxElementToken,
+    SyntaxExpectedOne,
+    SyntaxExpectedTwo,
+)
+from .lexer import Lexer, MissingToken, Token, TokenType
 from .span import Paren, Span, Tagged, tag
 
 KEYWORDS: frozenset[str] = frozenset(
@@ -92,18 +103,6 @@ KEYWORDS: frozenset[str] = frozenset(
 
 
 @dataclass(frozen=True)
-class ParseError:
-    """A parse error: a message and the source span it refers to."""
-
-    span: Span
-    message: str
-
-    def __str__(self) -> str:
-        s = self.span
-        return f"{self.message} at {s.line + 1}:{s.column + 1}"
-
-
-@dataclass(frozen=True)
 class ParseResult:
     """
     Result of parsing a Gold source file.
@@ -117,7 +116,7 @@ class ParseResult:
     """
 
     tree: File | None
-    errors: list[ParseError]
+    errors: list[Error]
 
     @property
     def ok(self) -> bool:
@@ -170,7 +169,7 @@ class Parser:
     """
 
     _lexer: Lexer
-    _errors: list[ParseError]
+    _errors: list[Error]
 
     def __init__(self, source: str) -> None:
         self._lexer = Lexer.new(source)
@@ -178,8 +177,8 @@ class Parser:
 
     # ── Error helpers ──────────────────────────────────────────────────────────
 
-    def _error(self, span: Span, message: str) -> None:
-        self._errors.append(ParseError(span=span, message=message))
+    def _error(self, span: Span, reason: Reason) -> None:
+        self._errors.append(Error.new(reason).tag(span, Action.Parse))
 
     def _here(self) -> Span:
         return self._lexer.position.with_length(0)
@@ -217,7 +216,7 @@ class Parser:
                 self._lexer = lexer
                 return tok
             return None
-        except LexError:
+        except Error:
             return None
 
     def _expect_tok(self, kind: TokenType, mode: str = "default") -> Tagged[Token | MissingToken]:
@@ -226,7 +225,7 @@ class Parser:
         if tok is not None:
             return tok
         sp = self._here()
-        self._error(sp, f"expected {kind}")
+        self._error(sp, ReasonSyntax(SyntaxExpectedOne(SyntaxElementToken(kind))))
         return tag(MissingToken(kind), sp)
 
     def _try_keyword(self, kw: str) -> Tagged[str] | None:
@@ -236,7 +235,7 @@ class Parser:
                 self._lexer = lexer
                 return tok.map(lambda t: t.text)
             return None
-        except LexError:
+        except Error:
             return None
 
     def _try_map_keyword(self, kw: str) -> Tagged[str] | None:
@@ -246,15 +245,23 @@ class Parser:
                 self._lexer = lexer
                 return tok.map(lambda t: t.text)
             return None
-        except LexError:
+        except Error:
             return None
+
+    _KW_ELEMENTS: dict[str, AnySyntaxElement] = {
+        "then": SyntaxElement.Then,
+        "else": SyntaxElement.Else,
+        "in": SyntaxElement.In,
+        "as": SyntaxElement.As,
+    }
 
     def _expect_keyword(self, kw: str) -> Tagged[str]:
         tok = self._try_keyword(kw)
         if tok is not None:
             return tok
         sp = self._here()
-        self._error(sp, f"expected '{kw}'")
+        elem: AnySyntaxElement = self._KW_ELEMENTS.get(kw, SyntaxElement.Expression)
+        self._error(sp, ReasonSyntax(SyntaxExpectedOne(elem)))
         return tag(kw, sp)
 
     def _try_identifier(self) -> Tagged[str] | None:
@@ -265,7 +272,7 @@ class Parser:
                 self._lexer = lexer
                 return tok.map(lambda t: t.text)
             return None
-        except LexError:
+        except Error:
             return None
 
     def _try_map_identifier(self) -> Tagged[str] | None:
@@ -276,7 +283,7 @@ class Parser:
                 self._lexer = lexer
                 return tok.map(lambda t: t.text)
             return None
-        except LexError:
+        except Error:
             return None
 
     # ── fmtspec helpers ────────────────────────────────────────────────────────
@@ -288,7 +295,7 @@ class Parser:
                 self._lexer = lexer
                 return tok.contents.text
             return None
-        except LexError:
+        except Error:
             return None
 
     def _fmtspec_try_number(self) -> int | None:
@@ -298,7 +305,7 @@ class Parser:
                 self._lexer = lexer
                 return int(tok.contents.text)
             return None
-        except LexError:
+        except Error:
             return None
 
     # ── Format specifier ──────────────────────────────────────────────────────
@@ -559,7 +566,7 @@ class Parser:
         if el is not None:
             return el
         sp = self._here()
-        self._error(sp, "expected list element")
+        self._error(sp, ReasonSyntax(SyntaxExpectedOne(SyntaxElement.ListElement)))
         return Paren.naked(tag(ListSingleton(self._missing_expr()), sp))
 
     def _try_list(self) -> Tagged[ListExpr] | None:
@@ -635,7 +642,7 @@ class Parser:
             else:
                 ident_name = self._try_identifier()
                 if ident_name is None:
-                    self._error(self._here(), "expected expression")
+                    self._error(self._here(), ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Expression)))
                     return tag(
                         MapSingleton(key=self._missing_expr(), value=self._missing_expr()), dollar.span
                     ), False
@@ -662,9 +669,11 @@ class Parser:
                 self._lexer = ms_lexer
                 val_str = _multiline(ms_tok.contents.text)
                 value_tagged = tag(LiteralExpr(val_str), ms_tok.span)
-            except LexError:
+            except Error:
                 value_tagged = self._missing_expr()
-                self._error(self._here(), "expected multiline string")
+                self._error(
+                    self._here(), ReasonSyntax(SyntaxExpectedOne(SyntaxElementToken(TokenType.MultiString)))
+                )
             span = Span.covering(elem_start, value_tagged.span)
             return tag(MapSingleton(key=key, value=value_tagged), span), True
 
@@ -680,7 +689,7 @@ class Parser:
         if el is not None:
             return el
         sp = self._here()
-        self._error(sp, "expected map element")
+        self._error(sp, ReasonSyntax(SyntaxExpectedOne(SyntaxElement.MapElement)))
         dummy_key: Tagged[MissingExpr] = tag(MissingExpr(), sp)
         return tag(MapSingleton(key=dummy_key, value=self._missing_expr()), sp), False
 
@@ -744,7 +753,7 @@ class Parser:
             if (dot := self._try_tok(TokenType.Dot)) is not None:
                 name = self._try_identifier()
                 if name is None:
-                    self._error(self._here(), "expected identifier after '.'")
+                    self._error(self._here(), ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Identifier)))
                     break
                 key_expr: Tagged[LiteralExpr] = name.map(LiteralExpr)
                 span = Span.covering(pexpr.outer(), name.span)
@@ -842,7 +851,7 @@ class Parser:
             return base
         rhs = self._try_prefixed()
         if rhs is None:
-            self._error(self._here(), "expected operand after '^'")
+            self._error(self._here(), ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Operand)))
             rhs = self._missing_paren()
         return Paren.naked(
             tag(
@@ -870,7 +879,7 @@ class Parser:
         operand = self._try_power()
         if operand is None:
             if ops:
-                self._error(self._here(), "expected operand")
+                self._error(self._here(), ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Operand)))
                 operand = self._missing_paren()
             else:
                 return None
@@ -906,7 +915,7 @@ class Parser:
                 break
             rhs = sub()
             if rhs is None:
-                self._error(self._here(), "expected operand")
+                self._error(self._here(), ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Operand)))
                 rhs = self._missing_paren()
             assert matched_op is not None
             lhs = Paren.naked(
@@ -1043,7 +1052,12 @@ class Parser:
 
             el = self._try_list_binding_element()
             if el is None:
-                self._error(self._here(), "expected parameter or closing delimiter")
+                self._error(
+                    self._here(),
+                    ReasonSyntax(
+                        SyntaxExpectedTwo(SyntaxElement.PosParam, SyntaxElementToken(TokenType.CloseParen))
+                    ),
+                )
                 close = try_close()
                 break
             elements.append(el)
@@ -1051,7 +1065,14 @@ class Parser:
             if self._try_tok(TokenType.Comma) is None:
                 close = try_close()
                 if close is None:
-                    self._error(self._here(), "expected ',' or closing delimiter")
+                    self._error(
+                        self._here(),
+                        ReasonSyntax(
+                            SyntaxExpectedTwo(
+                                SyntaxElementToken(TokenType.Comma), SyntaxElementToken(TokenType.CloseParen)
+                            )
+                        ),
+                    )
                 break
 
         end_sp = close.span if close is not None else self._here()
@@ -1076,7 +1097,14 @@ class Parser:
 
             el = self._try_map_binding_element()
             if el is None:
-                self._error(self._here(), "expected parameter or closing delimiter")
+                self._error(
+                    self._here(),
+                    ReasonSyntax(
+                        SyntaxExpectedTwo(
+                            SyntaxElement.KeywordParam, SyntaxElementToken(TokenType.CloseParen)
+                        )
+                    ),
+                )
                 close = try_close()
                 break
             elements.append(el)
@@ -1084,7 +1112,14 @@ class Parser:
             if self._try_tok(TokenType.Comma) is None:
                 close = try_close()
                 if close is None:
-                    self._error(self._here(), "expected ',' or closing delimiter")
+                    self._error(
+                        self._here(),
+                        ReasonSyntax(
+                            SyntaxExpectedTwo(
+                                SyntaxElementToken(TokenType.Comma), SyntaxElementToken(TokenType.CloseParen)
+                            )
+                        ),
+                    )
                 break
 
         end_sp = close.span if close is not None else self._here()
@@ -1141,7 +1176,14 @@ class Parser:
                 )
             )
 
-        self._error(self._here(), "expected '(' or '{' after 'fn'")
+        self._error(
+            self._here(),
+            ReasonSyntax(
+                SyntaxExpectedTwo(
+                    SyntaxElementToken(TokenType.OpenParen), SyntaxElementToken(TokenType.OpenBrace)
+                )
+            ),
+        )
         return Paren.naked(
             tag(
                 FunctionExpr(
@@ -1210,7 +1252,7 @@ class Parser:
         if expr is not None:
             return expr
         sp = self._here()
-        self._error(sp, "expected expression")
+        self._error(sp, ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Expression)))
         return self._missing_paren()
 
     # ── Bindings ──────────────────────────────────────────────────────────────
@@ -1237,7 +1279,7 @@ class Parser:
         if (ellipsis := self._try_tok(TokenType.Ellipsis)) is not None:
             name = self._try_identifier()
             if name is None:
-                self._error(self._here(), "expected identifier after '...'")
+                self._error(self._here(), ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Identifier)))
                 return tag(MapBindingSlurpTo(name="_"), ellipsis.span)
             return tag(MapBindingSlurpTo(name=name.contents), Span.covering(ellipsis.span, name.span))
 
@@ -1297,7 +1339,7 @@ class Parser:
         if b is not None:
             return b
         sp = self._here()
-        self._error(sp, "expected binding")
+        self._error(sp, ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Binding)))
         return self._missing_binding()
 
     # ── Top-level statements ───────────────────────────────────────────────────
@@ -1327,7 +1369,7 @@ class Parser:
         if pexpr is None:
             if not statements:
                 return None
-            self._error(self._here(), "expected expression")
+            self._error(self._here(), ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Expression)))
             return File(statements=statements, expression=self._missing_expr())
 
         return File(statements=statements, expression=pexpr.inner())

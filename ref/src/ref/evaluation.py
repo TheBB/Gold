@@ -58,14 +58,30 @@ from .ast import (
     UnOp,
     UnOpTransform,
 )
+from .error import (  # noqa: TC001
+    BindingType,
+    Error,
+    ReasonExternal,
+    ReasonTypeMismatch,
+    ReasonUnbound,
+    ReasonUnpack,
+    ReasonValue,
+    Type,
+    TypeMismatchBinOp,
+    TypeMismatchCall,
+    TypeMismatchIterate,
+    TypeMismatchMapKey,
+    TypeMismatchSplatArg,
+    TypeMismatchSplatList,
+    TypeMismatchSplatMap,
+    TypeMismatchUnOp,
+    UnpackKeyMissing,
+    UnpackListTooShort,
+    UnpackTypeMismatch,
+    ValueConvert,
+    ValueOutOfRange,
+)
 from .span import Tagged  # noqa: TC001
-
-# ── Errors ────────────────────────────────────────────────────────────────────
-
-
-class EvalError(Exception):
-    pass
-
 
 # ── Truthiness ────────────────────────────────────────────────────────────────
 
@@ -100,7 +116,7 @@ def _gold_str(v: GoldValue) -> str:
         return "[" + ", ".join(_gold_str(x) for x in v) + "]"
     if isinstance(v, dict):
         return "{" + ", ".join(f"{k}: {_gold_str(val)}" for k, val in v.items()) + "}"
-    raise EvalError(f"cannot convert {type(v).__name__!r} to string")
+    raise Error.new(ReasonExternal(f"cannot convert {type(v).__name__!r} to string"))
 
 
 # ── Format spec application ───────────────────────────────────────────────────
@@ -168,7 +184,7 @@ def _format_value(v: GoldValue, fmt: FormatSpec) -> str:
     try:
         return format(v, spec)
     except (TypeError, ValueError) as e:
-        raise EvalError(f"format error: {e}") from e
+        raise Error.new(ReasonExternal(str(e))) from e
 
 
 # ── Namespace ─────────────────────────────────────────────────────────────────
@@ -190,7 +206,7 @@ class Namespace:
             if name in ns._bindings:
                 return ns._bindings[name]
             ns = ns._parent
-        raise EvalError(f"undefined name: {name!r}")
+        raise Error.new(ReasonUnbound(name))
 
     def bind(self, name: str, value: GoldValue) -> None:
         self._bindings[name] = value
@@ -220,7 +236,7 @@ class PathImportResolver(AbstractImportResolver):
         source = full_path.read_text(encoding="utf-8")
         result = parse(source)
         if not result.ok or result.tree is None:
-            raise EvalError(f"import {path!r}: parse failed")
+            raise Error.new(ReasonExternal(f"import {path!r}: parse failed"))
         child_resolver = PathImportResolver(full_path.parent)
         return evaluate(result.tree, child_resolver)
 
@@ -239,12 +255,12 @@ def _resolve_binding(binding_tagged: Tagged[Binding], value: GoldValue, ns: Name
     elif isinstance(b, MissingBinding):
         pass
     else:
-        raise EvalError(f"unknown binding type: {type(b).__name__!r}")
+        raise Error.new(ReasonExternal(f"unknown binding type: {type(b).__name__!r}"))
 
 
 def _resolve_list_binding(lb: ListBinding, value: GoldValue, ns: Namespace) -> None:
     if not isinstance(value, list):
-        raise EvalError(f"cannot unpack {type(value).__name__!r} as list")
+        raise Error.new(ReasonUnpack(UnpackTypeMismatch(BindingType.List, _type_of(value))))
 
     elements = lb.elements
     slurp_pos: int | None = next(
@@ -258,7 +274,7 @@ def _resolve_list_binding(lb: ListBinding, value: GoldValue, ns: Namespace) -> N
         1 for e in pre if isinstance(e.contents, ListBindingSingleton) and e.contents.default is None
     ) + len(post)
     if len(value) < required:
-        raise EvalError(f"expected at least {required} list elements, got {len(value)}")
+        raise Error.new(ReasonUnpack(UnpackListTooShort()))
 
     idx = 0
     for elem_tagged in pre:
@@ -270,7 +286,7 @@ def _resolve_list_binding(lb: ListBinding, value: GoldValue, ns: Namespace) -> N
         elif elem.default is not None:
             _resolve_binding(elem.binding, _eval_expr(elem.default, ns), ns)
         else:
-            raise EvalError("missing required positional argument")
+            raise Error.new(ReasonUnpack(UnpackListTooShort()))
 
     if slurp_pos is not None:
         slurp = elements[slurp_pos].contents
@@ -287,7 +303,7 @@ def _resolve_list_binding(lb: ListBinding, value: GoldValue, ns: Namespace) -> N
 
 def _resolve_map_binding(mb: MapBinding, value: GoldValue, ns: Namespace) -> None:
     if not isinstance(value, dict):
-        raise EvalError(f"cannot unpack {type(value).__name__!r} as map")
+        raise Error.new(ReasonUnpack(UnpackTypeMismatch(BindingType.Map, _type_of(value))))
 
     consumed: set[str] = set()
     for elem_tagged in mb.elements:
@@ -300,7 +316,7 @@ def _resolve_map_binding(mb: MapBinding, value: GoldValue, ns: Namespace) -> Non
             elif elem.default is not None:
                 _resolve_binding(elem.binding, _eval_expr(elem.default, ns), ns)
             else:
-                raise EvalError(f"missing required key {k!r}")
+                raise Error.new(ReasonUnpack(UnpackKeyMissing(k)))
         elif isinstance(elem, MapBindingSlurpTo):
             rest: dict[str, GoldValue] = {k: v for k, v in value.items() if k not in consumed}
             ns.bind(elem.name, rest)
@@ -319,6 +335,24 @@ def _is_float(v: GoldValue) -> TypeGuard[float]:
 
 def _is_numeric(v: GoldValue) -> TypeGuard[int | float]:
     return _is_int(v) or _is_float(v)
+
+
+def _type_of(v: GoldValue) -> Type:
+    if v is None:
+        return Type.Null
+    if isinstance(v, bool):
+        return Type.Boolean
+    if isinstance(v, int):
+        return Type.Integer
+    if isinstance(v, float):
+        return Type.Float
+    if isinstance(v, str):
+        return Type.String
+    if isinstance(v, list):
+        return Type.List
+    if isinstance(v, dict):
+        return Type.Map
+    return Type.Function
 
 
 # ── Eager binary operators ────────────────────────────────────────────────────
@@ -340,7 +374,7 @@ def _compare(a: GoldValue, b: GoldValue) -> int:
         return (fa > fb) - (fa < fb)
     if isinstance(a, str) and isinstance(b, str):
         return (a > b) - (a < b)
-    raise EvalError(f"cannot compare {type(a).__name__!r} and {type(b).__name__!r}")
+    raise Error.new(ReasonExternal(f"cannot compare {type(a).__name__!r} and {type(b).__name__!r}"))
 
 
 def _eval_eager_op(op: EagerOp, lhs: GoldValue, rhs: GoldValue) -> GoldValue:
@@ -354,39 +388,53 @@ def _eval_eager_op(op: EagerOp, lhs: GoldValue, rhs: GoldValue) -> GoldValue:
                 return lhs + rhs
             if isinstance(lhs, list) and isinstance(rhs, list):
                 return lhs + rhs
-            raise EvalError(f"cannot add {type(lhs).__name__!r} and {type(rhs).__name__!r}")
+            raise Error.new(
+                ReasonTypeMismatch(TypeMismatchBinOp(_type_of(lhs), _type_of(rhs), str(EagerOp.Add)))
+            )
 
         case EagerOp.Subtract:
             if _is_int(lhs) and _is_int(rhs):
                 return lhs - rhs
             if _is_numeric(lhs) and _is_numeric(rhs):
                 return float(lhs) - float(rhs)
-            raise EvalError(f"cannot subtract {type(lhs).__name__!r} and {type(rhs).__name__!r}")
+            raise Error.new(
+                ReasonTypeMismatch(TypeMismatchBinOp(_type_of(lhs), _type_of(rhs), str(EagerOp.Subtract)))
+            )
 
         case EagerOp.Multiply:
             if _is_int(lhs) and _is_int(rhs):
                 return lhs * rhs
             if _is_numeric(lhs) and _is_numeric(rhs):
                 return float(lhs) * float(rhs)
-            raise EvalError(f"cannot multiply {type(lhs).__name__!r} and {type(rhs).__name__!r}")
+            raise Error.new(
+                ReasonTypeMismatch(TypeMismatchBinOp(_type_of(lhs), _type_of(rhs), str(EagerOp.Multiply)))
+            )
 
         case EagerOp.Divide:
             if not _is_numeric(lhs) or not _is_numeric(rhs):
-                raise EvalError("division requires numbers")
+                raise Error.new(
+                    ReasonTypeMismatch(TypeMismatchBinOp(_type_of(lhs), _type_of(rhs), str(EagerOp.Divide)))
+                )
             if rhs == 0:
-                raise EvalError("division by zero")
+                raise Error.new(ReasonValue(ValueOutOfRange()))
             return float(lhs) / float(rhs)
 
         case EagerOp.IntegerDivide:
             if not _is_int(lhs) or not _is_int(rhs):
-                raise EvalError("integer division requires integers")
+                raise Error.new(
+                    ReasonTypeMismatch(
+                        TypeMismatchBinOp(_type_of(lhs), _type_of(rhs), str(EagerOp.IntegerDivide))
+                    )
+                )
             if rhs == 0:
-                raise EvalError("integer division by zero")
+                raise Error.new(ReasonValue(ValueOutOfRange()))
             return lhs // rhs
 
         case EagerOp.Power:
             if not _is_numeric(lhs) or not _is_numeric(rhs):
-                raise EvalError("power requires numbers")
+                raise Error.new(
+                    ReasonTypeMismatch(TypeMismatchBinOp(_type_of(lhs), _type_of(rhs), str(EagerOp.Power)))
+                )
             if _is_int(lhs) and _is_int(rhs) and rhs >= 0:
                 return int(lhs) ** int(rhs)
             return float(lhs) ** float(rhs)
@@ -409,12 +457,14 @@ def _eval_eager_op(op: EagerOp, lhs: GoldValue, rhs: GoldValue) -> GoldValue:
                 try:
                     return lhs[int(rhs)]
                 except IndexError:
-                    raise EvalError(f"list index {rhs} out of range") from None
+                    raise Error.new(ReasonValue(ValueOutOfRange())) from None
             if isinstance(lhs, dict) and isinstance(rhs, str):
                 if rhs not in lhs:
-                    raise EvalError(f"key {rhs!r} not found in map")
+                    raise Error.new(ReasonUnpack(UnpackKeyMissing(str(rhs))))
                 return lhs[rhs]
-            raise EvalError(f"cannot index {type(lhs).__name__!r} with {type(rhs).__name__!r}")
+            raise Error.new(
+                ReasonExternal(f"cannot index {type(lhs).__name__!r} with {type(rhs).__name__!r}")
+            )
 
         case EagerOp.Contains:
             # Gold syntax: container has element  (lhs=container, rhs=element)
@@ -424,9 +474,9 @@ def _eval_eager_op(op: EagerOp, lhs: GoldValue, rhs: GoldValue) -> GoldValue:
                 return rhs in lhs
             if isinstance(lhs, str) and isinstance(rhs, str):
                 return rhs in lhs
-            raise EvalError(f"cannot check containment in {type(lhs).__name__!r}")
+            raise Error.new(ReasonExternal(f"cannot check containment in {type(lhs).__name__!r}"))
 
-    raise EvalError(f"unknown op: {op!r}")
+    raise Error.new(ReasonExternal(f"unknown op: {op!r}"))
 
 
 # ── Built-in functions ────────────────────────────────────────────────────────
@@ -436,26 +486,26 @@ _Builtin = Any  # Callable[[list[EvalValue], dict[str, EvalValue]], EvalValue]
 
 def _builtin_len(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
-        raise EvalError("len() takes exactly 1 positional argument")
+        raise Error.new(ReasonExternal("len() takes exactly 1 positional argument"))
     x = args[0]
     if isinstance(x, (str, list, dict)):
         return len(x)
-    raise EvalError("len() requires str, list, or map")
+    raise Error.new(ReasonExternal("len() requires str, list, or map"))
 
 
 def _builtin_range(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if kwargs:
-        raise EvalError("range() takes no keyword arguments")
+        raise Error.new(ReasonExternal("range() takes no keyword arguments"))
     if len(args) == 1 and _is_int(args[0]):
         return list(range(int(args[0])))
     if len(args) == 2 and _is_int(args[0]) and _is_int(args[1]):
         return list(range(int(args[0]), int(args[1])))
-    raise EvalError("range() takes 1 or 2 integer arguments")
+    raise Error.new(ReasonExternal("range() takes 1 or 2 integer arguments"))
 
 
 def _builtin_int(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
-        raise EvalError("int() takes exactly 1 argument")
+        raise Error.new(ReasonExternal("int() takes exactly 1 argument"))
     x = args[0]
     if _is_int(x):
         return x
@@ -467,13 +517,13 @@ def _builtin_int(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldVal
         try:
             return int(x)
         except ValueError:
-            raise EvalError(f"cannot convert {x!r} to integer") from None
-    raise EvalError(f"cannot convert {type(x).__name__!r} to integer")
+            raise Error.new(ReasonValue(ValueConvert(Type.Integer))) from None
+    raise Error.new(ReasonValue(ValueConvert(Type.Integer)))
 
 
 def _builtin_float(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
-        raise EvalError("float() takes exactly 1 argument")
+        raise Error.new(ReasonExternal("float() takes exactly 1 argument"))
     x = args[0]
     if _is_float(x):
         return x
@@ -485,119 +535,119 @@ def _builtin_float(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldV
         try:
             return float(x)
         except ValueError:
-            raise EvalError(f"cannot convert {x!r} to float") from None
-    raise EvalError(f"cannot convert {type(x).__name__!r} to float")
+            raise Error.new(ReasonValue(ValueConvert(Type.Float))) from None
+    raise Error.new(ReasonValue(ValueConvert(Type.Float)))
 
 
 def _builtin_bool(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
-        raise EvalError("bool() takes exactly 1 argument")
+        raise Error.new(ReasonExternal("bool() takes exactly 1 argument"))
     return _truthy(args[0])
 
 
 def _builtin_str(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
-        raise EvalError("str() takes exactly 1 argument")
+        raise Error.new(ReasonExternal("str() takes exactly 1 argument"))
     return _gold_str(args[0])
 
 
 def _builtin_map_fn(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 2 or kwargs:
-        raise EvalError("map() takes exactly 2 positional arguments")
+        raise Error.new(ReasonExternal("map() takes exactly 2 positional arguments"))
     f, xs = args[0], args[1]
     if not isinstance(f, (GoldFunction, GoldBuiltin)):
-        raise EvalError("map() first argument must be a function")
+        raise Error.new(ReasonTypeMismatch(TypeMismatchCall(_type_of(f))))
     if not isinstance(xs, list):
-        raise EvalError("map() second argument must be a list")
+        raise Error.new(ReasonTypeMismatch(TypeMismatchIterate(_type_of(xs))))
     return [_call(f, [x], {}) for x in xs]
 
 
 def _builtin_filter_fn(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 2 or kwargs:
-        raise EvalError("filter() takes exactly 2 positional arguments")
+        raise Error.new(ReasonExternal("filter() takes exactly 2 positional arguments"))
     f, xs = args[0], args[1]
     if not isinstance(f, (GoldFunction, GoldBuiltin)):
-        raise EvalError("filter() first argument must be a function")
+        raise Error.new(ReasonTypeMismatch(TypeMismatchCall(_type_of(f))))
     if not isinstance(xs, list):
-        raise EvalError("filter() second argument must be a list")
+        raise Error.new(ReasonTypeMismatch(TypeMismatchIterate(_type_of(xs))))
     return [x for x in xs if _truthy(_call(f, [x], {}))]
 
 
 def _builtin_items(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
-        raise EvalError("items() takes exactly 1 argument")
+        raise Error.new(ReasonExternal("items() takes exactly 1 argument"))
     x = args[0]
     if not isinstance(x, dict):
-        raise EvalError("items() argument must be a map")
+        raise Error.new(ReasonExternal("items() argument must be a map"))
     return [[k, v] for k, v in x.items()]
 
 
 def _builtin_exp(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1:
-        raise EvalError("exp() takes exactly 1 positional argument")
+        raise Error.new(ReasonExternal("exp() takes exactly 1 positional argument"))
     x = args[0]
     if not _is_numeric(x):
-        raise EvalError("exp() argument must be a number")
+        raise Error.new(ReasonExternal("exp() argument must be a number"))
     xf = float(x)
     if "base" in kwargs:
         base = kwargs["base"]
         if not _is_numeric(base):
-            raise EvalError("exp() base must be a number")
+            raise Error.new(ReasonExternal("exp() base must be a number"))
         return float(base) ** xf
     return math.exp(xf)
 
 
 def _builtin_log(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1:
-        raise EvalError("log() takes exactly 1 positional argument")
+        raise Error.new(ReasonExternal("log() takes exactly 1 positional argument"))
     x = args[0]
     if not _is_numeric(x):
-        raise EvalError("log() argument must be a number")
+        raise Error.new(ReasonExternal("log() argument must be a number"))
     xf = float(x)
     if "base" in kwargs:
         base = kwargs["base"]
         if not _is_numeric(base):
-            raise EvalError("log() base must be a number")
+            raise Error.new(ReasonExternal("log() base must be a number"))
         return math.log(xf, float(base))
     return math.log(xf)
 
 
 def _builtin_ord(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
-        raise EvalError("ord() takes exactly 1 argument")
+        raise Error.new(ReasonExternal("ord() takes exactly 1 argument"))
     x = args[0]
     if not isinstance(x, str) or len(x) != 1:
-        raise EvalError("ord() argument must be a single-character string")
+        raise Error.new(ReasonExternal("ord() argument must be a single-character string"))
     return ord(x)
 
 
 def _builtin_chr(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 1 or kwargs:
-        raise EvalError("chr() takes exactly 1 argument")
+        raise Error.new(ReasonExternal("chr() takes exactly 1 argument"))
     x = args[0]
     if not _is_int(x):
-        raise EvalError("chr() argument must be an integer")
+        raise Error.new(ReasonExternal("chr() argument must be an integer"))
     try:
         return chr(int(x))
     except (ValueError, OverflowError) as e:
-        raise EvalError(f"invalid codepoint: {x}") from e
+        raise Error.new(ReasonValue(ValueOutOfRange())) from e
 
 
 def _builtin_startswith(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 2 or kwargs:
-        raise EvalError("startswith() takes exactly 2 arguments")
+        raise Error.new(ReasonExternal("startswith() takes exactly 2 arguments"))
     x, y = args
     if not isinstance(x, str) or not isinstance(y, str):
-        raise EvalError("startswith() arguments must be strings")
+        raise Error.new(ReasonExternal("startswith() arguments must be strings"))
     return x.startswith(y)
 
 
 def _builtin_endswith(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldValue:
     if len(args) != 2 or kwargs:
-        raise EvalError("endswith() takes exactly 2 arguments")
+        raise Error.new(ReasonExternal("endswith() takes exactly 2 arguments"))
     x, y = args
     if not isinstance(x, str) or not isinstance(y, str):
-        raise EvalError("endswith() arguments must be strings")
+        raise Error.new(ReasonExternal("endswith() arguments must be strings"))
     return x.endswith(y)
 
 
@@ -677,7 +727,7 @@ def _call(func: GoldValue, args: list[GoldValue], kwargs: dict[str, GoldValue]) 
         if func.keywords is not None:
             _resolve_map_binding(func.keywords, kwargs, call_ns)
         return _eval_expr(func.body, call_ns)
-    raise EvalError(f"cannot call {type(func).__name__!r}")
+    raise Error.new(ReasonTypeMismatch(TypeMismatchCall(_type_of(func))))
 
 
 def _eval_args(arg_elems: list[Tagged[Any]], ns: Namespace) -> tuple[list[GoldValue], dict[str, GoldValue]]:
@@ -696,7 +746,7 @@ def _eval_args(arg_elems: list[Tagged[Any]], ns: Namespace) -> tuple[list[GoldVa
             elif isinstance(val, dict):
                 kw.update(val)
             else:
-                raise EvalError("splat argument must be list or map")
+                raise Error.new(ReasonTypeMismatch(TypeMismatchSplatArg(_type_of(val))))
     return pos, kw
 
 
@@ -710,12 +760,12 @@ def _eval_list_element(elem_tagged: Tagged[Any], ns: Namespace) -> list[GoldValu
     if isinstance(e, ListSplat):
         val = _eval_expr(e.expr, ns)
         if not isinstance(val, list):
-            raise EvalError("list splat requires a list")
+            raise Error.new(ReasonTypeMismatch(TypeMismatchSplatList(_type_of(val))))
         return val
     if isinstance(e, ListLoop):
         items = _eval_expr(e.iterable, ns)
         if not isinstance(items, list):
-            raise EvalError("for-loop iterable must be a list")
+            raise Error.new(ReasonTypeMismatch(TypeMismatchIterate(_type_of(items))))
         result: list[GoldValue] = []
         for item in items:
             loop_ns = ns.child()
@@ -726,7 +776,7 @@ def _eval_list_element(elem_tagged: Tagged[Any], ns: Namespace) -> list[GoldValu
         if _truthy(_eval_expr(e.condition, ns)):
             return _eval_list_element(e.element, ns)
         return []
-    raise EvalError(f"unexpected list element type: {type(e).__name__!r}")
+    raise Error.new(ReasonExternal(f"unexpected list element type: {type(e).__name__!r}"))
 
 
 def _eval_map_element(elem_tagged: Tagged[Any], ns: Namespace) -> dict[str, GoldValue]:
@@ -734,17 +784,17 @@ def _eval_map_element(elem_tagged: Tagged[Any], ns: Namespace) -> dict[str, Gold
     if isinstance(e, MapSingleton):
         k = _eval_expr(e.key, ns)
         if not isinstance(k, str):
-            raise EvalError("map key must be a string")
+            raise Error.new(ReasonTypeMismatch(TypeMismatchMapKey(_type_of(k))))
         return {k: _eval_expr(e.value, ns)}
     if isinstance(e, MapSplat):
         val = _eval_expr(e.expr, ns)
         if not isinstance(val, dict):
-            raise EvalError("map splat requires a map")
+            raise Error.new(ReasonTypeMismatch(TypeMismatchSplatMap(_type_of(val))))
         return dict(val)
     if isinstance(e, MapLoop):
         items = _eval_expr(e.iterable, ns)
         if not isinstance(items, list):
-            raise EvalError("for-loop iterable must be a list")
+            raise Error.new(ReasonTypeMismatch(TypeMismatchIterate(_type_of(items))))
         result: dict[str, GoldValue] = {}
         for item in items:
             loop_ns = ns.child()
@@ -755,7 +805,7 @@ def _eval_map_element(elem_tagged: Tagged[Any], ns: Namespace) -> dict[str, Gold
         if _truthy(_eval_expr(e.condition, ns)):
             return _eval_map_element(e.element, ns)
         return {}
-    raise EvalError(f"unexpected map element type: {type(e).__name__!r}")
+    raise Error.new(ReasonExternal(f"unexpected map element type: {type(e).__name__!r}"))
 
 
 # ── Expression evaluation ─────────────────────────────────────────────────────
@@ -824,7 +874,9 @@ def _eval_expr(expr: Tagged[Any], ns: Namespace) -> GoldValue:
                         return -(val)
                     if _is_float(val):
                         return -(val)
-                    raise EvalError(f"cannot negate {type(val).__name__!r}")
+                    raise Error.new(
+                        ReasonTypeMismatch(TypeMismatchUnOp(_type_of(val), str(UnOp.ArithmeticalNegate)))
+                    )
                 case UnOp.LogicalNegate:
                     return not _truthy(val)
 
@@ -845,9 +897,9 @@ def _eval_expr(expr: Tagged[Any], ns: Namespace) -> GoldValue:
             return _call(func, pos_args, kw_args)
 
     if isinstance(node, MissingExpr):
-        raise EvalError("missing expression (parse error in source)")
+        raise Error.new(ReasonExternal("missing expression (parse error in source)"))
 
-    raise EvalError(f"unexpected expression node: {type(node).__name__!r}")
+    raise Error.new(ReasonExternal(f"unexpected expression node: {type(node).__name__!r}"))
 
 
 # ── Root namespace ────────────────────────────────────────────────────────────
@@ -873,7 +925,7 @@ def evaluate(file: File, resolver: AbstractImportResolver | None = None) -> Gold
     for stmt in file.statements:
         if isinstance(stmt, ImportStatement):
             if resolver is None:
-                raise EvalError(f"import {stmt.path.contents!r}: no resolver provided")
+                raise Error.new(ReasonExternal(f"import {stmt.path.contents!r}: no resolver provided"))
             value = resolver.resolve(stmt.path.contents)
             _resolve_binding(stmt.binding, value, ns)
 
@@ -886,6 +938,7 @@ def evaluate_source(source: str, resolver: AbstractImportResolver | None = None)
 
     result = parse(source)
     if not result.ok or result.tree is None:
-        errors = "; ".join(e.message for e in result.errors)
-        raise EvalError(f"parse failed: {errors}")
+        if result.errors:
+            raise result.errors[0]
+        raise Error.new(ReasonExternal("parse failed"))
     return evaluate(result.tree, resolver)

@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ref.error import Error
+
 from ref.ast import (
     AlignSpec,
     ArgKeyword,
@@ -46,7 +51,7 @@ from ref.ast import (
     UnOp,
     UnOpTransform,
 )
-from ref.parser import ParseError, parse
+from ref.parser import parse
 from ref.span import Span, Tagged, tag
 
 # ── Span helpers ──────────────────────────────────────────────────────────────
@@ -290,7 +295,7 @@ def expr(source: str) -> Tagged[Expr]:
     return result.tree.expression
 
 
-def first_error(source: str) -> ParseError:
+def first_error(source: str) -> Error:
     result = parse(source)
     assert result.errors, f"Expected parse error in {source!r}"
     return result.errors[0]
@@ -298,8 +303,10 @@ def first_error(source: str) -> ParseError:
 
 def err(source: str, offset: int) -> None:
     e = first_error(source)
-    assert e.span.offset == offset, (
-        f"Expected error at offset {offset} in {source!r}, got {e.span.offset}: {e.message}"
+    span = e.span
+    assert span is not None
+    assert span.offset == offset, (
+        f"Expected error at offset {offset} in {source!r}, got {span.offset}: {e.message}"
     )
 
 

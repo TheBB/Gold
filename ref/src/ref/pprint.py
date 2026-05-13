@@ -66,13 +66,20 @@ class _PP:
     def _node(self, node: Any, indent: int) -> None:
         """Render an arbitrary node at the given indent level."""
         # Import here to avoid circular dependency at module load time
-        from .parser import ParseError, ParseResult
+        from .error import Error
+        from .parser import ParseResult
 
         if isinstance(node, Tagged):
             self._tagged(node, indent)
-        elif isinstance(node, ParseError):
-            self._emit(indent, f"ParseError{self._span(node.span)}")
-            self._emit(indent + 1, self._strval(node.message))
+        elif isinstance(node, Error):
+            self._emit(indent, "Error")
+            self._emit(indent + 1, f"reason: {self._strval(node.message)}")
+            if not node.locations:
+                self._emit(indent + 1, "locations: []")
+            else:
+                self._emit(indent + 1, "locations:")
+                for span, action in node.locations:
+                    self._emit(indent + 2, f"{self._span(span).strip()} {action.name}")
         elif isinstance(node, ParseResult):
             self._emit(indent, "ParseResult")
             self._emit(indent + 1, f"ok: {'true' if node.ok else 'false'}")

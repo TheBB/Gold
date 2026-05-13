@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from ref.lexer import Lexer, LexError, Token, TokenType
+from ref.error import Error
+from ref.lexer import Lexer, Token, TokenType
 from ref.span import Span, Tagged, tag
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -15,7 +16,7 @@ def tok(result: tuple[Lexer, Tagged[Token]], expected: Tagged[Token]) -> Lexer:
 
 
 def stop(lex: Lexer) -> None:
-    with pytest.raises(LexError):
+    with pytest.raises(Error):
         lex.next_token()
 
 

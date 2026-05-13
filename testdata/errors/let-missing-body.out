@@ -1,8 +1,10 @@
 ParseResult
   ok: false
   errors:
-    ParseError [12..12]
-      "expected expression"
+    Error
+      reason: "expected expression"
+      locations:
+        [12..12] Parse
   tree:
     File
       statements: []
