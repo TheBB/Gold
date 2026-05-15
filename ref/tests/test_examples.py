@@ -23,23 +23,23 @@ def error_cases() -> list[str]:
 
 @pytest.mark.parametrize("name", example_cases())
 def test_example(name: str) -> None:
-    source = (EXAMPLES / f"{name}.gold").read_text()
-    expected = (TESTDATA / f"{name}.parse").read_text()
+    source = (EXAMPLES / f"{name}.gold").read_text(encoding="utf-8")
+    expected = (TESTDATA / f"{name}.parse").read_text(encoding="utf-8")
     result = parse(source)
     assert result.pprint(show_spans=True) == expected.rstrip("\n")
 
 
 @pytest.mark.parametrize("name", error_cases())
 def test_error(name: str) -> None:
-    source = (ERRORS / f"{name}.gold").read_text()
-    expected = (ERRORS / f"{name}.parse").read_text()
+    source = (ERRORS / f"{name}.gold").read_text(encoding="utf-8")
+    expected = (ERRORS / f"{name}.parse").read_text(encoding="utf-8")
     result = parse(source)
     assert result.pprint(show_spans=True) == expected.rstrip("\n")
 
 
 @pytest.mark.parametrize("name", example_cases())
 def test_eval(name: str) -> None:
-    expected = (TESTDATA / f"{name}.eval").read_text()
+    expected = (TESTDATA / f"{name}.eval").read_text(encoding="utf-8")
     result = evaluate_file_result(EXAMPLES / f"{name}.gold")
     assert result.pprint(show_spans=True) == expected.rstrip("\n")
 
@@ -56,7 +56,7 @@ def test_eval_fixture_count() -> None:
     "gold_path", eval_fixture_cases(), ids=lambda p: str(p.relative_to(EVAL_FIXTURES).with_suffix(""))
 )
 def test_eval_fixture(gold_path: Path) -> None:
-    source = gold_path.read_text()
-    expected = gold_path.with_suffix(".eval").read_text()
+    source = gold_path.read_text(encoding="utf-8")
+    expected = gold_path.with_suffix(".eval").read_text(encoding="utf-8")
     result = evaluate_source_result(source)
     assert result.pprint(show_spans=True) == expected.rstrip("\n")
