@@ -285,10 +285,13 @@ def _resolve_list_binding(lb: ListBinding, value: GoldValue, ns: Namespace) -> N
     pre = elements[: slurp_pos if slurp_pos is not None else len(elements)]
     post = elements[slurp_pos + 1 :] if slurp_pos is not None else []
 
-    required = sum(
+    required_pre = sum(
         1 for e in pre if isinstance(e.contents, ListBindingSingleton) and e.contents.default is None
-    ) + len(post)
-    if len(value) < required:
+    )
+    required_post = sum(
+        1 for e in post if isinstance(e.contents, ListBindingSingleton) and e.contents.default is None
+    )
+    if len(value) < required_pre + required_post:
         raise Error.new(ReasonUnpack(UnpackListTooShort()))
     if slurp_pos is None and len(value) > len(pre) + len(post):
         raise Error.new(ReasonUnpack(UnpackListTooLong()))
@@ -307,15 +310,22 @@ def _resolve_list_binding(lb: ListBinding, value: GoldValue, ns: Namespace) -> N
 
     if slurp_pos is not None:
         slurp = elements[slurp_pos].contents
-        post_len = len(post)
-        slurp_items = value[idx : len(value) - post_len] if post_len else value[idx:]
+        available = len(value) - idx
+        actual_post = min(len(post), available)
+        slurp_items = value[idx : len(value) - actual_post] if actual_post else value[idx:]
         if isinstance(slurp, ListBindingSlurpTo):
             ns.bind(slurp.name, list(slurp_items))
 
     for i, elem_tagged in enumerate(post):
         elem = elem_tagged.contents
         assert isinstance(elem, ListBindingSingleton)
-        _resolve_binding(elem.binding, value[len(value) - len(post) + i], ns)
+        list_idx = len(value) - len(post) + i
+        if list_idx >= idx:
+            _resolve_binding(elem.binding, value[list_idx], ns)
+        elif elem.default is not None:
+            _resolve_binding(elem.binding, _eval_expr(elem.default, ns), ns)
+        else:
+            raise Error.new(ReasonUnpack(UnpackListTooShort()))
 
 
 def _resolve_map_binding(mb: MapBinding, value: GoldValue, ns: Namespace) -> None:

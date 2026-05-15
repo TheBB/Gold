@@ -1,0 +1,1 @@
+let {a as b} = {a: 1} in b

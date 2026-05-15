@@ -1,0 +1,2 @@
+let a = fn (; k = 1) k
+in a(k: 2)

@@ -1,0 +1,4 @@
+let a = 1
+in let b = fn () a
+   let a = a + 1
+   in [a, b()]

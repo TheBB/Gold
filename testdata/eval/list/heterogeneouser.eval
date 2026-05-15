@@ -1,0 +1,8 @@
+EvalResult
+  ok: true
+  value: (list)
+    1
+    false
+    "dingbob"
+    2.2
+    null

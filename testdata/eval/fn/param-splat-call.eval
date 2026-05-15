@@ -1,0 +1,15 @@
+EvalResult
+  ok: true
+  value: (list)
+    (list)
+      0
+      1
+      2
+      3
+      5
+    (map)
+      a: 8
+      x: 4
+      y: 5
+      z: 12
+      c: 10

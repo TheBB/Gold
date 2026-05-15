@@ -1,0 +1,4 @@
+let dest = fn (...args; ...kwargs) [args, kwargs]
+let args = [1, 2, 3]
+let kwargs = {x: 4, y: 5, z: 6}
+in dest(0, ...args, 5, a: 8, ...kwargs, c: 10, z: 12)

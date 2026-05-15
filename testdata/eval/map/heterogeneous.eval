@@ -1,0 +1,8 @@
+EvalResult
+  ok: true
+  value: (map)
+    a: -1
+    b: true
+    c: ""
+    d: 3.14
+    e: null

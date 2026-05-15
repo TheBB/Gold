@@ -1,0 +1,2 @@
+let a = fn (x, [y, z]) x + y + z
+in a(1, [2, 3])

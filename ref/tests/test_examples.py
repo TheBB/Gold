@@ -44,13 +44,19 @@ def test_eval(name: str) -> None:
     assert result.pprint(show_spans=True) == expected.rstrip("\n")
 
 
-def eval_fixture_cases() -> list[str]:
-    return sorted(p.stem for p in EVAL_FIXTURES.glob("*.gold"))
+def eval_fixture_cases() -> list[Path]:
+    return sorted(EVAL_FIXTURES.rglob("*.gold"))
 
 
-@pytest.mark.parametrize("name", eval_fixture_cases())
-def test_eval_fixture(name: str) -> None:
-    source = (EVAL_FIXTURES / f"{name}.gold").read_text()
-    expected = (EVAL_FIXTURES / f"{name}.eval").read_text()
+def test_eval_fixture_count() -> None:
+    assert len(eval_fixture_cases()) == 434, "unexpected fixture count — did discovery break?"
+
+
+@pytest.mark.parametrize(
+    "gold_path", eval_fixture_cases(), ids=lambda p: str(p.relative_to(EVAL_FIXTURES).with_suffix(""))
+)
+def test_eval_fixture(gold_path: Path) -> None:
+    source = gold_path.read_text()
+    expected = gold_path.with_suffix(".eval").read_text()
     result = evaluate_source_result(source)
     assert result.pprint(show_spans=True) == expected.rstrip("\n")
