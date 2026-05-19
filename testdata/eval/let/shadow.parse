@@ -1,0 +1,25 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..28]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "x" [4..5]
+            LiteralExpr [8..9]
+              value: 1
+          [1]:
+            IdentifierBinding [14..15]
+              name: "x" [14..15]
+            TransformedExpr [18..23]
+              operand: IdentifierExpr [18..19]
+                name: "x" [18..19]
+              transform: BinOpTransform
+                op: Add [20..21]
+                operand: LiteralExpr [22..23]
+                  value: 1
+        expression: IdentifierExpr [27..28]
+          name: "x" [27..28]

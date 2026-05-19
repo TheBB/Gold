@@ -1,0 +1,46 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..54]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "a" [4..5]
+            ListExpr [8..23]
+              elements:
+                ListSingleton [9..10]
+                  expr: LiteralExpr [9..10]
+                    value: 1
+                ListSingleton [12..13]
+                  expr: LiteralExpr [12..13]
+                    value: 2
+                ListSingleton [15..16]
+                  expr: LiteralExpr [15..16]
+                    value: 3
+                ListSingleton [18..19]
+                  expr: LiteralExpr [18..19]
+                    value: 4
+                ListSingleton [21..22]
+                  expr: LiteralExpr [21..22]
+                    value: 5
+        expression: ListExpr [27..54]
+          elements:
+            ListLoop [28..53]
+              binding: IdentifierBinding [32..33]
+                name: "x" [32..33]
+              iterable: IdentifierExpr [37..38]
+                name: "a" [37..38]
+              element: ListCond [40..53]
+                condition: TransformedExpr [45..50]
+                  operand: IdentifierExpr [45..46]
+                    name: "x" [45..46]
+                  transform: BinOpTransform
+                    op: Less [47..48]
+                    operand: LiteralExpr [49..50]
+                      value: 3
+                element: ListSingleton [52..53]
+                  expr: IdentifierExpr [52..53]
+                    name: "x" [52..53]

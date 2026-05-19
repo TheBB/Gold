@@ -1,0 +1,8 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..2]
+        elements: []

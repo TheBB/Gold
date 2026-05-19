@@ -1,0 +1,13 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..17]
+        operand: LiteralExpr [0..7]
+          value: "hello"
+        transform: BinOpTransform
+          op: Contains [8..11]
+          operand: LiteralExpr [12..17]
+            value: "ell"

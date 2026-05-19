@@ -1,0 +1,13 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..22]
+        elements:
+          MapSingleton [1..21]
+            key: LiteralExpr [1..18]
+              value: "ident-with-hyphen"
+            value: LiteralExpr [20..21]
+              value: 1

@@ -1,7 +1,3 @@
 EvalResult
-  ok: false
-  error:
-    Error
-      reason: "expected ')' or ','"
-      locations:
-        [22..22] Parse
+  ok: true
+  value: 15

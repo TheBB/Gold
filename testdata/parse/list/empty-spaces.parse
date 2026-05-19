@@ -1,0 +1,8 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: ListExpr [0..5]
+        elements: []

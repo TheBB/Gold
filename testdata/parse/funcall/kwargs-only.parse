@@ -1,0 +1,19 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..16]
+        operand: IdentifierExpr [0..4]
+          name: "func" [0..4]
+        transform: FunCallTransform
+          args: [4..16]
+            ArgKeyword [5..9]
+              key: "a" [5..6]
+              expr: LiteralExpr [8..9]
+                value: 2
+            ArgKeyword [11..15]
+              key: "b" [11..12]
+              expr: LiteralExpr [14..15]
+                value: 3

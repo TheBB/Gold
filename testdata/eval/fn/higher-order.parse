@@ -1,0 +1,69 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..86]
+        bindings:
+          [0]:
+            IdentifierBinding [4..10]
+              name: "double" [4..10]
+            FunctionExpr [13..25]
+              positional: ListBinding [16..19]
+                elements:
+                  ListBindingSingleton [17..18]
+                    binding: IdentifierBinding [17..18]
+                      name: "x" [17..18]
+                    default: null
+              keywords: null
+              expression: TransformedExpr [20..25]
+                operand: IdentifierExpr [20..21]
+                  name: "x" [20..21]
+                transform: BinOpTransform
+                  op: Add [22..23]
+                  operand: IdentifierExpr [24..25]
+                    name: "x" [24..25]
+          [1]:
+            IdentifierBinding [30..40]
+              name: "applytwice" [30..40]
+            FunctionExpr [43..59]
+              positional: ListBinding [46..51]
+                elements:
+                  ListBindingSingleton [47..48]
+                    binding: IdentifierBinding [47..48]
+                      name: "f" [47..48]
+                    default: null
+                  ListBindingSingleton [49..50]
+                    binding: IdentifierBinding [49..50]
+                      name: "x" [49..50]
+                    default: null
+              keywords: null
+              expression: TransformedExpr [52..59]
+                operand: IdentifierExpr [52..53]
+                  name: "f" [52..53]
+                transform: FunCallTransform
+                  args: [53..59]
+                    ArgSingleton [54..58]
+                      expr: TransformedExpr [54..58]
+                        operand: IdentifierExpr [54..55]
+                          name: "f" [54..55]
+                        transform: FunCallTransform
+                          args: [55..58]
+                            ArgSingleton [56..57]
+                              expr: IdentifierExpr [56..57]
+                                name: "x" [56..57]
+        expression: TransformedExpr [63..86]
+          operand: IdentifierExpr [63..73]
+            name: "applytwice" [63..73]
+          transform: FunCallTransform
+            args: [73..86]
+              ArgSingleton [74..80]
+                expr: IdentifierExpr [74..80]
+                  name: "double" [74..80]
+              ArgSingleton [82..85]
+                expr: ListExpr [82..85]
+                  elements:
+                    ListSingleton [83..84]
+                      expr: LiteralExpr [83..84]
+                        value: 1

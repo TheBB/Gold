@@ -16,6 +16,7 @@ from .error import (
 )
 from .span import Position, Tagged, tag
 
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -195,13 +196,15 @@ class Lexer:
         return c is not None and f(c)
 
     def _skip(self, offset: int, delta_line: int) -> Lexer:
+        byte_offset = len(self.code[:offset].encode())
         return Lexer(
             code=self.code[offset:],
-            position=self.position.adjust(offset, delta_line),
+            position=self.position.adjust(byte_offset, delta_line),
         )
 
     def _skip_tag(self, offset: int, delta_line: int, kind: TokenType) -> LexResult:
-        span = self.position.with_length(offset)
+        byte_offset = len(self.code[:offset].encode())
+        span = self.position.with_length(byte_offset)
         return self._skip(offset, delta_line), tag(Token(kind, self.code[:offset]), span)
 
     def _traverse(self, pattern: re.Pattern[str], kind: TokenType) -> LexResult:
@@ -383,8 +386,9 @@ class Lexer:
             end = nl if nl >= 0 else len(self.code) - 1  # matches Rust: uses orig self.code len
             cur = skipped._skip(end + 1, 1)
 
+        char_count = len(orig.code) - len(cur.code)
         span = cur.position - orig.position
-        return cur, tag(Token(TokenType.MultiString, orig.code[: span.length]), span)
+        return cur, tag(Token(TokenType.MultiString, orig.code[:char_count]), span)
 
     def _tokenize_fmtspec(self) -> LexResult:
         c = self._peek()

@@ -1,0 +1,21 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..16]
+        bindings:
+          [0]:
+            MapPatternBinding [4..7]
+              binding: MapBinding [4..7]
+                elements:
+                  MapBindingSingleton [5..6]
+                    key: "a" [5..6]
+                    binding: IdentifierBinding [5..6]
+                      name: "a" [5..6]
+                    default: null
+            IdentifierExpr [10..11]
+              name: "x" [10..11]
+        expression: IdentifierExpr [15..16]
+          name: "a" [15..16]

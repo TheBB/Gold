@@ -1,0 +1,23 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..17]
+        operand: MapExpr [0..12]
+          elements:
+            MapSingleton [1..5]
+              key: LiteralExpr [1..2]
+                value: "a"
+              value: LiteralExpr [4..5]
+                value: 1
+            MapSingleton [7..11]
+              key: LiteralExpr [7..8]
+                value: "b"
+              value: LiteralExpr [10..11]
+                value: 2
+        transform: BinOpTransform
+          op: Index [12..17]
+          operand: LiteralExpr [13..16]
+            value: "a"

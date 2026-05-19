@@ -1,0 +1,11 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..9]
+        operand: LiteralExpr [4..9]
+          value: false
+        transform: UnOpTransform
+          op: LogicalNegate [0..3]

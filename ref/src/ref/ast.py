@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
     from .evaluation import Namespace
     from .span import Tagged

@@ -1,0 +1,16 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: StringExpr [0..29]
+        elements:
+          StringRaw
+            value: "simsalabim "
+          StringInterpolate
+            expr: LiteralExpr [14..15]
+              value: 0
+            fmt: null
+          StringRaw
+            value: " abracadabra"

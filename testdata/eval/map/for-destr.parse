@@ -1,0 +1,45 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..42]
+        elements:
+          MapLoop [1..41]
+            binding: ListPatternBinding [5..10]
+              binding: ListBinding [5..10]
+                elements:
+                  ListBindingSingleton [6..7]
+                    binding: IdentifierBinding [6..7]
+                      name: "x" [6..7]
+                    default: null
+                  ListBindingSingleton [8..9]
+                    binding: IdentifierBinding [8..9]
+                      name: "y" [8..9]
+                    default: null
+            iterable: ListExpr [14..34]
+              elements:
+                ListSingleton [15..23]
+                  expr: ListExpr [15..23]
+                    elements:
+                      ListSingleton [16..19]
+                        expr: LiteralExpr [16..19]
+                          value: "a"
+                      ListSingleton [21..22]
+                        expr: LiteralExpr [21..22]
+                          value: 1
+                ListSingleton [25..33]
+                  expr: ListExpr [25..33]
+                    elements:
+                      ListSingleton [26..29]
+                        expr: LiteralExpr [26..29]
+                          value: "b"
+                      ListSingleton [31..32]
+                        expr: LiteralExpr [31..32]
+                          value: 2
+            element: MapSingleton [36..41]
+              key: IdentifierExpr [37..38]
+                name: "x" [37..38]
+              value: IdentifierExpr [40..41]
+                name: "y" [40..41]

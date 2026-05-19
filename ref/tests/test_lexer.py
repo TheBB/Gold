@@ -6,6 +6,7 @@ from ref.error import Error
 from ref.lexer import Lexer, Token, TokenType
 from ref.span import Span, Tagged, tag
 
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 

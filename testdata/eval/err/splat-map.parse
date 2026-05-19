@@ -1,0 +1,11 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..7]
+        elements:
+          MapSplat [1..6]
+            expr: ListExpr [4..6]
+              elements: []

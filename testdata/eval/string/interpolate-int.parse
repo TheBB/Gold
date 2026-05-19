@@ -1,0 +1,12 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: StringExpr [0..7]
+        elements:
+          StringInterpolate
+            expr: LiteralExpr [3..5]
+              value: 42
+            fmt: null

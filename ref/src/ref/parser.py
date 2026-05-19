@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -76,6 +77,7 @@ from .error import (
 )
 from .lexer import Lexer, MissingToken, Token, TokenType
 from .span import Paren, Span, Tagged, tag
+
 
 KEYWORDS: frozenset[str] = frozenset(
     [

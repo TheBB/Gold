@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
     from ref.error import Error
 
@@ -53,6 +54,7 @@ from ref.ast import (
 )
 from ref.parser import parse
 from ref.span import Span, Tagged, tag
+
 
 # ── Span helpers ──────────────────────────────────────────────────────────────
 

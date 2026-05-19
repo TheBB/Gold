@@ -1,0 +1,17 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..20]
+        operand: IdentifierExpr [0..10]
+          name: "startswith" [0..10]
+        transform: FunCallTransform
+          args: [10..20]
+            ArgSingleton [11..14]
+              expr: LiteralExpr [11..14]
+                value: "a"
+            ArgSingleton [16..19]
+              expr: LiteralExpr [16..19]
+                value: "a"

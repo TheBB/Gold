@@ -1,0 +1,39 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..67]
+        elements:
+          MapSingleton [2..7]
+            key: LiteralExpr [2..3]
+              value: "a"
+            value: LiteralExpr [6..7]
+              value: 1
+          MapSplat [10..15]
+            expr: IdentifierExpr [14..15]
+              name: "x" [14..15]
+          MapCond [18..32]
+            condition: IdentifierExpr [23..24]
+              name: "x" [23..24]
+            element: MapSingleton [27..32]
+              key: LiteralExpr [27..28]
+                value: "b"
+              value: IdentifierExpr [31..32]
+                name: "y" [31..32]
+          MapLoop [35..53]
+            binding: IdentifierBinding [39..40]
+              name: "x" [39..40]
+            iterable: IdentifierExpr [44..45]
+              name: "y" [44..45]
+            element: MapSingleton [48..53]
+              key: LiteralExpr [48..49]
+                value: "c"
+              value: IdentifierExpr [52..53]
+                name: "z" [52..53]
+          MapSingleton [56..63]
+            key: IdentifierExpr [58..59]
+              name: "f" [58..59]
+            value: LiteralExpr [62..63]
+              value: 2

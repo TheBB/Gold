@@ -1,0 +1,18 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..63]
+        operand: TransformedExpr [0..41]
+          operand: LiteralExpr [0..19]
+            value: 9223372036854775800
+          transform: BinOpTransform
+            op: Add [20..21]
+            operand: LiteralExpr [22..41]
+              value: 9223372036854775800
+        transform: BinOpTransform
+          op: Subtract [42..43]
+          operand: LiteralExpr [44..63]
+            value: 9223372036854775800

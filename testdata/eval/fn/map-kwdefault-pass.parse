@@ -1,0 +1,33 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..31]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "a" [4..5]
+            FunctionExpr [8..20]
+              positional: ListBinding [11..12]
+                elements: []
+              keywords: MapBinding [11..18]
+                elements:
+                  MapBindingSingleton [12..17]
+                    key: "k" [12..13]
+                    binding: IdentifierBinding [12..13]
+                      name: "k" [12..13]
+                    default: LiteralExpr [16..17]
+                      value: 1
+              expression: IdentifierExpr [19..20]
+                name: "k" [19..20]
+        expression: TransformedExpr [24..31]
+          operand: IdentifierExpr [24..25]
+            name: "a" [24..25]
+          transform: FunCallTransform
+            args: [25..31]
+              ArgKeyword [26..30]
+                key: "k" [26..27]
+                expr: LiteralExpr [29..30]
+                  value: 2

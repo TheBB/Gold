@@ -1,0 +1,11 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..4]
+        operand: ListExpr [0..2]
+          elements: []
+        transform: FunCallTransform
+          args: [] [2..4]

@@ -1,0 +1,18 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..20]
+        elements:
+          MapLoop [1..19]
+            binding: IdentifierBinding [5..6]
+              name: "x" [5..6]
+            iterable: LiteralExpr [10..13]
+              value: 2.2
+            element: MapSingleton [15..19]
+              key: LiteralExpr [15..16]
+                value: "a"
+              value: IdentifierExpr [18..19]
+                name: "x" [18..19]

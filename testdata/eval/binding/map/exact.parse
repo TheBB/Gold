@@ -1,0 +1,41 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..34]
+        bindings:
+          [0]:
+            MapPatternBinding [4..10]
+              binding: MapBinding [4..10]
+                elements:
+                  MapBindingSingleton [5..6]
+                    key: "a" [5..6]
+                    binding: IdentifierBinding [5..6]
+                      name: "a" [5..6]
+                    default: null
+                  MapBindingSingleton [8..9]
+                    key: "b" [8..9]
+                    binding: IdentifierBinding [8..9]
+                      name: "b" [8..9]
+                    default: null
+            MapExpr [13..25]
+              elements:
+                MapSingleton [14..18]
+                  key: LiteralExpr [14..15]
+                    value: "a"
+                  value: LiteralExpr [17..18]
+                    value: 1
+                MapSingleton [20..24]
+                  key: LiteralExpr [20..21]
+                    value: "b"
+                  value: LiteralExpr [23..24]
+                    value: 2
+        expression: TransformedExpr [29..34]
+          operand: IdentifierExpr [29..30]
+            name: "a" [29..30]
+          transform: BinOpTransform
+            op: Add [31..32]
+            operand: IdentifierExpr [33..34]
+              name: "b" [33..34]

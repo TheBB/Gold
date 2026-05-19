@@ -1,0 +1,13 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: BranchExpr [0..18]
+        condition: LiteralExpr [3..4]
+          value: 0
+        true_branch: LiteralExpr [10..11]
+          value: 1
+        false_branch: LiteralExpr [17..18]
+          value: 2

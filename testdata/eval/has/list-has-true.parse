@@ -1,0 +1,16 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..9]
+        operand: ListExpr [0..3]
+          elements:
+            ListSingleton [1..2]
+              expr: LiteralExpr [1..2]
+                value: 1
+        transform: BinOpTransform
+          op: Contains [4..7]
+          operand: LiteralExpr [8..9]
+            value: 1

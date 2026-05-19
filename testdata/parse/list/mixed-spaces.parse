@@ -1,0 +1,28 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: ListExpr [0..45]
+        elements:
+          ListSingleton [2..3]
+            expr: LiteralExpr [2..3]
+              value: 1
+          ListSplat [6..11]
+            expr: IdentifierExpr [10..11]
+              name: "x" [10..11]
+          ListCond [14..24]
+            condition: IdentifierExpr [19..20]
+              name: "x" [19..20]
+            element: ListSingleton [23..24]
+              expr: IdentifierExpr [23..24]
+                name: "y" [23..24]
+          ListLoop [27..41]
+            binding: IdentifierBinding [31..32]
+              name: "x" [31..32]
+            iterable: IdentifierExpr [36..37]
+              name: "y" [36..37]
+            element: ListSingleton [40..41]
+              expr: IdentifierExpr [40..41]
+                name: "z" [40..41]

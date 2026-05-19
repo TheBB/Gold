@@ -92,6 +92,7 @@ from .error import (  # noqa: TC001
 )
 from .span import Tagged  # noqa: TC001
 
+
 # ── Truthiness ────────────────────────────────────────────────────────────────
 
 

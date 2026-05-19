@@ -42,7 +42,7 @@ class _PP:
     def _strval(self, s: str) -> str:
         if self._max_str_len is not None and len(s) > self._max_str_len:
             return json.dumps(s[: self._max_str_len]) + "..."
-        return json.dumps(s)
+        return json.dumps(s, ensure_ascii=False)
 
     def _fmt(self, value: Any) -> str:
         """Format a scalar value (no span)."""

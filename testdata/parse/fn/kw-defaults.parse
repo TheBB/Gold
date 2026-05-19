@@ -1,0 +1,30 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: FunctionExpr [0..19]
+        positional: ListBinding [3..4]
+          elements: []
+        keywords: MapBinding [3..13]
+          elements:
+            MapBindingSingleton [4..7]
+              key: "x" [4..5]
+              binding: IdentifierBinding [4..5]
+                name: "x" [4..5]
+              default: LiteralExpr [6..7]
+                value: 1
+            MapBindingSingleton [9..12]
+              key: "y" [9..10]
+              binding: IdentifierBinding [9..10]
+                name: "y" [9..10]
+              default: LiteralExpr [11..12]
+                value: 2
+        expression: TransformedExpr [14..19]
+          operand: IdentifierExpr [14..15]
+            name: "x" [14..15]
+          transform: BinOpTransform
+            op: Add [16..17]
+            operand: IdentifierExpr [18..19]
+              name: "y" [18..19]

@@ -1,0 +1,1 @@
+let k = "hello" in {$k: 1}

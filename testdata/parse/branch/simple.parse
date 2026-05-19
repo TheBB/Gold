@@ -1,0 +1,13 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: BranchExpr [0..18]
+        condition: IdentifierExpr [3..4]
+          name: "a" [3..4]
+        true_branch: IdentifierExpr [10..11]
+          name: "b" [10..11]
+        false_branch: IdentifierExpr [17..18]
+          name: "c" [17..18]

@@ -25,7 +25,6 @@ ref = "ref:main"
 requires = ["uv_build>=0.9.21,<0.10.0"]
 build-backend = "uv_build"
 
-
 [tool.ruff]
 line-length = 110
 include = ["src/**/*.py", "tests/**/*.py", "stubs/**/*.pyi"]
@@ -55,7 +54,11 @@ ignore = [
     "TD003",    # Issue links for each todo comment
 ]
 
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+
 [tool.pyrefly]
 # pyrefly reads requires-python for the target version and auto-discovers
 # sources from the package layout; add search_path if you need local stubs:
 # search_path = ["stubs"]
+search_path = ["."]

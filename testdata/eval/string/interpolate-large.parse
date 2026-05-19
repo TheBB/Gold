@@ -1,0 +1,16 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: StringExpr [0..47]
+        elements:
+          StringRaw
+            value: "simsalabim "
+          StringInterpolate
+            expr: LiteralExpr [14..33]
+              value: 9223372036854775807
+            fmt: null
+          StringRaw
+            value: " abracadabra"
