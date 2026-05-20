@@ -1,0 +1,17 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected 'then'"
+      locations:
+        [7..7] Parse
+  tree:
+    File
+      statements: []
+      expression: BranchExpr [0..16]
+        condition: LiteralExpr [3..7]
+          value: true
+        true_branch: LiteralExpr [8..9]
+          value: 1
+        false_branch: LiteralExpr [15..16]
+          value: 2

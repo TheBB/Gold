@@ -533,6 +533,100 @@ class Parser:
             return s
         return None
 
+    # ── Separated-list kernel ─────────────────────────────────────────────────
+
+    def _seplist_inner[T](
+        self,
+        try_item: Callable[[], tuple[T, bool] | None],
+        try_sep: Callable[[], Tagged | None],
+        try_close: Callable[[], Tagged | None],
+        err_missing_item: Reason | None,
+        err_missing_sep: Reason,
+        close_tok_type: TokenType | None = None,
+    ) -> tuple[list[T], Tagged | None]:
+        """
+        Parse a comma-separated body without the opening delimiter.
+
+        Returns (items, close_token_or_None).  When close_token is None the
+        terminator was not found; callers must call _expect_tok to report it.
+
+        When err_missing_item is set and close_tok_type is also provided, the
+        error is emitted here and a synthetic MissingToken close is returned, so
+        the caller does NOT need to (and must not) call _expect_tok again.
+
+        try_item returns (item, skip_sep).  skip_sep=True skips the following
+        separator check (used by map multiline entries).
+
+        Recovery: if an item is followed by neither a separator nor the
+        terminator but another item CAN be parsed, err_missing_sep is recorded
+        and parsing continues.  If nothing follows, we break silently and let
+        the caller's _expect_tok produce the single appropriate error.
+        """
+        items: list[T] = []
+        close: Tagged | None = None
+        need_sep = False
+
+        while True:
+            if not need_sep:
+                close = try_close()
+                if close is not None:
+                    break
+                result = try_item()
+                if result is None:
+                    if err_missing_item is not None:
+                        self._error(self._here(), err_missing_item)
+                        close = try_close()
+                        if close is None and close_tok_type is not None:
+                            close = tag(MissingToken(close_tok_type), self._here())
+                    else:
+                        close = try_close()
+                    break
+                item, skip = result
+                items.append(item)
+                need_sep = not skip
+            else:
+                if try_sep() is not None:
+                    need_sep = False
+                    continue
+                close = try_close()
+                if close is not None:
+                    break
+                # No sep and no close — peek for a following item.
+                sep_pos = self._here()
+                saved = self._lexer
+                result = try_item()
+                if result is None:
+                    self._lexer = saved  # restore; break silently
+                    break
+                self._error(sep_pos, err_missing_sep)
+                item, skip = result
+                items.append(item)
+                need_sep = not skip
+
+        return items, close
+
+    def _seplist[T](
+        self,
+        try_open: Callable[[], Tagged | None],
+        try_item: Callable[[], tuple[T, bool] | None],
+        try_sep: Callable[[], Tagged | None],
+        try_close: Callable[[], Tagged | None],
+        err_missing_item: Reason | None,
+        err_missing_sep: Reason,
+        close_tok_type: TokenType | None = None,
+    ) -> tuple[Tagged, list[T], Tagged | None] | None:
+        """
+        Parse a delimited, separated list.  Returns None when the opening
+        delimiter is absent; otherwise (open, items, close_or_None).
+        """
+        open_tok = try_open()
+        if open_tok is None:
+            return None
+        items, close = self._seplist_inner(
+            try_item, try_sep, try_close, err_missing_item, err_missing_sep, close_tok_type
+        )
+        return open_tok, items, close
+
     # ── List ──────────────────────────────────────────────────────────────────
 
     def _parse_list_element(self) -> Paren[ListElement] | None:
@@ -582,24 +676,32 @@ class Parser:
         return Paren.naked(tag(ListSingleton(self._missing_expr()), sp))
 
     def _try_list(self) -> Tagged[ListExpr] | None:
-        open_b = self._try_tok(TokenType.OpenBracket)
-        if open_b is None:
-            return None
-        elements: list[Tagged[ListElement]] = []
-        while True:
-            # Peek for close (handles empty and trailing-comma cases)
-            saved = self._lexer
-            if self._try_tok(TokenType.CloseBracket) is not None:
-                self._lexer = saved  # restore; let the explicit expect below consume it
-                break
+        def try_item() -> tuple[Tagged[ListElement], bool] | None:
             el = self._parse_list_element()
-            if el is None:
-                break
-            elements.append(el.inner())
-            if self._try_tok(TokenType.Comma) is None:
-                break
-        close_b = self._expect_tok(TokenType.CloseBracket)
-        return tag(ListExpr(elements), Span.covering(open_b.span, close_b.span))
+            return None if el is None else (el.inner(), False)
+
+        result = self._seplist(
+            lambda: self._try_tok(TokenType.OpenBracket),
+            try_item,
+            lambda: self._try_tok(TokenType.Comma),
+            lambda: self._try_tok(TokenType.CloseBracket),
+            ReasonSyntax(
+                SyntaxExpectedTwo(SyntaxElementToken(TokenType.CloseBracket), SyntaxElement.ListElement)
+            ),
+            ReasonSyntax(
+                SyntaxExpectedTwo(
+                    SyntaxElementToken(TokenType.Comma),
+                    SyntaxElementToken(TokenType.CloseBracket),
+                )
+            ),
+            close_tok_type=TokenType.CloseBracket,
+        )
+        if result is None:
+            return None
+        open_b, elements, close = result
+        if close is None:
+            close = self._expect_tok(TokenType.CloseBracket)
+        return tag(ListExpr(elements), Span.covering(open_b.span, close.span))
 
     # ── Map ───────────────────────────────────────────────────────────────────
 
@@ -706,26 +808,28 @@ class Parser:
         return tag(MapSingleton(key=dummy_key, value=self._missing_expr()), sp), False
 
     def _try_map(self) -> Tagged[MapExpr] | None:
-        open_b = self._try_tok(TokenType.OpenBrace)
-        if open_b is None:
+        result = self._seplist(
+            lambda: self._try_tok(TokenType.OpenBrace),
+            self._parse_map_element,
+            lambda: self._try_tok(TokenType.Comma),
+            lambda: self._try_tok(TokenType.CloseBrace),
+            ReasonSyntax(
+                SyntaxExpectedTwo(SyntaxElementToken(TokenType.CloseBrace), SyntaxElement.MapElement)
+            ),
+            ReasonSyntax(
+                SyntaxExpectedTwo(
+                    SyntaxElementToken(TokenType.Comma),
+                    SyntaxElementToken(TokenType.CloseBrace),
+                )
+            ),
+            close_tok_type=TokenType.CloseBrace,
+        )
+        if result is None:
             return None
-        elements: list[Tagged[MapElement]] = []
-        while True:
-            saved = self._lexer
-            if self._try_tok(TokenType.CloseBrace) is not None:
-                self._lexer = saved
-                break
-            result = self._parse_map_element()
-            if result is None:
-                break
-            el, skip_sep = result
-            elements.append(el)
-            if skip_sep:
-                continue
-            if self._try_tok(TokenType.Comma) is None:
-                break
-        close_b = self._expect_tok(TokenType.CloseBrace)
-        return tag(MapExpr(elements), Span.covering(open_b.span, close_b.span))
+        open_b, elements, close = result
+        if close is None:
+            close = self._expect_tok(TokenType.CloseBrace)
+        return tag(MapExpr(elements), Span.covering(open_b.span, close.span))
 
     # ── Postfix expressions ───────────────────────────────────────────────────
 
@@ -766,6 +870,16 @@ class Parser:
                 name = self._try_identifier()
                 if name is None:
                     self._error(self._here(), ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Identifier)))
+                    missing = self._missing_expr()
+                    pexpr = Paren.naked(
+                        tag(
+                            TransformedExpr(
+                                operand=pexpr.inner(),
+                                transform=BinOpTransform(op=tag(EagerOp.Index, dot.span), operand=missing),
+                            ),
+                            Span.covering(pexpr.outer(), missing.span),
+                        )
+                    )
                     break
                 key_expr: Tagged[LiteralExpr] = name.map(LiteralExpr)
                 span = Span.covering(pexpr.outer(), name.span)
@@ -800,8 +914,9 @@ class Parser:
 
             # (args...)
             if (open_p := self._try_tok(TokenType.OpenParen)) is not None:
-                args = self._parse_arg_list()
-                close_p = self._expect_tok(TokenType.CloseParen)
+                args, close_p = self._parse_arg_list()
+                if close_p is None:
+                    close_p = self._expect_tok(TokenType.CloseParen)
                 call_span = Span.covering(open_p.span, close_p.span)
                 pexpr = Paren.naked(
                     tag(
@@ -817,33 +932,27 @@ class Parser:
             break
         return pexpr
 
-    def _parse_arg_list(self) -> list[Tagged[ArgElement]]:
-        args: list[Tagged[ArgElement]] = []
-        while True:
-            saved = self._lexer
-            if self._try_tok(TokenType.CloseParen) is not None:
-                self._lexer = saved
-                break
+    def _parse_arg_list(self) -> tuple[list[Tagged[ArgElement]], Tagged | None]:
+        def try_item() -> tuple[Tagged[ArgElement], bool] | None:
             arg = self._parse_function_arg()
-            if arg is None:
-                break
-            args.append(arg)
-            if self._try_tok(TokenType.Comma) is None:
-                saved2 = self._lexer
-                if self._try_tok(TokenType.CloseParen) is None:
-                    self._error(
-                        self._here(),
-                        ReasonSyntax(
-                            SyntaxExpectedTwo(
-                                SyntaxElementToken(TokenType.CloseParen),
-                                SyntaxElementToken(TokenType.Comma),
-                            )
-                        ),
-                    )
-                else:
-                    self._lexer = saved2
-                break
-        return args
+            return None if arg is None else (arg, False)
+
+        items, close = self._seplist_inner(
+            try_item,
+            lambda: self._try_tok(TokenType.Comma),
+            lambda: self._try_tok(TokenType.CloseParen),
+            ReasonSyntax(
+                SyntaxExpectedTwo(SyntaxElementToken(TokenType.CloseParen), SyntaxElement.ArgElement)
+            ),
+            ReasonSyntax(
+                SyntaxExpectedTwo(
+                    SyntaxElementToken(TokenType.Comma),
+                    SyntaxElementToken(TokenType.CloseParen),
+                )
+            ),
+            close_tok_type=TokenType.CloseParen,
+        )
+        return items, close
 
     def _parse_function_arg(self) -> Tagged[ArgElement] | None:
         # Splat
@@ -1065,45 +1174,26 @@ class Parser:
         Returns ``(list_binding, close_token_or_None)``.  When ``close_token``
         is not None the terminator has already been consumed.
         """
-        elements: list[Tagged[ListBindingElement]] = []
         inner_start = self._here()
-        close: Tagged | None = None
 
-        while True:
-            # Try close first (empty list / trailing comma)
-            close = try_close()
-            if close is not None:
-                break  # terminator consumed; stop
-
+        def try_item() -> tuple[Tagged[ListBindingElement], bool] | None:
             el = self._try_list_binding_element()
-            if el is None:
-                self._error(
-                    self._here(),
-                    ReasonSyntax(
-                        SyntaxExpectedTwo(SyntaxElement.PosParam, SyntaxElementToken(TokenType.CloseParen))
-                    ),
+            return None if el is None else (el, False)
+
+        elements, close = self._seplist_inner(
+            try_item,
+            lambda: self._try_tok(TokenType.Comma),
+            try_close,
+            ReasonSyntax(SyntaxExpectedTwo(SyntaxElement.PosParam, SyntaxElementToken(TokenType.CloseParen))),
+            ReasonSyntax(
+                SyntaxExpectedTwo(
+                    SyntaxElementToken(TokenType.Comma), SyntaxElementToken(TokenType.CloseParen)
                 )
-                close = try_close()
-                break
-            elements.append(el)
-
-            if self._try_tok(TokenType.Comma) is None:
-                close = try_close()
-                if close is None:
-                    self._error(
-                        self._here(),
-                        ReasonSyntax(
-                            SyntaxExpectedTwo(
-                                SyntaxElementToken(TokenType.Comma), SyntaxElementToken(TokenType.CloseParen)
-                            )
-                        ),
-                    )
-                break
-
+            ),
+        )
         end_sp = close.span if close is not None else self._here()
         actual_start = start_span if start_span is not None else inner_start
-        span = Span.covering(actual_start, end_sp)
-        return tag(ListBinding(elements), span), close
+        return tag(ListBinding(elements), Span.covering(actual_start, end_sp)), close
 
     def _parse_map_binding_terminated(
         self,
@@ -1111,46 +1201,28 @@ class Parser:
         start_span: Span | None = None,
     ) -> tuple[Tagged[MapBinding], Tagged | None]:
         """Same pattern for map bindings."""
-        elements: list[Tagged[MapBindingElement]] = []
         inner_start = self._here()
-        close: Tagged | None = None
 
-        while True:
-            close = try_close()
-            if close is not None:
-                break
-
+        def try_item() -> tuple[Tagged[MapBindingElement], bool] | None:
             el = self._try_map_binding_element()
-            if el is None:
-                self._error(
-                    self._here(),
-                    ReasonSyntax(
-                        SyntaxExpectedTwo(
-                            SyntaxElement.KeywordParam, SyntaxElementToken(TokenType.CloseParen)
-                        )
-                    ),
+            return None if el is None else (el, False)
+
+        elements, close = self._seplist_inner(
+            try_item,
+            lambda: self._try_tok(TokenType.Comma),
+            try_close,
+            ReasonSyntax(
+                SyntaxExpectedTwo(SyntaxElement.KeywordParam, SyntaxElementToken(TokenType.CloseParen))
+            ),
+            ReasonSyntax(
+                SyntaxExpectedTwo(
+                    SyntaxElementToken(TokenType.Comma), SyntaxElementToken(TokenType.CloseParen)
                 )
-                close = try_close()
-                break
-            elements.append(el)
-
-            if self._try_tok(TokenType.Comma) is None:
-                close = try_close()
-                if close is None:
-                    self._error(
-                        self._here(),
-                        ReasonSyntax(
-                            SyntaxExpectedTwo(
-                                SyntaxElementToken(TokenType.Comma), SyntaxElementToken(TokenType.CloseParen)
-                            )
-                        ),
-                    )
-                break
-
+            ),
+        )
         end_sp = close.span if close is not None else self._here()
         actual_start = start_span if start_span is not None else inner_start
-        span = Span.covering(actual_start, end_sp)
-        return tag(MapBinding(elements), span), close
+        return tag(MapBinding(elements), Span.covering(actual_start, end_sp)), close
 
     # ── Function syntax variants ───────────────────────────────────────────────
 
@@ -1167,16 +1239,17 @@ class Parser:
                 start_span=open_p.span,
             )
             kw: Tagged[MapBinding] | None = None
+            missing_close = False
             if term is not None and term.contents.text == ";":
                 kw, close_p = self._parse_map_binding_terminated(
                     lambda: self._try_tok(TokenType.CloseParen),
                     start_span=term.span,
                 )
                 if close_p is None:
-                    self._expect_tok(TokenType.CloseParen)
+                    missing_close = isinstance(self._expect_tok(TokenType.CloseParen).contents, MissingToken)
             elif term is None:
-                self._expect_tok(TokenType.CloseParen)
-            body = self._require_expr()
+                missing_close = isinstance(self._expect_tok(TokenType.CloseParen).contents, MissingToken)
+            body = Paren.naked(self._missing_expr()) if missing_close else self._require_expr()
             return Paren.naked(
                 tag(
                     FunctionExpr(positional=pos, keywords=kw, expression=body.inner()),
@@ -1190,9 +1263,10 @@ class Parser:
                 lambda: self._try_tok(TokenType.CloseBrace),
                 start_span=open_b.span,
             )
+            missing_close = False
             if close_b is None:
-                self._expect_tok(TokenType.CloseBrace)
-            body = self._require_expr()
+                missing_close = isinstance(self._expect_tok(TokenType.CloseBrace).contents, MissingToken)
+            body = Paren.naked(self._missing_expr()) if missing_close else self._require_expr()
             empty_pos = tag(ListBinding([]), open_b.span)
             return Paren.naked(
                 tag(
@@ -1229,9 +1303,10 @@ class Parser:
             lambda: self._try_tok(TokenType.CloseBracePipe),
             start_span=open_bp.span,
         )
+        missing_close = False
         if close_bp is None:
-            self._expect_tok(TokenType.CloseBracePipe)
-        body = self._require_expr()
+            missing_close = isinstance(self._expect_tok(TokenType.CloseBracePipe).contents, MissingToken)
+        body = Paren.naked(self._missing_expr()) if missing_close else self._require_expr()
         empty_pos = tag(ListBinding([]), open_bp.span.with_length(1))
         return Paren.naked(
             tag(
@@ -1250,16 +1325,17 @@ class Parser:
             start_span=open_pipe.span,
         )
         kw: Tagged[MapBinding] | None = None
+        missing_close = False
         if term is not None and term.contents.text == ";":
             kw, close_pipe = self._parse_map_binding_terminated(
                 lambda: self._try_tok(TokenType.Pipe),
                 start_span=term.span,
             )
             if close_pipe is None:
-                self._expect_tok(TokenType.Pipe)
+                missing_close = isinstance(self._expect_tok(TokenType.Pipe).contents, MissingToken)
         elif term is None:
-            self._expect_tok(TokenType.Pipe)
-        body = self._require_expr()
+            missing_close = isinstance(self._expect_tok(TokenType.Pipe).contents, MissingToken)
+        body = Paren.naked(self._missing_expr()) if missing_close else self._require_expr()
         return Paren.naked(
             tag(
                 FunctionExpr(positional=pos, keywords=kw, expression=body.inner()),
@@ -1392,11 +1468,7 @@ class Parser:
 
         pexpr = self._try_expr()
         if pexpr is None:
-            if not statements and self._at_eof():
-                return None
             self._error(self._here(), ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Expression)))
-            if not statements:
-                return None
             return File(statements=statements, expression=self._missing_expr())
 
         return File(statements=statements, expression=pexpr.inner())

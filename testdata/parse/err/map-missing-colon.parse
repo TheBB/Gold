@@ -1,0 +1,17 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected ':'"
+      locations:
+        [2..2] Parse
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..5]
+        elements:
+          MapSingleton [1..4]
+            key: LiteralExpr [1..2]
+              value: "x"
+            value: LiteralExpr [3..4]
+              value: 1

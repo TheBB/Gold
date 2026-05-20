@@ -1,0 +1,21 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected expression"
+      locations:
+        [19..19] Parse
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..20]
+        elements:
+          MapLoop [1..19]
+            binding: IdentifierBinding [5..6]
+              name: "x" [5..6]
+            iterable: IdentifierExpr [10..15]
+              name: "items" [10..15]
+            element: MapSingleton [17..19]
+              key: LiteralExpr [17..18]
+                value: "y"
+              value: MissingExpr [19..19]

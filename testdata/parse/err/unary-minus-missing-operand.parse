@@ -1,0 +1,14 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected operand"
+      locations:
+        [1..1] Parse
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..1]
+        operand: MissingExpr [1..1]
+        transform: UnOpTransform
+          op: ArithmeticalNegate [0..1]

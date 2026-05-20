@@ -1,0 +1,15 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected expression"
+      locations:
+        [17..17] Parse
+  tree:
+    File
+      statements:
+        ImportStatement
+          path: "foo" [7..12]
+          binding: IdentifierBinding [16..17]
+            name: "x" [16..17]
+      expression: MissingExpr [17..17]

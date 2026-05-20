@@ -1,0 +1,15 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected '(' or '{'"
+      locations:
+        [2..2] Parse
+  tree:
+    File
+      statements: []
+      expression: FunctionExpr [0..2]
+        positional: ListBinding [0..2]
+          elements: []
+        keywords: null
+        expression: MissingExpr [2..2]

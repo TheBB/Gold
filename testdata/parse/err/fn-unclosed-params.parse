@@ -1,0 +1,23 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected ')'"
+      locations:
+        [8..8] Parse
+  tree:
+    File
+      statements: []
+      expression: FunctionExpr [0..8]
+        positional: ListBinding [3..8]
+          elements:
+            ListBindingSingleton [4..5]
+              binding: IdentifierBinding [4..5]
+                name: "x" [4..5]
+              default: null
+            ListBindingSingleton [7..8]
+              binding: IdentifierBinding [7..8]
+                name: "y" [7..8]
+              default: null
+        keywords: null
+        expression: MissingExpr [8..8]

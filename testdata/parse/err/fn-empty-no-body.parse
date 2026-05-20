@@ -1,0 +1,15 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected expression"
+      locations:
+        [5..5] Parse
+  tree:
+    File
+      statements: []
+      expression: FunctionExpr [0..5]
+        positional: ListBinding [3..5]
+          elements: []
+        keywords: null
+        expression: MissingExpr [5..5]

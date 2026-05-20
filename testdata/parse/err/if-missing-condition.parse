@@ -1,0 +1,16 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected expression"
+      locations:
+        [2..2] Parse
+  tree:
+    File
+      statements: []
+      expression: BranchExpr [0..16]
+        condition: MissingExpr [2..2]
+        true_branch: LiteralExpr [8..9]
+          value: 1
+        false_branch: LiteralExpr [15..16]
+          value: 2

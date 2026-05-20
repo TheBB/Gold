@@ -1,0 +1,16 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected operand"
+      locations:
+        [5..5] Parse
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..5]
+        operand: IdentifierExpr [0..1]
+          name: "x" [0..1]
+        transform: BinOpTransform
+          op: Contains [2..5]
+          operand: MissingExpr [5..5]

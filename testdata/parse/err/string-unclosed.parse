@@ -1,0 +1,12 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected '\"'"
+      locations:
+        [6..6] Parse
+  tree:
+    File
+      statements: []
+      expression: LiteralExpr [0..6]
+        value: "hello"

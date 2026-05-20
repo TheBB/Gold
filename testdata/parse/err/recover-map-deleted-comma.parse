@@ -1,0 +1,27 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected ',' or '}'"
+      locations:
+        [5..5] Parse
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..17]
+        elements:
+          MapSingleton [1..5]
+            key: LiteralExpr [1..2]
+              value: "a"
+            value: LiteralExpr [4..5]
+              value: 1
+          MapSingleton [6..10]
+            key: LiteralExpr [6..7]
+              value: "b"
+            value: LiteralExpr [9..10]
+              value: 2
+          MapSingleton [12..16]
+            key: LiteralExpr [12..13]
+              value: "c"
+            value: LiteralExpr [15..16]
+              value: 3

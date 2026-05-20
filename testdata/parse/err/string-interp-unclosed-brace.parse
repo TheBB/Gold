@@ -1,0 +1,21 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected '}'"
+      locations:
+        [8..8] Parse
+  tree:
+    File
+      statements: []
+      expression: StringExpr [0..9]
+        elements:
+          StringInterpolate
+            expr: TransformedExpr [3..8]
+              operand: LiteralExpr [3..4]
+                value: 1
+              transform: BinOpTransform
+                op: Add [5..6]
+                operand: LiteralExpr [7..8]
+                  value: 2
+            fmt: null

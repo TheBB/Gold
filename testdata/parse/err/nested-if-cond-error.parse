@@ -1,0 +1,21 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected operand"
+      locations:
+        [6..6] Parse
+  tree:
+    File
+      statements: []
+      expression: BranchExpr [0..20]
+        condition: TransformedExpr [3..6]
+          operand: IdentifierExpr [3..4]
+            name: "x" [3..4]
+          transform: BinOpTransform
+            op: Add [5..6]
+            operand: MissingExpr [6..6]
+        true_branch: IdentifierExpr [12..13]
+          name: "y" [12..13]
+        false_branch: IdentifierExpr [19..20]
+          name: "z" [19..20]

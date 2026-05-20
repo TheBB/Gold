@@ -1,0 +1,26 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected operand"
+      locations:
+        [7..7] Parse
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..14]
+        elements:
+          MapSingleton [1..7]
+            key: LiteralExpr [1..2]
+              value: "x"
+            value: TransformedExpr [4..7]
+              operand: LiteralExpr [4..5]
+                value: 1
+              transform: BinOpTransform
+                op: Add [6..7]
+                operand: MissingExpr [7..7]
+          MapSingleton [9..13]
+            key: LiteralExpr [9..10]
+              value: "y"
+            value: LiteralExpr [12..13]
+              value: 2

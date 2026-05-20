@@ -1,0 +1,18 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected ']' or list element"
+      locations:
+        [6..6] Parse
+  tree:
+    File
+      statements: []
+      expression: ListExpr [0..6]
+        elements:
+          ListSingleton [1..2]
+            expr: LiteralExpr [1..2]
+              value: 1
+          ListSingleton [4..5]
+            expr: LiteralExpr [4..5]
+              value: 2

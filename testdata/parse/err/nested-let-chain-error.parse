@@ -1,0 +1,33 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected operand"
+      locations:
+        [11..11] Parse
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..30]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "a" [4..5]
+            TransformedExpr [8..11]
+              operand: LiteralExpr [8..9]
+                value: 1
+              transform: BinOpTransform
+                op: Add [10..11]
+                operand: MissingExpr [11..11]
+          [1]:
+            IdentifierBinding [16..17]
+              name: "b" [16..17]
+            LiteralExpr [20..21]
+              value: 2
+        expression: TransformedExpr [25..30]
+          operand: IdentifierExpr [25..26]
+            name: "a" [25..26]
+          transform: BinOpTransform
+            op: Add [27..28]
+            operand: IdentifierExpr [29..30]
+              name: "b" [29..30]

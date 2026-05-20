@@ -41,7 +41,7 @@ def test_eval(fixture: fixtures.Fixture) -> None:
 
 
 def test_parse_fixture_count() -> None:
-    assert len(list(fixtures.parse_fixtures())) == 96, "unexpected fixture count, did discovery break?"
+    assert len(list(fixtures.parse_fixtures())) == 153, "unexpected fixture count, did discovery break?"
 
 
 @fixtures.parses
