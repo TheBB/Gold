@@ -271,7 +271,7 @@ class Parser:
         return self._require(
             partial(self._try_tok, kind, mode),
             lambda: tag(None, self._here()),
-            lambda: ReasonSyntax(SyntaxExpected(kind)),
+            lambda: SyntaxExpected(kind).reason(),
         )
 
     def _try_keyword(self, kw: str) -> Tagged[str] | None:
@@ -305,7 +305,7 @@ class Parser:
         return self._require(
             partial(self._try_keyword, kw),
             lambda: tag(kw, self._here()),
-            lambda: ReasonSyntax(SyntaxExpected(self._KW_ELEMENTS.get(kw, SyntaxElement.Expression))),
+            lambda: SyntaxExpected(self._KW_ELEMENTS.get(kw, SyntaxElement.Expression)).reason(),
         )
 
     def _try_identifier(self) -> Tagged[str] | None:
@@ -686,7 +686,7 @@ class Parser:
         return self._require(
             self._try_list_element,
             lambda: Paren.naked(tag(ListSingleton(self._missing_expr()), self._here())),
-            lambda: ReasonSyntax(SyntaxExpected(SyntaxElement.ListElement)),
+            lambda: SyntaxExpected(SyntaxElement.ListElement).reason(),
         )
 
     def _try_list(self) -> Tagged[Expr] | None:
@@ -699,8 +699,8 @@ class Parser:
             try_item,
             partial(self._try_tok, TokenType.Comma),
             partial(self._try_tok, TokenType.CloseBracket),
-            ReasonSyntax(SyntaxExpected(TokenType.CloseBracket, SyntaxElement.ListElement)),
-            ReasonSyntax(SyntaxExpected(TokenType.Comma, TokenType.CloseBracket)),
+            SyntaxExpected(TokenType.CloseBracket, SyntaxElement.ListElement).reason(),
+            SyntaxExpected(TokenType.Comma, TokenType.CloseBracket).reason(),
             close_tok_type=TokenType.CloseBracket,
         )
         if result is None:
@@ -753,7 +753,7 @@ class Parser:
         # Dynamic key: $expr
         if (dollar := self._try_tok(TokenType.Dollar, mode="key")) is not None:
             if (expr := self._try_expr()) is None:
-                self._error(self._here(), ReasonSyntax(SyntaxExpected(SyntaxElement.Expression)))
+                self._error(self._here(), SyntaxExpected(SyntaxElement.Expression).reason())
                 return tag(
                     MapSingleton(key=self._missing_expr(), value=self._missing_expr()), dollar.span
                 ), False
@@ -781,7 +781,7 @@ class Parser:
                 value_tagged = tag(LiteralExpr(val_str), ms_tok.span)
             except Error:
                 value_tagged = self._missing_expr()
-                self._error(self._here(), ReasonSyntax(SyntaxExpected(TokenType.MultiString)))
+                self._error(self._here(), SyntaxExpected(TokenType.MultiString).reason())
             span = Span.covering(elem_start, value_tagged.span)
             return tag(MapSingleton(key=key, value=value_tagged), span), True
 
@@ -805,7 +805,7 @@ class Parser:
                 ),
                 False,
             ),
-            lambda: ReasonSyntax(SyntaxExpected(SyntaxElement.MapElement)),
+            lambda: SyntaxExpected(SyntaxElement.MapElement).reason(),
         )
 
     def _try_map(self) -> Tagged[Expr] | None:
@@ -814,8 +814,8 @@ class Parser:
             self._try_map_element,
             partial(self._try_tok, TokenType.Comma),
             partial(self._try_tok, TokenType.CloseBrace),
-            ReasonSyntax(SyntaxExpected(TokenType.CloseBrace, SyntaxElement.MapElement)),
-            ReasonSyntax(SyntaxExpected(TokenType.Comma, TokenType.CloseBrace)),
+            SyntaxExpected(TokenType.CloseBrace, SyntaxElement.MapElement).reason(),
+            SyntaxExpected(TokenType.Comma, TokenType.CloseBrace).reason(),
             close_tok_type=TokenType.CloseBrace,
         )
         if result is None:
@@ -856,7 +856,7 @@ class Parser:
             if (dot := self._try_tok(TokenType.Dot)) is not None:
                 name = self._try_identifier()
                 if name is None:
-                    self._error(self._here(), ReasonSyntax(SyntaxExpected(SyntaxElement.Identifier)))
+                    self._error(self._here(), SyntaxExpected(SyntaxElement.Identifier).reason())
                     key_expr = self._missing_expr()
                 else:
                     key_expr = name.map(LiteralExpr)
@@ -917,8 +917,8 @@ class Parser:
             try_item,
             partial(self._try_tok, TokenType.Comma),
             partial(self._try_tok, TokenType.CloseParen),
-            ReasonSyntax(SyntaxExpected(TokenType.CloseParen, SyntaxElement.ArgElement)),
-            ReasonSyntax(SyntaxExpected(TokenType.Comma, TokenType.CloseParen)),
+            SyntaxExpected(TokenType.CloseParen, SyntaxElement.ArgElement).reason(),
+            SyntaxExpected(TokenType.Comma, TokenType.CloseParen).reason(),
             close_tok_type=TokenType.CloseParen,
         )
 
@@ -951,7 +951,7 @@ class Parser:
         if (caret := self._try_tok(TokenType.Caret)) is None:
             return base
         if (rhs := self._try_prefixed()) is None:
-            self._error(self._here(), ReasonSyntax(SyntaxExpected(SyntaxElement.Operand)))
+            self._error(self._here(), SyntaxExpected(SyntaxElement.Operand).reason())
             rhs = self._missing_paren()
         return Paren.naked(
             tag(
@@ -979,7 +979,7 @@ class Parser:
         operand = self._try_power()
         if operand is None:
             if ops:
-                self._error(self._here(), ReasonSyntax(SyntaxExpected(SyntaxElement.Operand)))
+                self._error(self._here(), SyntaxExpected(SyntaxElement.Operand).reason())
                 operand = self._missing_paren()
             else:
                 return None
@@ -1013,7 +1013,7 @@ class Parser:
             if op_tok is None or matched_op is None:
                 break
             if (rhs := sub()) is None:
-                self._error(self._here(), ReasonSyntax(SyntaxExpected(SyntaxElement.Operand)))
+                self._error(self._here(), SyntaxExpected(SyntaxElement.Operand).reason())
                 rhs = self._missing_paren()
             lhs = Paren.naked(
                 tag(
@@ -1148,8 +1148,8 @@ class Parser:
             try_item,
             lambda: self._try_tok(TokenType.Comma),
             try_close,
-            ReasonSyntax(SyntaxExpected(SyntaxElement.PosParam, TokenType.CloseParen)),
-            ReasonSyntax(SyntaxExpected(TokenType.Comma, TokenType.CloseParen)),
+            SyntaxExpected(SyntaxElement.PosParam, TokenType.CloseParen).reason(),
+            SyntaxExpected(TokenType.Comma, TokenType.CloseParen).reason(),
             close_tok_type,
         )
         actual_start = start_span if start_span is not None else inner_start
@@ -1172,8 +1172,8 @@ class Parser:
             try_item,
             lambda: self._try_tok(TokenType.Comma),
             try_close,
-            ReasonSyntax(SyntaxExpected(SyntaxElement.KeywordParam, TokenType.CloseParen)),
-            ReasonSyntax(SyntaxExpected(TokenType.Comma, TokenType.CloseParen)),
+            SyntaxExpected(SyntaxElement.KeywordParam, TokenType.CloseParen).reason(),
+            SyntaxExpected(TokenType.Comma, TokenType.CloseParen).reason(),
             close_tok_type,
         )
         actual_start = start_span if start_span is not None else inner_start
@@ -1229,7 +1229,7 @@ class Parser:
 
         self._error(
             self._here(),
-            ReasonSyntax(SyntaxExpected(TokenType.OpenParen, TokenType.OpenBrace)),
+            SyntaxExpected(TokenType.OpenParen, TokenType.OpenBrace).reason(),
         )
         return Paren.naked(
             tag(
@@ -1299,7 +1299,7 @@ class Parser:
         if expr is not None:
             return expr
         sp = self._here()
-        self._error(sp, ReasonSyntax(SyntaxExpected(SyntaxElement.Expression)))
+        self._error(sp, SyntaxExpected(SyntaxElement.Expression).reason())
         return self._missing_paren()
 
     # ── Bindings ──────────────────────────────────────────────────────────────
@@ -1326,7 +1326,7 @@ class Parser:
         if (ellipsis := self._try_tok(TokenType.Ellipsis)) is not None:
             name = self._try_identifier()
             if name is None:
-                self._error(self._here(), ReasonSyntax(SyntaxExpected(SyntaxElement.Identifier)))
+                self._error(self._here(), SyntaxExpected(SyntaxElement.Identifier).reason())
                 return tag(MapBindingSlurpTo(name="_"), ellipsis.span)
             return tag(MapBindingSlurpTo(name=name.contents), Span.covering(ellipsis.span, name.span))
 
@@ -1384,7 +1384,7 @@ class Parser:
         if b is not None:
             return b
         sp = self._here()
-        self._error(sp, ReasonSyntax(SyntaxExpected(SyntaxElement.Binding)))
+        self._error(sp, SyntaxExpected(SyntaxElement.Binding).reason())
         return self._missing_binding()
 
     # ── Top-level statements ───────────────────────────────────────────────────
@@ -1412,7 +1412,7 @@ class Parser:
 
         pexpr = self._try_expr()
         if pexpr is None:
-            self._error(self._here(), ReasonSyntax(SyntaxExpected(SyntaxElement.Expression)))
+            self._error(self._here(), SyntaxExpected(SyntaxElement.Expression).reason())
             return File(statements=statements, expression=self._missing_expr())
 
         return File(statements=statements, expression=pexpr.inner())

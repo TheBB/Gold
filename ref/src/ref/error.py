@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .types import ObjectType, TokenType
 
@@ -62,6 +62,12 @@ type AnySyntaxElement = SyntaxElement | SyntaxElementToken
 
 class AbstractSyntax:
     """Base for all Syntax error variants."""
+
+    def reason(self) -> Reason:
+        return ReasonSyntax(cast("Syntax", self))
+
+    def err(self) -> Error:
+        return Error.new(self.reason())
 
 
 @dataclass(frozen=True)
@@ -132,6 +138,12 @@ class BindingType(Enum):
 class AbstractUnpack:
     """Base for all Unpack error variants."""
 
+    def reason(self) -> Reason:
+        return ReasonUnpack(cast("Unpack", self))
+
+    def err(self) -> Error:
+        return Error.new(self.reason())
+
 
 @dataclass(frozen=True)
 class UnpackListTooShort(AbstractUnpack):
@@ -170,6 +182,12 @@ type Unpack = UnpackListTooShort | UnpackListTooLong | UnpackKeyMissing | Unpack
 
 class AbstractTypeMismatch:
     """Base for all TypeMismatch error variants."""
+
+    def reason(self) -> Reason:
+        return ReasonTypeMismatch(cast("TypeMismatch", self))
+
+    def err(self) -> Error:
+        return Error.new(self.reason())
 
 
 @dataclass(frozen=True)
@@ -332,11 +350,20 @@ type TypeMismatch = (
 class AbstractValue:
     """Base for all Value error variants."""
 
+    def reason(self) -> Reason:
+        return ReasonValue(cast("Value", self))
+
+    def err(self) -> Error:
+        return Error.new(self.reason())
+
 
 @dataclass(frozen=True)
 class ValueOutOfRange(AbstractValue):
     def __str__(self) -> str:
         return "value out of range"
+
+    def reason(self) -> Reason:
+        return ReasonValue(self)
 
 
 @dataclass(frozen=True)
@@ -344,11 +371,17 @@ class ValueTooLarge(AbstractValue):
     def __str__(self) -> str:
         return "value too large"
 
+    def reason(self) -> Reason:
+        return ReasonValue(self)
+
 
 @dataclass(frozen=True)
 class ValueTooLong(AbstractValue):
     def __str__(self) -> str:
         return "value too long"
+
+    def reason(self) -> Reason:
+        return ReasonValue(self)
 
 
 @dataclass(frozen=True)
@@ -357,6 +390,9 @@ class ValueConvert(AbstractValue):
 
     def __str__(self) -> str:
         return f"couldn't convert to {self.to}"
+
+    def reason(self) -> Reason:
+        return ReasonValue(self)
 
 
 type Value = ValueOutOfRange | ValueTooLarge | ValueTooLong | ValueConvert
@@ -368,6 +404,12 @@ type Value = ValueOutOfRange | ValueTooLarge | ValueTooLong | ValueConvert
 class AbstractFileSystem:
     """Base for all FileSystem error variants."""
 
+    def reason(self) -> Reason:
+        return ReasonFileSystem(cast("FileSystem", self))
+
+    def err(self) -> Error:
+        return Error.new(self.reason())
+
 
 @dataclass(frozen=True)
 class FileSystemNoParent(AbstractFileSystem):
@@ -376,6 +418,9 @@ class FileSystemNoParent(AbstractFileSystem):
     def __str__(self) -> str:
         return f"path has no parent: {self.path}"
 
+    def reason(self) -> Reason:
+        return ReasonFileSystem(self)
+
 
 @dataclass(frozen=True)
 class FileSystemRead(AbstractFileSystem):
@@ -383,6 +428,9 @@ class FileSystemRead(AbstractFileSystem):
 
     def __str__(self) -> str:
         return f"couldn't read file: {self.path}"
+
+    def reason(self) -> Reason:
+        return ReasonFileSystem(self)
 
 
 type FileSystem = FileSystemNoParent | FileSystemRead
@@ -393,6 +441,9 @@ type FileSystem = FileSystemNoParent | FileSystemRead
 
 class AbstractReason:
     """Base for all Reason variants."""
+
+    def err(self) -> Error:
+        return Error.new(cast("Reason", self))
 
 
 @dataclass(frozen=True)

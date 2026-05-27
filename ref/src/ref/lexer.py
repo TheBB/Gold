@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from .error import (
     Action,
     Error,
-    ReasonSyntax,
     SyntaxElement,
     SyntaxExpected,
     SyntaxUnexpectedChar,
@@ -23,8 +22,8 @@ if TYPE_CHECKING:
 
 def _lex_err(position: Position, c: str | None) -> Error:
     if c is None:
-        return Error.new(ReasonSyntax(SyntaxUnexpectedEof())).tag(position.with_length(0), Action.Parse)
-    return Error.new(ReasonSyntax(SyntaxUnexpectedChar(c))).tag(position.with_length(1), Action.Parse)
+        return SyntaxUnexpectedEof().err().tag(position.with_length(0), Action.Parse)
+    return SyntaxUnexpectedChar(c).err().tag(position.with_length(1), Action.Parse)
 
 
 # ── Regexes ───────────────────────────────────────────────────────────────────
@@ -111,9 +110,7 @@ class Lexer:
             m = pattern.match(self.code)
             if m is not None:
                 return self._skip_tag(m.end(), 0, kind)
-        raise Error.new(ReasonSyntax(SyntaxExpected(SyntaxElement.Number))).tag(
-            self.position.with_length(0), Action.Parse
-        )
+        raise SyntaxExpected(SyntaxElement.Number).err().tag(self.position.with_length(0), Action.Parse)
 
     def _next_name(self, pattern: re.Pattern[str]) -> LexResult:
         return self._traverse(pattern, TokenType.Name)
