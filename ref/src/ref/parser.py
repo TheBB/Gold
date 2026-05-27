@@ -75,7 +75,6 @@ from .error import (
     Reason,
     ReasonSyntax,
     SyntaxElement,
-    SyntaxElementToken,
     SyntaxExpected,
     SyntaxUnexpectedEof,
 )
@@ -185,7 +184,7 @@ class Parser:
     - The lexer is only advanced on confirmed token consumption.
     """
 
-    _lexer: Lexer
+    _erlexer: Lexer
     _errors: list[Error]
 
     def __init__(self, source: str) -> None:
@@ -272,7 +271,7 @@ class Parser:
         return self._require(
             partial(self._try_tok, kind, mode),
             lambda: tag(None, self._here()),
-            lambda: ReasonSyntax(SyntaxExpected(SyntaxElementToken(kind))),
+            lambda: ReasonSyntax(SyntaxExpected(kind)),
         )
 
     def _try_keyword(self, kw: str) -> Tagged[str] | None:
@@ -700,15 +699,8 @@ class Parser:
             try_item,
             partial(self._try_tok, TokenType.Comma),
             partial(self._try_tok, TokenType.CloseBracket),
-            ReasonSyntax(
-                SyntaxExpected(SyntaxElementToken(TokenType.CloseBracket), SyntaxElement.ListElement)
-            ),
-            ReasonSyntax(
-                SyntaxExpected(
-                    SyntaxElementToken(TokenType.Comma),
-                    SyntaxElementToken(TokenType.CloseBracket),
-                )
-            ),
+            ReasonSyntax(SyntaxExpected(TokenType.CloseBracket, SyntaxElement.ListElement)),
+            ReasonSyntax(SyntaxExpected(TokenType.Comma, TokenType.CloseBracket)),
             close_tok_type=TokenType.CloseBracket,
         )
         if result is None:
@@ -789,9 +781,7 @@ class Parser:
                 value_tagged = tag(LiteralExpr(val_str), ms_tok.span)
             except Error:
                 value_tagged = self._missing_expr()
-                self._error(
-                    self._here(), ReasonSyntax(SyntaxExpected(SyntaxElementToken(TokenType.MultiString)))
-                )
+                self._error(self._here(), ReasonSyntax(SyntaxExpected(TokenType.MultiString)))
             span = Span.covering(elem_start, value_tagged.span)
             return tag(MapSingleton(key=key, value=value_tagged), span), True
 
@@ -824,13 +814,8 @@ class Parser:
             self._try_map_element,
             partial(self._try_tok, TokenType.Comma),
             partial(self._try_tok, TokenType.CloseBrace),
-            ReasonSyntax(SyntaxExpected(SyntaxElementToken(TokenType.CloseBrace), SyntaxElement.MapElement)),
-            ReasonSyntax(
-                SyntaxExpected(
-                    SyntaxElementToken(TokenType.Comma),
-                    SyntaxElementToken(TokenType.CloseBrace),
-                )
-            ),
+            ReasonSyntax(SyntaxExpected(TokenType.CloseBrace, SyntaxElement.MapElement)),
+            ReasonSyntax(SyntaxExpected(TokenType.Comma, TokenType.CloseBrace)),
             close_tok_type=TokenType.CloseBrace,
         )
         if result is None:
@@ -932,13 +917,8 @@ class Parser:
             try_item,
             partial(self._try_tok, TokenType.Comma),
             partial(self._try_tok, TokenType.CloseParen),
-            ReasonSyntax(SyntaxExpected(SyntaxElementToken(TokenType.CloseParen), SyntaxElement.ArgElement)),
-            ReasonSyntax(
-                SyntaxExpected(
-                    SyntaxElementToken(TokenType.Comma),
-                    SyntaxElementToken(TokenType.CloseParen),
-                )
-            ),
+            ReasonSyntax(SyntaxExpected(TokenType.CloseParen, SyntaxElement.ArgElement)),
+            ReasonSyntax(SyntaxExpected(TokenType.Comma, TokenType.CloseParen)),
             close_tok_type=TokenType.CloseParen,
         )
 
@@ -1168,10 +1148,8 @@ class Parser:
             try_item,
             lambda: self._try_tok(TokenType.Comma),
             try_close,
-            ReasonSyntax(SyntaxExpected(SyntaxElement.PosParam, SyntaxElementToken(TokenType.CloseParen))),
-            ReasonSyntax(
-                SyntaxExpected(SyntaxElementToken(TokenType.Comma), SyntaxElementToken(TokenType.CloseParen))
-            ),
+            ReasonSyntax(SyntaxExpected(SyntaxElement.PosParam, TokenType.CloseParen)),
+            ReasonSyntax(SyntaxExpected(TokenType.Comma, TokenType.CloseParen)),
             close_tok_type,
         )
         actual_start = start_span if start_span is not None else inner_start
@@ -1194,12 +1172,8 @@ class Parser:
             try_item,
             lambda: self._try_tok(TokenType.Comma),
             try_close,
-            ReasonSyntax(
-                SyntaxExpected(SyntaxElement.KeywordParam, SyntaxElementToken(TokenType.CloseParen))
-            ),
-            ReasonSyntax(
-                SyntaxExpected(SyntaxElementToken(TokenType.Comma), SyntaxElementToken(TokenType.CloseParen))
-            ),
+            ReasonSyntax(SyntaxExpected(SyntaxElement.KeywordParam, TokenType.CloseParen)),
+            ReasonSyntax(SyntaxExpected(TokenType.Comma, TokenType.CloseParen)),
             close_tok_type,
         )
         actual_start = start_span if start_span is not None else inner_start
@@ -1255,11 +1229,7 @@ class Parser:
 
         self._error(
             self._here(),
-            ReasonSyntax(
-                SyntaxExpected(
-                    SyntaxElementToken(TokenType.OpenParen), SyntaxElementToken(TokenType.OpenBrace)
-                )
-            ),
+            ReasonSyntax(SyntaxExpected(TokenType.OpenParen, TokenType.OpenBrace)),
         )
         return Paren.naked(
             tag(
