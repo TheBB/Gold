@@ -37,6 +37,7 @@ ParseResult
             name: "f" [36..37]
           transform: FunCallTransform
             args: [37..41]
-              ArgSingleton [38..40]
-                expr: ListExpr [38..40]
-                  elements: []
+              [0]:
+                ArgSingleton [38..40]
+                  expr: ListExpr [38..40]
+                    elements: []

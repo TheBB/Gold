@@ -19,9 +19,11 @@ ParseResult
               value: "add"
         transform: FunCallTransform
           args: [50..56]
-            ArgSingleton [51..52]
-              expr: LiteralExpr [51..52]
-                value: 1
-            ArgSingleton [54..55]
-              expr: LiteralExpr [54..55]
-                value: 2
+            [0]:
+              ArgSingleton [51..52]
+                expr: LiteralExpr [51..52]
+                  value: 1
+            [1]:
+              ArgSingleton [54..55]
+                expr: LiteralExpr [54..55]
+                  value: 2

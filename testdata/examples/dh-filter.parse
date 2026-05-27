@@ -125,9 +125,10 @@ ParseResult
                             name: "pred" [290..294]
                           transform: FunCallTransform
                             args: [294..297]
-                              ArgSingleton [295..296]
-                                expr: IdentifierExpr [295..296]
-                                  name: "x" [295..296]
+                              [0]:
+                                ArgSingleton [295..296]
+                                  expr: IdentifierExpr [295..296]
+                                    name: "x" [295..296]
                         element: ListSingleton [299..300]
                           expr: IdentifierExpr [299..300]
                             name: "x" [299..300]
@@ -136,21 +137,23 @@ ParseResult
             name: "filter" [307..313]
           transform: FunCallTransform
             args: [313..343]
-              ArgSingleton [314..321]
-                expr: IdentifierExpr [314..321]
-                  name: "isAdmin" [314..321]
-              ArgSingleton [323..342]
-                expr: ListExpr [323..342]
-                  elements:
-                    [0]:
-                      ListSingleton [324..329]
-                        expr: IdentifierExpr [324..329]
-                          name: "alice" [324..329]
-                    [1]:
-                      ListSingleton [331..334]
-                        expr: IdentifierExpr [331..334]
-                          name: "bob" [331..334]
-                    [2]:
-                      ListSingleton [336..341]
-                        expr: IdentifierExpr [336..341]
-                          name: "carlo" [336..341]
+              [0]:
+                ArgSingleton [314..321]
+                  expr: IdentifierExpr [314..321]
+                    name: "isAdmin" [314..321]
+              [1]:
+                ArgSingleton [323..342]
+                  expr: ListExpr [323..342]
+                    elements:
+                      [0]:
+                        ListSingleton [324..329]
+                          expr: IdentifierExpr [324..329]
+                            name: "alice" [324..329]
+                      [1]:
+                        ListSingleton [331..334]
+                          expr: IdentifierExpr [331..334]
+                            name: "bob" [331..334]
+                      [2]:
+                        ListSingleton [336..341]
+                          expr: IdentifierExpr [336..341]
+                            name: "carlo" [336..341]

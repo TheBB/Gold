@@ -9,12 +9,13 @@ ParseResult
           name: "len" [0..3]
         transform: FunCallTransform
           args: [3..11]
-            ArgSingleton [4..10]
-              expr: MapExpr [4..10]
-                elements:
-                  [0]:
-                    MapSingleton [5..9]
-                      key: LiteralExpr [5..6]
-                        value: "a"
-                      value: LiteralExpr [8..9]
-                        value: 1
+            [0]:
+              ArgSingleton [4..10]
+                expr: MapExpr [4..10]
+                  elements:
+                    [0]:
+                      MapSingleton [5..9]
+                        key: LiteralExpr [5..6]
+                          value: "a"
+                        value: LiteralExpr [8..9]
+                          value: 1

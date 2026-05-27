@@ -9,6 +9,7 @@ ParseResult
           name: "len" [0..3]
         transform: FunCallTransform
           args: [3..9]
-            ArgSingleton [4..8]
-              expr: LiteralExpr [4..8]
-                value: true
+            [0]:
+              ArgSingleton [4..8]
+                expr: LiteralExpr [4..8]
+                  value: true

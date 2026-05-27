@@ -9,9 +9,11 @@ ParseResult
           name: "startswith" [0..10]
         transform: FunCallTransform
           args: [10..18]
-            ArgSingleton [11..13]
-              expr: LiteralExpr [11..13]
-                value: ""
-            ArgSingleton [15..17]
-              expr: LiteralExpr [15..17]
-                value: ""
+            [0]:
+              ArgSingleton [11..13]
+                expr: LiteralExpr [11..13]
+                  value: ""
+            [1]:
+              ArgSingleton [15..17]
+                expr: LiteralExpr [15..17]
+                  value: ""

@@ -75,27 +75,34 @@ ParseResult
             name: "dest" [106..110]
           transform: FunCallTransform
             args: [110..156]
-              ArgSingleton [111..112]
-                expr: LiteralExpr [111..112]
-                  value: 0
-              ArgSplat [114..121]
-                expr: IdentifierExpr [117..121]
-                  name: "args" [117..121]
-              ArgSingleton [123..124]
-                expr: LiteralExpr [123..124]
-                  value: 5
-              ArgKeyword [126..130]
-                key: "a" [126..127]
-                expr: LiteralExpr [129..130]
-                  value: 8
-              ArgSplat [132..141]
-                expr: IdentifierExpr [135..141]
-                  name: "kwargs" [135..141]
-              ArgKeyword [143..148]
-                key: "c" [143..144]
-                expr: LiteralExpr [146..148]
-                  value: 10
-              ArgKeyword [150..155]
-                key: "z" [150..151]
-                expr: LiteralExpr [153..155]
-                  value: 12
+              [0]:
+                ArgSingleton [111..112]
+                  expr: LiteralExpr [111..112]
+                    value: 0
+              [1]:
+                ArgSplat [114..121]
+                  expr: IdentifierExpr [117..121]
+                    name: "args" [117..121]
+              [2]:
+                ArgSingleton [123..124]
+                  expr: LiteralExpr [123..124]
+                    value: 5
+              [3]:
+                ArgKeyword [126..130]
+                  key: "a" [126..127]
+                  expr: LiteralExpr [129..130]
+                    value: 8
+              [4]:
+                ArgSplat [132..141]
+                  expr: IdentifierExpr [135..141]
+                    name: "kwargs" [135..141]
+              [5]:
+                ArgKeyword [143..148]
+                  key: "c" [143..144]
+                  expr: LiteralExpr [146..148]
+                    value: 10
+              [6]:
+                ArgKeyword [150..155]
+                  key: "z" [150..151]
+                  expr: LiteralExpr [153..155]
+                    value: 12

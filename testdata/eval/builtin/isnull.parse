@@ -9,6 +9,7 @@ ParseResult
           name: "isnull" [0..6]
         transform: FunCallTransform
           args: [6..12]
-            ArgSingleton [7..11]
-              expr: LiteralExpr [7..11]
-                value: null
+            [0]:
+              ArgSingleton [7..11]
+                expr: LiteralExpr [7..11]
+                  value: null

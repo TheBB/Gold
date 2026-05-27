@@ -149,8 +149,9 @@ impl<'a> Pp<'a> {
             if !list.is_empty() {
                 let items: Vec<Object> = list.iter().cloned().collect();
                 drop(list);
-                for item in &items {
-                    self.gold_value(item, indent + 1);
+                for (i, item) in items.iter().enumerate() {
+                    self.emit(indent + 1, format!("[{i}]:"));
+                    self.gold_value(item, indent + 2);
                 }
             }
         } else if let Some(map) = obj.get_map() {
@@ -172,8 +173,9 @@ impl<'a> Pp<'a> {
             if !list.is_empty() {
                 let items: Vec<Object> = list.iter().cloned().collect();
                 drop(list);
-                for item in &items {
-                    self.gold_value(item, indent + 1);
+                for (i, item) in items.iter().enumerate() {
+                    self.emit(indent + 1, format!("[{i}]:"));
+                    self.gold_value(item, indent + 2);
                 }
             }
         } else if let Some(map) = obj.get_map() {
@@ -256,8 +258,9 @@ impl<'a> Pp<'a> {
             self.emit(indent + 1, "statements: []");
         } else {
             self.emit(indent + 1, "statements:");
-            for stmt in &file.statements {
-                self.top_level(stmt, indent + 2);
+            for (i, stmt) in file.statements.iter().enumerate() {
+                self.emit(indent + 2, format!("[{i}]:"));
+                self.top_level(stmt, indent + 3);
             }
         }
         self.field_expr("expression", &file.expression, indent + 1);
@@ -295,8 +298,9 @@ impl<'a> Pp<'a> {
                     self.emit(indent, "elements: []");
                 } else {
                     self.emit(indent, "elements:");
-                    for elem in elements {
-                        self.string_element(elem, indent + 1);
+                    for (i, elem) in elements.iter().enumerate() {
+                        self.emit(indent + 1, format!("[{i}]:"));
+                        self.string_element(elem, indent + 2);
                     }
                 }
             }
@@ -309,8 +313,9 @@ impl<'a> Pp<'a> {
                     self.emit(indent, "elements: []");
                 } else {
                     self.emit(indent, "elements:");
-                    for elem in elements {
-                        self.list_element(elem, indent + 1);
+                    for (i, elem) in elements.iter().enumerate() {
+                        self.emit(indent + 1, format!("[{i}]:"));
+                        self.list_element(elem, indent + 2);
                     }
                 }
             }
@@ -319,8 +324,9 @@ impl<'a> Pp<'a> {
                     self.emit(indent, "elements: []");
                 } else {
                     self.emit(indent, "elements:");
-                    for elem in elements {
-                        self.map_element(elem, indent + 1);
+                    for (i, elem) in elements.iter().enumerate() {
+                        self.emit(indent + 1, format!("[{i}]:"));
+                        self.map_element(elem, indent + 2);
                     }
                 }
             }
@@ -485,8 +491,9 @@ impl<'a> Pp<'a> {
                     self.emit(indent + 1, format!("args: []{args_span}"));
                 } else {
                     self.emit(indent + 1, format!("args:{args_span}"));
-                    for arg in args.as_ref() {
-                        self.arg_element(arg, indent + 2);
+                    for (i, arg) in args.as_ref().iter().enumerate() {
+                        self.emit(indent + 2, format!("[{i}]:"));
+                        self.arg_element(arg, indent + 3);
                     }
                 }
             }
@@ -528,8 +535,9 @@ impl<'a> Pp<'a> {
             self.emit(indent + 1, "elements: []");
         } else {
             self.emit(indent + 1, "elements:");
-            for elem in elems {
-                self.list_binding_element(elem, indent + 2);
+            for (i, elem) in elems.iter().enumerate() {
+                self.emit(indent + 2, format!("[{i}]:"));
+                self.list_binding_element(elem, indent + 3);
             }
         }
     }
@@ -562,8 +570,9 @@ impl<'a> Pp<'a> {
             self.emit(indent + 1, "elements: []");
         } else {
             self.emit(indent + 1, "elements:");
-            for elem in elems {
-                self.map_binding_element(elem, indent + 2);
+            for (i, elem) in elems.iter().enumerate() {
+                self.emit(indent + 2, format!("[{i}]:"));
+                self.map_binding_element(elem, indent + 3);
             }
         }
     }

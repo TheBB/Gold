@@ -43,8 +43,9 @@ ParseResult
               name: "f" [41..42]
             transform: FunCallTransform
               args: [42..45]
-                ArgSingleton [43..44]
-                  expr: LiteralExpr [43..44]
-                    value: 2
+                [0]:
+                  ArgSingleton [43..44]
+                    expr: LiteralExpr [43..44]
+                      value: 2
           transform: FunCallTransform
             args: [] [45..47]

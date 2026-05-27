@@ -9,6 +9,7 @@ ParseResult
           name: "range" [0..5]
         transform: FunCallTransform
           args: [5..8]
-            ArgSingleton [6..7]
-              expr: LiteralExpr [6..7]
-                value: 3
+            [0]:
+              ArgSingleton [6..7]
+                expr: LiteralExpr [6..7]
+                  value: 3

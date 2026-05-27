@@ -1,5 +1,5 @@
 use gold::pprint::{pprint, pprint_eval, PprintOptions};
-use libtest_mimic::{Failed, Trial};
+use libtest_mimic::{Arguments, Failed, Trial};
 use std::path::{Path, PathBuf};
 
 fn repo_root() -> PathBuf {
@@ -108,4 +108,6 @@ fn main() {
         let eval_path = gold_path.with_extension("eval");
         trials.push(eval_trial(format!("eval::{rel}"), gold_path, parse_path, eval_path));
     }
+
+    libtest_mimic::run(&Arguments::from_args(), trials).exit();
 }

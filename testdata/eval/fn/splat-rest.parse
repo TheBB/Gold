@@ -36,12 +36,15 @@ ParseResult
             name: "a" [34..35]
           transform: FunCallTransform
             args: [35..44]
-              ArgSingleton [36..37]
-                expr: LiteralExpr [36..37]
-                  value: 1
-              ArgSingleton [39..40]
-                expr: LiteralExpr [39..40]
-                  value: 2
-              ArgSingleton [42..43]
-                expr: LiteralExpr [42..43]
-                  value: 3
+              [0]:
+                ArgSingleton [36..37]
+                  expr: LiteralExpr [36..37]
+                    value: 1
+              [1]:
+                ArgSingleton [39..40]
+                  expr: LiteralExpr [39..40]
+                    value: 2
+              [2]:
+                ArgSingleton [42..43]
+                  expr: LiteralExpr [42..43]
+                    value: 3

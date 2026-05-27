@@ -9,6 +9,7 @@ ParseResult
           name: "bool" [0..4]
         transform: FunCallTransform
           args: [4..7]
-            ArgSingleton [5..6]
-              expr: LiteralExpr [5..6]
-                value: 0
+            [0]:
+              ArgSingleton [5..6]
+                expr: LiteralExpr [5..6]
+                  value: 0

@@ -62,30 +62,32 @@ ParseResult
                           name: "recurse" [114..121]
                         transform: FunCallTransform
                           args: [121..138]
-                            ArgSingleton [122..125]
-                              expr: TransformedExpr [122..125]
-                                operand: IdentifierExpr [122..123]
-                                  name: "n" [122..123]
-                                transform: BinOpTransform
-                                  op: Subtract [123..124]
-                                  operand: LiteralExpr [124..125]
-                                    value: 1
-                            ArgSingleton [127..137]
-                              expr: ListExpr [127..137]
-                                elements:
-                                  [0]:
-                                    ListSingleton [128..129]
-                                      expr: IdentifierExpr [128..129]
-                                        name: "b" [128..129]
-                                  [1]:
-                                    ListSingleton [131..136]
-                                      expr: TransformedExpr [131..136]
-                                        operand: IdentifierExpr [131..132]
-                                          name: "a" [131..132]
-                                        transform: BinOpTransform
-                                          op: Add [133..134]
-                                          operand: IdentifierExpr [135..136]
-                                            name: "b" [135..136]
+                            [0]:
+                              ArgSingleton [122..125]
+                                expr: TransformedExpr [122..125]
+                                  operand: IdentifierExpr [122..123]
+                                    name: "n" [122..123]
+                                  transform: BinOpTransform
+                                    op: Subtract [123..124]
+                                    operand: LiteralExpr [124..125]
+                                      value: 1
+                            [1]:
+                              ArgSingleton [127..137]
+                                expr: ListExpr [127..137]
+                                  elements:
+                                    [0]:
+                                      ListSingleton [128..129]
+                                        expr: IdentifierExpr [128..129]
+                                          name: "b" [128..129]
+                                    [1]:
+                                      ListSingleton [131..136]
+                                        expr: TransformedExpr [131..136]
+                                          operand: IdentifierExpr [131..132]
+                                            name: "a" [131..132]
+                                          transform: BinOpTransform
+                                            op: Add [133..134]
+                                            operand: IdentifierExpr [135..136]
+                                              name: "b" [135..136]
               expression: FunctionExpr [152..195]
                 positional: ListBinding [155..158]
                   elements:
@@ -116,20 +118,22 @@ ParseResult
                           name: "recurse" [172..179]
                         transform: FunCallTransform
                           args: [179..190]
-                            ArgSingleton [180..181]
-                              expr: IdentifierExpr [180..181]
-                                name: "n" [180..181]
-                            ArgSingleton [183..189]
-                              expr: ListExpr [183..189]
-                                elements:
-                                  [0]:
-                                    ListSingleton [184..185]
-                                      expr: LiteralExpr [184..185]
-                                        value: 1
-                                  [1]:
-                                    ListSingleton [187..188]
-                                      expr: LiteralExpr [187..188]
-                                        value: 1
+                            [0]:
+                              ArgSingleton [180..181]
+                                expr: IdentifierExpr [180..181]
+                                  name: "n" [180..181]
+                            [1]:
+                              ArgSingleton [183..189]
+                                expr: ListExpr [183..189]
+                                  elements:
+                                    [0]:
+                                      ListSingleton [184..185]
+                                        expr: LiteralExpr [184..185]
+                                          value: 1
+                                    [1]:
+                                      ListSingleton [187..188]
+                                        expr: LiteralExpr [187..188]
+                                          value: 1
                   expression: IdentifierExpr [194..195]
                     name: "x" [194..195]
         expression: TransformedExpr [202..208]
@@ -137,6 +141,7 @@ ParseResult
             name: "fib" [202..205]
           transform: FunCallTransform
             args: [205..208]
-              ArgSingleton [206..207]
-                expr: LiteralExpr [206..207]
-                  value: 5
+              [0]:
+                ArgSingleton [206..207]
+                  expr: LiteralExpr [206..207]
+                    value: 5

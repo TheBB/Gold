@@ -35,17 +35,21 @@ ParseResult
             name: "dest" [53..57]
           transform: FunCallTransform
             args: [57..75]
-              ArgSingleton [58..59]
-                expr: LiteralExpr [58..59]
-                  value: 1
-              ArgSingleton [61..62]
-                expr: LiteralExpr [61..62]
-                  value: 2
-              ArgKeyword [64..68]
-                key: "x" [64..65]
-                expr: LiteralExpr [67..68]
-                  value: 3
-              ArgKeyword [70..74]
-                key: "y" [70..71]
-                expr: LiteralExpr [73..74]
-                  value: 4
+              [0]:
+                ArgSingleton [58..59]
+                  expr: LiteralExpr [58..59]
+                    value: 1
+              [1]:
+                ArgSingleton [61..62]
+                  expr: LiteralExpr [61..62]
+                    value: 2
+              [2]:
+                ArgKeyword [64..68]
+                  key: "x" [64..65]
+                  expr: LiteralExpr [67..68]
+                    value: 3
+              [3]:
+                ArgKeyword [70..74]
+                  key: "y" [70..71]
+                  expr: LiteralExpr [73..74]
+                    value: 4

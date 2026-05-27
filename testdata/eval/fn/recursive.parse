@@ -38,19 +38,21 @@ ParseResult
                         name: "f" [41..42]
                       transform: FunCallTransform
                         args: [42..49]
-                          ArgSingleton [43..48]
-                            expr: TransformedExpr [43..48]
-                              operand: IdentifierExpr [43..44]
-                                name: "n" [43..44]
-                              transform: BinOpTransform
-                                op: Subtract [45..46]
-                                operand: LiteralExpr [47..48]
-                                  value: 1
+                          [0]:
+                            ArgSingleton [43..48]
+                              expr: TransformedExpr [43..48]
+                                operand: IdentifierExpr [43..44]
+                                  name: "n" [43..44]
+                                transform: BinOpTransform
+                                  op: Subtract [45..46]
+                                  operand: LiteralExpr [47..48]
+                                    value: 1
         expression: TransformedExpr [53..57]
           operand: IdentifierExpr [53..54]
             name: "f" [53..54]
           transform: FunCallTransform
             args: [54..57]
-              ArgSingleton [55..56]
-                expr: LiteralExpr [55..56]
-                  value: 5
+              [0]:
+                ArgSingleton [55..56]
+                  expr: LiteralExpr [55..56]
+                    value: 5

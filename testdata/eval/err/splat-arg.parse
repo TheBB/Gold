@@ -16,6 +16,7 @@ ParseResult
             value: 1
         transform: FunCallTransform
           args: [13..22]
-            ArgSplat [14..21]
-              expr: LiteralExpr [17..21]
-                value: true
+            [0]:
+              ArgSplat [14..21]
+                expr: LiteralExpr [17..21]
+                  value: true

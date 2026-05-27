@@ -55,9 +55,10 @@ ParseResult
                     name: "f" [40..41]
                   transform: FunCallTransform
                     args: [41..44]
-                      ArgSingleton [42..43]
-                        expr: LiteralExpr [42..43]
-                          value: 1
+                      [0]:
+                        ArgSingleton [42..43]
+                          expr: LiteralExpr [42..43]
+                            value: 1
             [1]:
               ListSingleton [46..52]
                 expr: TransformedExpr [46..52]
@@ -65,12 +66,14 @@ ParseResult
                     name: "f" [46..47]
                   transform: FunCallTransform
                     args: [47..52]
-                      ArgSingleton [48..49]
-                        expr: LiteralExpr [48..49]
-                          value: 1
-                      ArgSingleton [50..51]
-                        expr: LiteralExpr [50..51]
-                          value: 2
+                      [0]:
+                        ArgSingleton [48..49]
+                          expr: LiteralExpr [48..49]
+                            value: 1
+                      [1]:
+                        ArgSingleton [50..51]
+                          expr: LiteralExpr [50..51]
+                            value: 2
             [2]:
               ListSingleton [54..64]
                 expr: TransformedExpr [54..64]
@@ -78,13 +81,15 @@ ParseResult
                     name: "f" [54..55]
                   transform: FunCallTransform
                     args: [55..64]
-                      ArgSingleton [56..57]
-                        expr: LiteralExpr [56..57]
-                          value: 1
-                      ArgKeyword [58..63]
-                        key: "z" [58..59]
-                        expr: LiteralExpr [60..63]
-                          value: 100
+                      [0]:
+                        ArgSingleton [56..57]
+                          expr: LiteralExpr [56..57]
+                            value: 1
+                      [1]:
+                        ArgKeyword [58..63]
+                          key: "z" [58..59]
+                          expr: LiteralExpr [60..63]
+                            value: 100
             [3]:
               ListSingleton [66..78]
                 expr: TransformedExpr [66..78]
@@ -92,13 +97,16 @@ ParseResult
                     name: "f" [66..67]
                   transform: FunCallTransform
                     args: [67..78]
-                      ArgSingleton [68..69]
-                        expr: LiteralExpr [68..69]
-                          value: 1
-                      ArgSingleton [70..71]
-                        expr: LiteralExpr [70..71]
-                          value: 2
-                      ArgKeyword [72..77]
-                        key: "z" [72..73]
-                        expr: LiteralExpr [74..77]
-                          value: 100
+                      [0]:
+                        ArgSingleton [68..69]
+                          expr: LiteralExpr [68..69]
+                            value: 1
+                      [1]:
+                        ArgSingleton [70..71]
+                          expr: LiteralExpr [70..71]
+                            value: 2
+                      [2]:
+                        ArgKeyword [72..77]
+                          key: "z" [72..73]
+                          expr: LiteralExpr [74..77]
+                            value: 100

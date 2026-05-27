@@ -96,17 +96,18 @@ ParseResult
                   name: "makeUser" [272..280]
                 transform: FunCallTransform
                   args: [280..297]
-                    ArgSingleton [281..296]
-                      expr: StringExpr [281..296]
-                        elements:
-                          [0]:
-                            StringRaw
-                              value: "build"
-                          [1]:
-                            StringInterpolate
-                              expr: IdentifierExpr [289..294]
-                                name: "index" [289..294]
-                              fmt: null
+                    [0]:
+                      ArgSingleton [281..296]
+                        expr: StringExpr [281..296]
+                          elements:
+                            [0]:
+                              StringRaw
+                                value: "build"
+                            [1]:
+                              StringInterpolate
+                                expr: IdentifierExpr [289..294]
+                                  name: "index" [289..294]
+                                fmt: null
         expression: ListExpr [302..336]
           elements:
             [0]:
@@ -118,15 +119,17 @@ ParseResult
                     name: "range" [312..317]
                   transform: FunCallTransform
                     args: [317..321]
-                      ArgSingleton [318..320]
-                        expr: LiteralExpr [318..320]
-                          value: 10
+                      [0]:
+                        ArgSingleton [318..320]
+                          expr: LiteralExpr [318..320]
+                            value: 10
                 element: ListSingleton [323..335]
                   expr: TransformedExpr [323..335]
                     operand: IdentifierExpr [323..332]
                       name: "buildUser" [323..332]
                     transform: FunCallTransform
                       args: [332..335]
-                        ArgSingleton [333..334]
-                          expr: IdentifierExpr [333..334]
-                            name: "x" [333..334]
+                        [0]:
+                          ArgSingleton [333..334]
+                            expr: IdentifierExpr [333..334]
+                              name: "x" [333..334]

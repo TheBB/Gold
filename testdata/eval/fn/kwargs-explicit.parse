@@ -31,10 +31,12 @@ ParseResult
                 name: "y" [17..18]
         transform: FunCallTransform
           args: [19..29]
-            ArgSingleton [20..22]
-              expr: LiteralExpr [20..22]
-                value: 10
-            ArgKeyword [24..28]
-              key: "y" [24..25]
-              expr: LiteralExpr [27..28]
-                value: 5
+            [0]:
+              ArgSingleton [20..22]
+                expr: LiteralExpr [20..22]
+                  value: 10
+            [1]:
+              ArgKeyword [24..28]
+                key: "y" [24..25]
+                expr: LiteralExpr [27..28]
+                  value: 5

@@ -35,9 +35,11 @@ ParseResult
             name: "dest" [53..57]
           transform: FunCallTransform
             args: [57..63]
-              ArgSingleton [58..59]
-                expr: LiteralExpr [58..59]
-                  value: 1
-              ArgSingleton [61..62]
-                expr: LiteralExpr [61..62]
-                  value: 2
+              [0]:
+                ArgSingleton [58..59]
+                  expr: LiteralExpr [58..59]
+                    value: 1
+              [1]:
+                ArgSingleton [61..62]
+                  expr: LiteralExpr [61..62]
+                    value: 2

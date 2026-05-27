@@ -9,6 +9,7 @@ ParseResult
           name: "float" [0..5]
         transform: FunCallTransform
           args: [5..12]
-            ArgSingleton [6..11]
-              expr: LiteralExpr [6..11]
-                value: false
+            [0]:
+              ArgSingleton [6..11]
+                expr: LiteralExpr [6..11]
+                  value: false

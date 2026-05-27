@@ -51,17 +51,19 @@ ParseResult
             name: "a" [36..37]
           transform: FunCallTransform
             args: [37..48]
-              ArgSingleton [38..39]
-                expr: LiteralExpr [38..39]
-                  value: 1
-              ArgSingleton [41..47]
-                expr: ListExpr [41..47]
-                  elements:
-                    [0]:
-                      ListSingleton [42..43]
-                        expr: LiteralExpr [42..43]
-                          value: 2
-                    [1]:
-                      ListSingleton [45..46]
-                        expr: LiteralExpr [45..46]
-                          value: 3
+              [0]:
+                ArgSingleton [38..39]
+                  expr: LiteralExpr [38..39]
+                    value: 1
+              [1]:
+                ArgSingleton [41..47]
+                  expr: ListExpr [41..47]
+                    elements:
+                      [0]:
+                        ListSingleton [42..43]
+                          expr: LiteralExpr [42..43]
+                            value: 2
+                      [1]:
+                        ListSingleton [45..46]
+                          expr: LiteralExpr [45..46]
+                            value: 3

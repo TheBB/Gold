@@ -9,6 +9,7 @@ ParseResult
           name: "isint" [0..5]
         transform: FunCallTransform
           args: [5..8]
-            ArgSingleton [6..7]
-              expr: LiteralExpr [6..7]
-                value: 1
+            [0]:
+              ArgSingleton [6..7]
+                expr: LiteralExpr [6..7]
+                  value: 1

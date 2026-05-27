@@ -85,9 +85,10 @@ ParseResult
                     name: "makeUser" [254..262]
                   transform: FunCallTransform
                     args: [262..270]
-                      ArgSingleton [263..269]
-                        expr: LiteralExpr [263..269]
-                          value: "bill"
+                      [0]:
+                        ArgSingleton [263..269]
+                          expr: LiteralExpr [263..269]
+                            value: "bill"
             [1]:
               ListSingleton [276..292]
                 expr: TransformedExpr [276..292]
@@ -95,6 +96,7 @@ ParseResult
                     name: "makeUser" [276..284]
                   transform: FunCallTransform
                     args: [284..292]
-                      ArgSingleton [285..291]
-                        expr: LiteralExpr [285..291]
-                          value: "jane"
+                      [0]:
+                        ArgSingleton [285..291]
+                          expr: LiteralExpr [285..291]
+                            value: "jane"

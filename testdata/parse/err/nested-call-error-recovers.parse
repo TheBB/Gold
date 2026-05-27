@@ -13,13 +13,15 @@ ParseResult
           name: "f" [0..1]
         transform: FunCallTransform
           args: [1..9]
-            ArgSingleton [2..5]
-              expr: TransformedExpr [2..5]
-                operand: LiteralExpr [2..3]
-                  value: 1
-                transform: BinOpTransform
-                  op: Add [4..5]
-                  operand: MissingExpr [5..5]
-            ArgSingleton [7..8]
-              expr: LiteralExpr [7..8]
-                value: 2
+            [0]:
+              ArgSingleton [2..5]
+                expr: TransformedExpr [2..5]
+                  operand: LiteralExpr [2..3]
+                    value: 1
+                  transform: BinOpTransform
+                    op: Add [4..5]
+                    operand: MissingExpr [5..5]
+            [1]:
+              ArgSingleton [7..8]
+                expr: LiteralExpr [7..8]
+                  value: 2

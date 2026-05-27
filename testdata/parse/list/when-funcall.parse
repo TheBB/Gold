@@ -13,9 +13,10 @@ ParseResult
                   name: "f" [6..7]
                 transform: FunCallTransform
                   args: [7..10]
-                    ArgSingleton [8..9]
-                      expr: IdentifierExpr [8..9]
-                        name: "x" [8..9]
+                    [0]:
+                      ArgSingleton [8..9]
+                        expr: IdentifierExpr [8..9]
+                          name: "x" [8..9]
               element: ListSingleton [12..13]
                 expr: IdentifierExpr [12..13]
                   name: "x" [12..13]

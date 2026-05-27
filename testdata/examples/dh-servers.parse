@@ -129,9 +129,10 @@ ParseResult
                     name: "smallServer" [377..388]
                   transform: FunCallTransform
                     args: [388..411]
-                      ArgSingleton [389..410]
-                        expr: LiteralExpr [389..410]
-                          value: "eu-west.example.com"
+                      [0]:
+                        ArgSingleton [389..410]
+                          expr: LiteralExpr [389..410]
+                            value: "eu-west.example.com"
             [1]:
               ListSingleton [417..451]
                 expr: TransformedExpr [417..451]
@@ -139,9 +140,10 @@ ParseResult
                     name: "largeServer" [417..428]
                   transform: FunCallTransform
                     args: [428..451]
-                      ArgSingleton [429..450]
-                        expr: LiteralExpr [429..450]
-                          value: "us-east.example.com"
+                      [0]:
+                        ArgSingleton [429..450]
+                          expr: LiteralExpr [429..450]
+                            value: "us-east.example.com"
             [2]:
               ListSingleton [457..496]
                 expr: TransformedExpr [457..496]
@@ -149,9 +151,10 @@ ParseResult
                     name: "largeServer" [457..468]
                   transform: FunCallTransform
                     args: [468..496]
-                      ArgSingleton [469..495]
-                        expr: LiteralExpr [469..495]
-                          value: "ap-northeast.example.com"
+                      [0]:
+                        ArgSingleton [469..495]
+                          expr: LiteralExpr [469..495]
+                            value: "ap-northeast.example.com"
             [3]:
               ListSingleton [502..537]
                 expr: TransformedExpr [502..537]
@@ -159,9 +162,10 @@ ParseResult
                     name: "mediumServer" [502..514]
                   transform: FunCallTransform
                     args: [514..537]
-                      ArgSingleton [515..536]
-                        expr: LiteralExpr [515..536]
-                          value: "us-west.example.com"
+                      [0]:
+                        ArgSingleton [515..536]
+                          expr: LiteralExpr [515..536]
+                            value: "us-west.example.com"
             [4]:
               ListSingleton [543..577]
                 expr: TransformedExpr [543..577]
@@ -169,9 +173,10 @@ ParseResult
                     name: "smallServer" [543..554]
                   transform: FunCallTransform
                     args: [554..577]
-                      ArgSingleton [555..576]
-                        expr: LiteralExpr [555..576]
-                          value: "sa-east.example.com"
+                      [0]:
+                        ArgSingleton [555..576]
+                          expr: LiteralExpr [555..576]
+                            value: "sa-east.example.com"
             [5]:
               ListSingleton [583..620]
                 expr: TransformedExpr [583..620]
@@ -179,6 +184,7 @@ ParseResult
                     name: "largeServer" [583..594]
                   transform: FunCallTransform
                     args: [594..620]
-                      ArgSingleton [595..619]
-                        expr: LiteralExpr [595..619]
-                          value: "ca-central.example.com"
+                      [0]:
+                        ArgSingleton [595..619]
+                          expr: LiteralExpr [595..619]
+                            value: "ca-central.example.com"

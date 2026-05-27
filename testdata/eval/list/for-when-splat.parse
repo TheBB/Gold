@@ -62,9 +62,10 @@ ParseResult
                         name: "len" [54..57]
                       transform: FunCallTransform
                         args: [57..60]
-                          ArgSingleton [58..59]
-                            expr: IdentifierExpr [58..59]
-                              name: "x" [58..59]
+                          [0]:
+                            ArgSingleton [58..59]
+                              expr: IdentifierExpr [58..59]
+                                name: "x" [58..59]
                     transform: BinOpTransform
                       op: Greater [61..62]
                       operand: LiteralExpr [63..64]

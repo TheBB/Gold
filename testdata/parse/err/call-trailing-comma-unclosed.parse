@@ -13,6 +13,7 @@ ParseResult
           name: "f" [0..1]
         transform: FunCallTransform
           args: [1..4]
-            ArgSingleton [2..3]
-              expr: LiteralExpr [2..3]
-                value: 1
+            [0]:
+              ArgSingleton [2..3]
+                expr: LiteralExpr [2..3]
+                  value: 1

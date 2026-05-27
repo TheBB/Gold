@@ -32,11 +32,13 @@ ParseResult
                 name: "b" [17..18]
         transform: FunCallTransform
           args: [19..31]
-            ArgKeyword [20..24]
-              key: "a" [20..21]
-              expr: LiteralExpr [23..24]
-                value: 1
-            ArgKeyword [26..30]
-              key: "b" [26..27]
-              expr: LiteralExpr [29..30]
-                value: 3
+            [0]:
+              ArgKeyword [20..24]
+                key: "a" [20..21]
+                expr: LiteralExpr [23..24]
+                  value: 1
+            [1]:
+              ArgKeyword [26..30]
+                key: "b" [26..27]
+                expr: LiteralExpr [29..30]
+                  value: 3

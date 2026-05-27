@@ -66,12 +66,14 @@ ParseResult
                   name: "educationalBook" [175..190]
                 transform: FunCallTransform
                   args: [190..215]
-                    ArgSingleton [191..207]
-                      expr: LiteralExpr [191..207]
-                        value: "O'Reilly Media"
-                    ArgSingleton [209..214]
-                      expr: IdentifierExpr [209..214]
-                        name: "title" [209..214]
+                    [0]:
+                      ArgSingleton [191..207]
+                        expr: LiteralExpr [191..207]
+                          value: "O'Reilly Media"
+                    [1]:
+                      ArgSingleton [209..214]
+                        expr: IdentifierExpr [209..214]
+                          name: "title" [209..214]
         expression: ListExpr [220..414]
           elements:
             [0]:
@@ -81,9 +83,10 @@ ParseResult
                     name: "makeOreilly" [226..237]
                   transform: FunCallTransform
                     args: [237..274]
-                      ArgSingleton [238..273]
-                        expr: LiteralExpr [238..273]
-                          value: "Microservices for Java Developers"
+                      [0]:
+                        ArgSingleton [238..273]
+                          expr: LiteralExpr [238..273]
+                            value: "Microservices for Java Developers"
             [1]:
               ListSingleton [280..344]
                 expr: TransformedExpr [280..344]
@@ -91,12 +94,14 @@ ParseResult
                     name: "educationalBook" [280..295]
                   transform: FunCallTransform
                     args: [295..344]
-                      ArgSingleton [296..312]
-                        expr: LiteralExpr [296..312]
-                          value: "Addison Wesley"
-                      ArgSingleton [314..343]
-                        expr: LiteralExpr [314..343]
-                          value: "The Go Programming Language"
+                      [0]:
+                        ArgSingleton [296..312]
+                          expr: LiteralExpr [296..312]
+                            value: "Addison Wesley"
+                      [1]:
+                        ArgSingleton [314..343]
+                          expr: LiteralExpr [314..343]
+                            value: "The Go Programming Language"
             [2]:
               ListSingleton [350..411]
                 expr: TransformedExpr [350..411]
@@ -104,6 +109,7 @@ ParseResult
                     name: "makeOreilly" [350..361]
                   transform: FunCallTransform
                     args: [361..411]
-                      ArgSingleton [362..410]
-                        expr: LiteralExpr [362..410]
-                          value: "Parallel and Concurrent Programming in Haskell"
+                      [0]:
+                        ArgSingleton [362..410]
+                          expr: LiteralExpr [362..410]
+                            value: "Parallel and Concurrent Programming in Haskell"

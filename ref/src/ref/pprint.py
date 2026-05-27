@@ -247,8 +247,9 @@ class _PP:
                 self._emit(indent, f"[]{span_str}")
             else:
                 self._emit(indent, span_str.lstrip() or "[]")
-                for item in contents:
-                    self._node(item, indent + 1)
+                for i, item in enumerate(contents):
+                    self._emit(indent + 1, f"[{i}]:")
+                    self._node(item, indent + 2)
         elif self._is_scalar(contents):
             self._emit(indent, f"{self._fmt(contents)}{span_str}")
         elif self._is_dc(contents):
@@ -286,8 +287,9 @@ class _PP:
                 self._emit(indent, f"{name}: []{span_str}")
             else:
                 self._emit(indent, f"{name}:{span_str}")
-                for item in contents:
-                    self._node(item, indent + 1)
+                for i, item in enumerate(contents):
+                    self._emit(indent + 1, f"[{i}]:")
+                    self._node(item, indent + 2)
         elif self._is_scalar(contents):
             self._emit(indent, f"{name}: {self._fmt(contents)}{span_str}")
         elif self._is_dc(contents):

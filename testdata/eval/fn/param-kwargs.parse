@@ -48,14 +48,17 @@ ParseResult
             name: "f" [34..35]
           transform: FunCallTransform
             args: [35..50]
-              ArgSingleton [36..37]
-                expr: LiteralExpr [36..37]
-                  value: 1
-              ArgKeyword [39..43]
-                key: "y" [39..40]
-                expr: LiteralExpr [42..43]
-                  value: 2
-              ArgKeyword [45..49]
-                key: "z" [45..46]
-                expr: LiteralExpr [48..49]
-                  value: 3
+              [0]:
+                ArgSingleton [36..37]
+                  expr: LiteralExpr [36..37]
+                    value: 1
+              [1]:
+                ArgKeyword [39..43]
+                  key: "y" [39..40]
+                  expr: LiteralExpr [42..43]
+                    value: 2
+              [2]:
+                ArgKeyword [45..49]
+                  key: "z" [45..46]
+                  expr: LiteralExpr [48..49]
+                    value: 3

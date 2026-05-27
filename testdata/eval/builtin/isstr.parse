@@ -9,6 +9,7 @@ ParseResult
           name: "isstr" [0..5]
         transform: FunCallTransform
           args: [5..11]
-            ArgSingleton [6..10]
-              expr: LiteralExpr [6..10]
-                value: "hi"
+            [0]:
+              ArgSingleton [6..10]
+                expr: LiteralExpr [6..10]
+                  value: "hi"

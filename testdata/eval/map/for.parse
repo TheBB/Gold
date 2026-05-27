@@ -26,8 +26,9 @@ ParseResult
                     name: "str" [19..22]
                   transform: FunCallTransform
                     args: [22..25]
-                      ArgSingleton [23..24]
-                        expr: IdentifierExpr [23..24]
-                          name: "x" [23..24]
+                      [0]:
+                        ArgSingleton [23..24]
+                          expr: IdentifierExpr [23..24]
+                            name: "x" [23..24]
                 value: IdentifierExpr [27..28]
                   name: "x" [27..28]

@@ -9,14 +9,15 @@ ParseResult
           name: "len" [0..3]
         transform: FunCallTransform
           args: [3..11]
-            ArgSingleton [4..10]
-              expr: ListExpr [4..10]
-                elements:
-                  [0]:
-                    ListSingleton [5..6]
-                      expr: LiteralExpr [5..6]
-                        value: 1
-                  [1]:
-                    ListSingleton [8..9]
-                      expr: LiteralExpr [8..9]
-                        value: 2
+            [0]:
+              ArgSingleton [4..10]
+                expr: ListExpr [4..10]
+                  elements:
+                    [0]:
+                      ListSingleton [5..6]
+                        expr: LiteralExpr [5..6]
+                          value: 1
+                    [1]:
+                      ListSingleton [8..9]
+                        expr: LiteralExpr [8..9]
+                          value: 2
