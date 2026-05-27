@@ -4,7 +4,7 @@ import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path  # noqa: TC003
-from typing import Any, TypeGuard
+from typing import Any, TypeGuard, Unpack
 
 from .ast import (
     AlignSpec,
@@ -91,7 +91,7 @@ from .error import (  # noqa: TC001
     ValueTooLong,
 )
 from .parser import parse
-from .pprint import pprint_eval_result
+from .pprint import PrintOpts, pprint_eval_result
 from .span import Tagged  # noqa: TC001
 
 
@@ -1085,8 +1085,8 @@ class EvalResult:
     def ok(self) -> bool:
         return self.error is None
 
-    def pprint(self, *, show_spans: bool = True, max_str_len: int | None = None) -> str:
-        return pprint_eval_result(self, show_spans=show_spans, max_str_len=max_str_len)
+    def pprint(self, **kwargs: Unpack[PrintOpts]) -> str:
+        return pprint_eval_result(self, **kwargs)
 
 
 def evaluate(file: File, resolver: AbstractImportResolver | None = None) -> GoldValue:

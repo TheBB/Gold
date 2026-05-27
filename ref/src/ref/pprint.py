@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict, Unpack
 
 from .ast import GoldBuiltin, GoldFunction, GoldValue
 from .span import Span, Tagged
@@ -15,42 +15,94 @@ if TYPE_CHECKING:
     from .parser import ParseResult
 
 
+def _render_tree(raw: list[tuple[int, str]]) -> list[str]:
+    n = len(raw)
+
+    def _is_last(i: int) -> bool:
+        depth = raw[i][0]
+        for j in range(i + 1, n):
+            d = raw[j][0]
+            if d < depth:
+                return True
+            if d == depth:
+                return False
+        return True
+
+    def _ancestor_at(i: int, depth: int) -> int | None:
+        for k in range(i - 1, -1, -1):
+            d = raw[k][0]
+            if d == depth:
+                return k
+            if d < depth:
+                return None
+        return None
+
+    out: list[str] = []
+    for i, (depth, text) in enumerate(raw):
+        if depth == 0:
+            out.append(text)
+            continue
+
+        last = _is_last(i)
+
+        parts: list[str] = []
+        for lvl in range(1, depth):
+            anc = _ancestor_at(i, lvl)
+            if anc is not None and not _is_last(anc):
+                parts.append("│   ")
+            else:
+                parts.append("    ")
+
+        connector = "╰── " if last else "├── "
+        out.append("".join(parts) + connector + text)
+
+    return out
+
+
+class PrintOpts(TypedDict, total=False):
+    show_spans: bool
+    max_str_len: int | None
+    tree: bool
+
+
 def pprint_parse_result(
     node: ParseResult,
-    *,
-    show_spans: bool = True,
-    max_str_len: int | None = None,
+    **kwargs: Unpack[PrintOpts],
 ) -> str:
-    """Return an indented human-readable representation of a ParseResult."""
-    pp = _PP(show_spans=show_spans, max_str_len=max_str_len)
+    """Return a human-readable representation of a ParseResult."""
+    pp = _PP(**kwargs)
     pp._parse_result(node, 0)
-    return "\n".join(pp._out)
+    return "\n".join(pp._render())
 
 
 def pprint_eval_result(
     node: EvalResult,
-    *,
-    show_spans: bool = True,
-    max_str_len: int | None = None,
+    **kwargs: Unpack[PrintOpts],
 ) -> str:
-    """Return an indented human-readable representation of an EvalResult."""
-    pp = _PP(show_spans=show_spans, max_str_len=max_str_len)
+    """Return a human-readable representation of an EvalResult."""
+    pp = _PP(**kwargs)
     pp._eval_result(node, 0)
-    return "\n".join(pp._out)
+    return "\n".join(pp._render())
 
 
 class _PP:
-    _out: list[str]
+    _raw: list[tuple[int, str]]
 
-    def __init__(self, *, show_spans: bool, max_str_len: int | None) -> None:
-        self._show_spans = show_spans
-        self._max_str_len = max_str_len
-        self._out = []
+    def __init__(self, **kwargs: Unpack[PrintOpts]) -> None:
+        self._show_spans = kwargs.get("show_spans", False)
+        self._max_str_len = kwargs.get("max_str_len")
+        self._tree = kwargs.get("tree", False)
+        self._raw = []
+
+    def _render(self) -> list[str]:
+        if self._tree:
+            return _render_tree(self._raw)
+        return ["  " * depth + text for depth, text in self._raw]
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _emit(self, indent: int, text: str) -> None:
-        self._out.append("  " * indent + text)
+        self._raw.append((indent, text))
 
     def _span(self, span: Span) -> str:
         if not self._show_spans:

@@ -32,7 +32,7 @@ def parse(file: str, spans: bool, max_str_len: int | None) -> None:
     source = sys.stdin.read() if file == "-" else Path(file).read_text()
 
     result = _parse(source)
-    click.echo(result.pprint(show_spans=spans, max_str_len=max_str_len))
+    click.echo(result.pprint(show_spans=spans, max_str_len=max_str_len, tree=True))
 
 
 @main.command()
@@ -48,7 +48,7 @@ def parse(file: str, spans: bool, max_str_len: int | None) -> None:
 def run(file: str, spans: bool, max_str_len: int | None) -> None:
     """Evaluate a Gold source file and print the result."""
     result = evaluate_source_result(sys.stdin.read()) if file == "-" else evaluate_file_result(Path(file))
-    click.echo(result.pprint(show_spans=spans, max_str_len=max_str_len))
+    click.echo(result.pprint(show_spans=spans, max_str_len=max_str_len, tree=True))
 
 
 @main.command("gen-fixture")

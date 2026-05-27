@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Unpack
 
 
 if TYPE_CHECKING:
@@ -79,7 +79,7 @@ from .error import (
     SyntaxUnexpectedEof,
 )
 from .lexer import Lexer, Token, TokenType
-from .pprint import pprint_parse_result
+from .pprint import PrintOpts, pprint_parse_result
 from .span import Paren, Span, Tagged, tag
 
 
@@ -128,8 +128,8 @@ class ParseResult:
     def ok(self) -> bool:
         return not self.errors
 
-    def pprint(self, *, show_spans: bool = True, max_str_len: int | None = None) -> str:
-        return pprint_parse_result(self, show_spans=show_spans, max_str_len=max_str_len)
+    def pprint(self, **kwargs: Unpack[PrintOpts]) -> str:
+        return pprint_parse_result(self, **kwargs)
 
     def __str__(self) -> str:
         return self.pprint()
