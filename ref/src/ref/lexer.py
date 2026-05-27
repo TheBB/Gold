@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from enum import Enum, auto
 from typing import TYPE_CHECKING
 
 from .error import (
@@ -10,147 +9,16 @@ from .error import (
     Error,
     ReasonSyntax,
     SyntaxElement,
-    SyntaxExpectedOne,
+    SyntaxExpected,
     SyntaxUnexpectedChar,
     SyntaxUnexpectedEof,
 )
 from .span import Position, Tagged, tag
+from .types import Token, TokenType
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-
-# ── Token types ───────────────────────────────────────────────────────────────
-
-
-class TokenType(Enum):
-    Asterisk = auto()
-    Caret = auto()
-    CloseBrace = auto()
-    CloseBracePipe = auto()
-    CloseBracket = auto()
-    CloseParen = auto()
-    Colon = auto()
-    Comma = auto()
-    Dollar = auto()
-    Dot = auto()
-    DoubleColon = auto()
-    DoubleEq = auto()
-    DoubleSlash = auto()
-    DoubleQuote = auto()
-    Ellipsis = auto()
-    Eq = auto()
-    ExclamEq = auto()
-    Greater = auto()
-    GreaterEq = auto()
-    Less = auto()
-    LessEq = auto()
-    Minus = auto()
-    OpenBrace = auto()
-    OpenBracePipe = auto()
-    OpenBracket = auto()
-    OpenParen = auto()
-    Pipe = auto()
-    Plus = auto()
-    SemiColon = auto()
-    Slash = auto()
-    Name = auto()
-    Float = auto()
-    Integer = auto()
-    StringLit = auto()
-    MultiString = auto()
-    Char = auto()
-
-    def __str__(self) -> str:
-        match self:
-            case TokenType.Asterisk:
-                return "'*'"
-            case TokenType.Caret:
-                return "'^'"
-            case TokenType.CloseBrace:
-                return "'}'"
-            case TokenType.CloseBracePipe:
-                return "'|}'"
-            case TokenType.CloseBracket:
-                return "']'"
-            case TokenType.CloseParen:
-                return "')'"
-            case TokenType.Colon:
-                return "':'"
-            case TokenType.Comma:
-                return "','"
-            case TokenType.Dollar:
-                return "'$'"
-            case TokenType.Dot:
-                return "'.'"
-            case TokenType.DoubleColon:
-                return "'::'"
-            case TokenType.DoubleEq:
-                return "'=='"
-            case TokenType.DoubleSlash:
-                return "'//'"
-            case TokenType.DoubleQuote:
-                return "'\"'"
-            case TokenType.Ellipsis:
-                return "'...'"
-            case TokenType.Eq:
-                return "'='"
-            case TokenType.ExclamEq:
-                return "'!='"
-            case TokenType.Greater:
-                return "'>'"
-            case TokenType.GreaterEq:
-                return "'>='"
-            case TokenType.Less:
-                return "'<'"
-            case TokenType.LessEq:
-                return "'<='"
-            case TokenType.Minus:
-                return "'-'"
-            case TokenType.OpenBrace:
-                return "'{'"
-            case TokenType.OpenBracePipe:
-                return "'{|'"
-            case TokenType.OpenBracket:
-                return "'['"
-            case TokenType.OpenParen:
-                return "'('"
-            case TokenType.Pipe:
-                return "'|'"
-            case TokenType.Plus:
-                return "'+'"
-            case TokenType.SemiColon:
-                return "';'"
-            case TokenType.Slash:
-                return "'/'"
-            case TokenType.Name:
-                return "name"
-            case TokenType.Float:
-                return "float"
-            case TokenType.Integer:
-                return "int"
-            case TokenType.StringLit:
-                return "string literal"
-            case TokenType.MultiString:
-                return "multi-line string literal"
-            case TokenType.Char:
-                return "character"
-
-
-# ── Token ─────────────────────────────────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class Token:
-    kind: TokenType
-    text: str
-
-
-@dataclass(frozen=True)
-class MissingToken:
-    """Sentinel for a token that was expected but not present in the source."""
-
-    kind: TokenType
 
 
 def _lex_err(position: Position, c: str | None) -> Error:
@@ -243,7 +111,7 @@ class Lexer:
             m = pattern.match(self.code)
             if m is not None:
                 return self._skip_tag(m.end(), 0, kind)
-        raise Error.new(ReasonSyntax(SyntaxExpectedOne(SyntaxElement.Number))).tag(
+        raise Error.new(ReasonSyntax(SyntaxExpected(SyntaxElement.Number))).tag(
             self.position.with_length(0), Action.Parse
         )
 

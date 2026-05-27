@@ -145,13 +145,13 @@ class Paren[T]:
     _inner: Tagged[T]
     _outer: Span | None = None  # None → Naked (outer == _inner.span)
 
-    @classmethod
-    def naked(cls, expr: Tagged[T]) -> Paren[T]:
-        return cls(_inner=expr)
+    @staticmethod
+    def naked[S](expr: Tagged[S]) -> Paren[S]:
+        return Paren(_inner=expr)
 
-    @classmethod
-    def parenthesized(cls, inner: Tagged[T], outer: Span) -> Paren[T]:
-        return cls(_inner=inner, _outer=outer)
+    @staticmethod
+    def parenthesized[S](inner: Tagged[S], outer: Span) -> Paren[S]:
+        return Paren(_inner=inner, _outer=outer)
 
     def inner(self) -> Tagged[T]:
         """The expression with its own span (parentheses excluded)."""

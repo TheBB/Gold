@@ -63,13 +63,13 @@ from .error import (  # noqa: TC001
     Action,
     BindingType,
     Error,
+    ObjectType,
     ReasonExternal,
     ReasonTypeMismatch,
     ReasonUnassigned,
     ReasonUnbound,
     ReasonUnpack,
     ReasonValue,
-    Type,
     TypeMismatchArgCount,
     TypeMismatchBinOp,
     TypeMismatchCall,
@@ -90,6 +90,8 @@ from .error import (  # noqa: TC001
     ValueOutOfRange,
     ValueTooLong,
 )
+from .parser import parse
+from .pprint import pprint_eval_result
 from .span import Tagged  # noqa: TC001
 
 
@@ -240,8 +242,6 @@ class PathImportResolver(AbstractImportResolver):
         self._root = root
 
     def resolve(self, path: str) -> GoldValue:
-        from .parser import parse
-
         full_path = self._root / path
         source = full_path.read_text(encoding="utf-8")
         result = parse(source)
@@ -365,22 +365,22 @@ def _is_numeric(v: GoldValue) -> TypeGuard[int | float]:
     return _is_int(v) or _is_float(v)
 
 
-def _type_of(v: GoldValue) -> Type:
+def _type_of(v: GoldValue) -> ObjectType:
     if v is None:
-        return Type.Null
+        return ObjectType.Null
     if isinstance(v, bool):
-        return Type.Boolean
+        return ObjectType.Boolean
     if isinstance(v, int):
-        return Type.Integer
+        return ObjectType.Integer
     if isinstance(v, float):
-        return Type.Float
+        return ObjectType.Float
     if isinstance(v, str):
-        return Type.String
+        return ObjectType.String
     if isinstance(v, list):
-        return Type.List
+        return ObjectType.List
     if isinstance(v, dict):
-        return Type.Map
-    return Type.Function
+        return ObjectType.Map
+    return ObjectType.Function
 
 
 # ── Eager binary operators ────────────────────────────────────────────────────
@@ -547,7 +547,9 @@ def _builtin_len(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldVal
     if isinstance(x, dict):
         return len(x)
     raise Error.new(
-        ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (Type.String, Type.List, Type.Map), _type_of(x)))
+        ReasonTypeMismatch(
+            TypeMismatchExpectedPosArg(0, (ObjectType.String, ObjectType.List, ObjectType.Map), _type_of(x))
+        )
     )
 
 
@@ -557,15 +559,17 @@ def _builtin_range(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldV
     if len(args) == 2:
         if not _is_int(args[0]):
             raise Error.new(
-                ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (Type.Integer,), _type_of(args[0])))
+                ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (ObjectType.Integer,), _type_of(args[0])))
             )
         if not _is_int(args[1]):
             raise Error.new(
-                ReasonTypeMismatch(TypeMismatchExpectedPosArg(1, (Type.Integer,), _type_of(args[1])))
+                ReasonTypeMismatch(TypeMismatchExpectedPosArg(1, (ObjectType.Integer,), _type_of(args[1])))
             )
         return list(range(int(args[0]), int(args[1])))
     if not _is_int(args[0]):
-        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (Type.Integer,), _type_of(args[0]))))
+        raise Error.new(
+            ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (ObjectType.Integer,), _type_of(args[0])))
+        )
     return list(range(int(args[0])))
 
 
@@ -583,10 +587,12 @@ def _builtin_int(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldVal
         try:
             return int(x)
         except ValueError:
-            raise Error.new(ReasonValue(ValueConvert(Type.Integer))) from None
+            raise Error.new(ReasonValue(ValueConvert(ObjectType.Integer))) from None
     raise Error.new(
         ReasonTypeMismatch(
-            TypeMismatchExpectedPosArg(0, (Type.Integer, Type.Float, Type.Boolean, Type.String), _type_of(x))
+            TypeMismatchExpectedPosArg(
+                0, (ObjectType.Integer, ObjectType.Float, ObjectType.Boolean, ObjectType.String), _type_of(x)
+            )
         )
     )
 
@@ -605,10 +611,12 @@ def _builtin_float(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldV
         try:
             return float(x)
         except ValueError:
-            raise Error.new(ReasonValue(ValueConvert(Type.Float))) from None
+            raise Error.new(ReasonValue(ValueConvert(ObjectType.Float))) from None
     raise Error.new(
         ReasonTypeMismatch(
-            TypeMismatchExpectedPosArg(0, (Type.Integer, Type.Float, Type.Boolean, Type.String), _type_of(x))
+            TypeMismatchExpectedPosArg(
+                0, (ObjectType.Integer, ObjectType.Float, ObjectType.Boolean, ObjectType.String), _type_of(x)
+            )
         )
     )
 
@@ -630,9 +638,11 @@ def _builtin_map_fn(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> Gold
         raise Error.new(ReasonTypeMismatch(TypeMismatchArgCount(2, 2, len(args))))
     f, xs = args[0], args[1]
     if not isinstance(f, (GoldFunction, GoldBuiltin)):
-        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (Type.Function,), _type_of(f))))
+        raise Error.new(
+            ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (ObjectType.Function,), _type_of(f)))
+        )
     if not isinstance(xs, list):
-        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(1, (Type.List,), _type_of(xs))))
+        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(1, (ObjectType.List,), _type_of(xs))))
     return [_call(f, [x], {}) for x in xs]
 
 
@@ -641,9 +651,11 @@ def _builtin_filter_fn(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> G
         raise Error.new(ReasonTypeMismatch(TypeMismatchArgCount(2, 2, len(args))))
     f, xs = args[0], args[1]
     if not isinstance(f, (GoldFunction, GoldBuiltin)):
-        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (Type.Function,), _type_of(f))))
+        raise Error.new(
+            ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (ObjectType.Function,), _type_of(f)))
+        )
     if not isinstance(xs, list):
-        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(1, (Type.List,), _type_of(xs))))
+        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(1, (ObjectType.List,), _type_of(xs))))
     return [x for x in xs if _truthy(_call(f, [x], {}))]
 
 
@@ -652,7 +664,7 @@ def _builtin_items(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldV
         raise Error.new(ReasonTypeMismatch(TypeMismatchArgCount(1, 1, len(args))))
     x = args[0]
     if not isinstance(x, dict):
-        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (Type.Map,), _type_of(x))))
+        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (ObjectType.Map,), _type_of(x))))
     return [[k, v] for k, v in x.items()]
 
 
@@ -662,7 +674,9 @@ def _builtin_exp(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldVal
     x = args[0]
     if not _is_numeric(x):
         raise Error.new(
-            ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (Type.Integer, Type.Float), _type_of(x)))
+            ReasonTypeMismatch(
+                TypeMismatchExpectedPosArg(0, (ObjectType.Integer, ObjectType.Float), _type_of(x))
+            )
         )
     xf = float(x)
     if "base" in kwargs:
@@ -670,7 +684,7 @@ def _builtin_exp(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldVal
         if not _is_numeric(base):
             raise Error.new(
                 ReasonTypeMismatch(
-                    TypeMismatchExpectedKwarg("base", (Type.Integer, Type.Float), _type_of(base))
+                    TypeMismatchExpectedKwarg("base", (ObjectType.Integer, ObjectType.Float), _type_of(base))
                 )
             )
         return float(base) ** xf
@@ -683,7 +697,9 @@ def _builtin_log(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldVal
     x = args[0]
     if not _is_numeric(x):
         raise Error.new(
-            ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (Type.Integer, Type.Float), _type_of(x)))
+            ReasonTypeMismatch(
+                TypeMismatchExpectedPosArg(0, (ObjectType.Integer, ObjectType.Float), _type_of(x))
+            )
         )
     xf = float(x)
     if "base" in kwargs:
@@ -691,7 +707,7 @@ def _builtin_log(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldVal
         if not _is_numeric(base):
             raise Error.new(
                 ReasonTypeMismatch(
-                    TypeMismatchExpectedKwarg("base", (Type.Integer, Type.Float), _type_of(base))
+                    TypeMismatchExpectedKwarg("base", (ObjectType.Integer, ObjectType.Float), _type_of(base))
                 )
             )
         return math.log(xf, float(base))
@@ -703,7 +719,7 @@ def _builtin_ord(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldVal
         raise Error.new(ReasonTypeMismatch(TypeMismatchArgCount(1, 1, len(args))))
     x = args[0]
     if not isinstance(x, str):
-        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (Type.String,), _type_of(x))))
+        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (ObjectType.String,), _type_of(x))))
     if len(x) != 1:
         raise Error.new(ReasonValue(ValueTooLong()))
     return ord(x)
@@ -714,7 +730,7 @@ def _builtin_chr(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> GoldVal
         raise Error.new(ReasonTypeMismatch(TypeMismatchArgCount(1, 1, len(args))))
     x = args[0]
     if not _is_int(x):
-        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (Type.Integer,), _type_of(x))))
+        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (ObjectType.Integer,), _type_of(x))))
     try:
         return chr(int(x))
     except (ValueError, OverflowError) as e:
@@ -726,9 +742,9 @@ def _builtin_startswith(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> 
         raise Error.new(ReasonTypeMismatch(TypeMismatchArgCount(2, 2, len(args))))
     x, y = args
     if not isinstance(x, str):
-        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (Type.String,), _type_of(x))))
+        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (ObjectType.String,), _type_of(x))))
     if not isinstance(y, str):
-        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(1, (Type.String,), _type_of(y))))
+        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(1, (ObjectType.String,), _type_of(y))))
     return x.startswith(y)
 
 
@@ -737,9 +753,9 @@ def _builtin_endswith(args: list[GoldValue], kwargs: dict[str, GoldValue]) -> Go
         raise Error.new(ReasonTypeMismatch(TypeMismatchArgCount(2, 2, len(args))))
     x, y = args
     if not isinstance(x, str):
-        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (Type.String,), _type_of(x))))
+        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(0, (ObjectType.String,), _type_of(x))))
     if not isinstance(y, str):
-        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(1, (Type.String,), _type_of(y))))
+        raise Error.new(ReasonTypeMismatch(TypeMismatchExpectedPosArg(1, (ObjectType.String,), _type_of(y))))
     return x.endswith(y)
 
 
@@ -1070,9 +1086,7 @@ class EvalResult:
         return self.error is None
 
     def pprint(self, *, show_spans: bool = True, max_str_len: int | None = None) -> str:
-        from .pprint import pprint as _pprint
-
-        return _pprint(self, show_spans=show_spans, max_str_len=max_str_len)
+        return pprint_eval_result(self, show_spans=show_spans, max_str_len=max_str_len)
 
 
 def evaluate(file: File, resolver: AbstractImportResolver | None = None) -> GoldValue:
@@ -1091,8 +1105,6 @@ def evaluate(file: File, resolver: AbstractImportResolver | None = None) -> Gold
 
 def evaluate_source(source: str, resolver: AbstractImportResolver | None = None) -> GoldValue:
     """Parse ``source`` and evaluate it, returning the result value."""
-    from .parser import parse
-
     result = parse(source)
     if not result.ok or result.tree is None:
         if result.errors:

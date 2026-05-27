@@ -2,48 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+
+from .types import ObjectType, TokenType
 
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from .span import Span
-
-# ── Type ──────────────────────────────────────────────────────────────────────
-
-
-class Type(Enum):
-    Integer = auto()
-    Float = auto()
-    String = auto()
-    Boolean = auto()
-    List = auto()
-    Map = auto()
-    Function = auto()
-    Iterator = auto()
-    Null = auto()
-
-    def __str__(self) -> str:
-        match self:
-            case Type.Integer:
-                return "int"
-            case Type.Float:
-                return "float"
-            case Type.String:
-                return "str"
-            case Type.Boolean:
-                return "bool"
-            case Type.List:
-                return "list"
-            case Type.Map:
-                return "map"
-            case Type.Function:
-                return "function"
-            case Type.Iterator:
-                return "iterator"
-            case Type.Null:
-                return "null"
 
 
 # ── SyntaxElement ─────────────────────────────────────────────────────────────
@@ -81,7 +48,7 @@ class SyntaxElement(Enum):
 class SyntaxElementToken:
     """The Token(TokenType) variant of SyntaxElement."""
 
-    token_type: Any  # TokenType at runtime
+    token_type: TokenType
 
     def __str__(self) -> str:
         return str(self.token_type)
@@ -111,31 +78,23 @@ class SyntaxUnexpectedChar(AbstractSyntax):
         return f"unexpected {self.char}"
 
 
-@dataclass(frozen=True)
-class SyntaxExpectedOne(AbstractSyntax):
-    element: AnySyntaxElement
+@dataclass(frozen=True, init=False)
+class SyntaxExpected(AbstractSyntax):
+    elements: tuple[AnySyntaxElement, ...]
+
+    def __init__(self, *elements: AnySyntaxElement | TokenType) -> None:
+        object.__setattr__(
+            self,
+            "elements",
+            tuple(SyntaxElementToken(e) if isinstance(e, TokenType) else e for e in elements),
+        )
 
     def __str__(self) -> str:
-        return f"expected {self.element}"
-
-
-@dataclass(frozen=True)
-class SyntaxExpectedTwo(AbstractSyntax):
-    element1: AnySyntaxElement
-    element2: AnySyntaxElement
-
-    def __str__(self) -> str:
-        return f"expected {self.element1} or {self.element2}"
-
-
-@dataclass(frozen=True)
-class SyntaxExpectedThree(AbstractSyntax):
-    element1: AnySyntaxElement
-    element2: AnySyntaxElement
-    element3: AnySyntaxElement
-
-    def __str__(self) -> str:
-        return f"expected {self.element1}, {self.element2} or {self.element3}"
+        *head, final = self.elements
+        if not head:
+            return f"expected {final}"
+        head_str = ", ".join(str(h) for h in head)
+        return f"expected {head_str} or {final}"
 
 
 @dataclass(frozen=True)
@@ -151,13 +110,7 @@ class SyntaxDefaultSequence(AbstractSyntax):
 
 
 type Syntax = (
-    SyntaxUnexpectedEof
-    | SyntaxUnexpectedChar
-    | SyntaxExpectedOne
-    | SyntaxExpectedTwo
-    | SyntaxExpectedThree
-    | SyntaxMultiSlurp
-    | SyntaxDefaultSequence
+    SyntaxUnexpectedEof | SyntaxUnexpectedChar | SyntaxExpected | SyntaxMultiSlurp | SyntaxDefaultSequence
 )
 
 
@@ -203,7 +156,7 @@ class UnpackKeyMissing(AbstractUnpack):
 @dataclass(frozen=True)
 class UnpackTypeMismatch(AbstractUnpack):
     expected: BindingType
-    got: Type
+    got: ObjectType
 
     def __str__(self) -> str:
         return f"expected {self.expected}, found {self.got}"
@@ -221,7 +174,7 @@ class AbstractTypeMismatch:
 
 @dataclass(frozen=True)
 class TypeMismatchIterate(AbstractTypeMismatch):
-    got: Type
+    got: ObjectType
 
     def __str__(self) -> str:
         return f"non-iterable type: {self.got}"
@@ -229,7 +182,7 @@ class TypeMismatchIterate(AbstractTypeMismatch):
 
 @dataclass(frozen=True)
 class TypeMismatchSplatList(AbstractTypeMismatch):
-    got: Type
+    got: ObjectType
 
     def __str__(self) -> str:
         return f"unsuitable type for splatting: {self.got}"
@@ -237,7 +190,7 @@ class TypeMismatchSplatList(AbstractTypeMismatch):
 
 @dataclass(frozen=True)
 class TypeMismatchSplatMap(AbstractTypeMismatch):
-    got: Type
+    got: ObjectType
 
     def __str__(self) -> str:
         return f"unsuitable type for splatting: {self.got}"
@@ -245,7 +198,7 @@ class TypeMismatchSplatMap(AbstractTypeMismatch):
 
 @dataclass(frozen=True)
 class TypeMismatchSplatArg(AbstractTypeMismatch):
-    got: Type
+    got: ObjectType
 
     def __str__(self) -> str:
         return f"unsuitable type for splatting: {self.got}"
@@ -253,7 +206,7 @@ class TypeMismatchSplatArg(AbstractTypeMismatch):
 
 @dataclass(frozen=True)
 class TypeMismatchMapKey(AbstractTypeMismatch):
-    got: Type
+    got: ObjectType
 
     def __str__(self) -> str:
         return f"unsuitable type for map key: {self.got}"
@@ -261,7 +214,7 @@ class TypeMismatchMapKey(AbstractTypeMismatch):
 
 @dataclass(frozen=True)
 class TypeMismatchInterpolate(AbstractTypeMismatch):
-    got: Type
+    got: ObjectType
 
     def __str__(self) -> str:
         return f"unsuitable type for interpolation: {self.got}"
@@ -269,7 +222,7 @@ class TypeMismatchInterpolate(AbstractTypeMismatch):
 
 @dataclass(frozen=True)
 class TypeMismatchInterpolateSpec(AbstractTypeMismatch):
-    got: Type
+    got: ObjectType
 
     def __str__(self) -> str:
         return f"unsuitable type for format spec: {self.got}"
@@ -277,8 +230,8 @@ class TypeMismatchInterpolateSpec(AbstractTypeMismatch):
 
 @dataclass(frozen=True)
 class TypeMismatchBinOp(AbstractTypeMismatch):
-    left: Type
-    right: Type
+    left: ObjectType
+    right: ObjectType
     op: str
 
     def __str__(self) -> str:
@@ -287,7 +240,7 @@ class TypeMismatchBinOp(AbstractTypeMismatch):
 
 @dataclass(frozen=True)
 class TypeMismatchUnOp(AbstractTypeMismatch):
-    got: Type
+    got: ObjectType
     op: str
 
     def __str__(self) -> str:
@@ -296,7 +249,7 @@ class TypeMismatchUnOp(AbstractTypeMismatch):
 
 @dataclass(frozen=True)
 class TypeMismatchCall(AbstractTypeMismatch):
-    got: Type
+    got: ObjectType
 
     def __str__(self) -> str:
         return f"unsuitable type for function call: {self.got}"
@@ -304,13 +257,13 @@ class TypeMismatchCall(AbstractTypeMismatch):
 
 @dataclass(frozen=True)
 class TypeMismatchJson(AbstractTypeMismatch):
-    got: Type
+    got: ObjectType
 
     def __str__(self) -> str:
         return f"unsuitable type for JSON-like conversion: {self.got}"
 
 
-def _fmt_expected_arg(name: object, allowed: tuple[Type, ...], received: Type) -> str:
+def _fmt_expected_arg(name: object, allowed: tuple[ObjectType, ...], received: ObjectType) -> str:
     prefix = f"unsuitable type for parameter {name} - expected "
     if len(allowed) == 0:
         suffix = ""
@@ -324,8 +277,8 @@ def _fmt_expected_arg(name: object, allowed: tuple[Type, ...], received: Type) -
 @dataclass(frozen=True)
 class TypeMismatchExpectedPosArg(AbstractTypeMismatch):
     index: int
-    allowed: tuple[Type, ...]
-    received: Type
+    allowed: tuple[ObjectType, ...]
+    received: ObjectType
 
     def __str__(self) -> str:
         return _fmt_expected_arg(self.index + 1, self.allowed, self.received)
@@ -334,8 +287,8 @@ class TypeMismatchExpectedPosArg(AbstractTypeMismatch):
 @dataclass(frozen=True)
 class TypeMismatchExpectedKwarg(AbstractTypeMismatch):
     name: str
-    allowed: tuple[Type, ...]
-    received: Type
+    allowed: tuple[ObjectType, ...]
+    received: ObjectType
 
     def __str__(self) -> str:
         return _fmt_expected_arg(self.name, self.allowed, self.received)
@@ -400,7 +353,7 @@ class ValueTooLong(AbstractValue):
 
 @dataclass(frozen=True)
 class ValueConvert(AbstractValue):
-    to: Type
+    to: ObjectType
 
     def __str__(self) -> str:
         return f"couldn't convert to {self.to}"

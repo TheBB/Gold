@@ -3,21 +3,39 @@ from __future__ import annotations
 import dataclasses
 import json
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .ast import GoldBuiltin, GoldFunction, GoldValue
 from .span import Span, Tagged
 
 
-def pprint(
-    node: Any,
+if TYPE_CHECKING:
+    from .error import Error
+    from .evaluation import EvalResult
+    from .parser import ParseResult
+
+
+def pprint_parse_result(
+    node: ParseResult,
     *,
     show_spans: bool = True,
     max_str_len: int | None = None,
 ) -> str:
-    """Return an indented human-readable representation of a parse node or result."""
+    """Return an indented human-readable representation of a ParseResult."""
     pp = _PP(show_spans=show_spans, max_str_len=max_str_len)
-    pp._node(node, 0)
+    pp._parse_result(node, 0)
+    return "\n".join(pp._out)
+
+
+def pprint_eval_result(
+    node: EvalResult,
+    *,
+    show_spans: bool = True,
+    max_str_len: int | None = None,
+) -> str:
+    """Return an indented human-readable representation of an EvalResult."""
+    pp = _PP(show_spans=show_spans, max_str_len=max_str_len)
+    pp._eval_result(node, 0)
     return "\n".join(pp._out)
 
 
@@ -61,8 +79,6 @@ class _PP:
 
     def _is_dc(self, value: Any) -> bool:
         return dataclasses.is_dataclass(value) and not isinstance(value, type)
-
-    # ── Main dispatch ─────────────────────────────────────────────────────────
 
     # ── Gold value rendering ──────────────────────────────────────────────────
 
@@ -108,48 +124,48 @@ class _PP:
             for k, v in value.items():
                 self._gold_field(k, v, indent + 1)
 
+    # ── Result-type rendering ─────────────────────────────────────────────────
+
+    def _error(self, node: Error, indent: int) -> None:
+        self._emit(indent, "Error")
+        self._emit(indent + 1, f"reason: {self._strval(node.message)}")
+        if not node.locations:
+            self._emit(indent + 1, "locations: []")
+        else:
+            self._emit(indent + 1, "locations:")
+            for span, action in node.locations:
+                self._emit(indent + 2, f"{self._span(span).strip()} {action.name}")
+
+    def _eval_result(self, node: EvalResult, indent: int) -> None:
+        self._emit(indent, "EvalResult")
+        self._emit(indent + 1, f"ok: {'true' if node.ok else 'false'}")
+        if node.error is not None:
+            self._emit(indent + 1, "error:")
+            self._error(node.error, indent + 2)
+        else:
+            self._gold_field("value", node.value, indent + 1)
+
+    def _parse_result(self, node: ParseResult, indent: int) -> None:
+        self._emit(indent, "ParseResult")
+        self._emit(indent + 1, f"ok: {'true' if node.ok else 'false'}")
+        if not node.errors:
+            self._emit(indent + 1, "errors: []")
+        else:
+            self._emit(indent + 1, "errors:")
+            for e in node.errors:
+                self._error(e, indent + 2)
+        if node.tree is None:
+            self._emit(indent + 1, "tree: null")
+        else:
+            self._emit(indent + 1, "tree:")
+            self._node(node.tree, indent + 2)
+
     # ── Main dispatch ─────────────────────────────────────────────────────────
 
     def _node(self, node: Any, indent: int) -> None:
         """Render an arbitrary node at the given indent level."""
-        # Import here to avoid circular dependency at module load time
-        from .error import Error
-        from .evaluation import EvalResult
-        from .parser import ParseResult
-
         if isinstance(node, Tagged):
             self._tagged(node, indent)
-        elif isinstance(node, Error):
-            self._emit(indent, "Error")
-            self._emit(indent + 1, f"reason: {self._strval(node.message)}")
-            if not node.locations:
-                self._emit(indent + 1, "locations: []")
-            else:
-                self._emit(indent + 1, "locations:")
-                for span, action in node.locations:
-                    self._emit(indent + 2, f"{self._span(span).strip()} {action.name}")
-        elif isinstance(node, EvalResult):
-            self._emit(indent, "EvalResult")
-            self._emit(indent + 1, f"ok: {'true' if node.ok else 'false'}")
-            if node.error is not None:
-                self._emit(indent + 1, "error:")
-                self._node(node.error, indent + 2)
-            else:
-                self._gold_field("value", node.value, indent + 1)
-        elif isinstance(node, ParseResult):
-            self._emit(indent, "ParseResult")
-            self._emit(indent + 1, f"ok: {'true' if node.ok else 'false'}")
-            if not node.errors:
-                self._emit(indent + 1, "errors: []")
-            else:
-                self._emit(indent + 1, "errors:")
-                for e in node.errors:
-                    self._node(e, indent + 2)
-            if node.tree is None:
-                self._emit(indent + 1, "tree: null")
-            else:
-                self._emit(indent + 1, "tree:")
-                self._node(node.tree, indent + 2)
         elif self._is_dc(node):
             self._emit(indent, type(node).__name__)
             self._fields(node, indent + 1)
