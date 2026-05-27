@@ -1,0 +1,15 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..12]
+        operand: IdentifierExpr [0..6]
+          name: "isnull" [0..6]
+        transform: FunCallTransform
+          args: [6..12]
+            [0]:
+              ArgSingleton [7..11]
+                expr: LiteralExpr [7..11]
+                  value: null

@@ -1,0 +1,14 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..37]
+        elements:
+          [0]:
+            MapSingleton [5..36]
+              key: LiteralExpr [5..6]
+                value: "z"
+              value: LiteralExpr [8..36]
+                value: "here's some\ntext"

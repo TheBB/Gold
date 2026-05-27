@@ -1,0 +1,58 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..57]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "f" [4..5]
+            FunctionExpr [8..49]
+              positional: ListBinding [11..14]
+                elements:
+                  [0]:
+                    ListBindingSingleton [12..13]
+                      binding: IdentifierBinding [12..13]
+                        name: "n" [12..13]
+                      default: null
+              keywords: null
+              expression: BranchExpr [15..49]
+                condition: TransformedExpr [18..24]
+                  operand: IdentifierExpr [18..19]
+                    name: "n" [18..19]
+                  transform: BinOpTransform
+                    op: LessEqual [20..22]
+                    operand: LiteralExpr [23..24]
+                      value: 1
+                true_branch: LiteralExpr [30..31]
+                  value: 1
+                false_branch: TransformedExpr [37..49]
+                  operand: IdentifierExpr [37..38]
+                    name: "n" [37..38]
+                  transform: BinOpTransform
+                    op: Multiply [39..40]
+                    operand: TransformedExpr [41..49]
+                      operand: IdentifierExpr [41..42]
+                        name: "f" [41..42]
+                      transform: FunCallTransform
+                        args: [42..49]
+                          [0]:
+                            ArgSingleton [43..48]
+                              expr: TransformedExpr [43..48]
+                                operand: IdentifierExpr [43..44]
+                                  name: "n" [43..44]
+                                transform: BinOpTransform
+                                  op: Subtract [45..46]
+                                  operand: LiteralExpr [47..48]
+                                    value: 1
+        expression: TransformedExpr [53..57]
+          operand: IdentifierExpr [53..54]
+            name: "f" [53..54]
+          transform: FunCallTransform
+            args: [54..57]
+              [0]:
+                ArgSingleton [55..56]
+                  expr: LiteralExpr [55..56]
+                    value: 5

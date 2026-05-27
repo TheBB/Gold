@@ -1,0 +1,19 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected '='"
+      locations:
+        [5..5] Parse
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..12]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "x" [4..5]
+            LiteralExpr [6..7]
+              value: 1
+        expression: IdentifierExpr [11..12]
+          name: "x" [11..12]

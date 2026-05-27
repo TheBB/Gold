@@ -1,0 +1,15 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..12]
+        operand: IdentifierExpr [0..7]
+          name: "isfloat" [0..7]
+        transform: FunCallTransform
+          args: [7..12]
+            [0]:
+              ArgSingleton [8..11]
+                expr: LiteralExpr [8..11]
+                  value: 1.0

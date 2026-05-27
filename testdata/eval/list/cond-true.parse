@@ -1,0 +1,19 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: ListExpr [0..17]
+        elements:
+          [0]:
+            ListCond [1..13]
+              condition: LiteralExpr [6..10]
+                value: true
+              element: ListSingleton [12..13]
+                expr: LiteralExpr [12..13]
+                  value: 1
+          [1]:
+            ListSingleton [15..16]
+              expr: LiteralExpr [15..16]
+                value: 2

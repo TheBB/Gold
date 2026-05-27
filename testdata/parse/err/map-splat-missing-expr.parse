@@ -1,0 +1,19 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected expression"
+      locations:
+        [4..4] Parse
+    Error
+      reason: "expected '}'"
+      locations:
+        [4..4] Parse
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..4]
+        elements:
+          [0]:
+            MapSplat [1..4]
+              expr: MissingExpr [4..4]

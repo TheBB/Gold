@@ -1,0 +1,3 @@
+let double = fn (x) x + x
+let applytwice = fn (f,x) f(f(x))
+in applytwice(double, [1])

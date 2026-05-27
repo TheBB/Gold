@@ -1,0 +1,12 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: ListExpr [0..11]
+        elements:
+          [0]:
+            ListSingleton [3..4]
+              expr: LiteralExpr [3..4]
+                value: 1

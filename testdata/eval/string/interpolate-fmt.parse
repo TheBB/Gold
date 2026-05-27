@@ -1,0 +1,21 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: StringExpr [0..13]
+        elements:
+          [0]:
+            StringInterpolate
+              expr: LiteralExpr [3..7]
+                value: 3.14
+              fmt: FormatSpec
+                fill: " "
+                align: null
+                sign: null
+                alternate: false
+                width: null
+                grouping: null
+                precision: 2
+                fmt_type: Fixed

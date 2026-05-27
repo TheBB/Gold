@@ -1,0 +1,16 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected operand"
+      locations:
+        [8..8] Parse
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..8]
+        operand: LiteralExpr [0..4]
+          value: true
+        transform: BinOpTransform
+          op: And [5..8]
+          operand: MissingExpr [8..8]

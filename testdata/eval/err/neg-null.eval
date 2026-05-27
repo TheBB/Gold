@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unsuitable type for '-': null"
+      locations:
+        [0..1] Evaluate

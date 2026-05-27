@@ -1,0 +1,28 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected expression"
+      locations:
+        [10..10] Parse
+  tree:
+    File
+      statements: []
+      expression: FunctionExpr [0..13]
+        positional: ListBinding [3..6]
+          elements:
+            [0]:
+              ListBindingSingleton [4..5]
+                binding: IdentifierBinding [4..5]
+                  name: "x" [4..5]
+                default: null
+        keywords: MapBinding [5..11]
+          elements:
+            [0]:
+              MapBindingSingleton [7..10]
+                key: "y" [7..8]
+                binding: IdentifierBinding [7..8]
+                  name: "y" [7..8]
+                default: MissingExpr [10..10]
+        expression: IdentifierExpr [12..13]
+          name: "x" [12..13]

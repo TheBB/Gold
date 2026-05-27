@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unsuitable type for function call: bool"
+      locations:
+        [4..7] Evaluate

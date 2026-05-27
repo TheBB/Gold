@@ -1,0 +1,22 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected 'in'"
+      locations:
+        [9..9] Parse
+    Error
+      reason: "expected expression"
+      locations:
+        [9..9] Parse
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..9]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "x" [4..5]
+            LiteralExpr [8..9]
+              value: 1
+        expression: MissingExpr [9..9]

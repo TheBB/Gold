@@ -1,0 +1,15 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..7]
+        operand: LiteralExpr [0..4]
+          value: true
+        transform: FunCallTransform
+          args: [4..7]
+            [0]:
+              ArgSingleton [5..6]
+                expr: LiteralExpr [5..6]
+                  value: 1

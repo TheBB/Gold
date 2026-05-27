@@ -1,0 +1,22 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..22]
+        operand: FunctionExpr [1..12]
+          positional: ListBinding [4..10]
+            elements:
+              [0]:
+                ListBindingSlurpTo [5..9]
+                  name: "x"
+          keywords: null
+          expression: LiteralExpr [11..12]
+            value: 1
+        transform: FunCallTransform
+          args: [13..22]
+            [0]:
+              ArgSplat [14..21]
+                expr: LiteralExpr [17..21]
+                  value: true

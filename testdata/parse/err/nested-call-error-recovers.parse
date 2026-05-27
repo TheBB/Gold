@@ -1,0 +1,27 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected operand"
+      locations:
+        [5..5] Parse
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..9]
+        operand: IdentifierExpr [0..1]
+          name: "f" [0..1]
+        transform: FunCallTransform
+          args: [1..9]
+            [0]:
+              ArgSingleton [2..5]
+                expr: TransformedExpr [2..5]
+                  operand: LiteralExpr [2..3]
+                    value: 1
+                  transform: BinOpTransform
+                    op: Add [4..5]
+                    operand: MissingExpr [5..5]
+            [1]:
+              ArgSingleton [7..8]
+                expr: LiteralExpr [7..8]
+                  value: 2

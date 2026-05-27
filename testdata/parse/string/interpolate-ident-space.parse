@@ -1,0 +1,16 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: StringExpr [0..14]
+        elements:
+          [0]:
+            StringRaw
+              value: "dingbob"
+          [1]:
+            StringInterpolate
+              expr: IdentifierExpr [11..12]
+                name: "a" [11..12]
+              fmt: null

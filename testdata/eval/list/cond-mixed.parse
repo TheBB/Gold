@@ -1,0 +1,35 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: ListExpr [0..55]
+        elements:
+          [0]:
+            ListCond [1..13]
+              condition: LiteralExpr [6..10]
+                value: true
+              element: ListSingleton [12..13]
+                expr: LiteralExpr [12..13]
+                  value: 1
+          [1]:
+            ListCond [15..28]
+              condition: LiteralExpr [20..25]
+                value: false
+              element: ListSingleton [27..28]
+                expr: LiteralExpr [27..28]
+                  value: 2
+          [2]:
+            ListSingleton [30..51]
+              expr: BranchExpr [30..51]
+                condition: LiteralExpr [33..37]
+                  value: true
+                true_branch: LiteralExpr [43..44]
+                  value: 3
+                false_branch: LiteralExpr [50..51]
+                  value: 4
+          [3]:
+            ListSingleton [53..54]
+              expr: LiteralExpr [53..54]
+                value: 5

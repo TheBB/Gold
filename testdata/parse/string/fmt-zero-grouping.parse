@@ -1,0 +1,21 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: StringExpr [0..12]
+        elements:
+          [0]:
+            StringInterpolate
+              expr: IdentifierExpr [3..4]
+                name: "a" [3..4]
+              fmt: FormatSpec
+                fill: "0"
+                align: AfterSign
+                sign: null
+                alternate: false
+                width: null
+                grouping: Comma
+                precision: 5
+                fmt_type: String

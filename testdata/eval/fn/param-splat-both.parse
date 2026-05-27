@@ -1,0 +1,55 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..75]
+        bindings:
+          [0]:
+            IdentifierBinding [4..8]
+              name: "dest" [4..8]
+            FunctionExpr [11..49]
+              positional: ListBinding [14..23]
+                elements:
+                  [0]:
+                    ListBindingSlurpTo [15..22]
+                      name: "args"
+              keywords: MapBinding [22..34]
+                elements:
+                  [0]:
+                    MapBindingSlurpTo [24..33]
+                      name: "kwargs"
+              expression: ListExpr [35..49]
+                elements:
+                  [0]:
+                    ListSingleton [36..40]
+                      expr: IdentifierExpr [36..40]
+                        name: "args" [36..40]
+                  [1]:
+                    ListSingleton [42..48]
+                      expr: IdentifierExpr [42..48]
+                        name: "kwargs" [42..48]
+        expression: TransformedExpr [53..75]
+          operand: IdentifierExpr [53..57]
+            name: "dest" [53..57]
+          transform: FunCallTransform
+            args: [57..75]
+              [0]:
+                ArgSingleton [58..59]
+                  expr: LiteralExpr [58..59]
+                    value: 1
+              [1]:
+                ArgSingleton [61..62]
+                  expr: LiteralExpr [61..62]
+                    value: 2
+              [2]:
+                ArgKeyword [64..68]
+                  key: "x" [64..65]
+                  expr: LiteralExpr [67..68]
+                    value: 3
+              [3]:
+                ArgKeyword [70..74]
+                  key: "y" [70..71]
+                  expr: LiteralExpr [73..74]
+                    value: 4

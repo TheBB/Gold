@@ -1,0 +1,27 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..32]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "a" [4..5]
+            FunctionExpr [8..15]
+              positional: ListBinding [11..13]
+                elements: []
+              keywords: null
+              expression: IdentifierExpr [14..15]
+                name: "b" [14..15]
+          [1]:
+            IdentifierBinding [20..21]
+              name: "b" [20..21]
+            LiteralExpr [24..25]
+              value: 1
+        expression: TransformedExpr [29..32]
+          operand: IdentifierExpr [29..30]
+            name: "a" [29..30]
+          transform: FunCallTransform
+            args: [] [30..32]

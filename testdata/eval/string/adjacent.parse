@@ -1,0 +1,14 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: StringExpr [0..15]
+        elements:
+          [0]:
+            StringRaw
+              value: "alpha"
+          [1]:
+            StringRaw
+              value: "bravo"

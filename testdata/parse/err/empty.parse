@@ -1,0 +1,11 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected expression"
+      locations:
+        [0..0] Parse
+  tree:
+    File
+      statements: []
+      expression: MissingExpr [0..0]

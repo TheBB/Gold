@@ -1,0 +1,74 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: ListExpr [0..224]
+        elements:
+          [0]:
+            ListSingleton [6..74]
+              expr: MapExpr [6..74]
+                elements:
+                  [0]:
+                    MapSingleton [16..29]
+                      key: LiteralExpr [16..20]
+                        value: "name"
+                      value: LiteralExpr [22..29]
+                        value: "Alice"
+                  [1]:
+                    MapSingleton [39..46]
+                      key: LiteralExpr [39..42]
+                        value: "age"
+                      value: LiteralExpr [44..46]
+                        value: 24
+                  [2]:
+                    MapSingleton [56..67]
+                      key: LiteralExpr [56..61]
+                        value: "admin"
+                      value: LiteralExpr [63..67]
+                        value: true
+          [1]:
+            ListSingleton [80..146]
+              expr: MapExpr [80..146]
+                elements:
+                  [0]:
+                    MapSingleton [90..101]
+                      key: LiteralExpr [90..94]
+                        value: "name"
+                      value: LiteralExpr [96..101]
+                        value: "Bob"
+                  [1]:
+                    MapSingleton [111..118]
+                      key: LiteralExpr [111..114]
+                        value: "age"
+                      value: LiteralExpr [116..118]
+                        value: 49
+                  [2]:
+                    MapSingleton [128..139]
+                      key: LiteralExpr [128..133]
+                        value: "admin"
+                      value: LiteralExpr [135..139]
+                        value: true
+          [2]:
+            ListSingleton [152..221]
+              expr: MapExpr [152..221]
+                elements:
+                  [0]:
+                    MapSingleton [162..175]
+                      key: LiteralExpr [162..166]
+                        value: "name"
+                      value: LiteralExpr [168..175]
+                        value: "Carlo"
+                  [1]:
+                    MapSingleton [185..192]
+                      key: LiteralExpr [185..188]
+                        value: "age"
+                      value: LiteralExpr [190..192]
+                        value: 20
+                  [2]:
+                    MapSingleton [202..214]
+                      key: LiteralExpr [202..207]
+                        value: "admin"
+                      value: LiteralExpr [209..214]
+                        value: false

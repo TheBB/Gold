@@ -1,0 +1,22 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: ListExpr [0..14]
+        elements:
+          [0]:
+            ListCond [1..13]
+              condition: TransformedExpr [6..10]
+                operand: IdentifierExpr [6..7]
+                  name: "f" [6..7]
+                transform: FunCallTransform
+                  args: [7..10]
+                    [0]:
+                      ArgSingleton [8..9]
+                        expr: IdentifierExpr [8..9]
+                          name: "x" [8..9]
+              element: ListSingleton [12..13]
+                expr: IdentifierExpr [12..13]
+                  name: "x" [12..13]

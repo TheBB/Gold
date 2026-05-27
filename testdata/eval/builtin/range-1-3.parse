@@ -1,0 +1,19 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..11]
+        operand: IdentifierExpr [0..5]
+          name: "range" [0..5]
+        transform: FunCallTransform
+          args: [5..11]
+            [0]:
+              ArgSingleton [6..7]
+                expr: LiteralExpr [6..7]
+                  value: 1
+            [1]:
+              ArgSingleton [9..10]
+                expr: LiteralExpr [9..10]
+                  value: 3

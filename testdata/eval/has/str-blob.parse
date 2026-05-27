@@ -1,0 +1,13 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..22]
+        operand: LiteralExpr [0..11]
+          value: "bobloblaw"
+        transform: BinOpTransform
+          op: Contains [12..15]
+          operand: LiteralExpr [16..22]
+            value: "blob"

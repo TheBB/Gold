@@ -1,0 +1,18 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected binding pattern"
+      locations:
+        [3..3] Parse
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..12]
+        bindings:
+          [0]:
+            MissingBinding [3..3]
+            LiteralExpr [6..7]
+              value: 1
+        expression: IdentifierExpr [11..12]
+          name: "x" [11..12]

@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unsuitable types for 'subscript': int and str"
+      locations:
+        [3..4] Evaluate

@@ -1,0 +1,13 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..8]
+        operand: ListExpr [0..2]
+          elements: []
+        transform: BinOpTransform
+          op: NotEqual [3..5]
+          operand: MapExpr [6..8]
+            elements: []

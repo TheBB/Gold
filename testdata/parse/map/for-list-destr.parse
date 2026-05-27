@@ -1,0 +1,30 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..22]
+        elements:
+          [0]:
+            MapLoop [1..21]
+              binding: ListPatternBinding [5..10]
+                binding: ListBinding [5..10]
+                  elements:
+                    [0]:
+                      ListBindingSingleton [6..7]
+                        binding: IdentifierBinding [6..7]
+                          name: "x" [6..7]
+                        default: null
+                    [1]:
+                      ListBindingSingleton [8..9]
+                        binding: IdentifierBinding [8..9]
+                          name: "y" [8..9]
+                        default: null
+              iterable: IdentifierExpr [14..15]
+                name: "z" [14..15]
+              element: MapSingleton [17..21]
+                key: LiteralExpr [17..18]
+                  value: "x"
+                value: IdentifierExpr [20..21]
+                  name: "y" [20..21]

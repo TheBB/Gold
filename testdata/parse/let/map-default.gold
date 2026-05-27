@@ -1,0 +1,1 @@
+let {a = y} = x in a

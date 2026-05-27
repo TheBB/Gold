@@ -1,0 +1,13 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: StringExpr [0..9]
+        elements:
+          [0]:
+            StringInterpolate
+              expr: LiteralExpr [3..7]
+                value: null
+              fmt: null

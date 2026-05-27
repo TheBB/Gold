@@ -1,0 +1,15 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..8]
+        operand: IdentifierExpr [0..4]
+          name: "bool" [0..4]
+        transform: FunCallTransform
+          args: [4..8]
+            [0]:
+              ArgSingleton [5..7]
+                expr: MapExpr [5..7]
+                  elements: []

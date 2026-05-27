@@ -1,0 +1,19 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected ')' or function argument"
+      locations:
+        [4..4] Parse
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..4]
+        operand: IdentifierExpr [0..1]
+          name: "f" [0..1]
+        transform: FunCallTransform
+          args: [1..4]
+            [0]:
+              ArgSingleton [2..3]
+                expr: LiteralExpr [2..3]
+                  value: 1

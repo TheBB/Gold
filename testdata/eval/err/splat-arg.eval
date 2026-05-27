@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unsuitable type for splatting: bool"
+      locations:
+        [17..21] Splat

@@ -1,0 +1,20 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected expression"
+      locations:
+        [6..6] Parse
+  tree:
+    File
+      statements: []
+      expression: FunctionExpr [0..6]
+        positional: ListBinding [3..6]
+          elements:
+            [0]:
+              ListBindingSingleton [4..5]
+                binding: IdentifierBinding [4..5]
+                  name: "x" [4..5]
+                default: null
+        keywords: null
+        expression: MissingExpr [6..6]

@@ -1,0 +1,20 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected expression"
+      locations:
+        [14..14] Parse
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..15]
+        elements:
+          [0]:
+            MapCond [1..14]
+              condition: LiteralExpr [6..10]
+                value: true
+              element: MapSingleton [12..14]
+                key: LiteralExpr [12..13]
+                  value: "x"
+                value: MissingExpr [14..14]

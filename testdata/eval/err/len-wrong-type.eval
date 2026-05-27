@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unsuitable type for parameter 1 - expected str, list or map, got int"
+      locations:
+        [3..6] Evaluate

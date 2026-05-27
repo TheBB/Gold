@@ -1,0 +1,13 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: FunctionExpr [0..7]
+        positional: ListBinding [3..4]
+          elements: []
+        keywords: MapBinding [3..5]
+          elements: []
+        expression: LiteralExpr [6..7]
+          value: 1

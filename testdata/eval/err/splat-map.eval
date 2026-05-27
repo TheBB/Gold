@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unsuitable type for splatting: list"
+      locations:
+        [4..6] Splat

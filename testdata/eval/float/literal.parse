@@ -1,0 +1,8 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LiteralExpr [0..4]
+        value: 3.14

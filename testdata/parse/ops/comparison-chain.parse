@@ -1,0 +1,33 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..25]
+        operand: TransformedExpr [0..20]
+          operand: TransformedExpr [0..15]
+            operand: TransformedExpr [0..10]
+              operand: TransformedExpr [0..5]
+                operand: LiteralExpr [0..1]
+                  value: 1
+                transform: BinOpTransform
+                  op: Greater [2..3]
+                  operand: LiteralExpr [4..5]
+                    value: 2
+              transform: BinOpTransform
+                op: LessEqual [6..8]
+                operand: LiteralExpr [9..10]
+                  value: 3
+            transform: BinOpTransform
+              op: GreaterEqual [11..13]
+              operand: LiteralExpr [14..15]
+                value: 4
+          transform: BinOpTransform
+            op: Equal [16..18]
+            operand: LiteralExpr [19..20]
+              value: 5
+        transform: BinOpTransform
+          op: NotEqual [21..23]
+          operand: LiteralExpr [24..25]
+            value: 6

@@ -131,7 +131,7 @@ impl Span {
     }
 
     /// The offset of the start of the span into the buffer.
-    fn offset(&self) -> usize {
+    pub fn offset(&self) -> usize {
         self.start.offset()
     }
 
@@ -945,6 +945,21 @@ impl Error {
     /// Get the human-friendly text
     pub fn rendered(&self) -> Option<&str> {
         self.rendered.as_ref().map(String::as_str)
+    }
+
+    /// Get the span of the first recorded location, if any.
+    pub fn location(&self) -> Option<Span> {
+        self.locations.as_ref()?.first().map(|(span, _)| *span)
+    }
+
+    /// Get all recorded locations (span + action pairs).
+    pub fn locations(&self) -> &[(Span, Action)] {
+        self.locations.as_deref().unwrap_or(&[])
+    }
+
+    /// Get a plain string representation of the reason (without location context).
+    pub fn reason_display(&self) -> String {
+        self.reason.as_ref().map(|r| r.to_string()).unwrap_or_default()
     }
 
     /// Override the error reason.

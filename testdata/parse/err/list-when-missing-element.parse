@@ -1,0 +1,18 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected list element"
+      locations:
+        [11..11] Parse
+  tree:
+    File
+      statements: []
+      expression: ListExpr [0..12]
+        elements:
+          [0]:
+            ListCond [1..11]
+              condition: LiteralExpr [6..10]
+                value: true
+              element: ListSingleton [11..11]
+                expr: MissingExpr [11..11]

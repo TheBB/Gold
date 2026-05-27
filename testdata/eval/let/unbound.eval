@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unbound name 'y'"
+      locations:
+        [23..24] LookupName

@@ -1,0 +1,159 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..343]
+        bindings:
+          [0]:
+            IdentifierBinding [4..9]
+              name: "alice" [4..9]
+            MapExpr [12..64]
+              elements:
+                [0]:
+                  MapSingleton [18..31]
+                    key: LiteralExpr [18..22]
+                      value: "name"
+                    value: LiteralExpr [24..31]
+                      value: "Alice"
+                [1]:
+                  MapSingleton [37..44]
+                    key: LiteralExpr [37..40]
+                      value: "age"
+                    value: LiteralExpr [42..44]
+                      value: 24
+                [2]:
+                  MapSingleton [50..61]
+                    key: LiteralExpr [50..55]
+                      value: "admin"
+                    value: LiteralExpr [57..61]
+                      value: true
+          [1]:
+            IdentifierBinding [70..73]
+              name: "bob" [70..73]
+            MapExpr [76..126]
+              elements:
+                [0]:
+                  MapSingleton [82..93]
+                    key: LiteralExpr [82..86]
+                      value: "name"
+                    value: LiteralExpr [88..93]
+                      value: "Bob"
+                [1]:
+                  MapSingleton [99..106]
+                    key: LiteralExpr [99..102]
+                      value: "age"
+                    value: LiteralExpr [104..106]
+                      value: 49
+                [2]:
+                  MapSingleton [112..123]
+                    key: LiteralExpr [112..117]
+                      value: "admin"
+                    value: LiteralExpr [119..123]
+                      value: true
+          [2]:
+            IdentifierBinding [132..137]
+              name: "carlo" [132..137]
+            MapExpr [140..193]
+              elements:
+                [0]:
+                  MapSingleton [146..159]
+                    key: LiteralExpr [146..150]
+                      value: "name"
+                    value: LiteralExpr [152..159]
+                      value: "Carlo"
+                [1]:
+                  MapSingleton [165..172]
+                    key: LiteralExpr [165..168]
+                      value: "age"
+                    value: LiteralExpr [170..172]
+                      value: 20
+                [2]:
+                  MapSingleton [178..190]
+                    key: LiteralExpr [178..183]
+                      value: "admin"
+                    value: LiteralExpr [185..190]
+                      value: false
+          [3]:
+            IdentifierBinding [199..206]
+              name: "isAdmin" [199..206]
+            FunctionExpr [209..233]
+              positional: ListBinding [212..220]
+                elements:
+                  [0]:
+                    ListBindingSingleton [213..219]
+                      binding: IdentifierBinding [213..219]
+                        name: "person" [213..219]
+                      default: null
+              keywords: null
+              expression: TransformedExpr [221..233]
+                operand: IdentifierExpr [221..227]
+                  name: "person" [221..227]
+                transform: BinOpTransform
+                  op: Index [227..228]
+                  operand: LiteralExpr [228..233]
+                    value: "admin"
+          [4]:
+            IdentifierBinding [239..245]
+              name: "filter" [239..245]
+            FunctionExpr [248..302]
+              positional: ListBinding [251..263]
+                elements:
+                  [0]:
+                    ListBindingSingleton [252..256]
+                      binding: IdentifierBinding [252..256]
+                        name: "pred" [252..256]
+                      default: null
+                  [1]:
+                    ListBindingSingleton [258..262]
+                      binding: IdentifierBinding [258..262]
+                        name: "list" [258..262]
+                      default: null
+              keywords: null
+              expression: ListExpr [264..302]
+                elements:
+                  [0]:
+                    ListLoop [270..300]
+                      binding: IdentifierBinding [274..275]
+                        name: "x" [274..275]
+                      iterable: IdentifierExpr [279..283]
+                        name: "list" [279..283]
+                      element: ListCond [285..300]
+                        condition: TransformedExpr [290..297]
+                          operand: IdentifierExpr [290..294]
+                            name: "pred" [290..294]
+                          transform: FunCallTransform
+                            args: [294..297]
+                              [0]:
+                                ArgSingleton [295..296]
+                                  expr: IdentifierExpr [295..296]
+                                    name: "x" [295..296]
+                        element: ListSingleton [299..300]
+                          expr: IdentifierExpr [299..300]
+                            name: "x" [299..300]
+        expression: TransformedExpr [307..343]
+          operand: IdentifierExpr [307..313]
+            name: "filter" [307..313]
+          transform: FunCallTransform
+            args: [313..343]
+              [0]:
+                ArgSingleton [314..321]
+                  expr: IdentifierExpr [314..321]
+                    name: "isAdmin" [314..321]
+              [1]:
+                ArgSingleton [323..342]
+                  expr: ListExpr [323..342]
+                    elements:
+                      [0]:
+                        ListSingleton [324..329]
+                          expr: IdentifierExpr [324..329]
+                            name: "alice" [324..329]
+                      [1]:
+                        ListSingleton [331..334]
+                          expr: IdentifierExpr [331..334]
+                            name: "bob" [331..334]
+                      [2]:
+                        ListSingleton [336..341]
+                          expr: IdentifierExpr [336..341]
+                            name: "carlo" [336..341]

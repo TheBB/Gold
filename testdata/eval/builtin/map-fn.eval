@@ -1,0 +1,9 @@
+EvalResult
+  ok: true
+  value: (list)
+    [0]:
+      2
+    [1]:
+      4
+    [2]:
+      6

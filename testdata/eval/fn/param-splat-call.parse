@@ -1,0 +1,108 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..156]
+        bindings:
+          [0]:
+            IdentifierBinding [4..8]
+              name: "dest" [4..8]
+            FunctionExpr [11..49]
+              positional: ListBinding [14..23]
+                elements:
+                  [0]:
+                    ListBindingSlurpTo [15..22]
+                      name: "args"
+              keywords: MapBinding [22..34]
+                elements:
+                  [0]:
+                    MapBindingSlurpTo [24..33]
+                      name: "kwargs"
+              expression: ListExpr [35..49]
+                elements:
+                  [0]:
+                    ListSingleton [36..40]
+                      expr: IdentifierExpr [36..40]
+                        name: "args" [36..40]
+                  [1]:
+                    ListSingleton [42..48]
+                      expr: IdentifierExpr [42..48]
+                        name: "kwargs" [42..48]
+          [1]:
+            IdentifierBinding [54..58]
+              name: "args" [54..58]
+            ListExpr [61..70]
+              elements:
+                [0]:
+                  ListSingleton [62..63]
+                    expr: LiteralExpr [62..63]
+                      value: 1
+                [1]:
+                  ListSingleton [65..66]
+                    expr: LiteralExpr [65..66]
+                      value: 2
+                [2]:
+                  ListSingleton [68..69]
+                    expr: LiteralExpr [68..69]
+                      value: 3
+          [2]:
+            IdentifierBinding [75..81]
+              name: "kwargs" [75..81]
+            MapExpr [84..102]
+              elements:
+                [0]:
+                  MapSingleton [85..89]
+                    key: LiteralExpr [85..86]
+                      value: "x"
+                    value: LiteralExpr [88..89]
+                      value: 4
+                [1]:
+                  MapSingleton [91..95]
+                    key: LiteralExpr [91..92]
+                      value: "y"
+                    value: LiteralExpr [94..95]
+                      value: 5
+                [2]:
+                  MapSingleton [97..101]
+                    key: LiteralExpr [97..98]
+                      value: "z"
+                    value: LiteralExpr [100..101]
+                      value: 6
+        expression: TransformedExpr [106..156]
+          operand: IdentifierExpr [106..110]
+            name: "dest" [106..110]
+          transform: FunCallTransform
+            args: [110..156]
+              [0]:
+                ArgSingleton [111..112]
+                  expr: LiteralExpr [111..112]
+                    value: 0
+              [1]:
+                ArgSplat [114..121]
+                  expr: IdentifierExpr [117..121]
+                    name: "args" [117..121]
+              [2]:
+                ArgSingleton [123..124]
+                  expr: LiteralExpr [123..124]
+                    value: 5
+              [3]:
+                ArgKeyword [126..130]
+                  key: "a" [126..127]
+                  expr: LiteralExpr [129..130]
+                    value: 8
+              [4]:
+                ArgSplat [132..141]
+                  expr: IdentifierExpr [135..141]
+                    name: "kwargs" [135..141]
+              [5]:
+                ArgKeyword [143..148]
+                  key: "c" [143..144]
+                  expr: LiteralExpr [146..148]
+                    value: 10
+              [6]:
+                ArgKeyword [150..155]
+                  key: "z" [150..151]
+                  expr: LiteralExpr [153..155]
+                    value: 12

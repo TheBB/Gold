@@ -1,0 +1,81 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..239]
+        bindings:
+          [0]:
+            IdentifierBinding [4..7]
+              name: "job" [4..7]
+            MapExpr [10..78]
+              elements:
+                [0]:
+                  MapSingleton [16..43]
+                    key: LiteralExpr [16..26]
+                      value: "department"
+                    value: LiteralExpr [28..43]
+                      value: "Data Platform"
+                [1]:
+                  MapSingleton [49..75]
+                    key: LiteralExpr [49..54]
+                      value: "title"
+                    value: LiteralExpr [56..75]
+                      value: "Software Engineer"
+          [1]:
+            IdentifierBinding [84..88]
+              name: "john" [84..88]
+            MapExpr [91..148]
+              elements:
+                [0]:
+                  MapSingleton [97..104]
+                    key: LiteralExpr [97..100]
+                      value: "age"
+                    value: LiteralExpr [102..104]
+                      value: 23
+                [1]:
+                  MapSingleton [110..126]
+                    key: LiteralExpr [110..114]
+                      value: "name"
+                    value: LiteralExpr [116..126]
+                      value: "John Doe"
+                [2]:
+                  MapSingleton [132..145]
+                    key: LiteralExpr [132..140]
+                      value: "position"
+                    value: IdentifierExpr [142..145]
+                      name: "job" [142..145]
+          [2]:
+            IdentifierBinding [154..159]
+              name: "alice" [154..159]
+            MapExpr [162..221]
+              elements:
+                [0]:
+                  MapSingleton [168..175]
+                    key: LiteralExpr [168..171]
+                      value: "age"
+                    value: LiteralExpr [173..175]
+                      value: 24
+                [1]:
+                  MapSingleton [181..200]
+                    key: LiteralExpr [181..185]
+                      value: "name"
+                    value: LiteralExpr [187..200]
+                      value: "Alice Smith"
+                [2]:
+                  MapSingleton [206..219]
+                    key: LiteralExpr [206..214]
+                      value: "position"
+                    value: IdentifierExpr [216..219]
+                      name: "job" [216..219]
+        expression: ListExpr [226..239]
+          elements:
+            [0]:
+              ListSingleton [227..231]
+                expr: IdentifierExpr [227..231]
+                  name: "john" [227..231]
+            [1]:
+              ListSingleton [233..238]
+                expr: IdentifierExpr [233..238]
+                  name: "alice" [233..238]

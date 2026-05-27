@@ -1,0 +1,75 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..71]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "a" [4..5]
+            ListExpr [8..32]
+              elements:
+                [0]:
+                  ListSingleton [9..12]
+                    expr: ListExpr [9..12]
+                      elements:
+                        [0]:
+                          ListSingleton [10..11]
+                            expr: LiteralExpr [10..11]
+                              value: 1
+                [1]:
+                  ListSingleton [14..20]
+                    expr: ListExpr [14..20]
+                      elements:
+                        [0]:
+                          ListSingleton [15..16]
+                            expr: LiteralExpr [15..16]
+                              value: 2
+                        [1]:
+                          ListSingleton [18..19]
+                            expr: LiteralExpr [18..19]
+                              value: 3
+                [2]:
+                  ListSingleton [22..31]
+                    expr: ListExpr [22..31]
+                      elements:
+                        [0]:
+                          ListSingleton [23..24]
+                            expr: LiteralExpr [23..24]
+                              value: 4
+                        [1]:
+                          ListSingleton [26..27]
+                            expr: LiteralExpr [26..27]
+                              value: 5
+                        [2]:
+                          ListSingleton [29..30]
+                            expr: LiteralExpr [29..30]
+                              value: 6
+        expression: ListExpr [36..71]
+          elements:
+            [0]:
+              ListLoop [37..70]
+                binding: IdentifierBinding [41..42]
+                  name: "x" [41..42]
+                iterable: IdentifierExpr [46..47]
+                  name: "a" [46..47]
+                element: ListCond [49..70]
+                  condition: TransformedExpr [54..64]
+                    operand: TransformedExpr [54..60]
+                      operand: IdentifierExpr [54..57]
+                        name: "len" [54..57]
+                      transform: FunCallTransform
+                        args: [57..60]
+                          [0]:
+                            ArgSingleton [58..59]
+                              expr: IdentifierExpr [58..59]
+                                name: "x" [58..59]
+                    transform: BinOpTransform
+                      op: Greater [61..62]
+                      operand: LiteralExpr [63..64]
+                        value: 1
+                  element: ListSplat [66..70]
+                    expr: IdentifierExpr [69..70]
+                      name: "x" [69..70]

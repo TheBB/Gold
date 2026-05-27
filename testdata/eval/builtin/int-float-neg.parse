@@ -1,0 +1,18 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..9]
+        operand: IdentifierExpr [0..3]
+          name: "int" [0..3]
+        transform: FunCallTransform
+          args: [3..9]
+            [0]:
+              ArgSingleton [4..8]
+                expr: TransformedExpr [4..8]
+                  operand: LiteralExpr [5..8]
+                    value: 1.2
+                  transform: UnOpTransform
+                    op: ArithmeticalNegate [4..5]

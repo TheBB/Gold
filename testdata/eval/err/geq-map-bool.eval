@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unsuitable types for '>=': map and bool"
+      locations:
+        [3..5] Evaluate

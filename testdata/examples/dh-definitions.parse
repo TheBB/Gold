@@ -1,0 +1,63 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..152]
+        bindings:
+          [0]:
+            IdentifierBinding [4..8]
+              name: "user" [4..8]
+            LiteralExpr [11..17]
+              value: "bill"
+        expression: MapExpr [21..152]
+          elements:
+            [0]:
+              MapSingleton [27..48]
+                key: LiteralExpr [27..31]
+                  value: "home"
+                value: StringExpr [33..48]
+                  elements:
+                    [0]:
+                      StringRaw
+                        value: "/home/"
+                    [1]:
+                      StringInterpolate
+                        expr: IdentifierExpr [42..46]
+                          name: "user" [42..46]
+                        fmt: null
+            [1]:
+              MapSingleton [54..97]
+                key: LiteralExpr [54..64]
+                  value: "privateKey"
+                value: StringExpr [66..97]
+                  elements:
+                    [0]:
+                      StringRaw
+                        value: "/home/"
+                    [1]:
+                      StringInterpolate
+                        expr: IdentifierExpr [75..79]
+                          name: "user" [75..79]
+                        fmt: null
+                    [2]:
+                      StringRaw
+                        value: "/.ssh/id_ed25519"
+            [2]:
+              MapSingleton [103..149]
+                key: LiteralExpr [103..112]
+                  value: "publicKey"
+                value: StringExpr [114..149]
+                  elements:
+                    [0]:
+                      StringRaw
+                        value: "/home/"
+                    [1]:
+                      StringInterpolate
+                        expr: IdentifierExpr [123..127]
+                          name: "user" [123..127]
+                        fmt: null
+                    [2]:
+                      StringRaw
+                        value: "/.ssh/id_ed25519.pub"

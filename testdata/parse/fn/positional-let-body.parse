@@ -1,0 +1,24 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: FunctionExpr [0..21]
+        positional: ListBinding [3..6]
+          elements:
+            [0]:
+              ListBindingSingleton [4..5]
+                binding: IdentifierBinding [4..5]
+                  name: "a" [4..5]
+                default: null
+        keywords: null
+        expression: LetExpr [7..21]
+          bindings:
+            [0]:
+              IdentifierBinding [11..12]
+                name: "b" [11..12]
+              IdentifierExpr [15..16]
+                name: "a" [15..16]
+          expression: IdentifierExpr [20..21]
+            name: "b" [20..21]

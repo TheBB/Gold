@@ -1,0 +1,135 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..336]
+        bindings:
+          [0]:
+            IdentifierBinding [4..12]
+              name: "makeUser" [4..12]
+            FunctionExpr [15..243]
+              positional: ListBinding [18..24]
+                elements:
+                  [0]:
+                    ListBindingSingleton [19..23]
+                      binding: IdentifierBinding [19..23]
+                        name: "user" [19..23]
+                      default: null
+              keywords: null
+              expression: LetExpr [31..241]
+                bindings:
+                  [0]:
+                    IdentifierBinding [35..39]
+                      name: "home" [35..39]
+                    StringExpr [42..57]
+                      elements:
+                        [0]:
+                          StringRaw
+                            value: "/home/"
+                        [1]:
+                          StringInterpolate
+                            expr: IdentifierExpr [51..55]
+                              name: "user" [51..55]
+                            fmt: null
+                  [1]:
+                    IdentifierBinding [66..76]
+                      name: "privateKey" [66..76]
+                    StringExpr [79..104]
+                      elements:
+                        [0]:
+                          StringInterpolate
+                            expr: IdentifierExpr [82..86]
+                              name: "home" [82..86]
+                            fmt: null
+                        [1]:
+                          StringRaw
+                            value: "/.ssh/id_ed25519"
+                  [2]:
+                    IdentifierBinding [113..122]
+                      name: "publicKey" [113..122]
+                    StringExpr [125..144]
+                      elements:
+                        [0]:
+                          StringInterpolate
+                            expr: IdentifierExpr [128..138]
+                              name: "privateKey" [128..138]
+                            fmt: null
+                        [1]:
+                          StringRaw
+                            value: ".pub"
+                expression: MapExpr [152..241]
+                  elements:
+                    [0]:
+                      MapSingleton [162..172]
+                        key: LiteralExpr [162..166]
+                          value: "home"
+                        value: IdentifierExpr [168..172]
+                          name: "home" [168..172]
+                    [1]:
+                      MapSingleton [182..204]
+                        key: LiteralExpr [182..192]
+                          value: "privateKey"
+                        value: IdentifierExpr [194..204]
+                          name: "privateKey" [194..204]
+                    [2]:
+                      MapSingleton [214..234]
+                        key: LiteralExpr [214..223]
+                          value: "publicKey"
+                        value: IdentifierExpr [225..234]
+                          name: "publicKey" [225..234]
+          [1]:
+            IdentifierBinding [249..258]
+              name: "buildUser" [249..258]
+            FunctionExpr [261..297]
+              positional: ListBinding [264..271]
+                elements:
+                  [0]:
+                    ListBindingSingleton [265..270]
+                      binding: IdentifierBinding [265..270]
+                        name: "index" [265..270]
+                      default: null
+              keywords: null
+              expression: TransformedExpr [272..297]
+                operand: IdentifierExpr [272..280]
+                  name: "makeUser" [272..280]
+                transform: FunCallTransform
+                  args: [280..297]
+                    [0]:
+                      ArgSingleton [281..296]
+                        expr: StringExpr [281..296]
+                          elements:
+                            [0]:
+                              StringRaw
+                                value: "build"
+                            [1]:
+                              StringInterpolate
+                                expr: IdentifierExpr [289..294]
+                                  name: "index" [289..294]
+                                fmt: null
+        expression: ListExpr [302..336]
+          elements:
+            [0]:
+              ListLoop [303..335]
+                binding: IdentifierBinding [307..308]
+                  name: "x" [307..308]
+                iterable: TransformedExpr [312..321]
+                  operand: IdentifierExpr [312..317]
+                    name: "range" [312..317]
+                  transform: FunCallTransform
+                    args: [317..321]
+                      [0]:
+                        ArgSingleton [318..320]
+                          expr: LiteralExpr [318..320]
+                            value: 10
+                element: ListSingleton [323..335]
+                  expr: TransformedExpr [323..335]
+                    operand: IdentifierExpr [323..332]
+                      name: "buildUser" [323..332]
+                    transform: FunCallTransform
+                      args: [332..335]
+                        [0]:
+                          ArgSingleton [333..334]
+                            expr: IdentifierExpr [333..334]
+                              name: "x" [333..334]

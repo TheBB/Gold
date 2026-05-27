@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unbound key 'b'"
+      locations:
+        [6..7] Evaluate

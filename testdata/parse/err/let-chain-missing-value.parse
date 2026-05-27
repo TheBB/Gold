@@ -1,0 +1,23 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected expression"
+      locations:
+        [17..17] Parse
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..22]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "x" [4..5]
+            LiteralExpr [8..9]
+              value: 1
+          [1]:
+            IdentifierBinding [14..15]
+              name: "y" [14..15]
+            MissingExpr [17..17]
+        expression: IdentifierExpr [21..22]
+          name: "x" [21..22]

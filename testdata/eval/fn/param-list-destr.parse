@@ -1,0 +1,69 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..48]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "a" [4..5]
+            FunctionExpr [8..32]
+              positional: ListBinding [11..22]
+                elements:
+                  [0]:
+                    ListBindingSingleton [12..13]
+                      binding: IdentifierBinding [12..13]
+                        name: "x" [12..13]
+                      default: null
+                  [1]:
+                    ListBindingSingleton [15..21]
+                      binding: ListPatternBinding [15..21]
+                        binding: ListBinding [15..21]
+                          elements:
+                            [0]:
+                              ListBindingSingleton [16..17]
+                                binding: IdentifierBinding [16..17]
+                                  name: "y" [16..17]
+                                default: null
+                            [1]:
+                              ListBindingSingleton [19..20]
+                                binding: IdentifierBinding [19..20]
+                                  name: "z" [19..20]
+                                default: null
+                      default: null
+              keywords: null
+              expression: TransformedExpr [23..32]
+                operand: TransformedExpr [23..28]
+                  operand: IdentifierExpr [23..24]
+                    name: "x" [23..24]
+                  transform: BinOpTransform
+                    op: Add [25..26]
+                    operand: IdentifierExpr [27..28]
+                      name: "y" [27..28]
+                transform: BinOpTransform
+                  op: Add [29..30]
+                  operand: IdentifierExpr [31..32]
+                    name: "z" [31..32]
+        expression: TransformedExpr [36..48]
+          operand: IdentifierExpr [36..37]
+            name: "a" [36..37]
+          transform: FunCallTransform
+            args: [37..48]
+              [0]:
+                ArgSingleton [38..39]
+                  expr: LiteralExpr [38..39]
+                    value: 1
+              [1]:
+                ArgSingleton [41..47]
+                  expr: ListExpr [41..47]
+                    elements:
+                      [0]:
+                        ListSingleton [42..43]
+                          expr: LiteralExpr [42..43]
+                            value: 2
+                      [1]:
+                        ListSingleton [45..46]
+                          expr: LiteralExpr [45..46]
+                            value: 3

@@ -1,0 +1,16 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected expression"
+      locations:
+        [3..3] Parse
+  tree:
+    File
+      statements: []
+      expression: StringExpr [0..5]
+        elements:
+          [0]:
+            StringInterpolate
+              expr: MissingExpr [3..3]
+              fmt: null

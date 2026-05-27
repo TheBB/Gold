@@ -1,0 +1,29 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements:
+        [0]:
+          ImportStatement
+            path: "./imported.gold" [7..24]
+            binding: IdentifierBinding [28..36]
+              name: "imported" [28..36]
+      expression: TransformedExpr [38..56]
+        operand: TransformedExpr [38..50]
+          operand: IdentifierExpr [38..46]
+            name: "imported" [38..46]
+          transform: BinOpTransform
+            op: Index [46..47]
+            operand: LiteralExpr [47..50]
+              value: "add"
+        transform: FunCallTransform
+          args: [50..56]
+            [0]:
+              ArgSingleton [51..52]
+                expr: LiteralExpr [51..52]
+                  value: 1
+            [1]:
+              ArgSingleton [54..55]
+                expr: LiteralExpr [54..55]
+                  value: 2

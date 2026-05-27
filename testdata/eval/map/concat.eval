@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "unsuitable types for '+': map and map"
+      locations:
+        [7..8] Evaluate

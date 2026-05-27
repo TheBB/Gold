@@ -1,0 +1,36 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..29]
+        elements:
+          [0]:
+            MapSingleton [1..5]
+              key: LiteralExpr [1..2]
+                value: "a"
+              value: LiteralExpr [4..5]
+                value: 1
+          [1]:
+            MapSplat [7..22]
+              expr: MapExpr [10..22]
+                elements:
+                  [0]:
+                    MapSingleton [11..15]
+                      key: LiteralExpr [11..12]
+                        value: "b"
+                      value: LiteralExpr [14..15]
+                        value: 2
+                  [1]:
+                    MapSingleton [17..21]
+                      key: LiteralExpr [17..18]
+                        value: "c"
+                      value: LiteralExpr [20..21]
+                        value: 3
+          [2]:
+            MapSingleton [24..28]
+              key: LiteralExpr [24..25]
+                value: "d"
+              value: LiteralExpr [27..28]
+                value: 4

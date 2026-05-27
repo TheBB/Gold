@@ -1,0 +1,2 @@
+let dest = fn (...args; ...kwargs) [args, kwargs]
+in dest(1, 2)

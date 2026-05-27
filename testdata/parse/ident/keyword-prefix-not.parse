@@ -1,0 +1,8 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: IdentifierExpr [0..4]
+        name: "not1" [0..4]

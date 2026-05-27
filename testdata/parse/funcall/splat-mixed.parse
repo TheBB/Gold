@@ -1,0 +1,28 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..25]
+        operand: IdentifierExpr [0..4]
+          name: "func" [0..4]
+        transform: FunCallTransform
+          args: [4..25]
+            [0]:
+              ArgSingleton [5..6]
+                expr: LiteralExpr [5..6]
+                  value: 1
+            [1]:
+              ArgSplat [8..12]
+                expr: IdentifierExpr [11..12]
+                  name: "y" [11..12]
+            [2]:
+              ArgKeyword [14..18]
+                key: "z" [14..15]
+                expr: LiteralExpr [17..18]
+                  value: 2
+            [3]:
+              ArgSplat [20..24]
+                expr: IdentifierExpr [23..24]
+                  name: "q" [23..24]

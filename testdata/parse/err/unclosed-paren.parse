@@ -1,0 +1,17 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected ')'"
+      locations:
+        [6..6] Parse
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [1..6]
+        operand: LiteralExpr [1..2]
+          value: 1
+        transform: BinOpTransform
+          op: Add [3..4]
+          operand: LiteralExpr [5..6]
+            value: 2

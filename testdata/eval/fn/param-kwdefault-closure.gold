@@ -1,0 +1,3 @@
+let q = 1
+let f = fn (; y=q) y
+in f()

@@ -1,0 +1,64 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..50]
+        bindings:
+          [0]:
+            IdentifierBinding [4..5]
+              name: "f" [4..5]
+            FunctionExpr [8..30]
+              positional: ListBinding [11..14]
+                elements:
+                  [0]:
+                    ListBindingSingleton [12..13]
+                      binding: IdentifierBinding [12..13]
+                        name: "x" [12..13]
+                      default: null
+              keywords: MapBinding [13..20]
+                elements:
+                  [0]:
+                    MapBindingSingleton [15..16]
+                      key: "y" [15..16]
+                      binding: IdentifierBinding [15..16]
+                        name: "y" [15..16]
+                      default: null
+                  [1]:
+                    MapBindingSingleton [18..19]
+                      key: "z" [18..19]
+                      binding: IdentifierBinding [18..19]
+                        name: "z" [18..19]
+                      default: null
+              expression: TransformedExpr [21..30]
+                operand: TransformedExpr [21..26]
+                  operand: IdentifierExpr [21..22]
+                    name: "x" [21..22]
+                  transform: BinOpTransform
+                    op: Add [23..24]
+                    operand: IdentifierExpr [25..26]
+                      name: "y" [25..26]
+                transform: BinOpTransform
+                  op: Add [27..28]
+                  operand: IdentifierExpr [29..30]
+                    name: "z" [29..30]
+        expression: TransformedExpr [34..50]
+          operand: IdentifierExpr [34..35]
+            name: "f" [34..35]
+          transform: FunCallTransform
+            args: [35..50]
+              [0]:
+                ArgSingleton [36..37]
+                  expr: LiteralExpr [36..37]
+                    value: 1
+              [1]:
+                ArgKeyword [39..43]
+                  key: "y" [39..40]
+                  expr: LiteralExpr [42..43]
+                    value: 2
+              [2]:
+                ArgKeyword [45..49]
+                  key: "z" [45..46]
+                  expr: LiteralExpr [48..49]
+                    value: 3

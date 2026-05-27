@@ -1,0 +1,22 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected '}'"
+      locations:
+        [5..5] Parse
+  tree:
+    File
+      statements: []
+      expression: FunctionExpr [0..5]
+        positional: ListBinding [3..4]
+          elements: []
+        keywords: MapBinding [3..5]
+          elements:
+            [0]:
+              MapBindingSingleton [4..5]
+                key: "x" [4..5]
+                binding: IdentifierBinding [4..5]
+                  name: "x" [4..5]
+                default: null
+        expression: MissingExpr [5..5]

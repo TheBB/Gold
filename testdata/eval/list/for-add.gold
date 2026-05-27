@@ -1,0 +1,1 @@
+let a = [1, 2, 3] in [for x in a: x + 1]

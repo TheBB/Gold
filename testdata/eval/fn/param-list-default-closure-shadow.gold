@@ -1,0 +1,3 @@
+let f = fn (q) fn ([y = q]) y
+let q = 1
+in f(2)([])

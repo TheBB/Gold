@@ -1,0 +1,33 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..24]
+        bindings:
+          [0]:
+            ListPatternBinding [4..7]
+              binding: ListBinding [4..7]
+                elements:
+                  [0]:
+                    ListBindingSingleton [5..6]
+                      binding: IdentifierBinding [5..6]
+                        name: "x" [5..6]
+                      default: null
+            ListExpr [10..19]
+              elements:
+                [0]:
+                  ListSingleton [11..12]
+                    expr: LiteralExpr [11..12]
+                      value: 1
+                [1]:
+                  ListSingleton [14..15]
+                    expr: LiteralExpr [14..15]
+                      value: 2
+                [2]:
+                  ListSingleton [17..18]
+                    expr: LiteralExpr [17..18]
+                      value: 3
+        expression: IdentifierExpr [23..24]
+          name: "x" [23..24]

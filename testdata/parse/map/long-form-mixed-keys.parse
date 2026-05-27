@@ -1,0 +1,20 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: MapExpr [0..23]
+        elements:
+          [0]:
+            MapSingleton [6..12]
+              key: LiteralExpr [6..7]
+                value: "a"
+              value: LiteralExpr [9..12]
+                value: "x"
+          [1]:
+            MapSingleton [16..20]
+              key: LiteralExpr [16..17]
+                value: "b"
+              value: IdentifierExpr [19..20]
+                name: "y" [19..20]

@@ -1,0 +1,15 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..7]
+        operand: IdentifierExpr [0..3]
+          name: "len" [0..3]
+        transform: FunCallTransform
+          args: [3..7]
+            [0]:
+              ArgSingleton [4..6]
+                expr: ListExpr [4..6]
+                  elements: []

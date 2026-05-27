@@ -1,0 +1,2 @@
+let a = [1, 2, 3, 4, 5]
+in [for x in a: when x < 3: x]

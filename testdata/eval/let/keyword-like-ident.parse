@@ -1,0 +1,15 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..20]
+        bindings:
+          [0]:
+            IdentifierBinding [4..8]
+              name: "lets" [4..8]
+            LiteralExpr [11..12]
+              value: 1
+        expression: IdentifierExpr [16..20]
+          name: "lets" [16..20]

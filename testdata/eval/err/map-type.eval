@@ -1,0 +1,7 @@
+EvalResult
+  ok: false
+  error:
+    Error
+      reason: "expected map, found bool"
+      locations:
+        [4..7] Bind

@@ -1,0 +1,27 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: TransformedExpr [0..19]
+        operand: IdentifierExpr [0..5]
+          name: "items" [0..5]
+        transform: FunCallTransform
+          args: [5..19]
+            [0]:
+              ArgSingleton [6..18]
+                expr: MapExpr [6..18]
+                  elements:
+                    [0]:
+                      MapSingleton [7..11]
+                        key: LiteralExpr [7..8]
+                          value: "a"
+                        value: LiteralExpr [10..11]
+                          value: 1
+                    [1]:
+                      MapSingleton [13..17]
+                        key: LiteralExpr [13..14]
+                          value: "b"
+                        value: LiteralExpr [16..17]
+                          value: 2
