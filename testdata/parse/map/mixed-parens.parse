@@ -6,34 +6,39 @@ ParseResult
       statements: []
       expression: MapExpr [0..71]
         elements:
-          MapSingleton [2..9]
-            key: LiteralExpr [2..3]
-              value: "a"
-            value: LiteralExpr [7..8]
-              value: 1
-          MapSplat [11..18]
-            expr: IdentifierExpr [16..17]
-              name: "x" [16..17]
-          MapCond [20..36]
-            condition: IdentifierExpr [25..26]
-              name: "x" [25..26]
-            element: MapSingleton [29..36]
-              key: LiteralExpr [29..30]
-                value: "b"
-              value: IdentifierExpr [34..35]
-                name: "y" [34..35]
-          MapLoop [38..58]
-            binding: IdentifierBinding [42..43]
-              name: "x" [42..43]
-            iterable: IdentifierExpr [47..48]
-              name: "y" [47..48]
-            element: MapSingleton [51..58]
-              key: LiteralExpr [51..52]
-                value: "c"
-              value: IdentifierExpr [56..57]
-                name: "z" [56..57]
-          MapSingleton [60..69]
-            key: IdentifierExpr [62..63]
-              name: "f" [62..63]
-            value: LiteralExpr [67..68]
-              value: 2
+          [0]:
+            MapSingleton [2..9]
+              key: LiteralExpr [2..3]
+                value: "a"
+              value: LiteralExpr [7..8]
+                value: 1
+          [1]:
+            MapSplat [11..18]
+              expr: IdentifierExpr [16..17]
+                name: "x" [16..17]
+          [2]:
+            MapCond [20..36]
+              condition: IdentifierExpr [25..26]
+                name: "x" [25..26]
+              element: MapSingleton [29..36]
+                key: LiteralExpr [29..30]
+                  value: "b"
+                value: IdentifierExpr [34..35]
+                  name: "y" [34..35]
+          [3]:
+            MapLoop [38..58]
+              binding: IdentifierBinding [42..43]
+                name: "x" [42..43]
+              iterable: IdentifierExpr [47..48]
+                name: "y" [47..48]
+              element: MapSingleton [51..58]
+                key: LiteralExpr [51..52]
+                  value: "c"
+                value: IdentifierExpr [56..57]
+                  name: "z" [56..57]
+          [4]:
+            MapSingleton [60..69]
+              key: IdentifierExpr [62..63]
+                name: "f" [62..63]
+              value: LiteralExpr [67..68]
+                value: 2

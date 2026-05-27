@@ -108,8 +108,9 @@ class _PP:
         """Emit the label for a value then its body (if non-scalar)."""
         self._emit(indent, self._gold_label(value))
         if isinstance(value, list) and value:
-            for item in value:
-                self._gold_value(item, indent + 1)
+            for i, item in enumerate(value):
+                self._emit(indent + 1, f"[{i}]:")
+                self._gold_value(item, indent + 2)
         elif isinstance(value, dict) and value:
             for k, v in value.items():
                 self._gold_field(k, v, indent + 1)
@@ -118,8 +119,9 @@ class _PP:
         """Emit  `name: <label>`  and, for non-empty collections, the body below."""
         self._emit(indent, f"{name}: {self._gold_label(value)}")
         if isinstance(value, list) and value:
-            for item in value:
-                self._gold_value(item, indent + 1)
+            for i, item in enumerate(value):
+                self._emit(indent + 1, f"[{i}]:")
+                self._gold_value(item, indent + 2)
         elif isinstance(value, dict) and value:
             for k, v in value.items():
                 self._gold_field(k, v, indent + 1)
@@ -246,15 +248,11 @@ class _PP:
         if not value:
             self._emit(indent, f"{name}: []")
             return
-        # Detect list-of-tuples (e.g. LetExpr.bindings) — add [i]: grouping headers.
-        if isinstance(value[0], tuple):
-            self._emit(indent, f"{name}:")
-            for i, item in enumerate(value):
-                self._emit(indent + 1, f"[{i}]:")
-                assert isinstance(item, tuple)
+        self._emit(indent, f"{name}:")
+        for i, item in enumerate(value):
+            self._emit(indent + 1, f"[{i}]:")
+            if isinstance(item, tuple):
                 for elem in item:
                     self._node(elem, indent + 2)
-        else:
-            self._emit(indent, f"{name}:")
-            for item in value:
-                self._node(item, indent + 1)
+            else:
+                self._node(item, indent + 2)

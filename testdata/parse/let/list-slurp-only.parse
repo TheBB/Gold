@@ -10,8 +10,9 @@ ParseResult
             ListPatternBinding [4..10]
               binding: ListBinding [4..10]
                 elements:
-                  ListBindingSlurpTo [5..9]
-                    name: "a"
+                  [0]:
+                    ListBindingSlurpTo [5..9]
+                      name: "a"
             IdentifierExpr [13..14]
               name: "b" [13..14]
         expression: IdentifierExpr [18..19]

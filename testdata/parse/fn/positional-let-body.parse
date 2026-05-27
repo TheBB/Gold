@@ -7,10 +7,11 @@ ParseResult
       expression: FunctionExpr [0..21]
         positional: ListBinding [3..6]
           elements:
-            ListBindingSingleton [4..5]
-              binding: IdentifierBinding [4..5]
-                name: "a" [4..5]
-              default: null
+            [0]:
+              ListBindingSingleton [4..5]
+                binding: IdentifierBinding [4..5]
+                  name: "a" [4..5]
+                default: null
         keywords: null
         expression: LetExpr [7..21]
           bindings:

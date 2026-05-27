@@ -14,5 +14,6 @@ ParseResult
       statements: []
       expression: MapExpr [0..4]
         elements:
-          MapSplat [1..4]
-            expr: MissingExpr [4..4]
+          [0]:
+            MapSplat [1..4]
+              expr: MissingExpr [4..4]

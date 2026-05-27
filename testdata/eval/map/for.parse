@@ -6,25 +6,28 @@ ParseResult
       statements: []
       expression: MapExpr [0..29]
         elements:
-          MapLoop [1..28]
-            binding: IdentifierBinding [5..6]
-              name: "x" [5..6]
-            iterable: ListExpr [10..16]
-              elements:
-                ListSingleton [11..12]
-                  expr: LiteralExpr [11..12]
-                    value: 1
-                ListSingleton [14..15]
-                  expr: LiteralExpr [14..15]
-                    value: 2
-            element: MapSingleton [18..28]
-              key: TransformedExpr [19..25]
-                operand: IdentifierExpr [19..22]
-                  name: "str" [19..22]
-                transform: FunCallTransform
-                  args: [22..25]
-                    ArgSingleton [23..24]
-                      expr: IdentifierExpr [23..24]
-                        name: "x" [23..24]
-              value: IdentifierExpr [27..28]
-                name: "x" [27..28]
+          [0]:
+            MapLoop [1..28]
+              binding: IdentifierBinding [5..6]
+                name: "x" [5..6]
+              iterable: ListExpr [10..16]
+                elements:
+                  [0]:
+                    ListSingleton [11..12]
+                      expr: LiteralExpr [11..12]
+                        value: 1
+                  [1]:
+                    ListSingleton [14..15]
+                      expr: LiteralExpr [14..15]
+                        value: 2
+              element: MapSingleton [18..28]
+                key: TransformedExpr [19..25]
+                  operand: IdentifierExpr [19..22]
+                    name: "str" [19..22]
+                  transform: FunCallTransform
+                    args: [22..25]
+                      ArgSingleton [23..24]
+                        expr: IdentifierExpr [23..24]
+                          name: "x" [23..24]
+                value: IdentifierExpr [27..28]
+                  name: "x" [27..28]

@@ -10,24 +10,28 @@ ParseResult
             MapPatternBinding [4..13]
               binding: MapBinding [4..13]
                 elements:
-                  MapBindingSingleton [5..6]
-                    key: "a" [5..6]
-                    binding: IdentifierBinding [5..6]
-                      name: "a" [5..6]
-                    default: null
-                  MapBindingSlurpTo [8..12]
-                    name: "x"
+                  [0]:
+                    MapBindingSingleton [5..6]
+                      key: "a" [5..6]
+                      binding: IdentifierBinding [5..6]
+                        name: "a" [5..6]
+                      default: null
+                  [1]:
+                    MapBindingSlurpTo [8..12]
+                      name: "x"
             MapExpr [16..28]
               elements:
-                MapSingleton [17..21]
-                  key: LiteralExpr [17..18]
-                    value: "a"
-                  value: LiteralExpr [20..21]
-                    value: 1
-                MapSingleton [23..27]
-                  key: LiteralExpr [23..24]
-                    value: "b"
-                  value: LiteralExpr [26..27]
-                    value: 2
+                [0]:
+                  MapSingleton [17..21]
+                    key: LiteralExpr [17..18]
+                      value: "a"
+                    value: LiteralExpr [20..21]
+                      value: 1
+                [1]:
+                  MapSingleton [23..27]
+                    key: LiteralExpr [23..24]
+                      value: "b"
+                    value: LiteralExpr [26..27]
+                      value: 2
         expression: IdentifierExpr [32..33]
           name: "a" [32..33]

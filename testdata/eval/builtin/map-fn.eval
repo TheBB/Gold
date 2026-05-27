@@ -1,6 +1,9 @@
 EvalResult
   ok: true
   value: (list)
-    2
-    4
-    6
+    [0]:
+      2
+    [1]:
+      4
+    [2]:
+      6

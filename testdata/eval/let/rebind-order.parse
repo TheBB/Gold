@@ -23,9 +23,11 @@ ParseResult
               value: 2
         expression: ListExpr [33..39]
           elements:
-            ListSingleton [34..35]
-              expr: IdentifierExpr [34..35]
-                name: "a" [34..35]
-            ListSingleton [37..38]
-              expr: IdentifierExpr [37..38]
-                name: "b" [37..38]
+            [0]:
+              ListSingleton [34..35]
+                expr: IdentifierExpr [34..35]
+                  name: "a" [34..35]
+            [1]:
+              ListSingleton [37..38]
+                expr: IdentifierExpr [37..38]
+                  name: "b" [37..38]

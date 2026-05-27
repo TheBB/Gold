@@ -11,6 +11,7 @@ ParseResult
           op: Add [3..4]
           operand: ListExpr [5..8]
             elements:
-              ListSingleton [6..7]
-                expr: LiteralExpr [6..7]
-                  value: 3
+              [0]:
+                ListSingleton [6..7]
+                  expr: LiteralExpr [6..7]
+                    value: 3

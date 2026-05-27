@@ -13,10 +13,11 @@ ParseResult
               expr: FunctionExpr [4..16]
                 positional: ListBinding [7..10]
                   elements:
-                    ListBindingSingleton [8..9]
-                      binding: IdentifierBinding [8..9]
-                        name: "x" [8..9]
-                      default: null
+                    [0]:
+                      ListBindingSingleton [8..9]
+                        binding: IdentifierBinding [8..9]
+                          name: "x" [8..9]
+                        default: null
                 keywords: null
                 expression: TransformedExpr [11..16]
                   operand: IdentifierExpr [11..12]
@@ -28,12 +29,15 @@ ParseResult
             ArgSingleton [18..27]
               expr: ListExpr [18..27]
                 elements:
-                  ListSingleton [19..20]
-                    expr: LiteralExpr [19..20]
-                      value: 1
-                  ListSingleton [22..23]
-                    expr: LiteralExpr [22..23]
-                      value: 2
-                  ListSingleton [25..26]
-                    expr: LiteralExpr [25..26]
-                      value: 3
+                  [0]:
+                    ListSingleton [19..20]
+                      expr: LiteralExpr [19..20]
+                        value: 1
+                  [1]:
+                    ListSingleton [22..23]
+                      expr: LiteralExpr [22..23]
+                        value: 2
+                  [2]:
+                    ListSingleton [25..26]
+                      expr: LiteralExpr [25..26]
+                        value: 3

@@ -10,32 +10,40 @@ ParseResult
             ListPatternBinding [4..19]
               binding: ListBinding [4..19]
                 elements:
-                  ListBindingSingleton [5..6]
-                    binding: IdentifierBinding [5..6]
-                      name: "a" [5..6]
-                    default: null
-                  ListBindingSlurpTo [8..15]
-                    name: "rest"
-                  ListBindingSingleton [17..18]
-                    binding: IdentifierBinding [17..18]
-                      name: "b" [17..18]
-                    default: null
+                  [0]:
+                    ListBindingSingleton [5..6]
+                      binding: IdentifierBinding [5..6]
+                        name: "a" [5..6]
+                      default: null
+                  [1]:
+                    ListBindingSlurpTo [8..15]
+                      name: "rest"
+                  [2]:
+                    ListBindingSingleton [17..18]
+                      binding: IdentifierBinding [17..18]
+                        name: "b" [17..18]
+                      default: null
             ListExpr [22..31]
               elements:
-                ListSingleton [23..24]
-                  expr: LiteralExpr [23..24]
-                    value: 1
-                ListSingleton [26..27]
-                  expr: LiteralExpr [26..27]
-                    value: 2
-                ListSingleton [29..30]
-                  expr: LiteralExpr [29..30]
-                    value: 3
+                [0]:
+                  ListSingleton [23..24]
+                    expr: LiteralExpr [23..24]
+                      value: 1
+                [1]:
+                  ListSingleton [26..27]
+                    expr: LiteralExpr [26..27]
+                      value: 2
+                [2]:
+                  ListSingleton [29..30]
+                    expr: LiteralExpr [29..30]
+                      value: 3
         expression: ListExpr [35..41]
           elements:
-            ListSingleton [36..37]
-              expr: IdentifierExpr [36..37]
-                name: "a" [36..37]
-            ListSingleton [39..40]
-              expr: IdentifierExpr [39..40]
-                name: "b" [39..40]
+            [0]:
+              ListSingleton [36..37]
+                expr: IdentifierExpr [36..37]
+                  name: "a" [36..37]
+            [1]:
+              ListSingleton [39..40]
+                expr: IdentifierExpr [39..40]
+                  name: "b" [39..40]

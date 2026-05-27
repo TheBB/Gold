@@ -1,9 +1,15 @@
 EvalResult
   ok: true
   value: (list)
-    (list)
-      "a"
-      1
-    (list)
-      "b"
-      2
+    [0]:
+      (list)
+        [0]:
+          "a"
+        [1]:
+          1
+    [1]:
+      (list)
+        [0]:
+          "b"
+        [1]:
+          2

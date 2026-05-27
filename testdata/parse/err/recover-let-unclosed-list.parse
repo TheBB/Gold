@@ -15,14 +15,17 @@ ParseResult
               name: "xs" [4..6]
             ListExpr [9..17]
               elements:
-                ListSingleton [10..11]
-                  expr: LiteralExpr [10..11]
-                    value: 1
-                ListSingleton [13..14]
-                  expr: LiteralExpr [13..14]
-                    value: 2
-                ListSingleton [16..17]
-                  expr: LiteralExpr [16..17]
-                    value: 3
+                [0]:
+                  ListSingleton [10..11]
+                    expr: LiteralExpr [10..11]
+                      value: 1
+                [1]:
+                  ListSingleton [13..14]
+                    expr: LiteralExpr [13..14]
+                      value: 2
+                [2]:
+                  ListSingleton [16..17]
+                    expr: LiteralExpr [16..17]
+                      value: 3
         expression: IdentifierExpr [21..23]
           name: "xs" [21..23]

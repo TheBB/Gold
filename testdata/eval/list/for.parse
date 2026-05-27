@@ -6,25 +6,29 @@ ParseResult
       statements: []
       expression: ListExpr [0..27]
         elements:
-          ListLoop [1..26]
-            binding: IdentifierBinding [5..6]
-              name: "x" [5..6]
-            iterable: ListExpr [10..19]
-              elements:
-                ListSingleton [11..12]
-                  expr: LiteralExpr [11..12]
-                    value: 1
-                ListSingleton [14..15]
-                  expr: LiteralExpr [14..15]
-                    value: 2
-                ListSingleton [17..18]
-                  expr: LiteralExpr [17..18]
-                    value: 3
-            element: ListSingleton [21..26]
-              expr: TransformedExpr [21..26]
-                operand: IdentifierExpr [21..22]
-                  name: "x" [21..22]
-                transform: BinOpTransform
-                  op: Multiply [23..24]
-                  operand: LiteralExpr [25..26]
-                    value: 2
+          [0]:
+            ListLoop [1..26]
+              binding: IdentifierBinding [5..6]
+                name: "x" [5..6]
+              iterable: ListExpr [10..19]
+                elements:
+                  [0]:
+                    ListSingleton [11..12]
+                      expr: LiteralExpr [11..12]
+                        value: 1
+                  [1]:
+                    ListSingleton [14..15]
+                      expr: LiteralExpr [14..15]
+                        value: 2
+                  [2]:
+                    ListSingleton [17..18]
+                      expr: LiteralExpr [17..18]
+                        value: 3
+              element: ListSingleton [21..26]
+                expr: TransformedExpr [21..26]
+                  operand: IdentifierExpr [21..22]
+                    name: "x" [21..22]
+                  transform: BinOpTransform
+                    op: Multiply [23..24]
+                    operand: LiteralExpr [25..26]
+                      value: 2

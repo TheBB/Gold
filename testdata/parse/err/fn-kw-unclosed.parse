@@ -13,9 +13,10 @@ ParseResult
           elements: []
         keywords: MapBinding [3..5]
           elements:
-            MapBindingSingleton [4..5]
-              key: "x" [4..5]
-              binding: IdentifierBinding [4..5]
-                name: "x" [4..5]
-              default: null
+            [0]:
+              MapBindingSingleton [4..5]
+                key: "x" [4..5]
+                binding: IdentifierBinding [4..5]
+                  name: "x" [4..5]
+                default: null
         expression: MissingExpr [5..5]

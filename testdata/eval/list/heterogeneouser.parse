@@ -6,18 +6,23 @@ ParseResult
       statements: []
       expression: ListExpr [0..32]
         elements:
-          ListSingleton [1..2]
-            expr: LiteralExpr [1..2]
-              value: 1
-          ListSingleton [4..9]
-            expr: LiteralExpr [4..9]
-              value: false
-          ListSingleton [11..20]
-            expr: LiteralExpr [11..20]
-              value: "dingbob"
-          ListSingleton [22..25]
-            expr: LiteralExpr [22..25]
-              value: 2.2
-          ListSingleton [27..31]
-            expr: LiteralExpr [27..31]
-              value: null
+          [0]:
+            ListSingleton [1..2]
+              expr: LiteralExpr [1..2]
+                value: 1
+          [1]:
+            ListSingleton [4..9]
+              expr: LiteralExpr [4..9]
+                value: false
+          [2]:
+            ListSingleton [11..20]
+              expr: LiteralExpr [11..20]
+                value: "dingbob"
+          [3]:
+            ListSingleton [22..25]
+              expr: LiteralExpr [22..25]
+                value: 2.2
+          [4]:
+            ListSingleton [27..31]
+              expr: LiteralExpr [27..31]
+                value: null

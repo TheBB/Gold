@@ -11,19 +11,21 @@ ParseResult
       expression: FunctionExpr [0..21]
         positional: ListBinding [3..15]
           elements:
-            ListBindingSingleton [4..11]
-              binding: IdentifierBinding [4..5]
-                name: "x" [4..5]
-              default: TransformedExpr [8..11]
-                operand: LiteralExpr [8..9]
-                  value: 1
-                transform: BinOpTransform
-                  op: Add [10..11]
-                  operand: MissingExpr [11..11]
-            ListBindingSingleton [13..14]
-              binding: IdentifierBinding [13..14]
-                name: "y" [13..14]
-              default: null
+            [0]:
+              ListBindingSingleton [4..11]
+                binding: IdentifierBinding [4..5]
+                  name: "x" [4..5]
+                default: TransformedExpr [8..11]
+                  operand: LiteralExpr [8..9]
+                    value: 1
+                  transform: BinOpTransform
+                    op: Add [10..11]
+                    operand: MissingExpr [11..11]
+            [1]:
+              ListBindingSingleton [13..14]
+                binding: IdentifierBinding [13..14]
+                  name: "y" [13..14]
+                default: null
         keywords: null
         expression: TransformedExpr [16..21]
           operand: IdentifierExpr [16..17]

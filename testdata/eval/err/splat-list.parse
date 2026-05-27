@@ -6,6 +6,7 @@ ParseResult
       statements: []
       expression: ListExpr [0..6]
         elements:
-          ListSplat [1..5]
-            expr: LiteralExpr [4..5]
-              value: 1
+          [0]:
+            ListSplat [1..5]
+              expr: LiteralExpr [4..5]
+                value: 1

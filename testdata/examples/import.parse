@@ -4,10 +4,11 @@ ParseResult
   tree:
     File
       statements:
-        ImportStatement
-          path: "./imported.gold" [7..24]
-          binding: IdentifierBinding [28..36]
-            name: "imported" [28..36]
+        [0]:
+          ImportStatement
+            path: "./imported.gold" [7..24]
+            binding: IdentifierBinding [28..36]
+              name: "imported" [28..36]
       expression: TransformedExpr [38..56]
         operand: TransformedExpr [38..50]
           operand: IdentifierExpr [38..46]

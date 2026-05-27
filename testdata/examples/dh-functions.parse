@@ -12,10 +12,11 @@ ParseResult
             FunctionExpr [15..243]
               positional: ListBinding [18..24]
                 elements:
-                  ListBindingSingleton [19..23]
-                    binding: IdentifierBinding [19..23]
-                      name: "user" [19..23]
-                    default: null
+                  [0]:
+                    ListBindingSingleton [19..23]
+                      binding: IdentifierBinding [19..23]
+                        name: "user" [19..23]
+                      default: null
               keywords: null
               expression: LetExpr [31..241]
                 bindings:
@@ -24,23 +25,27 @@ ParseResult
                       name: "home" [35..39]
                     StringExpr [42..57]
                       elements:
-                        StringRaw
-                          value: "/home/"
-                        StringInterpolate
-                          expr: IdentifierExpr [51..55]
-                            name: "user" [51..55]
-                          fmt: null
+                        [0]:
+                          StringRaw
+                            value: "/home/"
+                        [1]:
+                          StringInterpolate
+                            expr: IdentifierExpr [51..55]
+                              name: "user" [51..55]
+                            fmt: null
                   [1]:
                     IdentifierBinding [66..76]
                       name: "privateKey" [66..76]
                     StringExpr [79..104]
                       elements:
-                        StringInterpolate
-                          expr: IdentifierExpr [82..86]
-                            name: "home" [82..86]
-                          fmt: null
-                        StringRaw
-                          value: "/.ssh/id_ed25519"
+                        [0]:
+                          StringInterpolate
+                            expr: IdentifierExpr [82..86]
+                              name: "home" [82..86]
+                            fmt: null
+                        [1]:
+                          StringRaw
+                            value: "/.ssh/id_ed25519"
                   [2]:
                     IdentifierBinding [113..122]
                       name: "publicKey" [113..122]
@@ -53,38 +58,43 @@ ParseResult
                           value: ".pub"
                 expression: MapExpr [152..241]
                   elements:
-                    MapSingleton [162..172]
-                      key: LiteralExpr [162..166]
-                        value: "home"
-                      value: IdentifierExpr [168..172]
-                        name: "home" [168..172]
-                    MapSingleton [182..204]
-                      key: LiteralExpr [182..192]
-                        value: "privateKey"
-                      value: IdentifierExpr [194..204]
-                        name: "privateKey" [194..204]
-                    MapSingleton [214..234]
-                      key: LiteralExpr [214..223]
-                        value: "publicKey"
-                      value: IdentifierExpr [225..234]
-                        name: "publicKey" [225..234]
+                    [0]:
+                      MapSingleton [162..172]
+                        key: LiteralExpr [162..166]
+                          value: "home"
+                        value: IdentifierExpr [168..172]
+                          name: "home" [168..172]
+                    [1]:
+                      MapSingleton [182..204]
+                        key: LiteralExpr [182..192]
+                          value: "privateKey"
+                        value: IdentifierExpr [194..204]
+                          name: "privateKey" [194..204]
+                    [2]:
+                      MapSingleton [214..234]
+                        key: LiteralExpr [214..223]
+                          value: "publicKey"
+                        value: IdentifierExpr [225..234]
+                          name: "publicKey" [225..234]
         expression: ListExpr [248..295]
           elements:
-            ListSingleton [254..270]
-              expr: TransformedExpr [254..270]
-                operand: IdentifierExpr [254..262]
-                  name: "makeUser" [254..262]
-                transform: FunCallTransform
-                  args: [262..270]
-                    ArgSingleton [263..269]
-                      expr: LiteralExpr [263..269]
-                        value: "bill"
-            ListSingleton [276..292]
-              expr: TransformedExpr [276..292]
-                operand: IdentifierExpr [276..284]
-                  name: "makeUser" [276..284]
-                transform: FunCallTransform
-                  args: [284..292]
-                    ArgSingleton [285..291]
-                      expr: LiteralExpr [285..291]
-                        value: "jane"
+            [0]:
+              ListSingleton [254..270]
+                expr: TransformedExpr [254..270]
+                  operand: IdentifierExpr [254..262]
+                    name: "makeUser" [254..262]
+                  transform: FunCallTransform
+                    args: [262..270]
+                      ArgSingleton [263..269]
+                        expr: LiteralExpr [263..269]
+                          value: "bill"
+            [1]:
+              ListSingleton [276..292]
+                expr: TransformedExpr [276..292]
+                  operand: IdentifierExpr [276..284]
+                    name: "makeUser" [276..284]
+                  transform: FunCallTransform
+                    args: [284..292]
+                      ArgSingleton [285..291]
+                        expr: LiteralExpr [285..291]
+                          value: "jane"

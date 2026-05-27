@@ -10,39 +10,47 @@ ParseResult
             ListPatternBinding [4..11]
               binding: ListBinding [4..11]
                 elements:
-                  ListBindingSingleton [5..6]
-                    binding: IdentifierBinding [5..6]
-                      name: "a" [5..6]
-                    default: null
-                  ListBindingSingleton [7..10]
-                    binding: ListPatternBinding [7..10]
-                      binding: ListBinding [7..10]
-                        elements:
-                          ListBindingSingleton [8..9]
-                            binding: IdentifierBinding [8..9]
-                              name: "b" [8..9]
-                            default: null
-                    default: null
+                  [0]:
+                    ListBindingSingleton [5..6]
+                      binding: IdentifierBinding [5..6]
+                        name: "a" [5..6]
+                      default: null
+                  [1]:
+                    ListBindingSingleton [7..10]
+                      binding: ListPatternBinding [7..10]
+                        binding: ListBinding [7..10]
+                          elements:
+                            [0]:
+                              ListBindingSingleton [8..9]
+                                binding: IdentifierBinding [8..9]
+                                  name: "b" [8..9]
+                                default: null
+                      default: null
             ListExpr [14..21]
               elements:
-                ListSingleton [15..16]
-                  expr: LiteralExpr [15..16]
-                    value: 1
-                ListSingleton [17..20]
-                  expr: ListExpr [17..20]
-                    elements:
-                      ListSingleton [18..19]
-                        expr: LiteralExpr [18..19]
-                          value: 2
+                [0]:
+                  ListSingleton [15..16]
+                    expr: LiteralExpr [15..16]
+                      value: 1
+                [1]:
+                  ListSingleton [17..20]
+                    expr: ListExpr [17..20]
+                      elements:
+                        [0]:
+                          ListSingleton [18..19]
+                            expr: LiteralExpr [18..19]
+                              value: 2
         expression: MapExpr [25..37]
           elements:
-            MapSingleton [26..30]
-              key: LiteralExpr [26..27]
-                value: "a"
-              value: IdentifierExpr [29..30]
-                name: "a" [29..30]
-            MapSingleton [32..36]
-              key: LiteralExpr [32..33]
-                value: "b"
-              value: IdentifierExpr [35..36]
-                name: "b" [35..36]
+            [0]:
+              MapSingleton [26..30]
+                key: LiteralExpr [26..27]
+                  value: "a"
+                value: IdentifierExpr [29..30]
+                  name: "a" [29..30]
+            [1]:
+              MapSingleton [32..36]
+                key: LiteralExpr [32..33]
+                  value: "b"
+                value: IdentifierExpr [35..36]
+                  name: "b" [35..36]

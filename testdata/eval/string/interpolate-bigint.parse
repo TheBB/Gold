@@ -6,11 +6,14 @@ ParseResult
       statements: []
       expression: StringExpr [0..47]
         elements:
-          StringRaw
-            value: "simsalabim "
-          StringInterpolate
-            expr: LiteralExpr [14..33]
-              value: 9223372036854776000
-            fmt: null
-          StringRaw
-            value: " abracadabra"
+          [0]:
+            StringRaw
+              value: "simsalabim "
+          [1]:
+            StringInterpolate
+              expr: LiteralExpr [14..33]
+                value: 9223372036854776000
+              fmt: null
+          [2]:
+            StringRaw
+              value: " abracadabra"

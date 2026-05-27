@@ -6,17 +6,18 @@ ParseResult
       statements: []
       expression: MapExpr [0..17]
         elements:
-          MapCond [1..16]
-            condition: TransformedExpr [6..10]
-              operand: IdentifierExpr [6..7]
-                name: "f" [6..7]
-              transform: FunCallTransform
-                args: [7..10]
-                  ArgSingleton [8..9]
-                    expr: IdentifierExpr [8..9]
-                      name: "x" [8..9]
-            element: MapSingleton [12..16]
-              key: LiteralExpr [12..13]
-                value: "z"
-              value: IdentifierExpr [15..16]
-                name: "y" [15..16]
+          [0]:
+            MapCond [1..16]
+              condition: TransformedExpr [6..10]
+                operand: IdentifierExpr [6..7]
+                  name: "f" [6..7]
+                transform: FunCallTransform
+                  args: [7..10]
+                    ArgSingleton [8..9]
+                      expr: IdentifierExpr [8..9]
+                        name: "x" [8..9]
+              element: MapSingleton [12..16]
+                key: LiteralExpr [12..13]
+                  value: "z"
+                value: IdentifierExpr [15..16]
+                  name: "y" [15..16]

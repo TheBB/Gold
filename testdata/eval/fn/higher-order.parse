@@ -12,10 +12,11 @@ ParseResult
             FunctionExpr [13..25]
               positional: ListBinding [16..19]
                 elements:
-                  ListBindingSingleton [17..18]
-                    binding: IdentifierBinding [17..18]
-                      name: "x" [17..18]
-                    default: null
+                  [0]:
+                    ListBindingSingleton [17..18]
+                      binding: IdentifierBinding [17..18]
+                        name: "x" [17..18]
+                      default: null
               keywords: null
               expression: TransformedExpr [20..25]
                 operand: IdentifierExpr [20..21]
@@ -30,14 +31,16 @@ ParseResult
             FunctionExpr [43..59]
               positional: ListBinding [46..51]
                 elements:
-                  ListBindingSingleton [47..48]
-                    binding: IdentifierBinding [47..48]
-                      name: "f" [47..48]
-                    default: null
-                  ListBindingSingleton [49..50]
-                    binding: IdentifierBinding [49..50]
-                      name: "x" [49..50]
-                    default: null
+                  [0]:
+                    ListBindingSingleton [47..48]
+                      binding: IdentifierBinding [47..48]
+                        name: "f" [47..48]
+                      default: null
+                  [1]:
+                    ListBindingSingleton [49..50]
+                      binding: IdentifierBinding [49..50]
+                        name: "x" [49..50]
+                      default: null
               keywords: null
               expression: TransformedExpr [52..59]
                 operand: IdentifierExpr [52..53]
@@ -64,6 +67,7 @@ ParseResult
               ArgSingleton [82..85]
                 expr: ListExpr [82..85]
                   elements:
-                    ListSingleton [83..84]
-                      expr: LiteralExpr [83..84]
-                        value: 1
+                    [0]:
+                      ListSingleton [83..84]
+                        expr: LiteralExpr [83..84]
+                          value: 1

@@ -6,14 +6,17 @@ ParseResult
       statements: []
       expression: StringExpr [0..30]
         elements:
-          StringRaw
-            value: "simsalabim "
-          StringInterpolate
-            expr: TransformedExpr [14..16]
-              operand: LiteralExpr [15..16]
-                value: 1
-              transform: UnOpTransform
-                op: ArithmeticalNegate [14..15]
-            fmt: null
-          StringRaw
-            value: " abracadabra"
+          [0]:
+            StringRaw
+              value: "simsalabim "
+          [1]:
+            StringInterpolate
+              expr: TransformedExpr [14..16]
+                operand: LiteralExpr [15..16]
+                  value: 1
+                transform: UnOpTransform
+                  op: ArithmeticalNegate [14..15]
+              fmt: null
+          [2]:
+            StringRaw
+              value: " abracadabra"

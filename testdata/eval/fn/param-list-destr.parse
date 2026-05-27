@@ -12,23 +12,27 @@ ParseResult
             FunctionExpr [8..32]
               positional: ListBinding [11..22]
                 elements:
-                  ListBindingSingleton [12..13]
-                    binding: IdentifierBinding [12..13]
-                      name: "x" [12..13]
-                    default: null
-                  ListBindingSingleton [15..21]
-                    binding: ListPatternBinding [15..21]
-                      binding: ListBinding [15..21]
-                        elements:
-                          ListBindingSingleton [16..17]
-                            binding: IdentifierBinding [16..17]
-                              name: "y" [16..17]
-                            default: null
-                          ListBindingSingleton [19..20]
-                            binding: IdentifierBinding [19..20]
-                              name: "z" [19..20]
-                            default: null
-                    default: null
+                  [0]:
+                    ListBindingSingleton [12..13]
+                      binding: IdentifierBinding [12..13]
+                        name: "x" [12..13]
+                      default: null
+                  [1]:
+                    ListBindingSingleton [15..21]
+                      binding: ListPatternBinding [15..21]
+                        binding: ListBinding [15..21]
+                          elements:
+                            [0]:
+                              ListBindingSingleton [16..17]
+                                binding: IdentifierBinding [16..17]
+                                  name: "y" [16..17]
+                                default: null
+                            [1]:
+                              ListBindingSingleton [19..20]
+                                binding: IdentifierBinding [19..20]
+                                  name: "z" [19..20]
+                                default: null
+                      default: null
               keywords: null
               expression: TransformedExpr [23..32]
                 operand: TransformedExpr [23..28]
@@ -53,9 +57,11 @@ ParseResult
               ArgSingleton [41..47]
                 expr: ListExpr [41..47]
                   elements:
-                    ListSingleton [42..43]
-                      expr: LiteralExpr [42..43]
-                        value: 2
-                    ListSingleton [45..46]
-                      expr: LiteralExpr [45..46]
-                        value: 3
+                    [0]:
+                      ListSingleton [42..43]
+                        expr: LiteralExpr [42..43]
+                          value: 2
+                    [1]:
+                      ListSingleton [45..46]
+                        expr: LiteralExpr [45..46]
+                          value: 3

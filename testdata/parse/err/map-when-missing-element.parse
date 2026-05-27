@@ -10,10 +10,11 @@ ParseResult
       statements: []
       expression: MapExpr [0..15]
         elements:
-          MapCond [1..14]
-            condition: LiteralExpr [6..10]
-              value: true
-            element: MapSingleton [12..14]
-              key: LiteralExpr [12..13]
-                value: "x"
-              value: MissingExpr [14..14]
+          [0]:
+            MapCond [1..14]
+              condition: LiteralExpr [6..10]
+                value: true
+              element: MapSingleton [12..14]
+                key: LiteralExpr [12..13]
+                  value: "x"
+                value: MissingExpr [14..14]

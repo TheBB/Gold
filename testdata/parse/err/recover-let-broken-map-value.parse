@@ -15,20 +15,22 @@ ParseResult
               name: "result" [4..10]
             MapExpr [13..27]
               elements:
-                MapSingleton [14..20]
-                  key: LiteralExpr [14..15]
-                    value: "x"
-                  value: TransformedExpr [17..20]
-                    operand: LiteralExpr [17..18]
-                      value: 1
-                    transform: BinOpTransform
-                      op: Add [19..20]
-                      operand: MissingExpr [20..20]
-                MapSingleton [22..26]
-                  key: LiteralExpr [22..23]
-                    value: "y"
-                  value: LiteralExpr [25..26]
-                    value: 2
+                [0]:
+                  MapSingleton [14..20]
+                    key: LiteralExpr [14..15]
+                      value: "x"
+                    value: TransformedExpr [17..20]
+                      operand: LiteralExpr [17..18]
+                        value: 1
+                      transform: BinOpTransform
+                        op: Add [19..20]
+                        operand: MissingExpr [20..20]
+                [1]:
+                  MapSingleton [22..26]
+                    key: LiteralExpr [22..23]
+                      value: "y"
+                    value: LiteralExpr [25..26]
+                      value: 2
         expression: TransformedExpr [31..39]
           operand: IdentifierExpr [31..37]
             name: "result" [31..37]

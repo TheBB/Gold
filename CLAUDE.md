@@ -65,6 +65,15 @@ cd ref && make test
 
 `make test` runs: `pytest`, `pyrefly` (type checker), `ruff check`, and `ruff format --check`.
 
+**CLI (`ref` command):**
+- `ref parse [FILE]` — parse a Gold file and print the AST
+- `ref run [FILE]` — evaluate a Gold file and print the result
+- `ref gen-fixture FILE [DEST]` — generate `.parse` and `.eval` fixture files alongside the source:
+  - If `FILE` is inside `testdata/`, outputs go in the same directory (no `DEST` needed)
+  - If `FILE` is outside `testdata/`, `DEST` must be the target directory inside `testdata/`
+  - If `FILE` is `-` (stdin), `DEST` must be the full `.gold` path in `testdata/` (e.g. `testdata/examples/foo.gold`)
+  - Evaluation is skipped and a message printed if there are parse errors
+
 **Python conventions (mandatory):**
 - `from __future__ import annotations` at the top of every file
 - New-style type aliases: `type X = ...`

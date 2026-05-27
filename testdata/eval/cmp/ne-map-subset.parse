@@ -7,22 +7,25 @@ ParseResult
       expression: TransformedExpr [0..22]
         operand: MapExpr [0..6]
           elements:
-            MapSingleton [1..5]
-              key: LiteralExpr [1..2]
-                value: "a"
-              value: LiteralExpr [4..5]
-                value: 1
+            [0]:
+              MapSingleton [1..5]
+                key: LiteralExpr [1..2]
+                  value: "a"
+                value: LiteralExpr [4..5]
+                  value: 1
         transform: BinOpTransform
           op: NotEqual [7..9]
           operand: MapExpr [10..22]
             elements:
-              MapSingleton [11..15]
-                key: LiteralExpr [11..12]
-                  value: "a"
-                value: LiteralExpr [14..15]
-                  value: 1
-              MapSingleton [17..21]
-                key: LiteralExpr [17..18]
-                  value: "b"
-                value: LiteralExpr [20..21]
-                  value: 1
+              [0]:
+                MapSingleton [11..15]
+                  key: LiteralExpr [11..12]
+                    value: "a"
+                  value: LiteralExpr [14..15]
+                    value: 1
+              [1]:
+                MapSingleton [17..21]
+                  key: LiteralExpr [17..18]
+                    value: "b"
+                  value: LiteralExpr [20..21]
+                    value: 1

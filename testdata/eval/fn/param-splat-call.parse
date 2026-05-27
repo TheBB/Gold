@@ -12,54 +12,64 @@ ParseResult
             FunctionExpr [11..49]
               positional: ListBinding [14..23]
                 elements:
-                  ListBindingSlurpTo [15..22]
-                    name: "args"
+                  [0]:
+                    ListBindingSlurpTo [15..22]
+                      name: "args"
               keywords: MapBinding [22..34]
                 elements:
-                  MapBindingSlurpTo [24..33]
-                    name: "kwargs"
+                  [0]:
+                    MapBindingSlurpTo [24..33]
+                      name: "kwargs"
               expression: ListExpr [35..49]
                 elements:
-                  ListSingleton [36..40]
-                    expr: IdentifierExpr [36..40]
-                      name: "args" [36..40]
-                  ListSingleton [42..48]
-                    expr: IdentifierExpr [42..48]
-                      name: "kwargs" [42..48]
+                  [0]:
+                    ListSingleton [36..40]
+                      expr: IdentifierExpr [36..40]
+                        name: "args" [36..40]
+                  [1]:
+                    ListSingleton [42..48]
+                      expr: IdentifierExpr [42..48]
+                        name: "kwargs" [42..48]
           [1]:
             IdentifierBinding [54..58]
               name: "args" [54..58]
             ListExpr [61..70]
               elements:
-                ListSingleton [62..63]
-                  expr: LiteralExpr [62..63]
-                    value: 1
-                ListSingleton [65..66]
-                  expr: LiteralExpr [65..66]
-                    value: 2
-                ListSingleton [68..69]
-                  expr: LiteralExpr [68..69]
-                    value: 3
+                [0]:
+                  ListSingleton [62..63]
+                    expr: LiteralExpr [62..63]
+                      value: 1
+                [1]:
+                  ListSingleton [65..66]
+                    expr: LiteralExpr [65..66]
+                      value: 2
+                [2]:
+                  ListSingleton [68..69]
+                    expr: LiteralExpr [68..69]
+                      value: 3
           [2]:
             IdentifierBinding [75..81]
               name: "kwargs" [75..81]
             MapExpr [84..102]
               elements:
-                MapSingleton [85..89]
-                  key: LiteralExpr [85..86]
-                    value: "x"
-                  value: LiteralExpr [88..89]
-                    value: 4
-                MapSingleton [91..95]
-                  key: LiteralExpr [91..92]
-                    value: "y"
-                  value: LiteralExpr [94..95]
-                    value: 5
-                MapSingleton [97..101]
-                  key: LiteralExpr [97..98]
-                    value: "z"
-                  value: LiteralExpr [100..101]
-                    value: 6
+                [0]:
+                  MapSingleton [85..89]
+                    key: LiteralExpr [85..86]
+                      value: "x"
+                    value: LiteralExpr [88..89]
+                      value: 4
+                [1]:
+                  MapSingleton [91..95]
+                    key: LiteralExpr [91..92]
+                      value: "y"
+                    value: LiteralExpr [94..95]
+                      value: 5
+                [2]:
+                  MapSingleton [97..101]
+                    key: LiteralExpr [97..98]
+                      value: "z"
+                    value: LiteralExpr [100..101]
+                      value: 6
         expression: TransformedExpr [106..156]
           operand: IdentifierExpr [106..110]
             name: "dest" [106..110]

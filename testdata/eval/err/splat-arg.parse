@@ -8,8 +8,9 @@ ParseResult
         operand: FunctionExpr [1..12]
           positional: ListBinding [4..10]
             elements:
-              ListBindingSlurpTo [5..9]
-                name: "x"
+              [0]:
+                ListBindingSlurpTo [5..9]
+                  name: "x"
           keywords: null
           expression: LiteralExpr [11..12]
             value: 1

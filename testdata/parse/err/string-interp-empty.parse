@@ -10,6 +10,7 @@ ParseResult
       statements: []
       expression: StringExpr [0..5]
         elements:
-          StringInterpolate
-            expr: MissingExpr [3..3]
-            fmt: null
+          [0]:
+            StringInterpolate
+              expr: MissingExpr [3..3]
+              fmt: null

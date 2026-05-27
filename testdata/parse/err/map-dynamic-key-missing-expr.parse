@@ -10,6 +10,7 @@ ParseResult
       statements: []
       expression: MapExpr [0..3]
         elements:
-          MapSingleton [1..2]
-            key: MissingExpr [2..2]
-            value: MissingExpr [2..2]
+          [0]:
+            MapSingleton [1..2]
+              key: MissingExpr [2..2]
+              value: MissingExpr [2..2]

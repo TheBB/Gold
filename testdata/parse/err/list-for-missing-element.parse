@@ -10,10 +10,11 @@ ParseResult
       statements: []
       expression: ListExpr [0..17]
         elements:
-          ListLoop [1..16]
-            binding: IdentifierBinding [5..6]
-              name: "x" [5..6]
-            iterable: IdentifierExpr [10..15]
-              name: "items" [10..15]
-            element: ListSingleton [16..16]
-              expr: MissingExpr [16..16]
+          [0]:
+            ListLoop [1..16]
+              binding: IdentifierBinding [5..6]
+                name: "x" [5..6]
+              iterable: IdentifierExpr [10..15]
+                name: "items" [10..15]
+              element: ListSingleton [16..16]
+                expr: MissingExpr [16..16]

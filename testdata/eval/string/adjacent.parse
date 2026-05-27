@@ -6,7 +6,9 @@ ParseResult
       statements: []
       expression: StringExpr [0..15]
         elements:
-          StringRaw
-            value: "alpha"
-          StringRaw
-            value: "bravo"
+          [0]:
+            StringRaw
+              value: "alpha"
+          [1]:
+            StringRaw
+              value: "bravo"

@@ -6,7 +6,8 @@ ParseResult
       statements: []
       expression: StringExpr [0..9]
         elements:
-          StringInterpolate
-            expr: LiteralExpr [3..7]
-              value: 3.14
-            fmt: null
+          [0]:
+            StringInterpolate
+              expr: LiteralExpr [3..7]
+                value: 3.14
+              fmt: null

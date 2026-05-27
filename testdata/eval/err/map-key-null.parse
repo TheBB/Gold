@@ -6,8 +6,9 @@ ParseResult
       statements: []
       expression: MapExpr [0..10]
         elements:
-          MapSingleton [1..9]
-            key: LiteralExpr [2..6]
-              value: null
-            value: LiteralExpr [8..9]
-              value: 1
+          [0]:
+            MapSingleton [1..9]
+              key: LiteralExpr [2..6]
+                value: null
+              value: LiteralExpr [8..9]
+                value: 1

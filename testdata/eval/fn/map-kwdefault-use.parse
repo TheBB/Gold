@@ -14,12 +14,13 @@ ParseResult
                 elements: []
               keywords: MapBinding [11..18]
                 elements:
-                  MapBindingSingleton [12..17]
-                    key: "k" [12..13]
-                    binding: IdentifierBinding [12..13]
-                      name: "k" [12..13]
-                    default: LiteralExpr [16..17]
-                      value: 1
+                  [0]:
+                    MapBindingSingleton [12..17]
+                      key: "k" [12..13]
+                      binding: IdentifierBinding [12..13]
+                        name: "k" [12..13]
+                      default: LiteralExpr [16..17]
+                        value: 1
               expression: IdentifierExpr [19..20]
                 name: "k" [19..20]
         expression: TransformedExpr [24..27]

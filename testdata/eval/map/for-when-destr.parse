@@ -11,59 +11,71 @@ ParseResult
               name: "a" [4..5]
             ListExpr [8..35]
               elements:
-                ListSingleton [9..16]
-                  expr: ListExpr [9..16]
-                    elements:
-                      ListSingleton [10..13]
-                        expr: LiteralExpr [10..13]
-                          value: "x"
-                      ListSingleton [14..15]
-                        expr: LiteralExpr [14..15]
-                          value: 1
-                ListSingleton [18..25]
-                  expr: ListExpr [18..25]
-                    elements:
-                      ListSingleton [19..22]
-                        expr: LiteralExpr [19..22]
-                          value: "y"
-                      ListSingleton [23..24]
-                        expr: LiteralExpr [23..24]
-                          value: 2
-                ListSingleton [27..34]
-                  expr: ListExpr [27..34]
-                    elements:
-                      ListSingleton [28..31]
-                        expr: LiteralExpr [28..31]
-                          value: "z"
-                      ListSingleton [32..33]
-                        expr: LiteralExpr [32..33]
-                          value: 3
+                [0]:
+                  ListSingleton [9..16]
+                    expr: ListExpr [9..16]
+                      elements:
+                        [0]:
+                          ListSingleton [10..13]
+                            expr: LiteralExpr [10..13]
+                              value: "x"
+                        [1]:
+                          ListSingleton [14..15]
+                            expr: LiteralExpr [14..15]
+                              value: 1
+                [1]:
+                  ListSingleton [18..25]
+                    expr: ListExpr [18..25]
+                      elements:
+                        [0]:
+                          ListSingleton [19..22]
+                            expr: LiteralExpr [19..22]
+                              value: "y"
+                        [1]:
+                          ListSingleton [23..24]
+                            expr: LiteralExpr [23..24]
+                              value: 2
+                [2]:
+                  ListSingleton [27..34]
+                    expr: ListExpr [27..34]
+                      elements:
+                        [0]:
+                          ListSingleton [28..31]
+                            expr: LiteralExpr [28..31]
+                              value: "z"
+                        [1]:
+                          ListSingleton [32..33]
+                            expr: LiteralExpr [32..33]
+                              value: 3
         expression: MapExpr [39..75]
           elements:
-            MapLoop [40..74]
-              binding: ListPatternBinding [44..49]
-                binding: ListBinding [44..49]
-                  elements:
-                    ListBindingSingleton [45..46]
-                      binding: IdentifierBinding [45..46]
-                        name: "x" [45..46]
-                      default: null
-                    ListBindingSingleton [47..48]
-                      binding: IdentifierBinding [47..48]
-                        name: "y" [47..48]
-                      default: null
-              iterable: IdentifierExpr [53..54]
-                name: "a" [53..54]
-              element: MapCond [56..74]
-                condition: TransformedExpr [61..67]
-                  operand: IdentifierExpr [61..62]
-                    name: "y" [61..62]
-                  transform: BinOpTransform
-                    op: NotEqual [63..65]
-                    operand: LiteralExpr [66..67]
-                      value: 2
-                element: MapSingleton [69..74]
-                  key: IdentifierExpr [70..71]
-                    name: "x" [70..71]
-                  value: IdentifierExpr [73..74]
-                    name: "y" [73..74]
+            [0]:
+              MapLoop [40..74]
+                binding: ListPatternBinding [44..49]
+                  binding: ListBinding [44..49]
+                    elements:
+                      [0]:
+                        ListBindingSingleton [45..46]
+                          binding: IdentifierBinding [45..46]
+                            name: "x" [45..46]
+                          default: null
+                      [1]:
+                        ListBindingSingleton [47..48]
+                          binding: IdentifierBinding [47..48]
+                            name: "y" [47..48]
+                          default: null
+                iterable: IdentifierExpr [53..54]
+                  name: "a" [53..54]
+                element: MapCond [56..74]
+                  condition: TransformedExpr [61..67]
+                    operand: IdentifierExpr [61..62]
+                      name: "y" [61..62]
+                    transform: BinOpTransform
+                      op: NotEqual [63..65]
+                      operand: LiteralExpr [66..67]
+                        value: 2
+                  element: MapSingleton [69..74]
+                    key: IdentifierExpr [70..71]
+                      name: "x" [70..71]
+                    value: IdentifierExpr [73..74]
+                      name: "y" [73..74]

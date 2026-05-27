@@ -34,12 +34,14 @@ ParseResult
                   name: "a" [44..45]
           expression: ListExpr [52..60]
             elements:
-              ListSingleton [53..54]
-                expr: IdentifierExpr [53..54]
-                  name: "a" [53..54]
-              ListSingleton [56..59]
-                expr: TransformedExpr [56..59]
-                  operand: IdentifierExpr [56..57]
-                    name: "b" [56..57]
-                  transform: FunCallTransform
-                    args: [] [57..59]
+              [0]:
+                ListSingleton [53..54]
+                  expr: IdentifierExpr [53..54]
+                    name: "a" [53..54]
+              [1]:
+                ListSingleton [56..59]
+                  expr: TransformedExpr [56..59]
+                    operand: IdentifierExpr [56..57]
+                      name: "b" [56..57]
+                    transform: FunCallTransform
+                      args: [] [57..59]

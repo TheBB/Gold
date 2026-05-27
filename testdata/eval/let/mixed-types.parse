@@ -18,9 +18,11 @@ ParseResult
               value: "zomg"
         expression: ListExpr [28..34]
           elements:
-            ListSingleton [29..30]
-              expr: IdentifierExpr [29..30]
-                name: "a" [29..30]
-            ListSingleton [32..33]
-              expr: IdentifierExpr [32..33]
-                name: "b" [32..33]
+            [0]:
+              ListSingleton [29..30]
+                expr: IdentifierExpr [29..30]
+                  name: "a" [29..30]
+            [1]:
+              ListSingleton [32..33]
+                expr: IdentifierExpr [32..33]
+                  name: "b" [32..33]

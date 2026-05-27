@@ -13,8 +13,9 @@ ParseResult
               value: "hello"
         expression: MapExpr [19..28]
           elements:
-            MapSingleton [20..27]
-              key: IdentifierExpr [22..23]
-                name: "k" [22..23]
-              value: LiteralExpr [26..27]
-                value: 1
+            [0]:
+              MapSingleton [20..27]
+                key: IdentifierExpr [22..23]
+                  name: "k" [22..23]
+                value: LiteralExpr [26..27]
+                  value: 1

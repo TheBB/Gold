@@ -10,9 +10,11 @@ ParseResult
       statements: []
       expression: ListExpr [0..5]
         elements:
-          ListSingleton [1..2]
-            expr: LiteralExpr [1..2]
-              value: 1
-          ListSingleton [3..4]
-            expr: LiteralExpr [3..4]
-              value: 2
+          [0]:
+            ListSingleton [1..2]
+              expr: LiteralExpr [1..2]
+                value: 1
+          [1]:
+            ListSingleton [3..4]
+              expr: LiteralExpr [3..4]
+                value: 2

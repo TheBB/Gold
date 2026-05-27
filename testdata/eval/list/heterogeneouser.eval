@@ -1,8 +1,13 @@
 EvalResult
   ok: true
   value: (list)
-    1
-    false
-    "dingbob"
-    2.2
-    null
+    [0]:
+      1
+    [1]:
+      false
+    [2]:
+      "dingbob"
+    [3]:
+      2.2
+    [4]:
+      null

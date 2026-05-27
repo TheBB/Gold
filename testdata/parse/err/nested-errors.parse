@@ -29,8 +29,9 @@ ParseResult
                 operand: MissingExpr [12..12]
         expression: MapExpr [16..21]
           elements:
-            MapSingleton [17..21]
-              key: LiteralExpr [17..18]
-                value: "y"
-              value: LiteralExpr [20..21]
-                value: 2
+            [0]:
+              MapSingleton [17..21]
+                key: LiteralExpr [17..18]
+                  value: "y"
+                value: LiteralExpr [20..21]
+                  value: 2

@@ -12,12 +12,15 @@ ParseResult
             ArgSingleton [4..13]
               expr: ListExpr [4..13]
                 elements:
-                  ListSingleton [5..6]
-                    expr: LiteralExpr [5..6]
-                      value: 1
-                  ListSingleton [8..9]
-                    expr: LiteralExpr [8..9]
-                      value: 2
-                  ListSingleton [11..12]
-                    expr: LiteralExpr [11..12]
-                      value: 3
+                  [0]:
+                    ListSingleton [5..6]
+                      expr: LiteralExpr [5..6]
+                        value: 1
+                  [1]:
+                    ListSingleton [8..9]
+                      expr: LiteralExpr [8..9]
+                        value: 2
+                  [2]:
+                    ListSingleton [11..12]
+                      expr: LiteralExpr [11..12]
+                        value: 3

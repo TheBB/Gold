@@ -6,11 +6,13 @@ ParseResult
       statements: []
       expression: MapExpr [0..12]
         elements:
-          MapSplat [1..5]
-            expr: IdentifierExpr [4..5]
-              name: "y" [4..5]
-          MapSingleton [7..11]
-            key: LiteralExpr [7..8]
-              value: "x"
-            value: LiteralExpr [10..11]
-              value: 1
+          [0]:
+            MapSplat [1..5]
+              expr: IdentifierExpr [4..5]
+                name: "y" [4..5]
+          [1]:
+            MapSingleton [7..11]
+              key: LiteralExpr [7..8]
+                value: "x"
+              value: LiteralExpr [10..11]
+                value: 1

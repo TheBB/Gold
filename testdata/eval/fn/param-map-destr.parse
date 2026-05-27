@@ -10,16 +10,18 @@ ParseResult
             elements: []
           keywords: MapBinding [4..10]
             elements:
-              MapBindingSingleton [5..6]
-                key: "a" [5..6]
-                binding: IdentifierBinding [5..6]
-                  name: "a" [5..6]
-                default: null
-              MapBindingSingleton [8..9]
-                key: "b" [8..9]
-                binding: IdentifierBinding [8..9]
-                  name: "b" [8..9]
-                default: null
+              [0]:
+                MapBindingSingleton [5..6]
+                  key: "a" [5..6]
+                  binding: IdentifierBinding [5..6]
+                    name: "a" [5..6]
+                  default: null
+              [1]:
+                MapBindingSingleton [8..9]
+                  key: "b" [8..9]
+                  binding: IdentifierBinding [8..9]
+                    name: "b" [8..9]
+                  default: null
           expression: TransformedExpr [11..16]
             operand: IdentifierExpr [11..12]
               name: "a" [11..12]

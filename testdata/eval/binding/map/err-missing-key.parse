@@ -10,11 +10,12 @@ ParseResult
             MapPatternBinding [4..7]
               binding: MapBinding [4..7]
                 elements:
-                  MapBindingSingleton [5..6]
-                    key: "a" [5..6]
-                    binding: IdentifierBinding [5..6]
-                      name: "a" [5..6]
-                    default: null
+                  [0]:
+                    MapBindingSingleton [5..6]
+                      key: "a" [5..6]
+                      binding: IdentifierBinding [5..6]
+                        name: "a" [5..6]
+                      default: null
             MapExpr [10..12]
               elements: []
         expression: IdentifierExpr [16..17]

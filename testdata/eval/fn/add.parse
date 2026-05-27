@@ -8,14 +8,16 @@ ParseResult
         operand: FunctionExpr [1..16]
           positional: ListBinding [4..10]
             elements:
-              ListBindingSingleton [5..6]
-                binding: IdentifierBinding [5..6]
-                  name: "x" [5..6]
-                default: null
-              ListBindingSingleton [8..9]
-                binding: IdentifierBinding [8..9]
-                  name: "y" [8..9]
-                default: null
+              [0]:
+                ListBindingSingleton [5..6]
+                  binding: IdentifierBinding [5..6]
+                    name: "x" [5..6]
+                  default: null
+              [1]:
+                ListBindingSingleton [8..9]
+                  binding: IdentifierBinding [8..9]
+                    name: "y" [8..9]
+                  default: null
           keywords: null
           expression: TransformedExpr [11..16]
             operand: IdentifierExpr [11..12]

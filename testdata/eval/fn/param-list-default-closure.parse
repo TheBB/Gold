@@ -17,16 +17,18 @@ ParseResult
             FunctionExpr [18..32]
               positional: ListBinding [21..30]
                 elements:
-                  ListBindingSingleton [22..29]
-                    binding: ListPatternBinding [22..29]
-                      binding: ListBinding [22..29]
-                        elements:
-                          ListBindingSingleton [23..28]
-                            binding: IdentifierBinding [23..24]
-                              name: "y" [23..24]
-                            default: IdentifierExpr [27..28]
-                              name: "q" [27..28]
-                    default: null
+                  [0]:
+                    ListBindingSingleton [22..29]
+                      binding: ListPatternBinding [22..29]
+                        binding: ListBinding [22..29]
+                          elements:
+                            [0]:
+                              ListBindingSingleton [23..28]
+                                binding: IdentifierBinding [23..24]
+                                  name: "y" [23..24]
+                                default: IdentifierExpr [27..28]
+                                  name: "q" [27..28]
+                      default: null
               keywords: null
               expression: IdentifierExpr [31..32]
                 name: "y" [31..32]

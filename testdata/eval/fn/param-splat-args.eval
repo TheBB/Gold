@@ -1,7 +1,11 @@
 EvalResult
   ok: true
   value: (list)
-    (list)
-      1
-      2
-    (map) {}
+    [0]:
+      (list)
+        [0]:
+          1
+        [1]:
+          2
+    [1]:
+      (map) {}

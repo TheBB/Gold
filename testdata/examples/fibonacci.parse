@@ -17,27 +17,32 @@ ParseResult
                   FunctionExpr [30..143]
                     positional: ListBinding [33..46]
                       elements:
-                        ListBindingSingleton [34..35]
-                          binding: IdentifierBinding [34..35]
-                            name: "f" [34..35]
-                          default: null
-                        ListBindingSingleton [37..38]
-                          binding: IdentifierBinding [37..38]
-                            name: "n" [37..38]
-                          default: null
-                        ListBindingSingleton [40..45]
-                          binding: ListPatternBinding [40..45]
-                            binding: ListBinding [40..45]
-                              elements:
-                                ListBindingSingleton [41..42]
-                                  binding: IdentifierBinding [41..42]
-                                    name: "a" [41..42]
-                                  default: null
-                                ListBindingSingleton [43..44]
-                                  binding: IdentifierBinding [43..44]
-                                    name: "b" [43..44]
-                                  default: null
-                          default: null
+                        [0]:
+                          ListBindingSingleton [34..35]
+                            binding: IdentifierBinding [34..35]
+                              name: "f" [34..35]
+                            default: null
+                        [1]:
+                          ListBindingSingleton [37..38]
+                            binding: IdentifierBinding [37..38]
+                              name: "n" [37..38]
+                            default: null
+                        [2]:
+                          ListBindingSingleton [40..45]
+                            binding: ListPatternBinding [40..45]
+                              binding: ListBinding [40..45]
+                                elements:
+                                  [0]:
+                                    ListBindingSingleton [41..42]
+                                      binding: IdentifierBinding [41..42]
+                                        name: "a" [41..42]
+                                      default: null
+                                  [1]:
+                                    ListBindingSingleton [43..44]
+                                      binding: IdentifierBinding [43..44]
+                                        name: "b" [43..44]
+                                      default: null
+                            default: null
                     keywords: null
                     expression: BranchExpr [57..137]
                       condition: TransformedExpr [60..66]
@@ -49,12 +54,14 @@ ParseResult
                             value: 0
                       true_branch: ListExpr [84..90]
                         elements:
-                          ListSingleton [85..86]
-                            expr: IdentifierExpr [85..86]
-                              name: "a" [85..86]
-                          ListSingleton [88..89]
-                            expr: IdentifierExpr [88..89]
-                              name: "b" [88..89]
+                          [0]:
+                            ListSingleton [85..86]
+                              expr: IdentifierExpr [85..86]
+                                name: "a" [85..86]
+                          [1]:
+                            ListSingleton [88..89]
+                              expr: IdentifierExpr [88..89]
+                                name: "b" [88..89]
                       false_branch: TransformedExpr [116..137]
                         operand: IdentifierExpr [116..117]
                           name: "f" [116..117]
@@ -74,24 +81,27 @@ ParseResult
                             ArgSingleton [126..136]
                               expr: ListExpr [126..136]
                                 elements:
-                                  ListSingleton [127..128]
-                                    expr: IdentifierExpr [127..128]
-                                      name: "b" [127..128]
-                                  ListSingleton [130..135]
-                                    expr: TransformedExpr [130..135]
-                                      operand: IdentifierExpr [130..131]
-                                        name: "a" [130..131]
-                                      transform: BinOpTransform
-                                        op: Add [132..133]
-                                        operand: IdentifierExpr [134..135]
-                                          name: "b" [134..135]
+                                  [0]:
+                                    ListSingleton [127..128]
+                                      expr: IdentifierExpr [127..128]
+                                        name: "b" [127..128]
+                                  [1]:
+                                    ListSingleton [130..135]
+                                      expr: TransformedExpr [130..135]
+                                        operand: IdentifierExpr [130..131]
+                                          name: "a" [130..131]
+                                        transform: BinOpTransform
+                                          op: Add [132..133]
+                                          operand: IdentifierExpr [134..135]
+                                            name: "b" [134..135]
               expression: FunctionExpr [151..203]
                 positional: ListBinding [154..157]
                   elements:
-                    ListBindingSingleton [155..156]
-                      binding: IdentifierBinding [155..156]
-                        name: "n" [155..156]
-                      default: null
+                    [0]:
+                      ListBindingSingleton [155..156]
+                        binding: IdentifierBinding [155..156]
+                          name: "n" [155..156]
+                        default: null
                 keywords: null
                 expression: LetExpr [158..203]
                   bindings:
@@ -99,14 +109,16 @@ ParseResult
                       ListPatternBinding [162..168]
                         binding: ListBinding [162..168]
                           elements:
-                            ListBindingSingleton [163..164]
-                              binding: IdentifierBinding [163..164]
-                                name: "_" [163..164]
-                              default: null
-                            ListBindingSingleton [166..167]
-                              binding: IdentifierBinding [166..167]
-                                name: "x" [166..167]
-                              default: null
+                            [0]:
+                              ListBindingSingleton [163..164]
+                                binding: IdentifierBinding [163..164]
+                                  name: "_" [163..164]
+                                default: null
+                            [1]:
+                              ListBindingSingleton [166..167]
+                                binding: IdentifierBinding [166..167]
+                                  name: "x" [166..167]
+                                default: null
                       TransformedExpr [171..198]
                         operand: IdentifierExpr [171..178]
                           name: "recurse" [171..178]
@@ -121,12 +133,14 @@ ParseResult
                             ArgSingleton [191..197]
                               expr: ListExpr [191..197]
                                 elements:
-                                  ListSingleton [192..193]
-                                    expr: LiteralExpr [192..193]
-                                      value: 1
-                                  ListSingleton [195..196]
-                                    expr: LiteralExpr [195..196]
-                                      value: 1
+                                  [0]:
+                                    ListSingleton [192..193]
+                                      expr: LiteralExpr [192..193]
+                                        value: 1
+                                  [1]:
+                                    ListSingleton [195..196]
+                                      expr: LiteralExpr [195..196]
+                                        value: 1
                   expression: IdentifierExpr [202..203]
                     name: "x" [202..203]
         expression: TransformedExpr [210..216]

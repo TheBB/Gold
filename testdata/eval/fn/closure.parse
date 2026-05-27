@@ -15,10 +15,11 @@ ParseResult
           operand: FunctionExpr [15..27]
             positional: ListBinding [18..21]
               elements:
-                ListBindingSingleton [19..20]
-                  binding: IdentifierBinding [19..20]
-                    name: "y" [19..20]
-                  default: null
+                [0]:
+                  ListBindingSingleton [19..20]
+                    binding: IdentifierBinding [19..20]
+                      name: "y" [19..20]
+                    default: null
             keywords: null
             expression: TransformedExpr [22..27]
               operand: IdentifierExpr [22..23]

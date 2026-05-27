@@ -1,9 +1,13 @@
 EvalResult
   ok: true
   value: (list)
-    (list)
-      1
-      2
-    (map)
-      x: 3
-      y: 4
+    [0]:
+      (list)
+        [0]:
+          1
+        [1]:
+          2
+    [1]:
+      (map)
+        x: 3
+        y: 4

@@ -14,5 +14,6 @@ ParseResult
       statements: []
       expression: ListExpr [0..4]
         elements:
-          ListSplat [1..4]
-            expr: MissingExpr [4..4]
+          [0]:
+            ListSplat [1..4]
+              expr: MissingExpr [4..4]

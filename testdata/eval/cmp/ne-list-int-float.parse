@@ -7,13 +7,15 @@ ParseResult
       expression: TransformedExpr [0..12]
         operand: ListExpr [0..3]
           elements:
-            ListSingleton [1..2]
-              expr: LiteralExpr [1..2]
-                value: 1
+            [0]:
+              ListSingleton [1..2]
+                expr: LiteralExpr [1..2]
+                  value: 1
         transform: BinOpTransform
           op: NotEqual [4..6]
           operand: ListExpr [7..12]
             elements:
-              ListSingleton [8..11]
-                expr: LiteralExpr [8..11]
-                  value: 1.0
+              [0]:
+                ListSingleton [8..11]
+                  expr: LiteralExpr [8..11]
+                    value: 1.0

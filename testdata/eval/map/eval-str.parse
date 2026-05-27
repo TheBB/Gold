@@ -6,8 +6,9 @@ ParseResult
       statements: []
       expression: MapExpr [0..34]
         elements:
-          MapSingleton [1..33]
-            key: LiteralExpr [2..30]
-              value: "abcdefghijklmnopqrstuvwxyz"
-            value: LiteralExpr [32..33]
-              value: 1
+          [0]:
+            MapSingleton [1..33]
+              key: LiteralExpr [2..30]
+                value: "abcdefghijklmnopqrstuvwxyz"
+              value: LiteralExpr [32..33]
+                value: 1

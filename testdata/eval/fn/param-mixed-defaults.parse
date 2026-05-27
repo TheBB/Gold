@@ -12,83 +12,93 @@ ParseResult
             FunctionExpr [8..35]
               positional: ListBinding [11..20]
                 elements:
-                  ListBindingSingleton [12..13]
-                    binding: IdentifierBinding [12..13]
-                      name: "x" [12..13]
-                    default: null
-                  ListBindingSingleton [15..19]
-                    binding: IdentifierBinding [15..16]
-                      name: "y" [15..16]
-                    default: LiteralExpr [17..19]
-                      value: 15
+                  [0]:
+                    ListBindingSingleton [12..13]
+                      binding: IdentifierBinding [12..13]
+                        name: "x" [12..13]
+                      default: null
+                  [1]:
+                    ListBindingSingleton [15..19]
+                      binding: IdentifierBinding [15..16]
+                        name: "y" [15..16]
+                      default: LiteralExpr [17..19]
+                        value: 15
               keywords: MapBinding [19..27]
                 elements:
-                  MapBindingSingleton [21..26]
-                    key: "z" [21..22]
-                    binding: IdentifierBinding [21..22]
-                      name: "z" [21..22]
-                    default: LiteralExpr [23..26]
-                      value: 200
+                  [0]:
+                    MapBindingSingleton [21..26]
+                      key: "z" [21..22]
+                      binding: IdentifierBinding [21..22]
+                        name: "z" [21..22]
+                      default: LiteralExpr [23..26]
+                        value: 200
               expression: ListExpr [28..35]
                 elements:
-                  ListSingleton [29..30]
-                    expr: IdentifierExpr [29..30]
-                      name: "x" [29..30]
-                  ListSingleton [31..32]
-                    expr: IdentifierExpr [31..32]
-                      name: "y" [31..32]
-                  ListSingleton [33..34]
-                    expr: IdentifierExpr [33..34]
-                      name: "z" [33..34]
+                  [0]:
+                    ListSingleton [29..30]
+                      expr: IdentifierExpr [29..30]
+                        name: "x" [29..30]
+                  [1]:
+                    ListSingleton [31..32]
+                      expr: IdentifierExpr [31..32]
+                        name: "y" [31..32]
+                  [2]:
+                    ListSingleton [33..34]
+                      expr: IdentifierExpr [33..34]
+                        name: "z" [33..34]
         expression: ListExpr [39..79]
           elements:
-            ListSingleton [40..44]
-              expr: TransformedExpr [40..44]
-                operand: IdentifierExpr [40..41]
-                  name: "f" [40..41]
-                transform: FunCallTransform
-                  args: [41..44]
-                    ArgSingleton [42..43]
-                      expr: LiteralExpr [42..43]
-                        value: 1
-            ListSingleton [46..52]
-              expr: TransformedExpr [46..52]
-                operand: IdentifierExpr [46..47]
-                  name: "f" [46..47]
-                transform: FunCallTransform
-                  args: [47..52]
-                    ArgSingleton [48..49]
-                      expr: LiteralExpr [48..49]
-                        value: 1
-                    ArgSingleton [50..51]
-                      expr: LiteralExpr [50..51]
-                        value: 2
-            ListSingleton [54..64]
-              expr: TransformedExpr [54..64]
-                operand: IdentifierExpr [54..55]
-                  name: "f" [54..55]
-                transform: FunCallTransform
-                  args: [55..64]
-                    ArgSingleton [56..57]
-                      expr: LiteralExpr [56..57]
-                        value: 1
-                    ArgKeyword [58..63]
-                      key: "z" [58..59]
-                      expr: LiteralExpr [60..63]
-                        value: 100
-            ListSingleton [66..78]
-              expr: TransformedExpr [66..78]
-                operand: IdentifierExpr [66..67]
-                  name: "f" [66..67]
-                transform: FunCallTransform
-                  args: [67..78]
-                    ArgSingleton [68..69]
-                      expr: LiteralExpr [68..69]
-                        value: 1
-                    ArgSingleton [70..71]
-                      expr: LiteralExpr [70..71]
-                        value: 2
-                    ArgKeyword [72..77]
-                      key: "z" [72..73]
-                      expr: LiteralExpr [74..77]
-                        value: 100
+            [0]:
+              ListSingleton [40..44]
+                expr: TransformedExpr [40..44]
+                  operand: IdentifierExpr [40..41]
+                    name: "f" [40..41]
+                  transform: FunCallTransform
+                    args: [41..44]
+                      ArgSingleton [42..43]
+                        expr: LiteralExpr [42..43]
+                          value: 1
+            [1]:
+              ListSingleton [46..52]
+                expr: TransformedExpr [46..52]
+                  operand: IdentifierExpr [46..47]
+                    name: "f" [46..47]
+                  transform: FunCallTransform
+                    args: [47..52]
+                      ArgSingleton [48..49]
+                        expr: LiteralExpr [48..49]
+                          value: 1
+                      ArgSingleton [50..51]
+                        expr: LiteralExpr [50..51]
+                          value: 2
+            [2]:
+              ListSingleton [54..64]
+                expr: TransformedExpr [54..64]
+                  operand: IdentifierExpr [54..55]
+                    name: "f" [54..55]
+                  transform: FunCallTransform
+                    args: [55..64]
+                      ArgSingleton [56..57]
+                        expr: LiteralExpr [56..57]
+                          value: 1
+                      ArgKeyword [58..63]
+                        key: "z" [58..59]
+                        expr: LiteralExpr [60..63]
+                          value: 100
+            [3]:
+              ListSingleton [66..78]
+                expr: TransformedExpr [66..78]
+                  operand: IdentifierExpr [66..67]
+                    name: "f" [66..67]
+                  transform: FunCallTransform
+                    args: [67..78]
+                      ArgSingleton [68..69]
+                        expr: LiteralExpr [68..69]
+                          value: 1
+                      ArgSingleton [70..71]
+                        expr: LiteralExpr [70..71]
+                          value: 2
+                      ArgKeyword [72..77]
+                        key: "z" [72..73]
+                        expr: LiteralExpr [74..77]
+                          value: 100

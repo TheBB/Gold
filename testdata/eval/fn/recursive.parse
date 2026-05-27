@@ -12,10 +12,11 @@ ParseResult
             FunctionExpr [8..49]
               positional: ListBinding [11..14]
                 elements:
-                  ListBindingSingleton [12..13]
-                    binding: IdentifierBinding [12..13]
-                      name: "n" [12..13]
-                    default: null
+                  [0]:
+                    ListBindingSingleton [12..13]
+                      binding: IdentifierBinding [12..13]
+                        name: "n" [12..13]
+                      default: null
               keywords: null
               expression: BranchExpr [15..49]
                 condition: TransformedExpr [18..24]

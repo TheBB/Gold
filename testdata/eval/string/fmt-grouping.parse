@@ -6,15 +6,16 @@ ParseResult
       statements: []
       expression: StringExpr [0..14]
         elements:
-          StringInterpolate
-            expr: LiteralExpr [3..10]
-              value: 1234567
-            fmt: FormatSpec
-              fill: " "
-              align: null
-              sign: null
-              alternate: false
-              width: null
-              grouping: Comma
-              precision: null
-              fmt_type: null
+          [0]:
+            StringInterpolate
+              expr: LiteralExpr [3..10]
+                value: 1234567
+              fmt: FormatSpec
+                fill: " "
+                align: null
+                sign: null
+                alternate: false
+                width: null
+                grouping: Comma
+                precision: null
+                fmt_type: null

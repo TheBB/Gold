@@ -12,13 +12,15 @@ ParseResult
             ArgSingleton [6..18]
               expr: MapExpr [6..18]
                 elements:
-                  MapSingleton [7..11]
-                    key: LiteralExpr [7..8]
-                      value: "a"
-                    value: LiteralExpr [10..11]
-                      value: 1
-                  MapSingleton [13..17]
-                    key: LiteralExpr [13..14]
-                      value: "b"
-                    value: LiteralExpr [16..17]
-                      value: 2
+                  [0]:
+                    MapSingleton [7..11]
+                      key: LiteralExpr [7..8]
+                        value: "a"
+                      value: LiteralExpr [10..11]
+                        value: 1
+                  [1]:
+                    MapSingleton [13..17]
+                      key: LiteralExpr [13..14]
+                        value: "b"
+                      value: LiteralExpr [16..17]
+                        value: 2

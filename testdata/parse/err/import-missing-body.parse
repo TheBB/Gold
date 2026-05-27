@@ -8,8 +8,9 @@ ParseResult
   tree:
     File
       statements:
-        ImportStatement
-          path: "foo" [7..12]
-          binding: IdentifierBinding [16..17]
-            name: "x" [16..17]
+        [0]:
+          ImportStatement
+            path: "foo" [7..12]
+            binding: IdentifierBinding [16..17]
+              name: "x" [16..17]
       expression: MissingExpr [17..17]

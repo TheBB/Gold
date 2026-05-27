@@ -10,20 +10,23 @@ ParseResult
             ListPatternBinding [4..13]
               binding: ListBinding [4..13]
                 elements:
-                  ListBindingSingleton [5..6]
-                    binding: IdentifierBinding [5..6]
-                      name: "a" [5..6]
-                    default: null
-                  ListBindingSingleton [8..12]
-                    binding: IdentifierBinding [8..9]
-                      name: "b" [8..9]
-                    default: LiteralExpr [10..12]
-                      value: 10
+                  [0]:
+                    ListBindingSingleton [5..6]
+                      binding: IdentifierBinding [5..6]
+                        name: "a" [5..6]
+                      default: null
+                  [1]:
+                    ListBindingSingleton [8..12]
+                      binding: IdentifierBinding [8..9]
+                        name: "b" [8..9]
+                      default: LiteralExpr [10..12]
+                        value: 10
             ListExpr [16..19]
               elements:
-                ListSingleton [17..18]
-                  expr: LiteralExpr [17..18]
-                    value: 1
+                [0]:
+                  ListSingleton [17..18]
+                    expr: LiteralExpr [17..18]
+                      value: 1
         expression: TransformedExpr [23..28]
           operand: IdentifierExpr [23..24]
             name: "a" [23..24]
