@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 
+from .evaluation import evaluate_file_result, evaluate_source_result
 from .parser import parse as _parse
 
 
@@ -28,4 +29,20 @@ def parse(file: str, spans: bool, max_str_len: int | None) -> None:
     source = sys.stdin.read() if file == "-" else Path(file).read_text()
 
     result = _parse(source)
+    click.echo(result.pprint(show_spans=spans, max_str_len=max_str_len))
+
+
+@main.command()
+@click.argument("file", default="-", type=click.Path(allow_dash=True))
+@click.option("--spans", is_flag=True, default=False, help="Include span information in output")
+@click.option(
+    "--max-str-len",
+    metavar="N",
+    type=int,
+    default=None,
+    help="Truncate strings longer than N chars",
+)
+def run(file: str, spans: bool, max_str_len: int | None) -> None:
+    """Evaluate a Gold source file and print the result."""
+    result = evaluate_source_result(sys.stdin.read()) if file == "-" else evaluate_file_result(Path(file))
     click.echo(result.pprint(show_spans=spans, max_str_len=max_str_len))
