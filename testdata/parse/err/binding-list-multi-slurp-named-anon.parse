@@ -1,0 +1,21 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..28]
+        bindings:
+          [0]:
+            ListPatternBinding [4..15]
+              binding: ListBinding [4..15]
+                elements:
+                  [0]:
+                    ListBindingSlurpTo [5..9]
+                      name: "a"
+                  [1]:
+                    ListBindingSlurp [11..14]
+            ListExpr [18..20]
+              elements: []
+        expression: LiteralExpr [24..28]
+          value: null

@@ -1,0 +1,22 @@
+ParseResult
+  ok: true
+  errors: []
+  tree:
+    File
+      statements: []
+      expression: LetExpr [0..29]
+        bindings:
+          [0]:
+            MapPatternBinding [4..16]
+              binding: MapBinding [4..16]
+                elements:
+                  [0]:
+                    MapBindingSlurpTo [5..9]
+                      name: "a"
+                  [1]:
+                    MapBindingSlurpTo [11..15]
+                      name: "b"
+            MapExpr [19..21]
+              elements: []
+        expression: LiteralExpr [25..29]
+          value: null
