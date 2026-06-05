@@ -1,0 +1,12 @@
+ParseResult
+  ok: false
+  errors:
+    Error
+      reason: "expected end of input"
+      locations:
+        [2..2] Parse
+  tree:
+    File
+      statements: []
+      expression: LiteralExpr [0..1]
+        value: 1

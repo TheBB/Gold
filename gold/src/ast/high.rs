@@ -9,7 +9,7 @@ use crate::{
 
 use super::low;
 use super::scope::{LocalScope, Scope, SubScope};
-use crate::error::{Action, Error, Taggable, Tagged};
+use crate::error::{Action, Error, Internal, Taggable, Tagged};
 use crate::types::Key;
 use crate::types::{BinOp, EagerOp, Res, UnOp};
 use crate::Object;
@@ -256,6 +256,7 @@ impl Lower for MapBinding {
 /// respectively.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Binding {
+    Missing,
     Identifier(Tagged<Key>),
     List(Tagged<ListBinding>),
     Map(Tagged<MapBinding>),
@@ -264,6 +265,7 @@ pub enum Binding {
 impl Binding {
     fn announce_bindings(&self, scope: &mut dyn SubScope) {
         match self {
+            Self::Missing => { panic!("Operation on missing node") }
             Self::Identifier(key) => {
                 scope.announce_binding(*key.as_ref());
             }
@@ -282,6 +284,7 @@ impl Lower for Binding {
 
     fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
         match self {
+            Self::Missing => { panic!("Operation on missing node") }
             Self::Identifier(key) => {
                 match scope.lookup_store(*key.as_ref()) {
                     None => Err(Error::new(Reason::Unbound(*key.as_ref()))
@@ -695,6 +698,9 @@ impl Lower for Transform {
 /// The most important AST node: an evaluatable expression.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
+    /// Dummy expression used for incomplete parsing.
+    Missing,
+
     /// A literal object (usually numbers, booleans, null and strings).
     Literal(Object),
 
@@ -964,6 +970,7 @@ impl Lower for Expr {
 
     fn lower(self, scope: &mut dyn Scope) -> Res<Self::Target> {
         match self {
+            Self::Missing => { Err(Error::new(Reason::from(Internal::LowerMissing))) }
             Self::Literal(obj) => {
                 let index = scope.new_constant(obj);
                 Ok(low::Expr::Constant(index))

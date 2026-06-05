@@ -316,6 +316,11 @@ impl<'a> Lexer<'a> {
         result
     }
 
+    /// Check if we're at the end of the input.
+    fn at_eof(&self) -> bool {
+        self.skip_whitespace().peek().is_none()
+    }
+
     /// Return the next token in the default context.
     fn tokenize_default(mut self) -> LexResult<'a> {
         // Gold is 100% whitespace insensitive in the default context.
@@ -539,7 +544,7 @@ impl<'a> CachedLexer<'a> {
     }
 
     /// Return the next token in a given context.
-    fn next(self, ctx: Ctx) -> CachedLexResult<'a> {
+    pub fn next(self, ctx: Ctx) -> CachedLexResult<'a> {
         self.lexer
             .next(ctx, self.cache)
             .map(|(lex, tok)| (self.cachify(lex), tok))
@@ -574,6 +579,11 @@ impl<'a> CachedLexer<'a> {
     /// Skip an arbitrary amount of whitespace (including comments and newlines).
     pub fn skip_whitespace(self) -> CachedLexer<'a> {
         self.lexer.skip_whitespace().with_cache(self.cache)
+    }
+
+    /// Check if we're at the end of the input.
+    pub fn at_eof(&self) -> bool {
+        self.lexer.at_eof()
     }
 }
 

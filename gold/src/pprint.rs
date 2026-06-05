@@ -2,7 +2,8 @@ use crate::ast::high::{
     ArgElement, Binding, Expr, File, ListBinding, ListBindingElement, ListElement, MapBinding,
     MapBindingElement, MapElement, StringElement, TopLevel, Transform,
 };
-use crate::error::{Error, Span, Tagged};
+use crate::error::{Action, Error, Span, Tagged};
+use crate::parsing::ParseResult;
 use crate::formatting::{
     AlignSpec, FloatFormatType, FormatSpec, FormatType, GroupingSpec, IntegerFormatType, SignSpec,
     StringAlignSpec, UppercaseSpec,
@@ -27,7 +28,7 @@ impl Default for PprintOptions {
 }
 
 /// Render a parse result as a human-readable tree string.
-pub fn pprint(result: &Result<File, Error>, opts: &PprintOptions) -> String {
+pub fn pprint(result: &ParseResult, opts: &PprintOptions) -> String {
     let mut pp = Pp { opts, out: Vec::new() };
     pp.result(result, 0);
     pp.out.join("\n")
@@ -229,23 +230,43 @@ impl<'a> Pp<'a> {
 
     // ── ParseResult ───────────────────────────────────────────────────────────
 
-    fn result(&mut self, result: &Result<File, Error>, indent: usize) {
+    fn result(&mut self, result: &ParseResult, indent: usize) {
         self.emit(indent, "ParseResult");
-        match result {
-            Ok(file) => {
-                self.emit(indent + 1, "ok: true");
-                self.emit(indent + 1, "errors: []");
-                self.emit(indent + 1, "tree:");
-                self.file(file, indent + 2);
+        self.emit(indent + 1, if result.ok() { "ok: true" } else { "ok: false" });
+        if result.errors.is_empty() {
+            self.emit(indent + 1, "errors: []");
+        } else {
+            self.emit(indent + 1, "errors:");
+            for err in &result.errors {
+                self.parse_error(err, indent + 2);
             }
-            Err(err) => {
-                self.emit(indent + 1, "ok: false");
-                self.emit(indent + 1, "errors:");
-                let span_str = err.location().map(|s| self.span_str(s)).unwrap_or_default();
-                self.emit(indent + 2, format!("ParseError{span_str}"));
-                let msg = err.rendered().unwrap_or("parse error");
-                self.emit(indent + 3, self.json_str(msg));
-                self.emit(indent + 1, "tree: null");
+        }
+        self.emit(indent + 1, "tree:");
+        self.file(&result.tree, indent + 2);
+    }
+
+    fn parse_error(&mut self, err: &Error, indent: usize) {
+        self.emit(indent, "Error");
+        self.emit(indent + 1, format!("reason: {}", self.json_str(&err.reason_display())));
+        let locs = err.locations();
+        if locs.is_empty() {
+            self.emit(indent + 1, "locations: []");
+        } else {
+            self.emit(indent + 1, "locations:");
+            for (span, action) in locs {
+                let action_name = match action {
+                    Action::Parse => "Parse",
+                    Action::LookupName => "LookupName",
+                    Action::Bind => "Bind",
+                    Action::Slurp => "Slurp",
+                    Action::Splat => "Splat",
+                    Action::Iterate => "Iterate",
+                    Action::Assign => "Assign",
+                    Action::Import => "Import",
+                    Action::Evaluate => "Evaluate",
+                    Action::Format => "Format",
+                };
+                self.emit(indent + 2, format!("{} {}", self.span_str(*span).trim(), action_name));
             }
         }
     }
@@ -290,6 +311,7 @@ impl<'a> Pp<'a> {
 
     fn expr_body(&mut self, expr: &Expr, indent: usize) {
         match expr {
+            Expr::Missing => {}
             Expr::Literal(obj) => {
                 self.emit(indent, format!("value: {}", self.fmt_object(obj)));
             }
@@ -516,6 +538,7 @@ impl<'a> Pp<'a> {
 
     fn binding_body(&mut self, binding: &Binding, indent: usize) {
         match binding {
+            Binding::Missing => {}
             Binding::Identifier(key) => {
                 let span = self.span_str(key.span());
                 self.emit(indent, format!("name: {}{}", self.json_str(key.as_str()), span));
@@ -632,6 +655,7 @@ impl<'a> Pp<'a> {
 
 fn expr_type_name(expr: &Expr) -> &'static str {
     match expr {
+        Expr::Missing => "MissingExpr",
         Expr::Literal(_) => "LiteralExpr",
         Expr::String(_) => "StringExpr",
         Expr::Identifier(_) => "IdentifierExpr",
@@ -646,6 +670,7 @@ fn expr_type_name(expr: &Expr) -> &'static str {
 
 fn binding_type_name(b: &Binding) -> &'static str {
     match b {
+        Binding::Missing => "MissingBinding",
         Binding::Identifier(_) => "IdentifierBinding",
         Binding::List(_) => "ListPatternBinding",
         Binding::Map(_) => "MapPatternBinding",

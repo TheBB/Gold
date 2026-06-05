@@ -28,3 +28,7 @@ libtest-mimic = "0.7"
 [[test]]
 name = "eval_fixtures"
 harness = false
+
+[[test]]
+name = "parse_fixtures"
+harness = false
