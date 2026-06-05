@@ -286,3 +286,7 @@ class Lexer:
 
     def skip_whitespace(self) -> Lexer:
         return self._skip_whitespace()
+
+    def at_eof(self) -> bool:
+        self = self.skip_whitespace()
+        return self._peek() is None

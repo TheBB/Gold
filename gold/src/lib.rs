@@ -47,7 +47,7 @@ use eval::Vm;
 pub use error::Error;
 pub use eval::ImportConfig;
 pub use object::Object;
-pub use parsing::parse;
+pub use parsing::{parse, ParseResult};
 pub use types::{Key, List, Map, Res, Type};
 
 #[cfg(feature = "python")]
@@ -59,7 +59,11 @@ pub use eval::PyImportConfig;
 /// imports will not be possible. Provide a custom import resolver for full
 /// control over imports.
 pub fn eval(input: &str, importer: &ImportConfig) -> Res<Object> {
-    let ast = parse(input)?;
+    let result = parse(input);
+    if let Some(err) = result.errors.into_iter().next() {
+        return Err(err);
+    }
+    let ast = result.tree;
     let lowered = ast.lower()?;
     let code = lowered.compile()?;
     let mut vm = Vm::new(importer);

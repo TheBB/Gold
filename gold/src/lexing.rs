@@ -316,6 +316,11 @@ impl<'a> Lexer<'a> {
         result
     }
 
+    /// Check if we're at the end of the input.
+    fn at_eof(&self) -> bool {
+        self.skip_whitespace().peek().is_none()
+    }
+
     /// Return the next token in the default context.
     fn tokenize_default(mut self) -> LexResult<'a> {
         // Gold is 100% whitespace insensitive in the default context.
@@ -533,13 +538,8 @@ impl<'a> CachedLexer<'a> {
         }
     }
 
-    /// Return an error at the current position.
-    pub fn error(&self, reason: Syntax) -> SyntaxError {
-        self.lexer.error(reason)
-    }
-
     /// Return the next token in a given context.
-    fn next(self, ctx: Ctx) -> CachedLexResult<'a> {
+    pub fn next(self, ctx: Ctx) -> CachedLexResult<'a> {
         self.lexer
             .next(ctx, self.cache)
             .map(|(lex, tok)| (self.cachify(lex), tok))
@@ -556,6 +556,10 @@ impl<'a> CachedLexer<'a> {
     }
 
     /// Return the next token in the string context.
+    ///
+    /// Not called from the parser (which uses `next(Ctx::String)` via the generic
+    /// `try_token` helper), but retained as a named entry point for lexer tests.
+    #[allow(dead_code)]
     pub fn next_string(self) -> CachedLexResult<'a> {
         self.next(Ctx::String)
     }
@@ -574,6 +578,11 @@ impl<'a> CachedLexer<'a> {
     /// Skip an arbitrary amount of whitespace (including comments and newlines).
     pub fn skip_whitespace(self) -> CachedLexer<'a> {
         self.lexer.skip_whitespace().with_cache(self.cache)
+    }
+
+    /// Check if we're at the end of the input.
+    pub fn at_eof(&self) -> bool {
+        self.lexer.at_eof()
     }
 }
 

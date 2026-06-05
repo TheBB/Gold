@@ -1,80 +1,15 @@
 use std::fmt::Debug;
-use std::num::{ParseFloatError, ParseIntError};
 
 use num_bigint::BigInt;
-use num_bigint::ParseBigIntError;
-
-use nom::{
-    branch::alt,
-    combinator::{map, map_res, opt, value, verify},
-    error::{ContextError, ErrorKind, FromExternalError, ParseError},
-    multi::{many0, many1},
-    sequence::{delimited, preceded, terminated, tuple},
-    Err as NomError, IResult, Parser as NomParser,
-};
 
 use crate::ast::high::*;
-use crate::error::{Error, Span, Syntax, SyntaxElement, SyntaxError, Taggable, Tagged};
+use crate::error::{Action, Error, Reason, Span, Syntax, SyntaxElement, Taggable, Tagged};
 use crate::formatting::{
-    AlignSpec, FloatFormatType, FormatSpec, FormatType, GroupingSpec, IntegerFormatType, SignSpec,
-    StringAlignSpec, UppercaseSpec,
+    AlignSpec, FloatFormatType, FormatSpec, FormatType, GroupingSpec, IntegerFormatType, SignSpec, UppercaseSpec,
 };
-use crate::lexing::{CachedLexResult, CachedLexer, Lexer, TokenType};
-use crate::types::{BinOp, EagerOp, Key, Res, UnOp};
+use crate::lexing::{CachedLexer, Ctx, Lexer, Token, TokenType};
+use crate::types::{BinOp, EagerOp, Key, UnOp, LogicOp};
 use crate::Object;
-
-trait ExplainError {
-    fn error<'a, T>(lex: CachedLexer<'a>, reason: T) -> Self
-    where
-        Syntax: From<T>;
-}
-
-impl ExplainError for SyntaxError {
-    fn error<'a, T>(lex: CachedLexer<'a>, reason: T) -> Self
-    where
-        Syntax: From<T>,
-    {
-        lex.error(Syntax::from(reason))
-    }
-}
-
-impl<'a> ParseError<In<'a>> for SyntaxError {
-    fn from_error_kind(lex: In<'a>, _: ErrorKind) -> Self {
-        Self::new(lex.position(), None)
-    }
-
-    fn from_char(lex: In<'a>, _: char) -> Self {
-        Self::new(lex.position(), None)
-    }
-
-    fn append(_: In<'a>, _: ErrorKind, other: Self) -> Self {
-        other
-    }
-}
-
-impl<'a> ContextError<In<'a>> for SyntaxError {
-    fn add_context(_: In<'a>, _: &'static str, other: Self) -> Self {
-        other
-    }
-}
-
-impl<'a> FromExternalError<In<'a>, ParseIntError> for SyntaxError {
-    fn from_external_error(lex: In<'a>, _: ErrorKind, _: ParseIntError) -> Self {
-        Self::new(lex.position(), None)
-    }
-}
-
-impl<'a> FromExternalError<In<'a>, ParseBigIntError> for SyntaxError {
-    fn from_external_error(lex: In<'a>, _: ErrorKind, _: ParseBigIntError) -> Self {
-        Self::new(lex.position(), None)
-    }
-}
-
-impl<'a> FromExternalError<In<'a>, ParseFloatError> for SyntaxError {
-    fn from_external_error(lex: In<'a>, _: ErrorKind, _: ParseFloatError) -> Self {
-        Self::new(lex.position(), None)
-    }
-}
 
 /// Convert a multiline string from source code to string by removing leading
 /// whitespace from each line according to the rules for such strings.
@@ -174,6 +109,10 @@ impl<T> Paren<T> {
         }
     }
 
+    /// Apply `f` to the inner `Tagged<T>` to produce a `U`, preserving the outer `Paren` wrapper.
+    ///
+    /// Used to lift a plain expression into a wrapper type (e.g. `Expr` → `ListElement::Singleton`)
+    /// while keeping the parenthesization information intact.
     fn map_wrap<F, U>(self, f: F) -> Paren<U>
     where
         F: FnOnce(Tagged<T>) -> U,
@@ -185,358 +124,292 @@ impl<T> Paren<T> {
     }
 }
 
-type PExpr = Paren<Expr>;
-type PList = Paren<ListElement>;
-type PMap = Paren<MapElement>;
-
-type OpCons = fn(Tagged<Expr>, loc: Span) -> Transform;
-
-type In<'a> = CachedLexer<'a>;
-type Out<'a, T> = IResult<In<'a>, T, SyntaxError>;
-
-trait Parser<'a, T>: NomParser<In<'a>, T, SyntaxError> {}
-impl<'a, T, P> Parser<'a, T> for P where P: NomParser<In<'a>, T, SyntaxError> {}
-
-/// Parser that always succeeds and consumes nothing
-fn success<'a>(input: In<'a>) -> Out<'a, Tagged<&'a str>> {
-    let loc = input.position();
-    Ok((input, "".tag(loc.with_length(0))))
+/// Recursive-descent parser that accumulates errors rather than aborting on the first one.
+///
+/// `CachedLexer` is `Copy`, so saving/restoring `self.lexer` provides unlimited backtracking
+/// at essentially zero cost — every speculative parse can be rolled back by saving the lexer
+/// before the attempt and restoring it on failure.
+struct Parser<'a> {
+    lexer: CachedLexer<'a>,
+    errors: Vec<Error>,
 }
 
-/// Convert errors to failures.
-fn fail<'a, O, T>(mut parser: impl Parser<'a, O>, reason: T) -> impl Parser<'a, O>
-where
-    Syntax: From<T>,
-    T: Copy,
-{
-    move |input: In<'a>| {
-        parser.parse(input.clone()).map_err(|err| match err {
-            NomError::Failure(e) => NomError::Failure(e),
-            NomError::Error(_) => NomError::Failure(SyntaxError::error(input, reason)),
-            _ => err,
+impl<'a> Parser<'a> {
+    fn error(&mut self, span: Span, reason: Reason) {
+        self.errors.push(Error::new(reason).tag(span, Action::Parse))
+    }
+
+    fn loc(&self) -> Span {
+        self.lexer.position().with_length(0)
+    }
+
+    fn missing_expr(&self) -> Tagged<Expr> {
+        return Expr::Missing.tag(self.loc())
+    }
+
+    fn missing_paren(&self) -> Paren<Expr> {
+        return Paren::Naked(self.missing_expr())
+    }
+
+    fn missing_binding(&self) -> Tagged<Binding> {
+        return Binding::Missing.tag(self.loc())
+    }
+
+    /// Runs `parser`; on failure, records an error and returns `fallback`.
+    ///
+    /// `fallback` typically inserts a `Missing` sentinel node so the caller can continue
+    /// building a structurally complete AST even when a required sub-expression is absent.
+    fn require<T>(
+        &mut self,
+        parser: impl Fn(&mut Parser<'a>) -> Option<T>,
+        fallback: impl Fn(&Parser<'a>) -> T,
+        reason: impl Fn() -> Reason,
+    ) -> T {
+        let result = parser(self);
+        result.unwrap_or_else(|| {
+            self.error(self.loc(), reason());
+            fallback(self)
         })
     }
-}
 
-/// Apply a separator skip rule to an item parser. See [`seplist_opt_delim`] for
-/// details.
-fn apply_skip<'a, O>(
-    parser: impl Parser<'a, O>,
-    skip_delimiter: bool,
-) -> impl Parser<'a, (O, bool)> {
-    map(parser, move |x| (x, skip_delimiter))
-}
+    // ── Token helpers ──────────────────────────────────────────────────────────
 
-/// Create an item parser that always skips the following separator. See
-/// [`seplist_opt_delim`] for details.
-fn do_skip<'a, O>(parser: impl Parser<'a, O>) -> impl Parser<'a, (O, bool)> {
-    apply_skip(parser, true)
-}
-
-/// Create an item parser that never skips the following separator. See
-/// [`seplist_opt_delim`] for details.
-fn dont_skip<'a, O>(parser: impl Parser<'a, O>) -> impl Parser<'a, (O, bool)> {
-    apply_skip(parser, false)
-}
-
-/// Separated list with delimiters and optional trailing separator.
-///
-/// The item parser should return a tuple with two items: the item itself, and a
-/// boolean indicating whether the following separator should be skipped or not.
-/// This is used in certain contexts, like map parsing.
-fn seplist_opt_delim<'a, Init, Item, Sep, Term, InitR, ItemR, SepR, TermR, T, U>(
-    mut initializer: Init,
-    mut item: Item,
-    mut separator: Sep,
-    mut terminator: Term,
-    err_terminator_or_item: T,
-    err_terminator_or_separator: U,
-) -> impl Parser<'a, (InitR, Vec<ItemR>, TermR)>
-where
-    Init: Parser<'a, InitR>,
-    Item: Parser<'a, (ItemR, bool)>,
-    Sep: Parser<'a, SepR>,
-    Term: Parser<'a, TermR>,
-    Syntax: From<T> + From<U>,
-    T: Copy,
-    U: Copy,
-    ItemR: Debug,
-{
-    move |mut i: In<'a>| {
-        let (j, initr) = initializer.parse(i)?;
-        i = j;
-
-        let mut items = Vec::new();
-        let mut expect_separator: bool;
-
-        loop {
-            let u = item.parse(i.clone());
-
-            // Try to parse an item
-            match u {
-                // Parsing item failed: we expect a terminator
-                Err(NomError::Error(_)) => match terminator.parse(i.clone()) {
-                    Err(NomError::Error(_)) => {
-                        return Err(NomError::Failure(SyntaxError::error(
-                            i,
-                            err_terminator_or_item,
-                        )))
-                    }
-                    Err(e) => return Err(e),
-                    Ok((i, termr)) => return Ok((i, (initr, items, termr))),
-                },
-
-                // Parsing item failed irrecoverably
-                Err(e) => return Err(e),
-
-                // Parsing item succeeded
-                Ok((j, (it, skip_separator))) => {
-                    i = j;
-                    expect_separator = !skip_separator;
-                    items.push(it);
-                }
+    fn try_token(&mut self, kind: TokenType, context: Ctx) -> Option<Tagged<Token<'a>>> {
+        match self.lexer.next(context) {
+            Ok((lexer, token)) if token.kind == kind => {
+                self.lexer = lexer;
+                Some(token)
             }
-
-            // If at this moment we don't expect a separator, try to parse a terminator
-            if !expect_separator {
-                match terminator.parse(i.clone()) {
-                    Err(NomError::Error(_)) => {}
-                    Err(e) => {
-                        return Err(e);
-                    }
-                    Ok((i, termr)) => return Ok((i, (initr, items, termr))),
-                }
-
-                continue;
-            }
-
-            // Try to parse a separator
-            match separator.parse(i.clone()) {
-                // Parsing separator failed: we expect a terminator
-                Err(NomError::Error(_)) => match terminator.parse(i.clone()) {
-                    Err(NomError::Error(_)) => {
-                        return Err(NomError::Failure(SyntaxError::error(
-                            i,
-                            err_terminator_or_separator,
-                        )))
-                    }
-                    Err(e) => return Err(e),
-                    Ok((i, termr)) => return Ok((i, (initr, items, termr))),
-                },
-
-                // Parsing separator failed irrecoverably
-                Err(e) => return Err(e),
-
-                // Parsing separator succeeded
-                Ok((j, _)) => {
-                    i = j;
-                }
-            }
+            _ => None
         }
     }
-}
 
-/// Separated list with delimiters and optional trailing separator.
-fn seplist<'a, Init, Item, Sep, Term, InitR, ItemR, SepR, TermR, T, U>(
-    initializer: Init,
-    item: Item,
-    separator: Sep,
-    terminator: Term,
-    err_terminator_or_item: T,
-    err_terminator_or_separator: U,
-) -> impl Parser<'a, (InitR, Vec<ItemR>, TermR)>
-where
-    Init: Parser<'a, InitR>,
-    Item: Parser<'a, ItemR>,
-    Sep: Parser<'a, SepR>,
-    Term: Parser<'a, TermR>,
-    Syntax: From<T> + From<U>,
-    T: Copy,
-    U: Copy,
-    ItemR: Debug,
-{
-    let item_parser = map(item, |it| (it, false));
-    seplist_opt_delim(
-        initializer,
-        item_parser,
-        separator,
-        terminator,
-        err_terminator_or_item,
-        err_terminator_or_separator,
-    )
-}
+    fn require_token(&mut self, kind: TokenType, context: Ctx) -> Tagged<Option<Token<'a>>> {
+        self.require::<Tagged<Option<Token<'a>>>>(
+            |parser| parser.try_token(kind, context).map(|t| t.map(Some)),
+            |parser| Tagged::new(parser.loc(), None),
+            || Reason::from(Syntax::from(kind)),
+        )
+    }
 
-/// Wrap the output of a parser in Paren::Naked.
-fn naked<'a, U>(parser: impl Parser<'a, Tagged<U>>) -> impl Parser<'a, Paren<U>> {
-    map(parser, Paren::Naked)
-}
-
-/// Never failing parser that obtains the current column.  Useful for
-/// indentation-sensitive rules.
-fn column<'a>(input: In<'a>) -> Out<'a, u32> {
-    let col = input.position().column();
-    Ok((input, col))
-}
-
-fn token<'a>(
-    getter: impl Fn(In<'a>) -> CachedLexResult<'a>,
-    kind: TokenType,
-) -> impl Parser<'a, Tagged<&'a str>> {
-    move |lex: In<'a>| {
-        let (lex, tok) = getter(lex).map_err(NomError::Error)?;
-        if tok.as_ref().kind == kind {
-            Ok((lex, tok.as_ref().text.tag(&tok)))
-        } else {
-            Err(NomError::Error(SyntaxError::error(lex, kind)))
+    /// Try to consume a keyword in normal expression context.
+    ///
+    /// Uses `next_token()` (not `next_key()`), so the lexer applies expression-context rules.
+    fn try_keyword(&mut self, kw: &str) -> Option<Tagged<&'a str>> {
+        match self.lexer.next_token() {
+            Ok((lexer, token)) if token.kind == TokenType::Name && token.text == kw => {
+                self.lexer = lexer;
+                Some(token.map(|t| t.text))
+            }
+            _ => None,
         }
     }
-}
 
-macro_rules! tok {
-    ($pname:ident, $toktype:ident) => {
-        fn $pname<'a>(input: In<'a>) -> Out<'a, Tagged<&'a str>> {
-            token(CachedLexer::next_token, TokenType::$toktype).parse(input)
+    /// Try to consume a keyword in map-key context.
+    ///
+    /// Uses `next_key()` so the lexer skips leading newlines/whitespace that separate map entries.
+    fn try_map_keyword(&mut self, kw: &str) -> Option<Tagged<&'a str>> {
+        match self.lexer.next_key() {
+            Ok((lexer, token)) if token.kind == TokenType::Name && token.text == kw => {
+                self.lexer = lexer;
+                Some(token.map(|t| t.text))
+            }
+            _ => None,
         }
-    };
-
-    ($pname:ident, $toktype:ident, $getter:ident) => {
-        fn $pname<'a>(input: In<'a>) -> Out<'a, Tagged<&'a str>> {
-            token(CachedLexer::$getter, TokenType::$toktype).parse(input)
-        }
-    };
-}
-
-tok! {name, Name}
-tok! {float, Float}
-tok! {integer, Integer}
-
-tok! {asterisk, Asterisk}
-tok! {caret, Caret}
-tok! {close_brace, CloseBrace}
-tok! {close_brace_pipe, CloseBracePipe}
-tok! {close_bracket, CloseBracket}
-tok! {close_paren, CloseParen}
-tok! {colon, Colon}
-tok! {comma, Comma}
-tok! {dot, Dot}
-tok! {double_eq, DoubleEq}
-tok! {double_quote, DoubleQuote}
-tok! {double_slash, DoubleSlash}
-tok! {ellipsis, Ellipsis}
-tok! {eq, Eq}
-tok! {exclam_eq, ExclamEq}
-tok! {greater_eq, GreaterEq}
-tok! {greater, Greater}
-tok! {less_eq, LessEq}
-tok! {less, Less}
-tok! {minus, Minus}
-tok! {open_brace, OpenBrace}
-tok! {open_brace_pipe, OpenBracePipe}
-tok! {open_bracket, OpenBracket}
-tok! {open_paren, OpenParen}
-tok! {pipe, Pipe}
-tok! {plus, Plus}
-tok! {semicolon, SemiColon}
-tok! {slash, Slash}
-
-tok! {map_name, Name, next_key}
-tok! {map_colon, Colon, next_key}
-tok! {map_dollar, Dollar, next_key}
-tok! {map_double_colon, DoubleColon, next_key}
-tok! {map_ellipsis, Ellipsis, next_key}
-
-tok! {string_lit, StringLit, next_string}
-tok! {string_dollar, Dollar, next_string}
-tok! {string_double_quote, DoubleQuote, next_string}
-
-tok! {fmtspec_char_raw, Char, next_fmtspec}
-tok! {fmtspec_number_raw, Integer, next_fmtspec}
-
-/// Match a single multiline string starting at a column.
-fn multistring<'a>(col: u32) -> impl Parser<'a, Tagged<&'a str>> {
-    move |lex: In<'a>| {
-        lex.next_multistring(col)
-            .map(|(lex, tok)| (lex, tok.as_ref().text.tag(&tok)))
-            .map_err(NomError::Error)
     }
-}
 
-/// Match a single named keyword. This does not match if the keyword is a prefix
-/// of some other name or identifier.
-fn keyword_raw<'a>(
-    parser: impl Parser<'a, Tagged<&'a str>>,
-    value: &'a str,
-) -> impl Parser<'a, Tagged<&'a str>> {
-    verify(parser, move |out| *out.as_ref() == value)
-}
+    fn require_keyword(&mut self, kw: &'a str, element: SyntaxElement) -> Tagged<&'a str> {
+        return self.require(
+            |parser| parser.try_keyword(kw),
+            |parser| kw.tag(parser.loc()),
+            || Reason::from(Syntax::from(element)),
+        )
+    }
 
-/// Match a single named keyword. This does not match if the keyword is a prefix
-/// of some other name or identifier.
-fn keyword<'a>(value: &'a str) -> impl Parser<'a, Tagged<&'a str>> {
-    keyword_raw(name, value)
-}
+    /// Consume an identifier that is not a reserved keyword.
+    ///
+    /// In expression context, keywords like `for`, `if`, `let` etc. are not valid identifiers.
+    /// See `try_map_identifier` for map-key context where keywords *are* valid unquoted keys.
+    fn try_identifier(&mut self) -> Option<Tagged<&'a str>> {
+        match self.lexer.next_token() {
+            Ok((lexer, token)) if token.kind == TokenType::Name && !KEYWORDS.contains(&token.text) => {
+                self.lexer = lexer;
+                Some(token.map(|t| t.text))
+            }
+            _ => None
+        }
+    }
 
-/// Match a single named keyword. This does not match if the keyword is a prefix
-/// of some other name or identifier.
-fn map_keyword<'a>(value: &'a str) -> impl Parser<'a, Tagged<&'a str>> {
-    keyword_raw(map_name, value)
-}
+    /// Consume an identifier in map-key context, where keywords are allowed as unquoted keys.
+    ///
+    /// E.g. `{ for: 1 }` is legal — `for` is a valid string key even though it is a keyword.
+    fn try_map_identifier(&mut self) -> Option<Tagged<&'a str>> {
+        match self.lexer.next_key() {
+            Ok((lexer, token)) if token.kind == TokenType::Name => {
+                self.lexer = lexer;
+                Some(token.map(|t| t.text))
+            }
+            _ => None
+        }
+    }
 
-/// List of keywords that must be avoided by the [`identifier`] parser.
-static KEYWORDS: [&'static str; 17] = [
-    "for", "when", "if", "then", "else", "let", "in", "has", "true", "false", "null", "and", "or",
-    "not", "as", "import", "fn",
-];
+    // ── Format specifier ──────────────────────────────────────────────────────
 
-/// Match an identfier.
-///
-/// This parser will refuse to match known keywords (see [`KEYWORDS`]).
-fn identifier<'a>(input: In<'a>) -> Out<'a, Tagged<Key>> {
-    map(
-        verify(name, |out| !KEYWORDS.contains(out.as_ref())),
-        |span| span.map(Key::new),
-    )(input)
-}
+    fn try_fmtspec_char(&mut self) -> Option<char> {
+        match self.lexer.next_fmtspec() {
+            Ok((lexer, token)) if token.kind == TokenType::Char => {
+                self.lexer = lexer;
+                token.text.chars().next()
+            }
+            _ => None
+        }
+    }
 
-/// Match an identifier in a map context.
-///
-/// Maps have relaxed conditions on identifier names compared to 'regular' code.
-fn map_identifier<'a>(input: In<'a>) -> Out<'a, Tagged<Key>> {
-    map(map_name, |span| span.map(Key::new))(input)
-}
+    fn try_fmtspec_number(&mut self) -> Option<usize> {
+        match self.lexer.next_fmtspec() {
+            Ok((lexer, token)) if token.kind == TokenType::Integer => {
+                self.lexer = lexer;
+                token.text.parse::<usize>().ok()
+            }
+            _ => None
+        }
+    }
 
-/// Match a number.
-fn number<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    naked(alt((
-        map_res(float, |span| {
-            span.as_ref()
-                .replace('_', "")
-                .parse::<f64>()
-                .map(|x| Expr::Literal(Object::from(x)).tag(&span))
-        }),
-        map_res(integer, |span| {
-            let text = span.as_ref().replace('_', "");
-            let y = text
-                .parse::<i64>()
-                .map(Object::from)
-                .or_else(|_| text.parse::<BigInt>().map(Object::from))
-                .map(Expr::Literal);
-            y.map(|x| x.tag(&span))
-        }),
-    )))
-    .parse(input)
-}
+    /// Attempt to parse a fill character followed by an alignment specifier.
+    ///
+    /// Requires two-character lookahead: the fill char is only confirmed as fill (not as an
+    /// alignment char) once the following character is seen to be `<`, `>`, `^`, or `=`.
+    fn try_fmtspec_fill_and_align(&mut self) -> Option<(char, AlignSpec)> {
+        let lexer = self.lexer;
+        let c1 = self.try_fmtspec_char();
+        let c2 = self.try_fmtspec_char();
+        match (c1, c2) {
+            (Some(c), Some('<')) => Some((c, AlignSpec::left())),
+            (Some(c), Some('>')) => Some((c, AlignSpec::right())),
+            (Some(c), Some('^')) => Some((c, AlignSpec::center())),
+            (Some(c), Some('=')) => Some((c, AlignSpec::AfterSign)),
+            _ => { self.lexer = lexer; None }
+        }
+    }
 
-/// Matches a raw string part.
-///
-/// This means all characters up to a terminating symbol: either a closing quote
-/// or a dollar sign, signifying the beginning of an interpolated segment. This
-/// parser does *not* parse the initial quote or the terminating symbol,
-/// whatever that may be.
-fn raw_string<'a>(input: In<'a>) -> Out<'a, String> {
-    map(string_lit, |span| {
+    fn try_fmtspec_only_align(&mut self) -> Option<AlignSpec> {
+        let lexer = self.lexer;
+        let c = self.try_fmtspec_char();
+        match c {
+            Some('<') => Some(AlignSpec::left()),
+            Some('>') => Some(AlignSpec::right()),
+            Some('^') => Some(AlignSpec::center()),
+            Some('=') => Some(AlignSpec::AfterSign),
+            _ => { self.lexer = lexer; None }
+        }
+    }
+
+    fn try_fmtspec_fill_align(&mut self) -> (Option<char>, Option<AlignSpec>) {
+        let mut fill: Option<char> = None;
+        let mut align: Option<AlignSpec> = None;
+
+        if let Some((f, a)) = self.try_fmtspec_fill_and_align() {
+            fill = Some(f);
+            align = Some(a);
+        } else if let Some(a) = self.try_fmtspec_only_align()  {
+            align = Some(a);
+        }
+
+        (fill, align)
+    }
+
+    fn try_fmtspec_sign(&mut self) -> Option<SignSpec> {
+        let lexer = self.lexer;
+        let c = self.try_fmtspec_char();
+        match c {
+            Some('+') => Some(SignSpec::Plus),
+            Some('-') => Some(SignSpec::Minus),
+            Some(' ') => Some(SignSpec::Space),
+            _ => { self.lexer = lexer; None }
+        }
+    }
+
+    fn require_fmtspec_alternate(&mut self) -> bool {
+        let lexer = self.lexer;
+        match self.try_fmtspec_char() {
+            Some('#') => true,
+            _ => { self.lexer = lexer; false }
+        }
+    }
+
+    fn require_fmtspec_zero(&mut self) -> bool {
+        let lexer = self.lexer;
+        match self.try_fmtspec_char() {
+            Some('0') => true,
+            _ => { self.lexer = lexer; false }
+        }
+    }
+
+    fn try_fmtspec_grouping(&mut self) -> Option<GroupingSpec> {
+        let lexer = self.lexer;
+        match self.try_fmtspec_char() {
+            Some(',') => Some(GroupingSpec::Comma),
+            Some('_') => Some(GroupingSpec::Underscore),
+            _ => { self.lexer = lexer; None }
+        }
+    }
+
+    fn try_fmtspec_precision(&mut self) -> Option<usize> {
+        let lexer = self.lexer;
+        let c = self.try_fmtspec_char();
+        let n = self.try_fmtspec_number();
+        match (c, n) {
+            (Some('.'), Some(n)) => Some(n),
+            (Some('.'), _) => Some(0),
+            _ => { self.lexer = lexer; None }
+        }
+    }
+
+    fn try_fmtspec_type(&mut self) -> Option<FormatType> {
+        let lexer = self.lexer;
+        let c = self.try_fmtspec_char();
+        match c {
+            Some('s') => Some(FormatType::String),
+            Some('b') => Some(FormatType::Integer(IntegerFormatType::Binary)),
+            Some('c') => Some(FormatType::Integer(IntegerFormatType::Character)),
+            Some('d') => Some(FormatType::Integer(IntegerFormatType::Decimal)),
+            Some('o') => Some(FormatType::Integer(IntegerFormatType::Octal)),
+            Some('x') => Some(FormatType::Integer(IntegerFormatType::Hex(UppercaseSpec::Lower))),
+            Some('X') => Some(FormatType::Integer(IntegerFormatType::Hex(UppercaseSpec::Upper))),
+            Some('e') => Some(FormatType::Float(FloatFormatType::Sci(UppercaseSpec::Lower))),
+            Some('E') => Some(FormatType::Float(FloatFormatType::Sci(UppercaseSpec::Upper))),
+            Some('f') => Some(FormatType::Float(FloatFormatType::Fixed)),
+            Some('g') => Some(FormatType::Float(FloatFormatType::General)),
+            Some('%') => Some(FormatType::Float(FloatFormatType::Percentage)),
+            _ => { self.lexer = lexer; None }
+        }
+    }
+
+    fn require_fmtspec(&mut self) -> FormatSpec {
+        let (fill, align) = self.try_fmtspec_fill_align();
+        let sign = self.try_fmtspec_sign();
+        let alternate = self.require_fmtspec_alternate();
+        let zero = self.require_fmtspec_zero();
+        let width = self.try_fmtspec_number();
+        let grouping = self.try_fmtspec_grouping();
+        let precision = self.try_fmtspec_precision();
+        let fmt_type = self.try_fmtspec_type();
+
+        // Mirroring Python's format-spec mini-language: `0` without an explicit fill/align means
+        // "pad with zeros after the sign", i.e. fill='0' + align=AfterSign.  An explicit fill/align
+        // always wins over the zero flag.
+        let has_explicit_fa = fill.is_some() || align.is_some();
+        let fill = fill.unwrap_or(if zero { '0' } else { ' ' });
+        let align = if has_explicit_fa { align } else if zero { Some(AlignSpec::AfterSign) } else { None };
+
+        FormatSpec { fill, align, sign, alternate, width, grouping, precision, fmt_type }
+    }
+
+    // ── Strings ───────────────────────────────────────────────────────────────
+
+    fn try_raw_string_content(&mut self) -> Option<String> {
+        let mut chars = self.try_token(TokenType::StringLit, Ctx::String)?.text.char_indices();
         let mut out = "".to_string();
-        let mut chars = span.as_ref().char_indices();
         loop {
             match chars.next() {
                 Some((_, '\\')) => match chars.next() {
@@ -565,1648 +438,1075 @@ fn raw_string<'a>(input: In<'a>) -> Out<'a, String> {
             }
         }
 
-        out
-    })(input)
-}
+        Some(out)
+    }
 
-/// Matches a non-interpolated string element.
-///
-/// This is just the output of [`raw_string`] returned as a [`StringElement`].
-fn string_data<'a>(input: In<'a>) -> Out<'a, StringElement> {
-    map(raw_string, StringElement::raw)(input)
-}
+    fn try_string_interp(&mut self) -> Option<StringElement> {
+        if self.try_token(TokenType::Dollar, Ctx::String).is_none() {
+            return None;
+        }
 
-/// Matches a specific format specifier character.
-fn fmtspec_char<'a>(c: char) -> impl Parser<'a, ()> {
-    value(
-        (),
-        verify(fmtspec_char_raw, move |out| {
-            out.unwrap().chars().next() == Some(c)
-        }),
-    )
-}
+        self.require_token(TokenType::OpenBrace, Ctx::Default);
+        let expr = self.require_expr();
 
-/// Matches a format specifier number.
-fn fmtspec_number<'a>(input: In<'a>) -> Out<'a, usize> {
-    map_res(fmtspec_number_raw, |out| out.as_ref().parse::<usize>())(input)
-}
+        let mut fmtspec: Option<FormatSpec> = None;
+        if self.try_token(TokenType::Colon, Ctx::Default).is_some() {
+            fmtspec = Some(self.require_fmtspec());
+            self.require_token(TokenType::CloseBrace, Ctx::FmtSpec);
+        } else {
+            self.require_token(TokenType::CloseBrace, Ctx::Default);
+        }
 
-/// Matches a format specifier alignment.
-fn fmtspec_align<'a>(input: In<'a>) -> Out<'a, AlignSpec> {
-    alt((
-        value(AlignSpec::String(StringAlignSpec::Left), fmtspec_char('<')),
-        value(AlignSpec::String(StringAlignSpec::Right), fmtspec_char('>')),
-        value(
-            AlignSpec::String(StringAlignSpec::Center),
-            fmtspec_char('^'),
-        ),
-        value(AlignSpec::AfterSign, fmtspec_char('=')),
-    ))(input)
-}
+        Some(StringElement::Interpolate(expr.inner(), fmtspec))
+    }
 
-/// Matches a format specifier fill and alignment.
-fn fmtspec_fill_align<'a>(input: In<'a>) -> Out<'a, (Option<char>, AlignSpec)> {
-    alt((
-        map(tuple((fmtspec_char_raw, fmtspec_align)), |(fill, align)| {
-            (Some(fill.unwrap().chars().next().unwrap()), align)
-        }),
-        map(fmtspec_align, |align| (None, align)),
-    ))(input)
-}
+    fn try_string_part(&mut self) -> Option<Tagged<Vec<StringElement>>> {
+        match self.try_token(TokenType::DoubleQuote, Ctx::Default) {
+            None => None,
+            Some(open_q) => {
+                let mut elements: Vec<StringElement> = Vec::new();
+                loop {
+                    if let Some(element) = self.try_string_interp() {
+                        elements.push(element);
+                        continue;
+                    }
+                    if let Some(element) = self.try_raw_string_content() {
+                        elements.push(StringElement::raw(element));
+                        continue;
+                    }
+                    break;
+                }
+                let close_q = self.require_token(TokenType::DoubleQuote, Ctx::Default);
+                Some(elements.tag(open_q.span()..close_q.span()))
+            }
+        }
+    }
 
-/// Matches a format specifier sign
-fn fmtspec_sign<'a>(input: In<'a>) -> Out<'a, SignSpec> {
-    alt((
-        value(SignSpec::Plus, fmtspec_char('+')),
-        value(SignSpec::Minus, fmtspec_char('-')),
-        value(SignSpec::Space, fmtspec_char(' ')),
-    ))(input)
-}
+    /// Parse a string expression, merging adjacent quoted segments into a single node.
+    ///
+    /// Gold allows adjacent string literals to be written side by side and they are
+    /// joined at parse time: `"hello " "world"` becomes the single string `"hello world"`.
+    fn try_string(&mut self) -> Option<Tagged<Expr>> {
+        match self.try_string_part() {
+            None => None,
+            Some(first) => {
+                let mut span = first.span();
+                let mut elements = first.unwrap();
 
-/// Matches a format specifier grouping
-fn fmtspec_grouping<'a>(input: In<'a>) -> Out<'a, GroupingSpec> {
-    alt((
-        value(GroupingSpec::Comma, fmtspec_char(',')),
-        value(GroupingSpec::Underscore, fmtspec_char('_')),
-    ))(input)
-}
-
-/// Matches a format speficier type
-fn fmtspec_type<'a>(input: In<'a>) -> Out<'a, FormatType> {
-    alt((
-        value(FormatType::String, fmtspec_char('s')),
-        value(
-            FormatType::Integer(IntegerFormatType::Binary),
-            fmtspec_char('b'),
-        ),
-        value(
-            FormatType::Integer(IntegerFormatType::Character),
-            fmtspec_char('c'),
-        ),
-        value(
-            FormatType::Integer(IntegerFormatType::Decimal),
-            fmtspec_char('d'),
-        ),
-        value(
-            FormatType::Integer(IntegerFormatType::Octal),
-            fmtspec_char('o'),
-        ),
-        value(
-            FormatType::Integer(IntegerFormatType::Hex(UppercaseSpec::Lower)),
-            fmtspec_char('x'),
-        ),
-        value(
-            FormatType::Integer(IntegerFormatType::Hex(UppercaseSpec::Upper)),
-            fmtspec_char('X'),
-        ),
-        value(
-            FormatType::Float(FloatFormatType::Sci(UppercaseSpec::Lower)),
-            fmtspec_char('e'),
-        ),
-        value(
-            FormatType::Float(FloatFormatType::Sci(UppercaseSpec::Upper)),
-            fmtspec_char('E'),
-        ),
-        value(FormatType::Float(FloatFormatType::Fixed), fmtspec_char('f')),
-        value(
-            FormatType::Float(FloatFormatType::General),
-            fmtspec_char('g'),
-        ),
-        value(
-            FormatType::Float(FloatFormatType::Percentage),
-            fmtspec_char('%'),
-        ),
-    ))(input)
-}
-
-/// Matches a format specifier
-fn format_specifier<'a>(input: In<'a>) -> Out<'a, FormatSpec> {
-    map(
-        tuple((
-            opt(fmtspec_fill_align),
-            opt(fmtspec_sign),
-            opt(value(true, fmtspec_char('#'))),
-            opt(value(true, fmtspec_char('0'))),
-            opt(fmtspec_number),
-            opt(fmtspec_grouping),
-            opt(preceded(fmtspec_char('.'), fmtspec_number)),
-            opt(fmtspec_type),
-        )),
-        |(fill_align, sign, alternate, zero_in, width, grouping, precision, fmt_type)| {
-            let zero = zero_in.unwrap_or_default();
-            FormatSpec {
-                fill: match fill_align {
-                    None => {
-                        if zero {
-                            '0'
-                        } else {
-                            ' '
+                loop {
+                    match self.try_string_part() {
+                        None => { break }
+                        Some(more) => {
+                            span = Span::from(span..more.span());
+                            elements.extend(more.unwrap().into_iter());
                         }
                     }
-                    Some((None, _)) => ' ',
-                    Some((Some(fill), _)) => fill,
-                },
+                }
 
-                align: match (fill_align, zero) {
-                    (Some((_, align)), _) => Some(align), //fill_align.map(|(_, align)| align)
-                    (None, true) => Some(AlignSpec::AfterSign),
-                    _ => None,
-                },
-
-                alternate: alternate.unwrap_or_default(),
-
-                sign,
-                width,
-                grouping,
-                precision,
-                fmt_type,
+                Some(Expr::string(elements).tag(span))
             }
-        },
-    )(input)
-}
+        }
+    }
 
-/// Matches an interpolated string element.
-fn string_interp<'a>(input: In<'a>) -> Out<'a, StringElement> {
-    map(
-        delimited(
-            terminated(string_dollar, fail(open_brace, TokenType::OpenBrace)),
-            tuple((
-                fail(expression, SyntaxElement::Expression),
-                opt(preceded(colon, format_specifier)),
-            )),
-            fail(close_brace, TokenType::CloseBrace),
-        ),
-        |(expression, fmt_spec)| StringElement::Interpolate(expression.inner(), fmt_spec),
-    )(input)
-}
+    // ── Separated-list kernel ─────────────────────────────────────────────────
 
-/// Matches a string part.
-///
-/// This parser matches an opening quote, followed by a sequence of string
-/// elements: either raw string data or interpolated expressions, followed by a
-/// closing quote.
-fn string_part<'a>(input: In<'a>) -> Out<'a, Tagged<Vec<StringElement>>> {
-    map(
-        tuple((
-            double_quote,
-            many0(alt((string_interp, string_data))),
-            fail(string_double_quote, TokenType::DoubleQuote),
-        )),
-        |(a, x, b)| x.tag(a.span()..b.span()),
-    )(input)
-}
+    /// Core separated-list parser with error recovery.
+    ///
+    /// `try_item` returns `(item, skip_next_sep)`.  When `skip_next_sep` is `true` the item
+    /// consumed its own logical separator (e.g. a multistring value terminated by dedent), so
+    /// the loop does not look for a separator before the next item.
+    ///
+    /// Error recovery: if a separator is expected but missing, the parser checks whether what
+    /// follows is the closing delimiter (end the list) or another item (emit a missing-separator
+    /// error and keep going).  If an item is expected but missing, the list is closed immediately.
+    fn seplist_inner<T, S>(
+        &mut self,
+        try_item: impl Fn(&mut Parser<'a>) -> Option<(Tagged<T>, bool)>,
+        try_sep: impl Fn(&mut Parser<'a>) -> Option<Tagged<S>>,
+        try_close: impl Fn(&mut Parser<'a>) -> Option<Tagged<Token<'a>>>,
+        err_missing_item: Reason,
+        err_missing_sep: Reason,
+        close_tok_type: TokenType,
+    ) -> (Vec<Tagged<T>>, Tagged<Option<Token<'a>>>) {
+        let mut items: Vec<Tagged<T>> = vec![];
+        let mut close: Option<Tagged<Token<'a>>>;
+        let mut need_sep: bool = false;
 
-/// Matches a string.
-///
-/// This consists of a sequence of one or more string parts, separated by
-/// whitespace.
-fn string<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    naked(map(many1(string_part), |x| {
-        let start = x.first().unwrap().span();
-        let end = x.last().unwrap().span();
-        let elements: Vec<StringElement> = x.into_iter().map(Tagged::unwrap).flatten().collect();
-        Expr::string(elements).tag(start..end)
-    }))
-    .parse(input)
-}
+        loop {
+            if need_sep {
+                if try_sep(self).is_some() {
+                    need_sep = false;
+                    continue;
+                }
+                close = try_close(self);
+                if close.is_some() { break; }
 
-/// Matches a boolean literal.
-fn boolean<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    naked(alt((
-        map(keyword("false"), |tok| {
-            Expr::Literal(Object::from(false)).tag(&tok)
-        }),
-        map(keyword("true"), |tok| {
-            Expr::Literal(Object::from(true)).tag(&tok)
-        }),
-    )))
-    .parse(input)
-}
+                let loc = self.loc();
+                let lexer = self.lexer;
+                match try_item(self) {
+                    None => { self.lexer = lexer; break; }
+                    Some((item, skip_next_sep)) => {
+                        self.error(loc, err_missing_sep.clone());
+                        items.push(item);
+                        need_sep = !skip_next_sep;
+                    }
+                }
+            } else {
+                close = try_close(self);
+                if close.is_some() { break; }
 
-/// Matches a null literal.
-fn null<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    naked(map(keyword("null"), |tok| {
-        Expr::Literal(Object::null()).tag(&tok)
-    }))
-    .parse(input)
-}
+                match try_item(self) {
+                    None => {
+                        self.error(self.loc(), err_missing_item);
+                        close = try_close(self);
+                        if close.is_none() {
+                            close = Some(Token { kind: close_tok_type, text: "" }.tag(self.loc()));
+                        }
+                        break;
+                    }
+                    Some((item, skip_next_sep)) => {
+                        items.push(item);
+                        need_sep = !skip_next_sep;
+                    }
+                }
+            }
+        }
 
-/// Matches any atomic (non-divisible) expression.
-///
-/// Although strings are technically not atomic due to possibly interpolated
-/// expressions.
-fn atomic<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    alt((
-        null,
-        boolean,
-        number,
-        string,
-        naked(map(identifier, |x| x.wrap(Expr::Identifier))),
-    ))(input)
-}
+        (items, close.map(|t| t.map(Some)).unwrap_or_else(|| self.require_token(close_tok_type, Ctx::Default)))
+    }
 
-/// Matches a list element: anything that is legal in a list.
-///
-/// There are four cases:
-/// - singleton elements: `[2]`
-/// - splatted iterables: `[...x]`
-/// - conditional elements: `[if cond: @]`
-/// - iterated elements: `[for x in y: @]`
-fn list_element<'a>(input: In<'a>) -> Out<'a, PList> {
-    alt((
-        // Splat
-        naked(map(
-            tuple((ellipsis, fail(expression, SyntaxElement::Expression))),
-            |(start, expr)| {
-                let span = start.span()..expr.outer();
+    fn try_seplist<T, S>(
+        &mut self,
+        try_open: impl Fn(&mut Parser<'a>) -> Option<Tagged<Token<'a>>>,
+        try_item: impl Fn(&mut Parser<'a>) -> Option<(Tagged<T>, bool)>,
+        try_sep: impl Fn(&mut Parser<'a>) -> Option<Tagged<S>>,
+        try_close: impl Fn(&mut Parser<'a>) -> Option<Tagged<Token<'a>>>,
+        err_missing_item: Reason,
+        err_missing_sep: Reason,
+        close_tok_type: TokenType,
+    ) -> Option<(Tagged<Token<'a>>, Vec<Tagged<T>>, Tagged<Option<Token<'a>>>)> {
+        match try_open(self) {
+            None => None,
+            Some(open) => {
+                let (items, close) = self.seplist_inner(
+                    try_item,
+                    try_sep,
+                    try_close,
+                    err_missing_item,
+                    err_missing_sep,
+                    close_tok_type,
+                );
+                Some((open, items, close))
+            }
+        }
+    }
+
+    // ── Numbers / atomics ─────────────────────────────────────────────────────
+
+    fn try_number(&mut self) -> Option<Tagged<Expr>> {
+        self.try_token(TokenType::Float, Ctx::Default).map(|tok| {
+            tok.text.replace("_", "")
+                .parse::<f64>()
+                .map(|x| Expr::Literal(Object::from(x)).tag(tok.span()))
+        }).and_then(|x| x.ok()).or_else(|| {
+            self.try_token(TokenType::Integer, Ctx::Default).map(|tok| {
+                let text = tok.text.replace("_", "");
+                text.parse::<i64>()
+                    .map(Object::from)
+                    .or_else(|_| text.parse::<BigInt>().map(Object::from))
+                    .map(|obj| Expr::Literal(obj).tag(tok.span()))
+            }).and_then(|x| x.ok())
+        })
+    }
+
+    fn try_atomic(&mut self) -> Option<Tagged<Expr>> {
+        if let Some(tok) = self.try_keyword("null") {
+            return Some(Expr::Literal(Object::null()).tag(tok.span()))
+        }
+        if let Some(tok) = self.try_keyword("true") {
+            return Some(Expr::Literal(Object::from(true)).tag(tok.span()))
+        }
+        if let Some(tok) = self.try_keyword("false") {
+            return Some(Expr::Literal(Object::from(false)).tag(tok.span()))
+        }
+        self.try_number().or_else(|| self.try_string())
+    }
+
+    // ── Lists ──────────────────────────────────────────────────────────────────
+
+    fn try_list_element(&mut self) -> Option<Paren<ListElement>> {
+        if let Some(start) = self.try_token(TokenType::Ellipsis, Ctx::Default) {
+            let expr = self.require_expr();
+            let span = Span::from(start.span()..expr.outer());
+            return Some(Paren::Naked(
                 ListElement::Splat(expr.inner()).tag(span)
-            },
-        )),
-        // Iteration
-        naked(map(
-            tuple((
-                keyword("for"),
-                fail(binding, SyntaxElement::Binding),
-                preceded(
-                    fail(keyword("in"), SyntaxElement::In),
-                    fail(expression, SyntaxElement::Expression),
-                ),
-                preceded(
-                    fail(colon, TokenType::Colon),
-                    fail(list_element, SyntaxElement::ListElement),
-                ),
-            )),
-            |(start, binding, iterable, expr)| {
-                let span = start.span()..expr.outer();
+            ))
+        }
+
+        if let Some(start) = self.try_keyword("for") {
+            let binding = self.require_binding();
+            self.require_keyword("in", SyntaxElement::In);
+            let iterable = self.require_expr();
+            self.require_token(TokenType::Colon, Ctx::Default);
+            let element = self.require_list_element();
+            let span = Span::from(start.span()..element.outer());
+            return Some(Paren::Naked(
                 ListElement::Loop {
                     binding,
                     iterable: iterable.inner(),
-                    element: Box::new(expr.inner()),
-                }
-                .tag(span)
-            },
-        )),
-        // Conditional
-        naked(map(
-            tuple((
-                keyword("when"),
-                fail(expression, SyntaxElement::Expression),
-                preceded(
-                    fail(colon, TokenType::Colon),
-                    fail(list_element, SyntaxElement::ListElement),
-                ),
-            )),
-            |(start, condition, expr)| {
-                let span = start.span()..expr.outer();
+                    element: Box::new(element.inner()),
+                }.tag(span)
+            ))
+        }
+
+        if let Some(start) = self.try_keyword("when") {
+            let condition = self.require_expr();
+            self.require_token(TokenType::Colon, Ctx::Default);
+            let element = self.require_list_element();
+            let span = Span::from(start.span()..element.outer());
+            return Some(Paren::Naked(
                 ListElement::Cond {
                     condition: condition.inner(),
-                    element: Box::new(expr.inner()),
-                }
-                .tag(span)
-            },
-        )),
-        // Singleton
-        map(expression, |x| x.map_wrap(ListElement::Singleton)),
-    ))(input)
-}
+                    element: Box::new(element.inner()),
+                }.tag(span)
+            ))
+        }
 
-/// Matches a list.
-///
-/// A list is composed of an opening bracket, a potentially empty
-/// comma-separated list of list elements, an optional terminal comma and a
-/// closing bracket.
-fn list<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    naked(map(
-        seplist(
-            open_bracket,
-            list_element,
-            comma,
-            close_bracket,
-            (TokenType::CloseBracket, SyntaxElement::ListElement),
-            (TokenType::CloseBracket, TokenType::Comma),
-        ),
-        |(a, x, b)| Expr::List(x.into_iter().map(|y| y.inner()).collect()).tag(a.span()..b.span()),
-    ))
-    .parse(input)
-}
+        if let Some(expr) = self.try_expr() {
+            return Some(expr.map_wrap(|e| ListElement::Singleton(e)))
+        }
 
-/// Matches a singleton key in a map context.
-///
-/// This is either a dollar sign followed by an expression, a string literal or
-/// a pure map identifier.
-fn map_key_singleton<'a>(input: In<'a>) -> Out<'a, (u32, PExpr)> {
-    tuple((
-        column,
-        alt((
-            map(
-                tuple((map_dollar, fail(expression, SyntaxElement::Expression))),
-                |(d, ex)| {
-                    let span = d.span()..ex.outer();
-                    PExpr::Parenthesized(ex.inner().tag(span))
-                },
-            ),
-            string,
-            naked(map(map_identifier, |key| {
-                key.map(Object::from).map(Expr::Literal)
-            })),
-        )),
-    ))(input)
-}
-
-/// Matches a singleton value in a map context.
-///
-/// This is either a double colon followed by a multiline string, or a single
-/// comma followed by an expression.
-fn map_value_singleton<'a>(col: u32, input: In<'a>) -> Out<'a, (PExpr, bool)> {
-    alt((
-        do_skip(naked(map(
-            preceded(map_double_colon, multistring(col)),
-            |s| s.map(|s| Expr::string(vec![StringElement::raw(multiline(s.as_ref()))])),
-        ))),
-        dont_skip(preceded(
-            fail(map_colon, TokenType::Colon),
-            fail(expression, SyntaxElement::Expression),
-        )),
-    ))(input)
-}
-
-/// Matches a singleton map element: a singleton key followed by a singleton
-/// value.
-fn map_element_singleton<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
-    let input = input.skip_whitespace();
-    let (input, (col, key)) = map_key_singleton(input)?;
-    let (input, (value, skip_sep)) = map_value_singleton(col, input)?;
-
-    let span = key.outer()..value.outer();
-    let ret = MapElement::Singleton {
-        key: key.inner(),
-        value: value.inner(),
+        None
     }
-    .tag(span);
 
-    Ok((input, (PMap::Naked(ret), skip_sep)))
-}
+    fn require_list_element(&mut self) -> Paren<ListElement> {
+        self.require(
+            |parser| parser.try_list_element(),
+            |parser| Paren::Naked(ListElement::Singleton(parser.missing_expr()).tag(parser.loc())),
+            || Reason::from(Syntax::from(SyntaxElement::ListElement)),
+        )
+    }
 
-/// Matches a map element: anything that is legal in a map.
-///
-/// There are five cases:
-/// - singleton elements
-/// - splatted iterables: `{...x}`
-/// - conditional elements: `{if cond: @}`
-/// - iterated elements: `{for x in y: @}`
-fn map_element<'a>(input: In<'a>) -> Out<'a, (PMap, bool)> {
-    alt((
-        // Splat
-        dont_skip(naked(map(
-            tuple((map_ellipsis, fail(expression, SyntaxElement::Expression))),
-            |(start, expr)| {
-                let span = start.span()..expr.outer();
-                MapElement::Splat(expr.inner()).tag(span)
-            },
-        ))),
-        // Iteration
-        map(
-            tuple((
-                map_keyword("for"),
-                fail(binding, SyntaxElement::Binding),
-                preceded(
-                    fail(keyword("in"), SyntaxElement::In),
-                    fail(expression, SyntaxElement::Expression),
-                ),
-                preceded(
-                    fail(colon, TokenType::Colon),
-                    fail(map_element, SyntaxElement::MapElement),
-                ),
-            )),
-            |(start, binding, iterable, (expr, skip))| {
-                let span = start.span()..expr.outer();
-                let ret = MapElement::Loop {
+    fn try_list(&mut self) -> Option<Tagged<Expr>> {
+        self.try_seplist(
+            |parser| parser.try_token(TokenType::OpenBracket, Ctx::Default),
+            |parser| parser.try_list_element().map(|x| (x.inner(), false)),
+            |parser| parser.try_token(TokenType::Comma, Ctx::Default),
+            |parser| parser.try_token(TokenType::CloseBracket, Ctx::Default),
+            Reason::from(Syntax::from((TokenType::CloseBracket, SyntaxElement::ListElement))),
+            Reason::from(Syntax::from((TokenType::Comma, TokenType::CloseBracket))),
+            TokenType::CloseBracket,
+        ).map(|(open, list, close)| Expr::List(list).tag(open.span()..close.span()))
+    }
+
+    // ── Map ───────────────────────────────────────────────────────────────────
+
+    fn try_map_key(&mut self) -> Option<Tagged<Expr>> {
+        if let Some(s) = self.try_string() {
+            return Some(s);
+        }
+        if let Some(s) = self.try_map_identifier() {
+            return Some(s.map(|x| Expr::Literal(Object::from(x))));
+        }
+        None
+    }
+
+    fn try_map_element(&mut self) -> Option<(Tagged<MapElement>, bool)> {
+        // Map entries may be on separate lines; advance past any leading whitespace/newlines
+        // before attempting to lex the next token in map-key context.
+        self.lexer = self.lexer.skip_whitespace();
+
+        if let Some(start) = self.try_token(TokenType::Ellipsis, Ctx::Map) {
+            let expr = self.require_expr();
+            let span = Span::from(start.span()..expr.outer());
+            return Some((MapElement::Splat(expr.inner()).tag(span), false));
+        }
+
+        if let Some(start) = self.try_map_keyword("for") {
+            let binding = self.require_binding();
+            self.require_keyword("in", SyntaxElement::In);
+            let iterable = self.require_expr().inner();
+            self.require_token(TokenType::Colon, Ctx::Default);
+            let (element, skip) = self.require_map_element();
+            let span = Span::from(start.span()..element.span());
+            return Some((
+                MapElement::Loop {
                     binding,
-                    iterable: iterable.inner(),
-                    element: Box::new(expr.inner()),
-                }
-                .tag(span);
-                (PMap::Naked(ret), skip)
-            },
-        ),
-        // Conditional
-        map(
-            tuple((
-                map_keyword("when"),
-                fail(expression, SyntaxElement::Expression),
-                preceded(
-                    fail(colon, TokenType::Colon),
-                    fail(map_element, SyntaxElement::MapElement),
-                ),
-            )),
-            |(start, condition, (expr, skip))| {
-                let span = start.span()..expr.outer();
-                let ret = MapElement::Cond {
-                    condition: condition.inner(),
-                    element: Box::new(expr.inner()),
-                }
-                .tag(span);
-                (PMap::Naked(ret), skip)
-            },
-        ),
-        // Various types of singletons
-        map_element_singleton,
-    ))(input)
-}
+                    iterable,
+                    element: Box::new(element),
+                }.tag(span),
+                skip,
+            ));
+        }
 
-/// Matches a map.
-///
-/// A list is composed of an opening brace, a potentially empty comma-separated
-/// list of map elements, an optional terminal comma and a closing brace.
-fn mapping<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    naked(map(
-        seplist_opt_delim(
-            open_brace,
-            map_element,
-            comma,
-            close_brace,
-            (TokenType::CloseBrace, SyntaxElement::MapElement),
-            (TokenType::CloseBrace, TokenType::Comma),
-        ),
-        |(a, x, b)| Expr::Map(x.into_iter().map(|y| y.inner()).collect()).tag(a.span()..b.span()),
-    ))
-    .parse(input)
-}
+        if let Some(start) = self.try_map_keyword("when") {
+            let condition = self.require_expr().inner();
+            self.require_token(TokenType::Colon, Ctx::Default);
+            let (element, skip) = self.require_map_element();
+            let span = Span::from(start.span()..element.span());
+            return Some((
+                MapElement::Cond {
+                    condition,
+                    element: Box::new(element),
+                }.tag(span),
+                skip,
+            ));
+        }
 
-/// Matches a parenthesized expression.
-///
-/// This is the only possible source of Paren::Parenthesized in the Gold
-/// language. All other parenthesized variants stem from this origin.
-fn paren<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    map(
-        tuple((
-            open_paren,
-            fail(expression, SyntaxElement::Expression),
-            fail(close_paren, TokenType::CloseParen),
-        )),
-        |(start, expr, end)| PExpr::Parenthesized(expr.inner().tag(start.span()..end.span())),
-    )(input)
-}
+        if let Some(start) = self.try_token(TokenType::Dollar, Ctx::Map) {
+            let key = self.require_expr().inner();
+            self.require_token(TokenType::Colon, Ctx::Default);
+            let value = self.require_expr();
+            let span = Span::from(start.span()..value.outer());
+            return Some((
+                MapElement::Singleton {
+                    key,
+                    value: value.inner(),
+                }.tag(span),
+                false,
+            ));
+        }
 
-/// Matches an expression that can be an operand.
-///
-/// The tightest binding operators are the postfix operators, so this class of
-/// expressions are called 'postixable' expressions. Only expressions with a
-/// well defined end are postfixable: in particular, functions, let-blocks and
-/// tertiary expressions are not postfixable, but parenthesized expressions are.
-fn postfixable<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    alt((
-        paren,
-        atomic,
-        naked(map(identifier, |x| Expr::Identifier(x).tag(&x))),
-        list,
-        mapping,
-    ))(input)
-}
-
-/// Matches a dot-syntax subscripting operator.
-///
-/// This is a dot followed by an identifier.
-fn object_access<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
-    map(
-        tuple((dot, fail(identifier, SyntaxElement::Identifier))),
-        |(dot, out)| {
-            Transform::BinOp(
-                BinOp::Eager(EagerOp::Index).tag(&dot),
-                Box::new(out.map(Object::from).map(Expr::Literal)),
-            )
-            .tag(dot.span()..out.span())
-        },
-    )(input)
-}
-
-/// Matches a bracket-syntax subscripting operator.
-///
-/// This is an open bracket followed by any expression and a closing bracket.
-fn object_index<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
-    map(
-        tuple((
-            open_bracket,
-            fail(expression, SyntaxElement::Expression),
-            fail(close_bracket, TokenType::CloseBracket),
-        )),
-        |(a, expr, b)| {
-            let span = Span::from(a.span()..b.span());
-            Transform::BinOp(
-                BinOp::Eager(EagerOp::Index).tag(span),
-                Box::new(expr.inner()),
-            )
-            .tag(span)
-        },
-    )(input)
-}
-
-/// Matches a function argument element.
-///
-/// There are three cases:
-/// - splatted iterables: `f(...x)`
-/// - keyword arguments: `f(x: y)`
-/// - singleton arguments: `f(x)`
-fn function_arg<'a>(input: In<'a>) -> Out<'a, Tagged<ArgElement>> {
-    alt((
-        // Splat
-        map(
-            tuple((ellipsis, fail(expression, SyntaxElement::Expression))),
-            |(x, y)| {
-                let span = x.span()..y.outer();
-                ArgElement::Splat(y.inner()).tag(span)
-            },
-        ),
-        // Keyword
-        map(
-            tuple((
-                identifier,
-                preceded(colon, fail(expression, SyntaxElement::Expression)),
-            )),
-            |(name, expr)| {
-                let span = name.span()..expr.outer();
-                ArgElement::Keyword(name, expr.inner()).tag(span)
-            },
-        ),
-        // Singleton
-        map(expression, |x| {
-            let span = x.outer();
-            ArgElement::Singleton(x.inner()).tag(span)
-        }),
-    ))(input)
-}
-
-/// Matches a function call operator.
-///
-/// This is an open parenthesis followed by a possibly empty list of
-/// comma-separated argument elements, followed by an optional comma and a
-/// closin parenthesis.
-fn function_call<'a>(input: In<'a>) -> Out<'a, Tagged<Transform>> {
-    map(
-        seplist(
-            open_paren,
-            function_arg,
-            comma,
-            close_paren,
-            (TokenType::CloseParen, SyntaxElement::ArgElement),
-            (TokenType::CloseParen, TokenType::Comma),
-        ),
-        |(a, expr, b)| {
-            let span = Span::from(a.span()..b.span());
-            Transform::FunCall(expr.tag(span)).tag(span)
-        },
-    )(input)
-}
-
-/// Matches any postfix operator expression.
-///
-/// This is a postfixable expression (see [`postfixable`]) followed by an
-/// arbitrary sequence of postfix operators.
-fn postfixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    map(
-        tuple((
-            postfixable,
-            many0(alt((object_access, object_index, function_call))),
-        )),
-        |(expr, ops)| {
-            ops.into_iter().fold(expr, |expr, operator| {
-                let span = expr.outer()..operator.span();
-                PExpr::Naked(
-                    Expr::Transformed {
-                        operand: Box::new(expr.inner()),
-                        transform: operator.unwrap(),
+        if let Some(key) = self.try_map_key() {
+            if let Some(_) = self.try_token(TokenType::DoubleColon, Ctx::Map) {
+                let value = match self.lexer.next_multistring(key.span().column()) {
+                    Ok((lexer, token)) => {
+                        self.lexer = lexer;
+                        Expr::Literal(Object::from(multiline(token.text))).tag(token.span())
                     }
-                    .tag(span),
-                )
-            })
-        },
-    )(input)
-}
+                    Err(_) => {
+                        self.error(self.loc(), Reason::from(Syntax::from(TokenType::MultiString)));
+                        self.missing_expr()
+                    }
+                };
+                let span = Span::from(key.span()..value.span());
+                return Some((MapElement::Singleton { key, value }.tag(span), true));
+            }
 
-/// Matches any prefixed operator expression.
-///
-/// This is an arbitrary sequence of prefix operators followed by a postfixed
-/// expression.
-fn prefixed<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    alt((
-        power,
-        map(
-            tuple((
-                many1(alt((
-                    map(plus, |x| x.map(|_| None)),
-                    map(minus, |x| x.map(|_| Some(UnOp::ArithmeticalNegate))),
-                    map(keyword("not"), |x| x.map(|_| Some(UnOp::LogicalNegate))),
-                ))),
-                fail(power, SyntaxElement::Operand),
-            )),
-            |(ops, expr)| {
-                ops.into_iter().rev().fold(expr, |expr, operator| {
-                    let span = operator.span()..expr.outer();
-                    PExpr::Naked(
-                        Expr::Transformed {
-                            operand: Box::new(expr.inner()),
-                            transform: Transform::UnOp(operator),
-                        }
-                        .tag(span),
-                    )
-                })
-            },
-        ),
-    ))(input)
-}
-
-/// Utility parser for parsing a single binary operator with operand,
-/// collectively termed a 'transform'.
-///
-/// * `transformer` - a parser whose result is, loosely, a function
-///   `Expr -> Transform`.
-/// * `operand` - a parser whose result is an `Expr`.
-///
-/// The result is the output of `transformer` applied to the output of
-/// `operand`, which is a `Transform`.
-fn binop<'a>(
-    transformer: impl Parser<'a, Tagged<OpCons>>,
-    operand: impl Parser<'a, PExpr>,
-) -> impl Parser<'a, Tagged<Transform>> {
-    map(
-        tuple((transformer, fail(operand, SyntaxElement::Operand))),
-        |(func, expr)| {
-            let span = func.span()..expr.outer();
-            func.as_ref()(expr.inner(), func.span()).tag(span)
-        },
-    )
-}
-
-/// Utility parser for parsing a left- or right-associative sequence of
-/// operators.
-///
-/// * `transform` - a parser returning a `Transform`, normally created with
-///   `binop`.
-/// * `operand` -  a parser returning an expression to be acted upon by the
-///   transform
-/// * `right` - true if right-associative, false if left-associative.
-fn binops<'a>(
-    transform: impl Parser<'a, Tagged<Transform>>,
-    operand: impl Parser<'a, PExpr>,
-    right: bool,
-) -> impl Parser<'a, PExpr> {
-    map(tuple((operand, many0(transform))), move |(expr, ops)| {
-        let acc = |expr: PExpr, operator: Tagged<Transform>| {
-            let span = expr.outer()..operator.span();
-            PExpr::Naked(
-                Expr::Transformed {
-                    operand: Box::new(expr.inner()),
-                    transform: operator.unwrap(),
-                }
-                .tag(span),
-            )
-        };
-        if right {
-            ops.into_iter().rev().fold(expr, acc)
-        } else {
-            ops.into_iter().fold(expr, acc)
+            self.require_token(TokenType::Colon, Ctx::Map);
+            let value = self.require_expr();
+            let span = Span::from(key.span()..value.outer());
+            return Some((MapElement::Singleton { key, value: value.inner() }.tag(span), false));
         }
-    })
-}
 
-/// Matches the exponentiation precedence level.
-///
-/// The exponentiation operator, unlike practically every other operator, is
-/// right-associative, and asymmetric in its operands: it binds tighter than
-/// prefix operators on the left, but not on the right.
-fn power<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    binops(
-        binop(
-            alt((map(caret, |x| (Transform::power as OpCons).tag(&x)),)),
-            prefixed,
-        ),
-        postfixed,
-        true,
-    )
-    .parse(input)
-}
+        None
+    }
 
-/// Utility parser for matching a sequence of left-associative operators with
-/// symmetric operands. In other words, most conventional operators.
-fn lbinop<'a>(
-    operators: impl Parser<'a, Tagged<OpCons>>,
-    operands: impl Parser<'a, PExpr> + Copy,
-) -> impl Parser<'a, PExpr> {
-    binops(binop(operators, operands), operands, false)
-}
+    fn require_map_element(&mut self) -> (Tagged<MapElement>, bool) {
+        self.require(
+            |parser| parser.try_map_element(),
+            |parser| (
+                MapElement::Singleton {
+                    key: parser.missing_expr(),
+                    value: parser.missing_expr(),
+                }.tag(parser.loc()),
+                false,
+            ),
+            || Reason::from(Syntax::from(SyntaxElement::MapElement)),
+        )
+    }
 
-/// Matches the multiplication precedence level.
-fn product<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    lbinop(
-        alt((
-            map(asterisk, |x| (Transform::multiply as OpCons).tag(&x)),
-            map(double_slash, |x| {
-                (Transform::integer_divide as OpCons).tag(&x)
-            }),
-            map(slash, |x| (Transform::divide as OpCons).tag(&x)),
-        )),
-        prefixed,
-    )
-    .parse(input)
-}
+    fn try_map(&mut self) -> Option<Tagged<Expr>> {
+        self.try_seplist(
+            |parser| parser.try_token(TokenType::OpenBrace, Ctx::Default),
+            |parser| parser.try_map_element(),
+            |parser| parser.try_token(TokenType::Comma, Ctx::Default),
+            |parser| parser.try_token(TokenType::CloseBrace, Ctx::Default),
+            Reason::from(Syntax::from((TokenType::CloseBrace, SyntaxElement::MapElement))),
+            Reason::from(Syntax::from((TokenType::Comma, TokenType::CloseBrace))),
+            TokenType::CloseBrace,
+        ).map(|(open, list, close)| Expr::Map(list).tag(open.span()..close.span()))
+    }
 
-/// Matches the addition predecence level.
-fn sum<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    lbinop(
-        alt((
-            map(plus, |x| (Transform::add as OpCons).tag(&x)),
-            map(minus, |x| (Transform::subtract as OpCons).tag(&x)),
-        )),
-        product,
-    )
-    .parse(input)
-}
+    // ── Postfix expressions ───────────────────────────────────────────────────
 
-/// Matches the inequality comparison precedence level.
-fn inequality<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    lbinop(
-        alt((
-            map(less_eq, |x| (Transform::less_equal as OpCons).tag(&x)),
-            map(less, |x| (Transform::less as OpCons).tag(&x)),
-            map(greater_eq, |x| (Transform::greater_equal as OpCons).tag(&x)),
-            map(greater, |x| (Transform::greater as OpCons).tag(&x)),
-        )),
-        sum,
-    )
-    .parse(input)
-}
+    fn try_postfixable(&mut self) -> Option<Paren<Expr>> {
+        if let Some(start) = self.try_token(TokenType::OpenParen, Ctx::Default) {
+            let expr = self.require_expr();
+            let close = self.require_token(TokenType::CloseParen, Ctx::Default);
+            let span = Span::from(start.span()..close.span());
+            return Some(Paren::Parenthesized(expr.inner().tag(span)));
+        }
 
-/// Matches the equality comparison precedence level.
-fn equality<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    lbinop(
-        alt((
-            map(double_eq, |x| (Transform::equal as OpCons).tag(&x)),
-            map(exclam_eq, |x| (Transform::not_equal as OpCons).tag(&x)),
-        )),
-        inequality,
-    )
-    .parse(input)
-}
+        if let Some(atom) = self.try_atomic() {
+            return Some(Paren::Naked(atom));
+        }
 
-/// Matches the contains precedence level.
-fn contains<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    lbinop(
-        alt((map(keyword("has"), |x| {
-            (Transform::contains as OpCons).tag(&x)
-        }),)),
-        equality,
-    )
-    .parse(input)
-}
+        if let Some(ident) = self.try_identifier() {
+            let span = ident.span();
+            return Some(Paren::Naked(Expr::Identifier(Key::new(*ident).tag(span)).tag(span)))
+        }
 
-/// Matches the conjunction ('and') precedence level.
-fn conjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    lbinop(
-        alt((map(keyword("and"), |x| (Transform::and as OpCons).tag(&x)),)),
-        contains,
-    )
-    .parse(input)
-}
+        if let Some(list) = self.try_list() {
+            return Some(Paren::Naked(list));
+        }
 
-/// Matches the disjunction ('or') precedence level.
-fn disjunction<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    lbinop(
-        alt((map(keyword("or"), |x| (Transform::or as OpCons).tag(&x)),)),
-        conjunction,
-    )
-    .parse(input)
-}
+        if let Some(map) = self.try_map() {
+            return Some(Paren::Naked(map));
+        }
 
-/// Matches an identifier binding. This is essentially the same as a normal
-/// identifier.
-fn ident_binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
-    alt((map(identifier, |out| Binding::Identifier(out).tag(&out)),))(input)
-}
+        None
+    }
 
-/// Matches a list binding element: anything that's legal in a list unpacking
-/// environment.
-///
-/// There are four cases:
-/// - anonymous slurp: `let [...] = x`
-/// - named slurp: `let [...y] = x`
-/// - singleton binding: `let [y] = x`
-/// - singleton binding with default: `let [y = z] = x`
-fn list_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<ListBindingElement>> {
-    alt((
-        // Named and anonymous slurps
-        map(tuple((ellipsis, opt(identifier))), |(e, ident)| {
-            let loc = if let Some(i) = ident {
-                Span::from(e.span()..i.span())
-            } else {
-                e.span()
+    fn try_postfix_transform(&mut self) -> Option<Tagged<Transform>> {
+        if let Some(dot) = self.try_token(TokenType::Dot, Ctx::Default) {
+            let key_expr = match self.try_identifier() {
+                Some(name) => name.map(|s| Expr::Literal(Object::from(s))),
+                None => {
+                    self.error(self.loc(), Reason::from(Syntax::from(SyntaxElement::Identifier)));
+                    self.missing_expr()
+                }
             };
-            ident
-                .map(ListBindingElement::SlurpTo)
-                .unwrap_or(ListBindingElement::Slurp)
-                .tag(loc)
-        }),
-        // Singleton bindings with or without defaults
-        map(
-            tuple((
-                binding,
-                opt(preceded(eq, fail(expression, SyntaxElement::Expression))),
-            )),
-            |(b, e)| {
-                let span = if let Some(d) = &e {
-                    Span::from(b.span()..d.outer())
-                } else {
-                    b.span()
-                };
+            let span = Span::from(dot.span()..key_expr.span());
+            return Some(Transform::index(key_expr, dot.span()).tag(span));
+        }
 
-                ListBindingElement::Binding {
-                    binding: b,
-                    default: e.map(PExpr::inner),
-                }
-                .tag(span)
-            },
-        ),
-    ))(input)
-}
+        if let Some(open_b) = self.try_token(TokenType::OpenBracket, Ctx::Default) {
+            let subscript = self.require_expr().inner();
+            let close_b = self.require_token(TokenType::CloseBracket, Ctx::Default);
+            let op_span = Span::from(open_b.span()..close_b.span());
+            return Some(Transform::index(subscript, op_span).tag(op_span));
+        }
 
-/// Matches a list binding.
-///
-/// This is a comma-separated list of list binding elements, optionally
-/// terminated by a comma.
-fn list_binding<'a, T, U, V>(
-    initializer: impl Parser<'a, Tagged<V>> + Copy,
-    terminator: impl Parser<'a, Tagged<V>> + Copy,
-    err_terminator_or_item: T,
-    err_terminator_or_separator: U,
-) -> impl Parser<'a, (Tagged<ListBinding>, Tagged<V>)>
-where
-    Syntax: From<T> + From<U>,
-    T: Copy,
-    U: Copy,
-{
-    move |input| {
-        map(
-            seplist(
-                initializer,
-                list_binding_element,
-                comma,
-                terminator,
-                err_terminator_or_item,
-                err_terminator_or_separator,
-            ),
-            |(a, x, b)| (ListBinding::new(x).tag(a.span()..b.span()), b),
-        )(input)
+        if let Some(open_p) = self.try_token(TokenType::OpenParen, Ctx::Default) {
+            let (args, close_p) = self.require_arg_list();
+            let call_span = Span::from(open_p.span()..close_p.span());
+            return Some(Transform::FunCall(args.tag(call_span)).tag(call_span));
+        }
+
+        None
     }
-}
 
-/// Matches a map binding element: anything that's legal in a map unpacking environment.
-///
-/// There are five cases:
-/// - named slurp: `let {...y} = x`
-/// - singleton binding: `let {y} = x`
-/// - singleton binding with unpacking: `let {y as z} = x`
-/// - singleton binding with default: `let {y = z} = x`
-/// - singleton binding with unpacking and default: `let {y as z = q} = x`
-fn map_binding_element<'a>(input: In<'a>) -> Out<'a, Tagged<MapBindingElement>> {
-    alt((
-        // Slurp
-        map(
-            tuple((ellipsis, fail(identifier, SyntaxElement::Identifier))),
-            |(e, i)| MapBindingElement::SlurpTo(i).tag(e.span()..i.span()),
-        ),
-        // All variants of singleton bindings
-        map(
-            tuple((
-                alt((
-                    // With unpacking
-                    map(
-                        tuple((
-                            map_identifier,
-                            preceded(keyword("as"), fail(binding, SyntaxElement::Binding)),
-                        )),
-                        |(name, binding)| (name, Some(binding)),
-                    ),
-                    // Without unpacking
-                    map(identifier, |name| (name, None)),
-                )),
-                // Optional default
-                opt(preceded(eq, fail(expression, SyntaxElement::Expression))),
-            )),
-            |((name, binding), default)| {
-                let mut loc = name.span();
-                if let Some(b) = &binding {
-                    loc = Span::from(loc..b.span());
-                };
-                if let Some(d) = &default {
-                    loc = Span::from(loc..d.outer());
-                };
-                let rval = match binding {
-                    None => MapBindingElement::Binding {
-                        key: name,
-                        binding: Binding::Identifier(name).tag(&name),
-                        default: default.map(PExpr::inner),
-                    },
-                    Some(binding) => MapBindingElement::Binding {
-                        key: name,
-                        binding,
-                        default: default.map(PExpr::inner),
-                    },
-                };
-                rval.tag(loc)
-            },
-        ),
-    ))(input)
-}
-
-/// Matches a map binding.
-///
-/// This is a comma-separated list of list binding elements, optionally
-/// terminated by a comma.
-fn map_binding<'a, T, U, V>(
-    initializer: impl Parser<'a, Tagged<V>> + Copy,
-    terminator: impl Parser<'a, Tagged<V>> + Copy,
-    err_terminator_or_item: T,
-    err_terminator_or_separator: U,
-) -> impl FnMut(In<'a>) -> Out<'a, Tagged<MapBinding>>
-where
-    Syntax: From<T> + From<U>,
-    T: Copy,
-    U: Copy,
-{
-    move |input: In<'a>| {
-        map(
-            seplist(
-                initializer,
-                map_binding_element,
-                comma,
-                terminator,
-                err_terminator_or_item,
-                err_terminator_or_separator,
-            ),
-            |(a, x, b)| MapBinding::new(x).tag(a.span()..b.span()),
-        )(input)
+    fn try_postfixed(&mut self) -> Option<Paren<Expr>> {
+        let mut pexpr = self.try_postfixable()?;
+        while let Some(transform) = self.try_postfix_transform() {
+            let span = Span::from(pexpr.outer()..transform.span());
+            pexpr = Paren::Naked(
+                Expr::Transformed {
+                    operand: Box::new(pexpr.inner()),
+                    transform: transform.unwrap(),
+                }.tag(span)
+            );
+        }
+        Some(pexpr)
     }
-}
 
-/// Matches a binding.
-///
-/// There are three cases:
-/// - An identifier binding (leaf node)
-/// - A list binding
-/// - A map binding
-fn binding<'a>(input: In<'a>) -> Out<'a, Tagged<Binding>> {
-    alt((
-        ident_binding,
-        // TODO: Do we need double up location tagging here?
-        map(
-            list_binding(
-                |i| open_bracket(i),
-                |i| close_bracket(i),
-                (TokenType::CloseBracket, SyntaxElement::ListBindingElement),
-                (TokenType::CloseBracket, TokenType::Comma),
-            ),
-            |(x, _)| x.wrap(Binding::List),
-        ),
-        // TODO: Do we need double up location tagging here?
-        map(
-            map_binding(
-                |i| open_brace(i),
-                |i| close_brace(i),
-                (TokenType::CloseBrace, SyntaxElement::MapBindingElement),
-                (TokenType::CloseBrace, TokenType::Comma),
-            ),
-            |x| x.wrap(Binding::Map),
-        ),
-    ))(input)
-}
-
-/// Matches a function definition.
-///
-/// This is the 'fn' keyword followed by either an open paren or brace.
-///
-/// An open paren must be followed by a list binding and optionally a semicolon
-/// and a map binding, then a close paren and an expression.
-///
-/// An open brace must be followed by a map binding, a close brace and an
-/// expression.
-fn function_new_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    let (i, init) = keyword("fn").parse(input)?;
-    let (i, opener) = fail(
-        alt((open_paren, open_brace)),
-        (TokenType::OpenParen, TokenType::OpenBrace),
-    )
-    .parse(i)?;
-
-    let (i, args, kwargs, expr) = if opener.unwrap() == "(" {
-        // Parse a normal function
-        let (i, (args, end)) = list_binding(
-            success,
-            |i| alt((close_paren, semicolon))(i),
-            (
-                TokenType::CloseParen,
-                TokenType::SemiColon,
-                SyntaxElement::PosParam,
-            ),
-            (
-                TokenType::CloseParen,
-                TokenType::SemiColon,
-                TokenType::Comma,
-            ),
+    fn require_arg_list(&mut self) -> (Vec<Tagged<ArgElement>>, Tagged<Option<Token<'_>>>) {
+        return self.seplist_inner(
+            |parser| parser.try_function_arg().map(|x| (x, false)),
+            |parser| parser.try_token(TokenType::Comma, Ctx::Default),
+            |parser| parser.try_token(TokenType::CloseParen, Ctx::Default),
+            Reason::from(Syntax::from((TokenType::CloseParen, SyntaxElement::ArgElement))),
+            Reason::from(Syntax::from((TokenType::Comma, TokenType::CloseParen))),
+            TokenType::CloseParen,
         )
-        .parse(i)?;
+    }
 
-        let (i, kwargs) = if *end.as_ref() == ";" {
-            let (i, kwargs) = map_binding(
-                success,
-                |i| close_paren(i),
-                (TokenType::CloseParen, SyntaxElement::KeywordParam),
-                (TokenType::CloseParen, TokenType::Comma),
+    fn try_function_arg(&mut self) -> Option<Tagged<ArgElement>> {
+        if let Some(start) = self.try_token(TokenType::Ellipsis, Ctx::Default) {
+            let expr = self.require_expr();
+            let span = Span::from(start.span()..expr.outer());
+            return Some(ArgElement::Splat(expr.inner()).tag(span));
+        }
+
+        let lexer = self.lexer;
+        if let Some(key) = self.try_identifier() {
+            if let Some(_) = self.try_token(TokenType::Colon, Ctx::Default) {
+                let expr = self.require_expr();
+                let span = Span::from(key.span()..expr.outer());
+                return Some(ArgElement::Keyword(key.map(Key::new), expr.inner()).tag(span));
+            } else {
+                self.lexer = lexer;
+            }
+        }
+
+        if let Some(expr) = self.try_expr() {
+            let span = expr.outer();
+            return Some(ArgElement::Singleton(expr.inner()).tag(span));
+        }
+
+        None
+    }
+
+    // ── Operator precedence ───────────────────────────────────────────────────
+    //
+    // Tightest to loosest:
+    //   postfixed (calls/indexing) → power (right-assoc) → prefix unary →
+    //   product (* / //) → sum (+ -) → inequality (< <= > >=) → equality (== !=) →
+    //   contains (has) → conjunction (and) → disjunction (or)
+
+    fn try_power(&mut self) -> Option<Paren<Expr>> {
+        let base = self.try_postfixed()?;
+        let Some(caret) = self.try_token(TokenType::Caret, Ctx::Default) else { return Some(base) };
+        let rhs = self.try_prefixed().unwrap_or_else(|| {
+            self.error(self.loc(), Reason::from(Syntax::from(SyntaxElement::Operand)));
+            self.missing_paren()
+        });
+
+        let span = Span::from(base.outer()..rhs.outer());
+        return Some(Paren::Naked(
+            Expr::Transformed {
+                operand: Box::new(base.inner()),
+                transform: Transform::BinOp(
+                    BinOp::Eager(EagerOp::Power).tag(caret.span()),
+                    Box::new(rhs.inner()),
+                ),
+            }.tag(span)
+        ))
+    }
+
+    fn try_prefixed(&mut self) -> Option<Paren<Expr>> {
+        let mut ops: Vec<Tagged<Option<UnOp>>> = vec![];
+        loop {
+            if let Some(tok) = self.try_token(TokenType::Plus, Ctx::Default) {
+                ops.push(None.tag(tok.span()));
+            } else if let Some(tok) = self.try_token(TokenType::Minus, Ctx::Default) {
+                ops.push(Some(UnOp::ArithmeticalNegate).tag(tok.span()));
+            } else if let Some(tok) = self.try_keyword("not") {
+                ops.push(Some(UnOp::LogicalNegate).tag(tok.span()));
+            } else {
+                break;
+            }
+        }
+
+        let mut operand = self.try_power().or_else(|| {
+            if !ops.is_empty() {
+                self.error(self.loc(), Reason::from(Syntax::from(SyntaxElement::Operand)));
+                Some(self.missing_paren())
+            } else {
+                None
+            }
+        })?;
+
+        for op in ops.into_iter().rev() {
+            let span = Span::from(op.span()..operand.outer());
+            operand = Paren::Naked(
+                Expr::Transformed {
+                    operand: Box::new(operand.inner()),
+                    transform: Transform::UnOp(op),
+                }.tag(span)
             )
-            .parse(i)?;
+        }
 
-            let span = end.span()..kwargs.span();
-            (i, Some(kwargs.retag(span)))
+        Some(operand)
+    }
+
+    /// Left-associative binary-operator parser: `a op b op c` folds to `(a op b) op c`.
+    fn try_lbinop(
+        &mut self,
+        try_sub: impl Fn(&mut Parser<'a>) -> Option<Paren<Expr>>,
+        try_op: impl Fn(&mut Parser<'a>) -> Option<Tagged<BinOp>>,
+    ) -> Option<Paren<Expr>> {
+        let mut lhs = try_sub(self)?;
+
+        loop {
+            let Some(op) = try_op(self) else { break };
+            let rhs = try_sub(self).unwrap_or_else(|| {
+                self.error(self.loc(), Reason::from(Syntax::from(SyntaxElement::Operand)));
+                self.missing_paren()
+            });
+
+            let span = Span::from(lhs.outer()..rhs.outer());
+            lhs = Paren::Naked(
+                Expr::Transformed {
+                    operand: Box::new(lhs.inner()),
+                    transform: Transform::BinOp(op, Box::new(rhs.inner())),
+                }.tag(span)
+            )
+        }
+
+        Some(lhs)
+    }
+
+    fn try_product(&mut self) -> Option<Paren<Expr>> {
+        self.try_lbinop(
+            |parser| parser.try_prefixed(),
+            |parser| {
+                parser.try_token(TokenType::Asterisk, Ctx::Default)
+                .map(|t| BinOp::Eager(EagerOp::Multiply).tag(t.span()))
+                .or_else(|| {
+                    parser.try_token(TokenType::DoubleSlash, Ctx::Default)
+                    .map(|t| BinOp::Eager(EagerOp::IntegerDivide).tag(t.span()))
+                })
+                .or_else(|| {
+                    parser.try_token(TokenType::Slash, Ctx::Default)
+                    .map(|t| BinOp::Eager(EagerOp::Divide).tag(t.span()))
+                })
+            }
+        )
+    }
+
+    fn try_sum(&mut self) -> Option<Paren<Expr>> {
+        self.try_lbinop(
+            |parser| parser.try_product(),
+            |parser| {
+                parser.try_token(TokenType::Plus, Ctx::Default)
+                .map(|t| BinOp::Eager(EagerOp::Add).tag(t.span()))
+                .or_else(|| {
+                    parser.try_token(TokenType::Minus, Ctx::Default)
+                    .map(|t| BinOp::Eager(EagerOp::Subtract).tag(t.span()))
+                })
+            }
+        )
+    }
+
+    fn try_inequality(&mut self) -> Option<Paren<Expr>> {
+        self.try_lbinop(
+            |parser| parser.try_sum(),
+            |parser| {
+                parser.try_token(TokenType::LessEq, Ctx::Default)
+                .map(|t| BinOp::Eager(EagerOp::LessEqual).tag(t.span()))
+                .or_else(|| {
+                    parser.try_token(TokenType::Less, Ctx::Default)
+                    .map(|t| BinOp::Eager(EagerOp::Less).tag(t.span()))
+                })
+                .or_else(|| {
+                    parser.try_token(TokenType::GreaterEq, Ctx::Default)
+                    .map(|t| BinOp::Eager(EagerOp::GreaterEqual).tag(t.span()))
+                })
+                .or_else(|| {
+                    parser.try_token(TokenType::Greater, Ctx::Default)
+                    .map(|t| BinOp::Eager(EagerOp::Greater).tag(t.span()))
+                })
+            }
+        )
+    }
+
+    fn try_equality(&mut self) -> Option<Paren<Expr>> {
+        self.try_lbinop(
+            |parser| parser.try_inequality(),
+            |parser| {
+                parser.try_token(TokenType::DoubleEq, Ctx::Default)
+                .map(|t| BinOp::Eager(EagerOp::Equal).tag(t.span()))
+                .or_else(|| {
+                    parser.try_token(TokenType::ExclamEq, Ctx::Default)
+                    .map(|t| BinOp::Eager(EagerOp::NotEqual).tag(t.span()))
+                })
+            }
+        )
+    }
+
+    fn try_contains(&mut self) -> Option<Paren<Expr>> {
+        self.try_lbinop(
+            |parser| parser.try_equality(),
+            |parser| {
+                parser.try_keyword("has")
+                .map(|t| BinOp::Eager(EagerOp::Contains).tag(t.span()))
+            }
+        )
+    }
+
+    fn try_conjunction(&mut self) -> Option<Paren<Expr>> {
+        self.try_lbinop(
+            |parser| parser.try_contains(),
+            |parser| {
+                parser.try_keyword("and")
+                .map(|t| BinOp::Logic(LogicOp::And).tag(t.span()))
+            }
+        )
+    }
+
+    fn try_disjunction(&mut self) -> Option<Paren<Expr>> {
+        self.try_lbinop(
+            |parser| parser.try_conjunction(),
+            |parser| {
+                parser.try_keyword("or")
+                .map(|t| BinOp::Logic(LogicOp::Or).tag(t.span()))
+            }
+        )
+    }
+
+    // ── Composite expressions ─────────────────────────────────────────────────
+
+    fn try_let(&mut self) -> Option<Paren<Expr>> {
+        let start = self.try_keyword("let")?.span();
+
+        let mut bindings: Vec<(Tagged<Binding>, Tagged<Expr>)> = vec![];
+        loop {
+            let binding = self.require_binding();
+            self.require_token(TokenType::Eq, Ctx::Default);
+            let expr = self.require_expr();
+            bindings.push((binding, expr.inner()));
+            if self.try_keyword("let").is_none() { break }
+        }
+
+        self.require_keyword("in", SyntaxElement::In);
+        let body = self.require_expr();
+
+        let span = Span::from(start..body.outer());
+        return Some(Paren::Naked(
+            Expr::Let { bindings, expression: Box::new(body.inner()) }.tag(span)
+        ));
+    }
+
+    fn try_branch(&mut self) -> Option<Paren<Expr>> {
+        let start = self.try_keyword("if")?.span();
+        let cond = self.require_expr();
+        self.require_keyword("then", SyntaxElement::Then);
+        let true_br = self.require_expr();
+        self.require_keyword("else", SyntaxElement::Else);
+        let false_br = self.require_expr();
+
+        let span = Span::from(start..false_br.outer());
+        return Some(Paren::Naked(
+            Expr::Branch {
+                condition: Box::new(cond.inner()),
+                true_branch: Box::new(true_br.inner()),
+                false_branch: Box::new(false_br.inner()),
+            }.tag(span)
+        ))
+    }
+
+    fn try_function(&mut self) -> Option<Paren<Expr>> {
+        self.try_fn_new_style()
+            .or_else(|| self.try_fn_old_kw_style())
+            .or_else(|| self.try_fn_old_pos_style())
+    }
+
+    // ── Binding helpers used by function parsers ───────────────────────────────
+
+    fn parse_list_binding_terminated(
+        &mut self,
+        try_close: impl Fn(&mut Parser<'a>) -> Option<Tagged<Token<'a>>>,
+        close_tok_type: TokenType,
+        start_span: Span,
+    ) -> (Tagged<ListBinding>, Tagged<Option<Token<'a>>>) {
+        let (elements, close) = self.seplist_inner(
+            |parser| parser.try_list_binding_element().map(|x| (x, false)),
+            |parser| parser.try_token(TokenType::Comma, Ctx::Default),
+            try_close,
+            Reason::from(Syntax::from((SyntaxElement::PosParam, TokenType::CloseParen))),
+            Reason::from(Syntax::from((TokenType::Comma, TokenType::CloseParen))),
+            close_tok_type,
+        );
+
+        return (ListBinding::new(elements).tag(Span::from(start_span..close.span())), close)
+    }
+
+    fn parse_map_binding_terminated(
+        &mut self,
+        try_close: impl Fn(&mut Parser<'a>) -> Option<Tagged<Token<'a>>>,
+        close_tok_type: TokenType,
+        start_span: Span,
+    ) -> (Tagged<MapBinding>, Tagged<Option<Token<'a>>>) {
+        let (elements, close) = self.seplist_inner(
+            |parser| parser.try_map_binding_element().map(|x| (x, false)),
+            |parser| parser.try_token(TokenType::Comma, Ctx::Default),
+            try_close,
+            Reason::from(Syntax::from((SyntaxElement::KeywordParam, TokenType::CloseParen))),
+            Reason::from(Syntax::from((TokenType::Comma, TokenType::CloseParen))),
+            close_tok_type,
+        );
+
+        return (MapBinding::new(elements).tag(Span::from(start_span..close.span())), close)
+    }
+
+    // ── Function syntax variants ───────────────────────────────────────────────
+    //
+    // Gold supports three function syntaxes:
+    //   new-style:      fn (pos1, pos2; kw1, kw2) body    (parentheses; `;` separates pos/kw)
+    //                   fn {kw1, kw2} body                (braces = keyword-only)
+    //   old-style kw:   {| kw1, kw2 |} body
+    //   old-style pos:  |pos1, pos2| body
+    //                   |pos1; kw1| body                  (`;` separates pos/kw)
+    //
+    // All three are still accepted by the parser for backwards compatibility.
+
+    fn try_fn_new_style(&mut self) -> Option<Paren<Expr>> {
+        let start = self.try_keyword("fn")?.span();
+
+        let (pos, kw, expr) = if let Some(open) = self.try_token(TokenType::OpenParen, Ctx::Default) {
+            // The positional-param list is closed by either `)` (no keywords) or `;` (keywords follow).
+            let (pos, term) = self.parse_list_binding_terminated(
+                |parser| {
+                    parser.try_token(TokenType::CloseParen, Ctx::Default)
+                    .or_else(|| parser.try_token(TokenType::SemiColon, Ctx::Default))
+                },
+                TokenType::CloseParen,
+                open.span(),
+            );
+
+            let (kw, missing_close) = if term.is_some_and(|t| t.kind == TokenType::SemiColon) {
+                let (kw, close) = self.parse_map_binding_terminated(
+                    |parser| parser.try_token(TokenType::CloseParen, Ctx::Default),
+                    TokenType::CloseParen,
+                    term.span(),
+                );
+
+                (Some(kw), close.is_none())
+            } else {
+                (None, term.is_none())
+            };
+
+            let expr = if missing_close { self.missing_paren() } else { self.require_expr() };
+            (pos, kw, expr)
+        } else if let Some(open) = self.try_token(TokenType::OpenBrace, Ctx::Default) {
+            let (kw, close) = self.parse_map_binding_terminated(
+                |parser| parser.try_token(TokenType::CloseBrace, Ctx::Default),
+                TokenType::CloseBrace,
+                open.span(),
+            );
+
+            let expr = if close.is_none() { self.missing_paren() } else { self.require_expr() };
+
+            (
+                ListBinding::new(vec![]).tag(open.span()),
+                Some(kw),
+                expr,
+            )
         } else {
-            (i, None)
+            self.error(self.loc(), Reason::from(Syntax::from((TokenType::OpenParen, TokenType::OpenBrace))));
+            (
+                ListBinding::new(vec![]).tag(start),
+                None,
+                self.missing_paren(),
+            )
         };
 
-        let (i, expr) = fail(expression, SyntaxElement::Expression).parse(i)?;
+        let span = Span::from(start..expr.outer());
+        Some(Paren::Naked(
+            Expr::Function {
+                positional: pos,
+                keywords: kw,
+                expression: Box::new(expr.inner()),
+            }.tag(span)
+        ))
+    }
 
-        let span = opener.span()..args.span();
-        (i, args.retag(span), kwargs, expr)
-    } else {
-        // Parse a keyword function
-        let (i, kwargs) = map_binding(
-            success,
-            |i| close_brace(i),
-            (TokenType::CloseBrace, SyntaxElement::KeywordParam),
-            (TokenType::CloseBrace, TokenType::Comma),
-        )
-        .parse(i)?;
-        let (i, expr) = fail(expression, SyntaxElement::Expression).parse(i)?;
+    fn try_fn_old_kw_style(&mut self) -> Option<Paren<Expr>> {
+        let start = self.try_token(TokenType::OpenBracePipe, Ctx::Default)?.span();
+        let (kw, close) = self.parse_map_binding_terminated(
+            |parser| parser.try_token(TokenType::CloseBracePipe, Ctx::Default),
+            TokenType::CloseBracePipe,
+            start,
+        );
 
-        let span = opener.span()..kwargs.span();
-        let kwargs = kwargs.retag(span);
-        (
-            i,
-            ListBinding::new(vec![]).tag(kwargs.span().with_length(1)),
-            Some(kwargs),
-            expr,
-        )
-    };
+        let expr = if close.is_none() { self.missing_paren() } else { self.require_expr() };
+        let span = Span::from(start..expr.outer());
+        Some(Paren::Naked(
+            Expr::Function {
+                positional: ListBinding::new(vec![]).tag(start.with_length(1)),
+                keywords: Some(kw),
+                expression: Box::new(expr.inner()),
+            }.tag(span)
+        ))
+    }
 
-    let span = init.span()..expr.outer();
-    let result = PExpr::Naked(
-        Expr::Function {
-            positional: args,
-            keywords: kwargs,
-            expression: Box::new(expr.inner()),
-        }
-        .tag(span),
-    );
-
-    Ok((i, result))
-}
-
-/// Matches a standard function definition.
-///
-/// This is the 'fn' keyword followed by a list binding and an optional map
-/// binding, each with slightly different delimiters from conventional
-/// let-binding syntax. It is concluded by a double arrow (=>) and an
-/// expression.
-fn normal_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    let (i, (args, end)) = list_binding(
-        |i| pipe(i),
-        |i| alt((pipe, semicolon))(i),
-        (
+    fn try_fn_old_pos_style(&mut self) -> Option<Paren<Expr>> {
+        let start = self.try_token(TokenType::Pipe, Ctx::Default)?.span();
+        let (pos, close) = self.parse_list_binding_terminated(
+            |parser| {
+                parser.try_token(TokenType::Pipe, Ctx::Default)
+                    .or_else(|| parser.try_token(TokenType::SemiColon, Ctx::Default))
+            },
             TokenType::Pipe,
-            TokenType::SemiColon,
-            SyntaxElement::PosParam,
-        ),
-        (TokenType::Pipe, TokenType::SemiColon, TokenType::Comma),
-    )
-    .parse(input)?;
+            start,
+        );
 
-    let (j, kwargs) = if *end.as_ref() == ";" {
-        let (j, kwargs) = map_binding(
-            success,
-            // |i: In<'a>| { let loc = i.position(); Ok((i, "".tag(loc.with_length(0)))) },
-            |i| pipe(i),
-            (TokenType::Pipe, SyntaxElement::KeywordParam),
-            (TokenType::Pipe, TokenType::Comma),
-        )(i)?;
-        (j, Some(kwargs))
-    } else {
-        (i, None)
-    };
+        let (kw, close) = if close.is_some_and(|t| t.kind == TokenType::SemiColon) {
+            let (kw, term) = self.parse_map_binding_terminated(
+                |parser| parser.try_token(TokenType::Pipe, Ctx::Default),
+                TokenType::Pipe,
+                close.span(),
+            );
 
-    let (l, expr) = fail(expression, SyntaxElement::Expression).parse(j)?;
-    let span = args.span()..expr.outer();
+            (Some(kw), term)
+        } else {
+            (None, close)
+        };
 
-    let result = PExpr::Naked(
-        Expr::Function {
-            positional: args,
-            keywords: kwargs,
-            expression: Box::new(expr.inner()),
+        let expr = if close.is_none() { self.missing_paren() } else { self.require_expr() };
+        let span = Span::from(start..expr.outer());
+        Some(Paren::Naked(
+            Expr::Function {
+                positional: pos,
+                keywords: kw,
+                expression: Box::new(expr.inner()),
+            }.tag(span)
+        ))
+    }
+
+    // ── Top-level expression ───────────────────────────────────────────────────
+
+    fn try_expr(&mut self) -> Option<Paren<Expr>> {
+        self.try_let()
+            .or_else(|| self.try_branch())
+            .or_else(|| self.try_function())
+            .or_else(|| self.try_disjunction())
+    }
+
+    fn require_expr(&mut self) -> Paren<Expr> {
+        self.require(
+            |parser| parser.try_expr(),
+            |parser| parser.missing_paren(),
+            || Reason::from(Syntax::from(SyntaxElement::Expression)),
+        )
+    }
+
+    // ── Bindings ──────────────────────────────────────────────────────────────
+
+    fn try_list_binding_element(&mut self) -> Option<Tagged<ListBindingElement>> {
+        if let Some(ellipsis) = self.try_token(TokenType::Ellipsis, Ctx::Default) {
+            return Some(
+                match self.try_identifier() {
+                    Some(name) => ListBindingElement::SlurpTo(name.map(Key::new)).tag(ellipsis.span()..name.span()),
+                    None => ListBindingElement::Slurp.tag(ellipsis.span()),
+                }
+            );
         }
-        .tag(span),
-    );
 
-    // eprintln!("gold: |...| syntax is deprecated, use fn (...) instead");
-    Ok((l, result))
-}
-
-/// Matches a keyword-only function.
-///
-/// This is a conventional map binding followed by a double arrow (=>) and an
-/// expression.
-fn keyword_function_old_style<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    map(
-        tuple((
-            map_binding(
-                |i| open_brace_pipe(i),
-                |i| close_brace_pipe(i),
-                (TokenType::CloseBracePipe, SyntaxElement::KeywordParam),
-                (TokenType::CloseBracePipe, TokenType::Comma),
-            ),
-            fail(expression, SyntaxElement::Expression),
-        )),
-        |(kwargs, expr)| {
-            let span = kwargs.span()..expr.outer();
-            // eprintln!("gold: {{|...|}} syntax is deprecated, use fn {{...}} instead");
-            PExpr::Naked(
-                Expr::Function {
-                    positional: ListBinding::new(vec![]).tag(kwargs.span().with_length(1)),
-                    keywords: Some(kwargs),
-                    expression: Box::new(expr.inner()),
-                }
-                .tag(span),
+        let binding = self.try_binding()?;
+        if self.try_token(TokenType::Eq, Ctx::Default).is_some() {
+            let default = self.require_expr();
+            let span = Span::from(binding.span()..default.outer());
+            Some(
+                ListBindingElement::Binding {
+                    binding,
+                    default: Some(default.inner()),
+                }.tag(span)
             )
-        },
-    )(input)
-}
+        } else {
+            let span = binding.span();
+            Some(binding.map(|binding| ListBindingElement::Binding { binding: binding.tag(span), default: None}))
+        }
+    }
 
-/// Matches a function.
-///
-/// The heavy lifting of this function is done by [`function_new_style`],
-/// [`normal_function_old_style`] or [`keyword_function_old_style`].
-fn function<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    alt((
-        function_new_style,
-        keyword_function_old_style,
-        normal_function_old_style,
-    ))(input)
-}
-
-/// Matches a let-binding block.
-///
-/// This is an arbitrary (non-empty) sequence of let-bindings followed by the
-/// keyword 'in' and then an expression.
-///
-/// A let-binding consists of the keyword 'let' followed by a binding, an equals
-/// symbol and an expression.
-fn let_block<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    map(
-        tuple((
-            // position,
-            many1(tuple((
-                keyword("let"),
-                fail(binding, SyntaxElement::Binding),
-                preceded(
-                    fail(eq, TokenType::Eq),
-                    fail(expression, SyntaxElement::Expression),
-                ),
-            ))),
-            preceded(
-                fail(keyword("in"), SyntaxElement::In),
-                fail(expression, SyntaxElement::Expression),
-            ),
-        )),
-        |(bindings, expr)| {
-            let span = bindings.first().unwrap().0.span()..expr.outer();
-            PExpr::Naked(
-                Expr::Let {
-                    bindings: bindings
-                        .into_iter()
-                        .map(|(_, x, y)| (x, y.inner()))
-                        .collect(),
-                    expression: Box::new(expr.inner()),
+    fn try_map_binding_element(&mut self) -> Option<Tagged<MapBindingElement>> {
+        if let Some(ellipsis) = self.try_token(TokenType::Ellipsis, Ctx::Default) {
+            // Map slurp always requires a name to bind the rest-object to, unlike list slurp
+            // which may appear as a bare `...` to discard remaining elements.
+            return Some(
+                match self.try_identifier() {
+                    Some(name) => MapBindingElement::SlurpTo(name.map(Key::new)).tag(ellipsis.span()..name.span()),
+                    None => {
+                        self.error(self.loc(), Reason::from(Syntax::from(SyntaxElement::Identifier)));
+                        let name = Key::new("").tag(self.loc());
+                        MapBindingElement::SlurpTo(name).tag(ellipsis.span())
+                    }
                 }
-                .tag(span),
-            )
-        },
-    )(input)
+            );
+        }
+
+        let name = self.try_identifier()?.map(Key::new);
+        let sub_binding = self
+            .try_keyword("as")
+            .map(|_| self.require_binding())
+            .unwrap_or_else(|| Binding::Identifier(name).tag(name.span()));
+        let default = self
+            .try_token(TokenType::Eq, Ctx::Default)
+            .map(|_| self.require_expr());
+
+        let end = default.as_ref().map(|x| x.outer()).unwrap_or_else(|| sub_binding.span());
+
+        Some(
+            MapBindingElement::Binding {
+                key: name,
+                binding: sub_binding,
+                default: default.map(|x| x.inner()),
+            }.tag(name.span()..end)
+        )
+    }
+
+    fn try_binding(&mut self) -> Option<Tagged<Binding>> {
+        if let Some(name) = self.try_identifier() {
+            let span = name.span();
+            return Some(name.map(|x| Binding::Identifier(Key::new(x).tag(span))));
+        }
+
+        if let Some(tok) = self.try_token(TokenType::OpenBracket, Ctx::Default) {
+            let (binding, _) = self.parse_list_binding_terminated(
+                |parser| parser.try_token(TokenType::CloseBracket, Ctx::Default),
+                TokenType::CloseBracket,
+                tok.span(),
+            );
+            let span = binding.span();
+            return Some(Binding::List(binding).tag(span));
+        }
+
+        if let Some(tok) = self.try_token(TokenType::OpenBrace, Ctx::Default) {
+            let (binding, _) = self.parse_map_binding_terminated(
+                |parser| parser.try_token(TokenType::CloseBrace, Ctx::Default),
+                TokenType::CloseBrace,
+                tok.span(),
+            );
+            let span = binding.span();
+            return Some(Binding::Map(binding).tag(span));
+        }
+
+        None
+    }
+
+    fn require_binding(&mut self) -> Tagged<Binding> {
+        self.require(
+            |parser| parser.try_binding(),
+            |parser| parser.missing_binding(),
+            || Reason::from(Syntax::from(SyntaxElement::Binding)),
+        )
+    }
+
+    // ── Top-level statements ───────────────────────────────────────────────────
+
+    fn try_import(&mut self) -> Option<TopLevel> {
+        self.try_keyword("import")?;
+        let open = self.require_token(TokenType::DoubleQuote, Ctx::Default).span();
+        let path = self.try_raw_string_content().unwrap_or_else(|| "".into());
+        let close = self.require_token(TokenType::DoubleQuote, Ctx::Default).span();
+        let path = path.tag(Span::from(open..close));
+
+        self.require_keyword("as", SyntaxElement::As);
+        let binding = self.require_binding();
+
+        Some(TopLevel::Import(path, binding))
+    }
+
+    fn parse(&mut self) -> File {
+        let mut statements: Vec<TopLevel> = vec![];
+        while let Some(stmt) = self.try_import() {
+            statements.push(stmt);
+        }
+
+        let expr = self.require_expr();
+
+        if !self.lexer.at_eof() {
+            let pos = self.lexer.skip_whitespace().position();
+            self.error(pos.with_length(0), Reason::from(Syntax::from(SyntaxElement::EndOfInput)));
+        }
+
+        File { statements, expression: expr.inner() }
+    }
 }
 
-/// Matches a branching expression (tertiary operator).
+/// The result of parsing a Gold source file.
 ///
-/// This consists of the keywords 'if', 'then' and 'else', each followed by an
-/// expression.
-fn branch<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    map(
-        tuple((
-            keyword("if"),
-            fail(expression, SyntaxElement::Expression),
-            preceded(
-                fail(keyword("then"), SyntaxElement::Then),
-                fail(expression, SyntaxElement::Expression),
-            ),
-            preceded(
-                fail(keyword("else"), SyntaxElement::Else),
-                fail(expression, SyntaxElement::Expression),
-            ),
-        )),
-        |(start, condition, true_branch, false_branch)| {
-            let span = start.span()..false_branch.outer();
-            PExpr::Naked(
-                Expr::Branch {
-                    condition: Box::new(condition.inner()),
-                    true_branch: Box::new(true_branch.inner()),
-                    false_branch: Box::new(false_branch.inner()),
-                }
-                .tag(span),
-            )
-        },
-    )(input)
+/// Always contains a structurally complete AST (`tree`), possibly with
+/// `Missing` sentinels at positions where sub-expressions were absent.
+/// Errors are accumulated in `errors`; an empty list means the parse succeeded.
+pub struct ParseResult {
+    /// The parsed AST. Always structurally complete; positions where sub-expressions were
+    /// absent are filled with `Missing` sentinel nodes.
+    pub tree: File,
+    /// All parse errors encountered. Empty on a clean parse.
+    pub errors: Vec<Error>,
 }
 
-/// Matches a composite expression.
-///
-/// This is a catch-all terms for special expressions that do not participate in
-/// the operator sequence: let blocks, branches, and functions.
-fn composite<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    alt((let_block, branch, function))(input)
+impl ParseResult {
+    /// Returns `true` when the parse completed without any errors.
+    pub fn ok(&self) -> bool {
+        self.errors.is_empty()
+    }
 }
 
-/// Matches any expression.
-fn expression<'a>(input: In<'a>) -> Out<'a, PExpr> {
-    alt((composite, disjunction))(input)
-}
-
-/// Matches an import statement.
-///
-/// An import statement consists of the keyword 'import' followed by a raw
-/// string (no interpolated segments), the keyword 'as' and a binding pattern.
-fn import<'a>(input: In<'a>) -> Out<'a, TopLevel> {
-    map(
-        tuple((
-            preceded(
-                keyword("import"),
-                fail(
-                    tuple((
-                        double_quote,
-                        raw_string,
-                        fail(double_quote, TokenType::DoubleQuote),
-                    )),
-                    SyntaxElement::ImportPath,
-                ),
-            ),
-            preceded(
-                fail(keyword("as"), SyntaxElement::As),
-                fail(binding, SyntaxElement::Binding),
-            ),
-        )),
-        |((a, path, b), binding)| TopLevel::Import(path.tag(a.span()..b.span()), binding),
-    )(input)
-}
-
-/// Matches a file.
-///
-/// A file consists of an arbitrary number of top-level statements followed by a
-/// single expression.
-fn file<'a>(input: In<'a>) -> Out<'a, File> {
-    map(
-        tuple((many0(import), fail(expression, SyntaxElement::Expression))),
-        |(statements, expression)| File {
-            statements,
-            expression: expression.inner(),
-        },
-    )(input)
-}
-
-/// Parse the input and return a File object.
-pub fn parse(input: &str) -> Res<File> {
+/// Parse a Gold source string into a [`ParseResult`].
+pub fn parse(input: &str) -> ParseResult {
     let cache = Lexer::cache();
     let lexer = Lexer::new(input).with_cache(&cache);
-    file(lexer).map_or_else(
-        |err| match err {
-            NomError::Incomplete(_) => Err(Error::default()),
-            NomError::Error(e) | NomError::Failure(e) => Err(e.to_error()),
-        },
-        |(_, node)| Ok(node),
-    )
+    let mut parser = Parser { lexer, errors: vec![] };
+    let tree = parser.parse();
+    ParseResult { tree, errors: parser.errors }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::parse as parse_file;
-    use crate::ast::high::*;
-    use crate::error::{Action, Span, Syntax, SyntaxElement as S, Taggable, Tagged};
-    use crate::formatting::{
-        AlignSpec, FormatSpec, FormatType, GroupingSpec, SignSpec, StringAlignSpec,
-    };
-    use crate::lexing::TokenType as T;
-    use crate::types::{Key, Res};
-    use crate::{Error, Object};
-
-    trait ToExpr {
-        fn expr<T>(self, loc: T) -> Tagged<Expr>
-        where
-            Span: From<T>;
-    }
-
-    impl<U> ToExpr for U
-    where
-        Object: From<U>,
-    {
-        fn expr<T>(self, loc: T) -> Tagged<Expr>
-        where
-            Span: From<T>,
-        {
-            Expr::Literal(Object::from(self)).tag(loc)
-        }
-    }
-
-    trait ToKey {
-        fn key<T>(self, loc: T) -> Tagged<Key>
-        where
-            Span: From<T>;
-    }
-
-    impl<U> ToKey for U
-    where
-        U: AsRef<str>,
-    {
-        fn key<T>(self, loc: T) -> Tagged<Key>
-        where
-            Span: From<T>,
-        {
-            Key::new(self).tag(loc)
-        }
-    }
-
-    trait ToIdentifier {
-        fn id<T>(self, loc: T) -> Tagged<Expr>
-        where
-            Span: From<T>;
-    }
-
-    impl<U> ToIdentifier for U
-    where
-        U: ToKey,
-    {
-        fn id<T>(self, loc: T) -> Tagged<Expr>
-        where
-            Span: From<T>,
-        {
-            self.key(loc).wrap(Expr::Identifier)
-        }
-    }
-
-    trait ToBindingIdentifier {
-        fn bid<T>(self, loc: T) -> Tagged<Binding>
-        where
-            Span: From<T>,
-            T: Copy;
-    }
-
-    impl<U> ToBindingIdentifier for U
-    where
-        U: ToKey,
-    {
-        fn bid<T>(self, loc: T) -> Tagged<Binding>
-        where
-            Span: From<T>,
-            T: Copy,
-        {
-            Binding::Identifier(self.key(loc)).tag(loc)
-        }
-    }
-
-    trait ToListElement {
-        fn lel<T>(self, loc: T) -> Tagged<ListElement>
-        where
-            Span: From<T>;
-    }
-
-    impl<U> ToListElement for U
-    where
-        Object: From<U>,
-    {
-        fn lel<T>(self, loc: T) -> Tagged<ListElement>
-        where
-            Span: From<T>,
-        {
-            Expr::Literal(Object::from(self))
-                .tag(loc)
-                .wrap(ListElement::Singleton)
-        }
-    }
-
-    trait ToMapElement {
-        fn mel(self) -> Tagged<MapElement>;
-    }
-
-    impl ToMapElement for (Tagged<Expr>, Tagged<Expr>) {
-        fn mel(self) -> Tagged<MapElement> {
-            let loc = Span::from(self.0.span()..self.1.span());
-            MapElement::Singleton {
-                key: self.0,
-                value: self.1,
-            }
-            .tag(loc)
-        }
-    }
-
-    trait ToBox<T>
-    where
-        T: Sized,
-    {
-        /// Convert self to a boxed value.
-        fn to_box(self) -> Box<T>;
-    }
-
-    impl<T> ToBox<T> for T {
-        fn to_box(self) -> Box<T> {
-            Box::new(self)
-        }
-    }
-
-    trait ToLiteralKey {
-        fn lit<T>(self, loc: T) -> Tagged<Expr>
-        where
-            Span: From<T>;
-    }
-
-    impl<U> ToLiteralKey for U
-    where
-        U: ToKey,
-    {
-        fn lit<T>(self, loc: T) -> Tagged<Expr>
-        where
-            Span: From<T>,
-        {
-            self.key(loc).map(Object::from).map(Expr::Literal)
-        }
-    }
-
-    fn expr(input: &str) -> Res<Tagged<Expr>> {
-        parse_file(input)
-            .map(|x| x.expression)
-            .map_err(Error::unrender)
-    }
-
-    #[test]
-    fn string_format() {
-        assert_eq!(
-            FormatSpec::default(),
-            FormatSpec {
-                fill: ' ',
-                align: None,
-                sign: None,
-                alternate: false,
-                width: None,
-                grouping: None,
-                precision: None,
-                fmt_type: None,
-            }
-        );
-    }
-
-    macro_rules! err {
-        ($code:expr, $offset:expr, $elt:expr $(,$elts:expr)*) => {
-            assert_eq!(
-                expr($code),
-                Err(Error::new(Syntax::from(($elt $(,$elts)*))).with_locations_vec(vec![(Span::from($offset..$offset), Action::Parse)])),
-            )
-        };
-    }
-
-    // macro_rules! errl {
-    //     ($code:expr, $offset:expr, $elt:expr) => {
-    //         assert_eq!(
-    //             parse($code).map(|x| x.lower()),
-    //             Err(Error::new(Reason::Syntax($elt))
-    //                 .with_locations_vec(vec![(Span::from($offset), Action::Parse)]))
-    //         )
-    //     };
-    // }
-
-    #[test]
-    fn errors() {
-        err!("let", 3, S::Binding);
-        err!("let a", 5, T::Eq);
-        err!("let a =", 7, S::Expression);
-        err!("let a = 1", 9, S::In);
-        err!("let a = 1 in", 12, S::Expression);
-
-        err!("if", 2, S::Expression);
-        err!("if true", 7, S::Then);
-        err!("if true then", 12, S::Expression);
-        err!("if true then 1", 14, S::Else);
-        err!("if true then 1 else", 19, S::Expression);
-
-        err!("[", 1, T::CloseBracket, S::ListElement);
-        err!("[1", 2, T::CloseBracket, T::Comma);
-        err!("[1,", 3, T::CloseBracket, S::ListElement);
-        err!("[...", 4, S::Expression);
-        err!("[when", 5, S::Expression);
-        err!("[when x", 7, T::Colon);
-        err!("[when x:", 8, S::ListElement);
-        err!("[when x: 1", 10, T::CloseBracket, T::Comma);
-        err!("[for", 4, S::Binding);
-        err!("[for x", 6, S::In);
-        err!("[for x in", 9, S::Expression);
-        err!("[for x in y", 11, T::Colon);
-        err!("[for x in y:", 12, S::ListElement);
-        err!("[for x in y: z", 14, T::CloseBracket, T::Comma);
-
-        err!("{", 1, T::CloseBrace, S::MapElement);
-        err!("{x", 2, T::Colon);
-        err!("{x:", 3, S::Expression);
-        err!("{x: y", 5, T::CloseBrace, T::Comma);
-        err!("{x: y,", 6, T::CloseBrace, S::MapElement);
-        err!("{$", 2, S::Expression);
-        err!("{$x", 3, T::Colon);
-        err!("{$x:", 4, S::Expression);
-        err!("{$x: y", 6, T::CloseBrace, T::Comma);
-        err!("{$x: y,", 7, T::CloseBrace, S::MapElement);
-        err!("{...", 4, S::Expression);
-        err!("{when", 5, S::Expression);
-        err!("{when x", 7, T::Colon);
-        err!("{when x:", 8, S::MapElement);
-        err!("{when x: y", 10, T::Colon);
-        err!("{when x: y:", 11, S::Expression);
-        err!("{when x: y: 1", 13, T::CloseBrace, T::Comma);
-        err!("{for", 4, S::Binding);
-        err!("{for x", 6, S::In);
-        err!("{for x in", 9, S::Expression);
-        err!("{for x in y", 11, T::Colon);
-        err!("{for x in y:", 12, S::MapElement);
-        err!("{for x in y: z", 14, T::Colon);
-        err!("{for x in y: z:", 15, S::Expression);
-        err!("{for x in y: z: v", 17, T::CloseBrace, T::Comma);
-
-        err!("let", 3, S::Binding);
-        err!("let [", 5, T::CloseBracket, S::ListBindingElement);
-        err!("let [x", 6, T::CloseBracket, T::Comma);
-        err!("let [x,", 7, T::CloseBracket, S::ListBindingElement);
-        err!("let [x =", 8, S::Expression);
-        err!("let [x = 1", 10, T::CloseBracket, T::Comma);
-        err!("let [...", 8, T::CloseBracket, T::Comma);
-        err!("let {", 5, T::CloseBrace, S::MapBindingElement);
-
-        err!("let {y", 6, T::CloseBrace, T::Comma);
-        err!("let {y,", 7, T::CloseBrace, S::MapBindingElement);
-        err!("let {y =", 8, S::Expression);
-        err!("let {y = 1", 10, T::CloseBrace, T::Comma);
-        err!("let {y as", 9, S::Binding);
-        err!("let {y as x =", 13, S::Expression);
-        err!("let {...", 8, S::Identifier);
-        err!("let {...x", 9, T::CloseBrace, T::Comma);
-
-        err!("(", 1, S::Expression);
-        err!("(1", 2, T::CloseParen);
-
-        err!("fn (", 4, T::CloseParen, T::SemiColon, S::PosParam);
-        err!("fn (x", 5, T::CloseParen, T::SemiColon, T::Comma);
-        err!("fn (x,", 6, T::CloseParen, T::SemiColon, S::PosParam);
-        err!("fn (;", 5, T::CloseParen, S::KeywordParam);
-        err!("fn (;y", 6, T::CloseParen, T::Comma);
-        err!("fn (;y,", 7, T::CloseParen, S::KeywordParam);
-        err!("fn ()", 5, S::Expression);
-        err!("fn {", 4, T::CloseBrace, S::KeywordParam);
-        err!("fn {x", 5, T::CloseBrace, T::Comma);
-        err!("fn {x,", 6, T::CloseBrace, S::KeywordParam);
-        err!("fn {}", 5, S::Expression);
-
-        err!("\"alpha", 6, T::DoubleQuote);
-        err!("\"alpha$", 7, T::OpenBrace);
-        err!("\"alpha${", 8, S::Expression);
-        err!("\"alpha${1", 9, T::CloseBrace);
-        err!("\"alpha${1}", 10, T::DoubleQuote);
-
-        err!("a.", 2, S::Identifier);
-        err!("a[", 2, S::Expression);
-        err!("a[1", 3, T::CloseBracket);
-        err!("a(", 2, T::CloseParen, S::ArgElement);
-        err!("a(1", 3, T::CloseParen, T::Comma);
-        err!("a(1,", 4, T::CloseParen, S::ArgElement);
-        err!("a(x:", 4, S::Expression);
-        err!("a(...", 5, S::Expression);
-
-        err!("-", 1, S::Operand);
-        err!("1+", 2, S::Operand);
-
-        err!("import", 6, S::ImportPath);
-        err!("import \"path\"", 13, S::As);
-        err!("import \"path\" as", 16, S::Binding);
-        err!("import \"path\" as y", 18, S::Expression);
-
-        // errl!("let [x, ..., y, ...] = z in 2", 16..19, Syntax::MultiSlurp);
-        // errl!(
-        //     "let {x, ...a, y, ...b} = z in 2",
-        //     17..21,
-        //     Syntax::MultiSlurp
-        // );
-    }
-}
+/// List of keywords that must be avoided by the [`identifier`] parser.
+static KEYWORDS: [&'static str; 17] = [
+    "for", "when", "if", "then", "else", "let", "in", "has", "true", "false", "null", "and", "or",
+    "not", "as", "import", "fn",
+];

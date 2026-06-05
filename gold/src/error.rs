@@ -141,7 +141,7 @@ impl Span {
     }
 
     /// The zero-indexed column number of the start of the span.
-    fn column(&self) -> u32 {
+    pub fn column(&self) -> u32 {
         self.start.column()
     }
 
@@ -229,7 +229,7 @@ pub struct Tagged<T> {
 
 impl<T> Tagged<T> {
     /// Construct a new Tagged wrapper.
-    fn new(location: Span, contents: T) -> Tagged<T> {
+    pub fn new(location: Span, contents: T) -> Tagged<T> {
         Tagged::<T> {
             span: location,
             contents,
@@ -381,16 +381,6 @@ impl SyntaxError {
     /// Create a new syntax error.
     pub fn new(position: Position, reason: Option<Syntax>) -> SyntaxError {
         SyntaxError { position, reason }
-    }
-
-    /// Convert to the general error type.
-    pub fn to_error(self) -> Error {
-        let SyntaxError { position, reason } = self;
-        Error {
-            locations: Some(vec![(position.with_length(0), Action::Parse)]),
-            reason: reason.map(Reason::Syntax),
-            rendered: None,
-        }
     }
 }
 
@@ -586,6 +576,9 @@ pub enum Internal {
 
     /// Attempted to use the append operation on a non-list. (014)
     AppendNotList,
+
+    /// Attempted to lower a missing expression. (015)
+    LowerMissing,
 }
 
 impl Internal {
@@ -613,6 +606,7 @@ impl Internal {
             Self::InsertNotMap => 12,
             Self::NextNotIterator => 13,
             Self::AppendNotList => 14,
+            Self::LowerMissing => 15,
         }
     }
 }
