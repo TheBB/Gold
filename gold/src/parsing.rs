@@ -155,10 +155,6 @@ impl<'a> Parser<'a> {
         return Binding::Missing.tag(self.loc())
     }
 
-    fn at_eof(self) -> bool {
-        return self.lexer.at_eof()
-    }
-
     /// Runs `parser`; on failure, records an error and returns `fallback`.
     ///
     /// `fallback` typically inserts a `Missing` sentinel node so the caller can continue
@@ -564,7 +560,7 @@ impl<'a> Parser<'a> {
                         self.error(self.loc(), err_missing_item);
                         close = try_close(self);
                         if close.is_none() {
-                            close.insert(Token { kind: close_tok_type, text: "" }.tag(self.loc()));
+                            close = Some(Token { kind: close_tok_type, text: "" }.tag(self.loc()));
                         }
                         break;
                     }
@@ -895,7 +891,7 @@ impl<'a> Parser<'a> {
         Some(pexpr)
     }
 
-    fn require_arg_list(&mut self) -> (Vec<Tagged<ArgElement>>, Tagged<Option<Token>>) {
+    fn require_arg_list(&mut self) -> (Vec<Tagged<ArgElement>>, Tagged<Option<Token<'_>>>) {
         return self.seplist_inner(
             |parser| parser.try_function_arg().map(|x| (x, false)),
             |parser| parser.try_token(TokenType::Comma, Ctx::Default),

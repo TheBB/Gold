@@ -382,16 +382,6 @@ impl SyntaxError {
     pub fn new(position: Position, reason: Option<Syntax>) -> SyntaxError {
         SyntaxError { position, reason }
     }
-
-    /// Convert to the general error type.
-    pub fn to_error(self) -> Error {
-        let SyntaxError { position, reason } = self;
-        Error {
-            locations: Some(vec![(position.with_length(0), Action::Parse)]),
-            reason: reason.map(Reason::Syntax),
-            rendered: None,
-        }
-    }
 }
 
 /// A complete enumeration of all grammatical elements in the Gold language,

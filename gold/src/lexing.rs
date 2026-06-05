@@ -538,11 +538,6 @@ impl<'a> CachedLexer<'a> {
         }
     }
 
-    /// Return an error at the current position.
-    pub fn error(&self, reason: Syntax) -> SyntaxError {
-        self.lexer.error(reason)
-    }
-
     /// Return the next token in a given context.
     pub fn next(self, ctx: Ctx) -> CachedLexResult<'a> {
         self.lexer
@@ -561,6 +556,10 @@ impl<'a> CachedLexer<'a> {
     }
 
     /// Return the next token in the string context.
+    ///
+    /// Not called from the parser (which uses `next(Ctx::String)` via the generic
+    /// `try_token` helper), but retained as a named entry point for lexer tests.
+    #[allow(dead_code)]
     pub fn next_string(self) -> CachedLexResult<'a> {
         self.next(Ctx::String)
     }
