@@ -1,6 +1,5 @@
 /target
 /.vscode
-/contrib
 /site
 __pycache__
 /.claude

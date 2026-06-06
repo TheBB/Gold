@@ -1,0 +1,31 @@
+{
+  "grammars": [
+    {
+      "name": "gold",
+      "camelcase": "Gold",
+      "scope": "source.gold",
+      "path": ".",
+      "file-types": [
+        "gold"
+      ],
+      "highlights": "queries/highlights.scm",
+      "injections": "queries/injections.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Tree-sitter grammar for the Gold configuration language",
+    "links": {
+      "repository": "https://github.com/tree-sitter/tree-sitter-gold"
+    }
+  },
+  "bindings": {
+    "c": true,
+    "go": true,
+    "node": true,
+    "python": true,
+    "rust": true,
+    "swift": true
+  }
+}
