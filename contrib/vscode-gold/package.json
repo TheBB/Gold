@@ -1,9 +1,9 @@
 {
-  "name": "vscode-gold",
-  "displayName": "Gold",
+  "name": "goldlang",
+  "displayName": "GoldLang",
   "description": "Language support for the Gold configuration language",
-  "version": "0.1.0",
-  "publisher": "gold-lang",
+  "version": "0.2.0",
+  "publisher": "thebb",
   "engines": {
     "vscode": "^1.85.0"
   },

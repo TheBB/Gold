@@ -32,18 +32,19 @@
     },
 
     "keywords": {
+      "comment": "Use Gold-aware boundaries instead of \\b. \\b fires between word chars and '-', so 'not-bob' would incorrectly highlight 'not'. The lookarounds below reject a match when preceded/followed by any character that is valid in a Gold key (i.e. anything that is not whitespace or a structural punctuation char).",
       "patterns": [
         {
           "name": "keyword.control.gold",
-          "match": "\\b(let|in|if|then|else|for|when|import|as|fn)\\b"
+          "match": "(?<![^\\s'\"{}()\\[\\]:,])(let|in|if|then|else|for|when|import|as|fn)(?![^\\s'\"{}()\\[\\]:,])"
         },
         {
           "name": "keyword.operator.logical.gold",
-          "match": "\\b(and|or|not|has)\\b"
+          "match": "(?<![^\\s'\"{}()\\[\\]:,])(and|or|not|has)(?![^\\s'\"{}()\\[\\]:,])"
         },
         {
           "name": "constant.language.gold",
-          "match": "\\b(true|false|null)\\b"
+          "match": "(?<![^\\s'\"{}()\\[\\]:,])(true|false|null)(?![^\\s'\"{}()\\[\\]:,])"
         }
       ]
     },
