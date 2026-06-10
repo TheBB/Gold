@@ -1,0 +1,79 @@
+{
+  "name": "goldlang",
+  "displayName": "GoldLang",
+  "description": "Language support for the Gold configuration language",
+  "version": "0.2.0",
+  "publisher": "thebb",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Programming Languages"],
+  "keywords": ["gold", "configuration", "dhall"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheBB/gold"
+  },
+  "icon": "images/icon.png",
+  "activationEvents": [
+    "onLanguage:gold"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "gold",
+        "aliases": ["Gold", "gold"],
+        "extensions": [".gold"],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./images/icon.png",
+          "dark": "./images/icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "gold",
+        "scopeName": "source.gold",
+        "path": "./syntaxes/gold.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Gold",
+      "properties": {
+        "gold.treeSitter.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use tree-sitter for enhanced syntax analysis. Requires gold.wasm in the extension directory."
+        },
+        "gold.treeSitter.wasmPath": {
+          "type": "string",
+          "default": "",
+          "description": "Override path to gold.wasm. Defaults to the bundled WASM if empty."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "gold.showSyntaxTree",
+        "title": "Gold: Show Syntax Tree",
+        "enablement": "editorLangId == gold"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "web-tree-sitter": "^0.24.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "@vscode/vsce": "^3.0.0"
+  }
+}

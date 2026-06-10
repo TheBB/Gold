@@ -1,0 +1,206 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Gold",
+  "scopeName": "source.gold",
+  "fileTypes": ["gold"],
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#import" },
+    { "include": "#keywords" },
+    { "include": "#literal" },
+    { "include": "#string" },
+    { "include": "#map" },
+    { "include": "#list" },
+    { "include": "#operators" },
+    { "include": "#punctuation" },
+    { "include": "#identifier" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.number-sign.gold",
+      "match": "#[^\\n]*"
+    },
+
+    "import": {
+      "name": "meta.import.gold",
+      "match": "\\b(import)\\b\\s*(\"[^\"]*\")\\s*(as)\\b",
+      "captures": {
+        "1": { "name": "keyword.control.import.gold" },
+        "2": { "name": "string.quoted.double.path.gold" },
+        "3": { "name": "keyword.control.as.gold" }
+      }
+    },
+
+    "keywords": {
+      "comment": "Use Gold-aware boundaries instead of \\b. \\b fires between word chars and '-', so 'not-bob' would incorrectly highlight 'not'. The lookarounds below reject a match when preceded/followed by any character that is valid in a Gold key (i.e. anything that is not whitespace or a structural punctuation char).",
+      "patterns": [
+        {
+          "name": "keyword.control.gold",
+          "match": "(?<![^\\s'\"{}()\\[\\]:,])(let|in|if|then|else|for|when|import|as|fn)(?![^\\s'\"{}()\\[\\]:,])"
+        },
+        {
+          "name": "keyword.operator.logical.gold",
+          "match": "(?<![^\\s'\"{}()\\[\\]:,])(and|or|not|has)(?![^\\s'\"{}()\\[\\]:,])"
+        },
+        {
+          "name": "constant.language.gold",
+          "match": "(?<![^\\s'\"{}()\\[\\]:,])(true|false|null)(?![^\\s'\"{}()\\[\\]:,])"
+        }
+      ]
+    },
+
+    "literal": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.gold",
+          "match": "\\b[0-9][0-9_]*\\.[0-9_]*(?:[eE][+-]?[0-9][0-9_]*)?\\b"
+        },
+        {
+          "name": "constant.numeric.float.gold",
+          "match": "\\b[0-9][0-9_]*[eE][+-]?[0-9][0-9_]*\\b"
+        },
+        {
+          "name": "constant.numeric.float.gold",
+          "match": "\\.[0-9][0-9_]*(?:[eE][0-9][0-9_]*)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.gold",
+          "match": "\\b[0-9][0-9_]*\\b"
+        }
+      ]
+    },
+
+    "string": {
+      "patterns": [
+        { "include": "#string-quoted" }
+      ]
+    },
+
+    "string-quoted": {
+      "name": "string.quoted.double.gold",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.gold",
+          "match": "\\\\[\"\\\\$]"
+        },
+        {
+          "name": "meta.interpolation.gold",
+          "match": "(\\$)([a-zA-Z_][^\\s'\"{}()\\[\\]/+*\\-;:,.=#|^]*)",
+          "captures": {
+            "1": { "name": "punctuation.definition.template-expression.begin.gold" },
+            "2": { "name": "variable.other.gold" }
+          }
+        },
+        {
+          "name": "meta.interpolation.gold",
+          "begin": "(\\$)\\{",
+          "beginCaptures": {
+            "1": { "name": "punctuation.definition.template-expression.begin.gold" },
+            "0": { "name": "punctuation.definition.template-expression.begin.gold" }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.template-expression.end.gold" }
+          },
+          "patterns": [
+            {
+              "name": "string.other.format-spec.gold",
+              "match": ":[^}]*"
+            },
+            { "include": "#keywords" },
+            { "include": "#literal" },
+            { "include": "#string" },
+            { "include": "#operators" },
+            { "include": "#identifier" }
+          ]
+        }
+      ]
+    },
+
+    "map": {
+      "patterns": [
+        { "include": "#multiline-string-entry" },
+        { "include": "#map-entry" }
+      ]
+    },
+
+    "multiline-string-entry": {
+      "name": "meta.map.entry.multiline.gold",
+      "begin": "^(\\s*)([^\\s'\"{}()\\[\\]/:,][^\\s'\"{}()\\[\\]/:,]*)(::)",
+      "beginCaptures": {
+        "2": { "name": "variable.other.member.gold" },
+        "3": { "name": "punctuation.separator.multiline.gold" }
+      },
+      "end": "^(?=\\1[^\\s]|\\S)",
+      "contentName": "string.other.multiline.gold"
+    },
+
+    "map-entry": {
+      "name": "meta.map.entry.gold",
+      "match": "([^\\s'\"{}()\\[\\]/:,][^\\s'\"{}()\\[\\]/:,]*)\\s*(:)(?!:)",
+      "captures": {
+        "1": { "name": "variable.other.member.gold" },
+        "2": { "name": "punctuation.separator.key-value.gold" }
+      }
+    },
+
+    "list": {
+      "patterns": [
+        { "include": "#keywords" },
+        { "include": "#literal" },
+        { "include": "#string" },
+        { "include": "#operators" },
+        { "include": "#identifier" }
+      ]
+    },
+
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.gold",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.arithmetic.gold",
+          "match": "//|\\^|\\*|\\/|\\+|\\-"
+        },
+        {
+          "name": "keyword.operator.assignment.gold",
+          "match": "(?<![=!<>])=(?!=)"
+        },
+        {
+          "name": "keyword.operator.spread.gold",
+          "match": "\\.\\.\\."
+        }
+      ]
+    },
+
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.definition.interpolation.gold",
+          "match": "\\$"
+        },
+        {
+          "name": "punctuation.separator.gold",
+          "match": "::|:|,|;|\\."
+        },
+        {
+          "name": "punctuation.section.gold",
+          "match": "\\{\\||\\|\\}|[{}\\[\\]()]"
+        },
+        {
+          "name": "punctuation.separator.pipe.gold",
+          "match": "\\|"
+        }
+      ]
+    },
+
+    "identifier": {
+      "name": "variable.other.gold",
+      "match": "[a-zA-Z_][^\\s'\"{}()\\[\\]/+*\\-;:,.=#|^]*"
+    }
+  }
+}
