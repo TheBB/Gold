@@ -68,6 +68,7 @@
     "package": "vsce package"
   },
   "dependencies": {
+    "vscode-languageclient": "^9.0.0",
     "web-tree-sitter": "^0.24.0"
   },
   "devDependencies": {
