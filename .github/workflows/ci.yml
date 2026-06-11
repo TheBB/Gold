@@ -93,10 +93,92 @@ jobs:
       - run: make test
         working-directory: ref
 
+  build-lsp:
+    name: Build LSP
+    needs: [rutest, pytest, pytest-ref]
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-latest,  target: x86_64-unknown-linux-gnu,  vscode_target: linux-x64    }
+          - { os: ubuntu-latest,  target: aarch64-unknown-linux-gnu, vscode_target: linux-arm64, use_cross: true }
+          - { os: macos-latest,   target: aarch64-apple-darwin,      vscode_target: darwin-arm64 }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc,    vscode_target: win32-x64    }
+    runs-on: ${{ matrix.os }}
+    steps:
+
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+          targets: ${{ matrix.target }}
+
+      - uses: taiki-e/install-action@v2
+        if: ${{ matrix.use_cross == true }}
+        with:
+          tool: cross
+
+      - name: Build
+        if: ${{ matrix.use_cross != true }}
+        run: cargo build --release -p gold --features lsp --bin gold-lsp --target ${{ matrix.target }}
+
+      - name: Build (cross)
+        if: ${{ matrix.use_cross == true }}
+        run: cross build --release -p gold --features lsp --bin gold-lsp --target ${{ matrix.target }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: gold-lsp-${{ matrix.vscode_target }}
+          path: target/${{ matrix.target }}/release/gold-lsp${{ matrix.vscode_target == 'win32-x64' && '.exe' || '' }}
+
+  build-vscode:
+    name: Package VS Code extension
+    needs: build-lsp
+    strategy:
+      matrix:
+        include:
+          - { vscode_target: linux-x64,    binary: gold-lsp     }
+          - { vscode_target: linux-arm64,  binary: gold-lsp     }
+          - { vscode_target: darwin-arm64, binary: gold-lsp     }
+          - { vscode_target: win32-x64,    binary: gold-lsp.exe }
+    runs-on: ubuntu-latest
+    steps:
+
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Download LSP binary
+        uses: actions/download-artifact@v4
+        with:
+          name: gold-lsp-${{ matrix.vscode_target }}
+          path: contrib/vscode-gold/bin
+
+      - name: Make binary executable
+        if: ${{ matrix.vscode_target != 'win32-x64' }}
+        run: chmod +x contrib/vscode-gold/bin/gold-lsp
+
+      - name: Install dependencies
+        working-directory: contrib/vscode-gold
+        run: npm ci
+
+      - name: Package extension
+        working-directory: contrib/vscode-gold
+        run: npx @vscode/vsce package --target ${{ matrix.vscode_target }}
+
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: goldlang-${{ matrix.vscode_target }}
+          path: contrib/vscode-gold/*.vsix
+
   build-wheels:
     name: Build wheels
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-    needs: [pytest, pytest-ref]
+    needs: [pytest, pytest-ref, rutest]
     strategy:
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
