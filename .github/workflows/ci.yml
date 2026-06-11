@@ -33,6 +33,7 @@ jobs:
           toolchain: nightly
 
       - run: cargo check
+      - run: cargo check --features lsp
       - run: cargo test
 
   pytest:
