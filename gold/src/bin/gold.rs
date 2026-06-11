@@ -68,13 +68,13 @@ fn main() {
         Some(Command::Parse { file, code, spans, max_str_len }) => {
             let source = get_source(code, file);
             let result = gold::parse(&source);
-            let opts = PprintOptions { show_spans: spans, max_str_len };
+            let opts = PprintOptions { show_spans: spans, max_str_len, tree: true };
             println!("{}", pprint(&result, &opts));
         }
 
         Some(Command::Run { file, code, spans }) => {
             let result = eval_source(code, file);
-            let opts = PprintOptions { show_spans: spans, max_str_len: None };
+            let opts = PprintOptions { show_spans: spans, max_str_len: None, tree: true };
             println!("{}", pprint_eval(&result, &opts));
         }
 

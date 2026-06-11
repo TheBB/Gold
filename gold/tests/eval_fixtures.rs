@@ -29,7 +29,7 @@ fn collect_rec(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 fn opts() -> PprintOptions {
-    PprintOptions { show_spans: true, max_str_len: None }
+    PprintOptions { show_spans: true, max_str_len: None, tree: false }
 }
 
 fn read(path: &Path) -> Result<String, Failed> {
