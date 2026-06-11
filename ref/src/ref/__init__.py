@@ -18,7 +18,8 @@ def main() -> None:
 
 
 @main.command()
-@click.argument("file", default="-", type=click.Path(allow_dash=True))
+@click.argument("file", default="-", type=click.Path(allow_dash=True), required=False)
+@click.option("-c", "code", default=None, help="Gold source code to parse")
 @click.option("--spans", is_flag=True, default=False, help="Omit span information from output")
 @click.option(
     "--max-str-len",
@@ -27,16 +28,17 @@ def main() -> None:
     default=None,
     help="Truncate strings longer than N chars",
 )
-def parse(file: str, spans: bool, max_str_len: int | None) -> None:
+def parse(file: str, code: str | None, spans: bool, max_str_len: int | None) -> None:
     """Parse a Gold source file and print the parse tree."""
-    source = sys.stdin.read() if file == "-" else Path(file).read_text()
+    source = code if code is not None else sys.stdin.read() if file == "-" else Path(file).read_text()
 
     result = _parse(source)
     click.echo(result.pprint(show_spans=spans, max_str_len=max_str_len, tree=True))
 
 
 @main.command()
-@click.argument("file", default="-", type=click.Path(allow_dash=True))
+@click.argument("file", default="-", type=click.Path(allow_dash=True), required=False)
+@click.option("-c", "code", default=None, help="Gold source code to evaluate")
 @click.option("--spans", is_flag=True, default=False, help="Include span information in output")
 @click.option(
     "--max-str-len",
@@ -45,9 +47,14 @@ def parse(file: str, spans: bool, max_str_len: int | None) -> None:
     default=None,
     help="Truncate strings longer than N chars",
 )
-def run(file: str, spans: bool, max_str_len: int | None) -> None:
+def run(file: str, code: str | None, spans: bool, max_str_len: int | None) -> None:
     """Evaluate a Gold source file and print the result."""
-    result = evaluate_source_result(sys.stdin.read()) if file == "-" else evaluate_file_result(Path(file))
+    if code is not None:
+        result = evaluate_source_result(code)
+    elif file == "-":
+        result = evaluate_source_result(sys.stdin.read())
+    else:
+        result = evaluate_file_result(Path(file))
     click.echo(result.pprint(show_spans=spans, max_str_len=max_str_len, tree=True))
 
 
