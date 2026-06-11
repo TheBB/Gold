@@ -136,7 +136,7 @@ impl Span {
     }
 
     /// The zero-indexed line number of the start of the span.
-    fn line(&self) -> u32 {
+    pub fn line(&self) -> u32 {
         self.start.line()
     }
 
