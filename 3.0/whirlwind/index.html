@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../assets/logo-640.png">
-      <meta name="generator" content="zensical-0.0.40">
+      <meta name="generator" content="zensical-0.0.57">
     
     
       
@@ -36,12 +36,12 @@
       
         
       
-      <link rel="stylesheet" href="../assets/stylesheets/modern/main.fba56155.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/modern/main.5da3a30f.min.css">
       
         
           
         
-        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.dfe2e883.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/modern/palette.812a03bb.min.css">
       
       
 
@@ -743,26 +743,26 @@ line.</p>
 <h2 id="lists">Lists<a class="headerlink" href="#lists" title="Permanent link">&para;</a></h2>
 <p>Lists are constructed with square brackets surrounding a comma-separated list of
 values.</p>
-<div class="language-gold highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s">&quot;here is a string&quot;</span><span class="p">]</span>
+<div class="language-gold highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s">"here is a string"</span><span class="p">]</span>
 </span></code></pre></div>
 <p>An empty list is just</p>
 <div class="language-gold highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="p">[]</span>
 </span></code></pre></div>
 <p>Use square brackets to index a list and extract its elements</p>
-<div class="language-gold highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">[</span><span class="s">&quot;a&quot;</span><span class="p">,</span> <span class="s">&quot;b&quot;</span><span class="p">,</span> <span class="s">&quot;c&quot;</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>   <span class="c1"># =&gt; &quot;b&quot;</span>
+<div class="language-gold highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">[</span><span class="s">"a"</span><span class="p">,</span> <span class="s">"b"</span><span class="p">,</span> <span class="s">"c"</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>   <span class="c1"># =&gt; "b"</span>
 </span></code></pre></div>
 <p>In Gold, indexing is zero-based.</p>
 <h2 id="objects">Objects<a class="headerlink" href="#objects" title="Permanent link">&para;</a></h2>
 <p>Objects are constructed with curly brackets surrounding a comma-separated list of key-value pairs. The key and the value are themselves separated by a colon. In most cases it's not necessary to quote the key.</p>
 <div class="language-gold highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">my</span><span class="o">-</span><span class="n">key</span><span class="p">:</span> <span class="s">&quot;value&quot;</span><span class="p">,</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">my</span><span class="o">-</span><span class="n">other</span><span class="o">-</span><span class="n">key</span><span class="p">:</span> <span class="s">&quot;some other value&quot;</span><span class="p">,</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">my</span><span class="o">-</span><span class="n">key</span><span class="p">:</span> <span class="s">"value"</span><span class="p">,</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">my</span><span class="o">-</span><span class="n">other</span><span class="o">-</span><span class="n">key</span><span class="p">:</span> <span class="s">"some other value"</span><span class="p">,</span>
 </span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="p">}</span>
 </span></code></pre></div>
 <p>Quoting the key is necessary if it contains a colon, or if it starts with a quotation mark.</p>
 <div class="language-gold highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="s">&quot;with-colon:&quot;</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="s">&quot;</span><span class="se">\&quot;</span><span class="s">with-quote&quot;</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="s">"with-colon:"</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="s">"</span><span class="se">\"</span><span class="s">with-quote"</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">}</span>
 </span></code></pre></div>
 <p>An empty object is just</p>
@@ -776,7 +776,7 @@ values.</p>
 <div class="language-gold highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span><span class="n">some</span><span class="o">-</span><span class="n">key</span><span class="p">:</span> <span class="mi">1</span><span class="p">}.</span><span class="n">some</span><span class="o">-</span><span class="n">key</span>
 </span></code></pre></div>
 <p>In this case, rely on explicit indexing with square brackets:</p>
-<div class="language-gold highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span><span class="n">some</span><span class="o">-</span><span class="n">key</span><span class="p">:</span> <span class="mi">1</span><span class="p">}[</span><span class="s">&quot;some-key&quot;</span><span class="p">]</span>   <span class="c1"># =&gt; 1</span>
+<div class="language-gold highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span><span class="n">some</span><span class="o">-</span><span class="n">key</span><span class="p">:</span> <span class="mi">1</span><span class="p">}[</span><span class="s">"some-key"</span><span class="p">]</span>   <span class="c1"># =&gt; 1</span>
 </span></code></pre></div>
 <h2 id="binding-names">Binding names<a class="headerlink" href="#binding-names" title="Permanent link">&para;</a></h2>
 <p>To bind values to names, use the <em>let</em> expression:</p>
@@ -925,11 +925,11 @@ to perform destructuring:</p>
 <p>And, indeed, loops and conditions may be nested arbitrarily deep:</p>
 <div class="language-gold highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="c1"># Extract the names of all adults</span>
 </span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="k">let</span> <span class="n">people</span> <span class="p">=</span> <span class="p">[</span>
-</span><span id="__span-30-3"><a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>    <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="s">&quot;Bob&quot;</span><span class="p">,</span> <span class="n">age</span><span class="p">:</span> <span class="mi">42</span><span class="p">},</span>
-</span><span id="__span-30-4"><a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a>    <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="s">&quot;Eve&quot;</span><span class="p">,</span> <span class="n">age</span><span class="p">:</span> <span class="mi">24</span><span class="p">},</span>
-</span><span id="__span-30-5"><a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a>    <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="s">&quot;Jill&quot;</span><span class="p">,</span> <span class="n">age</span><span class="p">:</span> <span class="mi">12</span><span class="p">},</span>
-</span><span id="__span-30-6"><a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a>    <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="s">&quot;Adam&quot;</span><span class="p">,</span> <span class="n">age</span><span class="p">:</span> <span class="mi">15</span><span class="p">},</span>
-</span><span id="__span-30-7"><a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a>    <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="s">&quot;Patricia&quot;</span><span class="p">,</span> <span class="n">age</span><span class="p">:</span> <span class="mi">72</span><span class="p">},</span>
+</span><span id="__span-30-3"><a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>    <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="s">"Bob"</span><span class="p">,</span> <span class="n">age</span><span class="p">:</span> <span class="mi">42</span><span class="p">},</span>
+</span><span id="__span-30-4"><a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a>    <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="s">"Eve"</span><span class="p">,</span> <span class="n">age</span><span class="p">:</span> <span class="mi">24</span><span class="p">},</span>
+</span><span id="__span-30-5"><a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a>    <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="s">"Jill"</span><span class="p">,</span> <span class="n">age</span><span class="p">:</span> <span class="mi">12</span><span class="p">},</span>
+</span><span id="__span-30-6"><a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a>    <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="s">"Adam"</span><span class="p">,</span> <span class="n">age</span><span class="p">:</span> <span class="mi">15</span><span class="p">},</span>
+</span><span id="__span-30-7"><a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a>    <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="s">"Patricia"</span><span class="p">,</span> <span class="n">age</span><span class="p">:</span> <span class="mi">72</span><span class="p">},</span>
 </span><span id="__span-30-8"><a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a><span class="p">]</span>
 </span><span id="__span-30-9"><a id="__codelineno-30-9" name="__codelineno-30-9" href="#__codelineno-30-9"></a><span class="k">in</span> <span class="p">[</span>
 </span><span id="__span-30-10"><a id="__codelineno-30-10" name="__codelineno-30-10" href="#__codelineno-30-10"></a>    <span class="k">for</span> <span class="p">{</span><span class="n">name</span><span class="p">,</span> <span class="n">age</span><span class="p">}</span> <span class="k">in</span> <span class="n">people</span><span class="p">:</span>
@@ -956,7 +956,7 @@ work as expected. The reason is that in an object, <code>{name: age}</code> inte
 </span><span id="__span-32-2"><a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a><span class="k">in</span> <span class="p">{</span>
 </span><span id="__span-32-3"><a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a>    <span class="k">for</span> <span class="p">{</span><span class="n">name</span><span class="p">,</span> <span class="n">age</span><span class="p">}</span> <span class="k">in</span> <span class="n">people</span><span class="p">:</span>
 </span><span id="__span-32-4"><a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a>        <span class="k">if</span> <span class="n">age</span> <span class="o">&gt;</span> <span class="mi">18</span><span class="p">:</span>
-</span><span id="__span-32-5"><a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a>            <span class="s">&quot;</span><span class="err">$</span><span class="s">name&quot;</span><span class="p">:</span> <span class="n">age</span>
+</span><span id="__span-32-5"><a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a>            <span class="s">"</span><span class="err">$</span><span class="s">name"</span><span class="p">:</span> <span class="n">age</span>
 </span><span id="__span-32-6"><a id="__codelineno-32-6" name="__codelineno-32-6" href="#__codelineno-32-6"></a><span class="p">}</span>
 </span></code></pre></div>
 <p>However, this particular use-case is common enough that Gold supports the
@@ -970,19 +970,19 @@ alternative syntax <code>$key: value</code></p>
 </span></code></pre></div>
 <h2 id="advanced-strings">Advanced strings<a class="headerlink" href="#advanced-strings" title="Permanent link">&para;</a></h2>
 <p>Gold supports string interpolation of other values:</p>
-<div class="language-gold highlight"><pre><span></span><code><span id="__span-34-1"><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="k">let</span> <span class="n">a</span> <span class="p">=</span> <span class="s">&quot;Gold&quot;</span>
-</span><span id="__span-34-2"><a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a><span class="k">in</span> <span class="s">&quot;This language is </span><span class="si">${</span><span class="n">a</span><span class="si">}</span><span class="s">&quot;</span>
+<div class="language-gold highlight"><pre><span></span><code><span id="__span-34-1"><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="k">let</span> <span class="n">a</span> <span class="p">=</span> <span class="s">"Gold"</span>
+</span><span id="__span-34-2"><a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a><span class="k">in</span> <span class="s">"This language is </span><span class="si">${</span><span class="n">a</span><span class="si">}</span><span class="s">"</span>
 </span></code></pre></div>
 <p>The curly braces are mandatory. The expression to be interpolated can of course
 be more sophisticated than just a name:</p>
-<div class="language-gold highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="s">&quot;1 + 2 is </span><span class="si">${</span><span class="err">1 + 2</span><span class="si">}</span><span class="s">&quot;</span>
+<div class="language-gold highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="s">"1 + 2 is </span><span class="si">${</span><span class="err">1 + 2</span><span class="si">}</span><span class="s">"</span>
 </span></code></pre></div>
 <p>Gold also supports format specifiers, see <a href="../formatting/">string formatting</a>.</p>
 <p>To facilitate long strings, Gold supports juxtaposition:</p>
-<div class="language-gold highlight"><pre><span></span><code><span id="__span-36-1"><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="s">&quot;here</span><span class="se">\n</span><span class="s">&quot;</span>
-</span><span id="__span-36-2"><a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a><span class="s">&quot;is</span><span class="se">\a</span><span class="s">&quot;</span>
-</span><span id="__span-36-3"><a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a><span class="s">&quot;multiline</span><span class="se">\n</span><span class="s">&quot;</span>
-</span><span id="__span-36-4"><a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a><span class="s">&quot;string</span><span class="se">\n</span><span class="s">&quot;</span>
+<div class="language-gold highlight"><pre><span></span><code><span id="__span-36-1"><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="s">"here</span><span class="se">\n</span><span class="s">"</span>
+</span><span id="__span-36-2"><a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a><span class="s">"is</span><span class="se">\a</span><span class="s">"</span>
+</span><span id="__span-36-3"><a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a><span class="s">"multiline</span><span class="se">\n</span><span class="s">"</span>
+</span><span id="__span-36-4"><a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a><span class="s">"string</span><span class="se">\n</span><span class="s">"</span>
 </span></code></pre></div>
 <p>Note that the newlines must still be explicitly provided: juxtaposition is just
 concatenation - no extra characters are added between each part.</p>
@@ -1011,7 +1011,7 @@ syntactical element.</p>
 </span></code></pre></div>
 <p>From the second line forward, the greatest common indentation is stripped from
 all lines. Thus the string above could also be rendered as</p>
-<div class="language-gold highlight"><pre><span></span><code><span id="__span-39-1"><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="s">&quot;This is the first line,</span><span class="se">\n</span><span class="s">this is the second line,</span><span class="se">\n</span><span class="s">and this is the third line.&quot;</span>
+<div class="language-gold highlight"><pre><span></span><code><span id="__span-39-1"><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="s">"This is the first line,</span><span class="se">\n</span><span class="s">this is the second line,</span><span class="se">\n</span><span class="s">and this is the third line."</span>
 </span></code></pre></div>
 <p>If the first line is empty, it is ignored. Extra indentation is not stripped:</p>
 <div class="language-gold highlight"><pre><span></span><code><span id="__span-40-1"><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a><span class="p">{</span>
@@ -1086,11 +1086,11 @@ file <code>mylib.gold</code>:</p>
 </span><span id="__span-52-3"><a id="__codelineno-52-3" name="__codelineno-52-3" href="#__codelineno-52-3"></a><span class="p">}</span>
 </span></code></pre></div>
 <p>The function <em>add</em> can then be used from another file like this:</p>
-<div class="language-gold highlight"><pre><span></span><code><span id="__span-53-1"><a id="__codelineno-53-1" name="__codelineno-53-1" href="#__codelineno-53-1"></a><span class="k">import</span> <span class="s">&quot;mylib.gold&quot;</span> <span class="k">as</span> <span class="n">mylib</span>
+<div class="language-gold highlight"><pre><span></span><code><span id="__span-53-1"><a id="__codelineno-53-1" name="__codelineno-53-1" href="#__codelineno-53-1"></a><span class="k">import</span> <span class="s">"mylib.gold"</span> <span class="k">as</span> <span class="n">mylib</span>
 </span><span id="__span-53-2"><a id="__codelineno-53-2" name="__codelineno-53-2" href="#__codelineno-53-2"></a><span class="n">mylib</span><span class="p">.</span><span class="n">add</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 </span></code></pre></div>
 <p>or like this:</p>
-<div class="language-gold highlight"><pre><span></span><code><span id="__span-54-1"><a id="__codelineno-54-1" name="__codelineno-54-1" href="#__codelineno-54-1"></a><span class="k">import</span> <span class="s">&quot;mylib.gold&quot;</span> <span class="k">as</span> <span class="p">{</span><span class="n">add</span><span class="p">}</span>
+<div class="language-gold highlight"><pre><span></span><code><span id="__span-54-1"><a id="__codelineno-54-1" name="__codelineno-54-1" href="#__codelineno-54-1"></a><span class="k">import</span> <span class="s">"mylib.gold"</span> <span class="k">as</span> <span class="p">{</span><span class="n">add</span><span class="p">}</span>
 </span><span id="__span-54-2"><a id="__codelineno-54-2" name="__codelineno-54-2" href="#__codelineno-54-2"></a><span class="n">add</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Of course, there is no requirement that the value of an imported file must be an
@@ -1100,7 +1100,7 @@ object - only a convention (although a strong one). For the single function
 </span><span id="__span-55-2"><a id="__codelineno-55-2" name="__codelineno-55-2" href="#__codelineno-55-2"></a><span class="k">fn</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span> <span class="n">x</span> <span class="o">+</span> <span class="n">y</span>
 </span><span id="__span-55-3"><a id="__codelineno-55-3" name="__codelineno-55-3" href="#__codelineno-55-3"></a>
 </span><span id="__span-55-4"><a id="__codelineno-55-4" name="__codelineno-55-4" href="#__codelineno-55-4"></a><span class="c1"># Other file</span>
-</span><span id="__span-55-5"><a id="__codelineno-55-5" name="__codelineno-55-5" href="#__codelineno-55-5"></a><span class="k">import</span> <span class="s">&quot;mylib.gold&quot;</span> <span class="k">as</span> <span class="n">add</span>
+</span><span id="__span-55-5"><a id="__codelineno-55-5" name="__codelineno-55-5" href="#__codelineno-55-5"></a><span class="k">import</span> <span class="s">"mylib.gold"</span> <span class="k">as</span> <span class="n">add</span>
 </span><span id="__span-55-6"><a id="__codelineno-55-6" name="__codelineno-55-6" href="#__codelineno-55-6"></a><span class="n">add</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Imports are <em>statements</em> and must be found at the beginning of a file preceding
@@ -1209,10 +1209,10 @@ the expression to evaluate. It is not possible to import files mid-evaluation.</
     
       
       
-      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.top","navigation.tracking","search.highlight"],"search":"../assets/javascripts/workers/search.e2d2d235.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":{"alias":true,"provider":"mike"}}</script>
+      <script id="__config" type="application/json">{"annotate":null,"base":"..","features":["announce.dismiss","content.code.annotate","content.code.copy","content.code.select","content.footnote.tooltips","content.tabs.link","content.tooltips","navigation.footer","navigation.indexes","navigation.instant","navigation.instant.prefetch","navigation.path","navigation.sections","navigation.top","navigation.tracking","search.highlight"],"search":"../assets/javascripts/workers/search.7d14d953.min.js","tags":null,"translations":{"clipboard.copied":"Copied to clipboard","clipboard.copy":"Copy to clipboard","search.result.more.one":"1 more on this page","search.result.more.other":"# more on this page","search.result.none":"No matching documents","search.result.one":"1 matching document","search.result.other":"# matching documents","search.result.placeholder":"Type to start searching","search.result.term.missing":"Missing","select.version":"Select version"},"version":{"alias":true,"provider":"mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.dbc0afdc.min.js"></script>
+      <script src="../assets/javascripts/bundle.49251538.min.js"></script>
       
     
   </body>
