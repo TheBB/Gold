@@ -103,6 +103,16 @@ impl Step for Int {
     fn backward_checked(start: Self, count: usize) -> Option<Self> {
         Some(start.sub(&Self::from(count)))
     }
+
+    fn forward_overflowing(start: Self, count: usize) -> (Self, bool) {
+        // Gold integers promote to bignum on overflow, so this never overflows.
+        (start.add(&Self::from(count)), false)
+    }
+
+    fn backward_overflowing(start: Self, count: usize) -> (Self, bool) {
+        // Gold integers promote to bignum on overflow, so this never overflows.
+        (start.sub(&Self::from(count)), false)
+    }
 }
 
 impl Int {
