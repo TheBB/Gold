@@ -3,3 +3,4 @@ out/
 *.wasm
 *.vsix
 bin/
+.vscode-test/

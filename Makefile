@@ -16,10 +16,9 @@ clean:
 # Launch VS Code with the extension and language server built from source
 vscode: $(VSCODE_EXT)/node_modules
 	cargo build -p gold --features lsp --bin gold-lsp
-	cd $(VSCODE_EXT) && npm run compile
+	cd $(VSCODE_EXT) && npm run bundle
 	mkdir -p $(VSCODE_EXT)/bin
 	ln -sf ../../../target/debug/gold-lsp $(VSCODE_EXT)/bin/gold-lsp
-	code --new-window --extensionDevelopmentPath=$(abspath $(VSCODE_EXT))
 
 $(VSCODE_EXT)/node_modules: $(VSCODE_EXT)/package-lock.json
 	cd $(VSCODE_EXT) && npm ci

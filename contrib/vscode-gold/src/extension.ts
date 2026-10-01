@@ -93,7 +93,9 @@ async function loadParser(
     customWasmPath: string,
 ): Promise<import('web-tree-sitter')> {
     if (!Parser) {
-        Parser = await import('web-tree-sitter');
+        // Plain require: web-tree-sitter is external to the esbuild bundle, and a native
+        // dynamic import of this CommonJS module would only expose `default`.
+        Parser = require('web-tree-sitter') as typeof import('web-tree-sitter');
         const runtimeWasm = vscode.Uri.joinPath(
             context.extensionUri, 'node_modules', 'web-tree-sitter', 'tree-sitter.wasm'
         );

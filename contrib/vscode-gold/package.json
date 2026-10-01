@@ -62,8 +62,9 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run bundle",
     "compile": "tsc -p ./",
+    "bundle": "tsc -p ./ --noEmit && esbuild src/extension.ts --bundle --outfile=out/extension.js --platform=node --format=cjs --target=node18 --external:vscode --external:web-tree-sitter --sourcemap",
     "watch": "tsc -watch -p ./",
     "package": "vsce package"
   },
@@ -75,6 +76,7 @@
     "@types/vscode": "^1.85.0",
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0",
-    "@vscode/vsce": "^3.0.0"
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.28.2"
   }
 }
