@@ -19,11 +19,13 @@ pub struct PprintOptions {
     pub show_spans: bool,
     /// If set, truncate string values longer than this many characters.
     pub max_str_len: Option<usize>,
+    /// Use box-drawing characters instead of plain indentation.
+    pub tree: bool,
 }
 
 impl Default for PprintOptions {
     fn default() -> Self {
-        Self { show_spans: false, max_str_len: None }
+        Self { show_spans: false, max_str_len: None, tree: false }
     }
 }
 
@@ -31,31 +33,80 @@ impl Default for PprintOptions {
 pub fn pprint(result: &ParseResult, opts: &PprintOptions) -> String {
     let mut pp = Pp { opts, out: Vec::new() };
     pp.result(result, 0);
-    pp.out.join("\n")
+    render(&pp.out, opts.tree)
 }
 
 /// Render an eval result as a human-readable string.
 pub fn pprint_eval(result: &Result<Object, Error>, opts: &PprintOptions) -> String {
     let mut pp = Pp { opts, out: Vec::new() };
     pp.eval_result(result, 0);
-    pp.out.join("\n")
+    render(&pp.out, opts.tree)
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+
+fn render(raw: &[(usize, String)], tree: bool) -> String {
+    if tree { render_tree(raw) } else { render_flat(raw) }.join("\n")
+}
+
+fn render_flat(raw: &[(usize, String)]) -> Vec<String> {
+    raw.iter()
+        .map(|(depth, text)| {
+            if *depth == 0 { text.clone() } else { format!("{}{}", "  ".repeat(*depth), text) }
+        })
+        .collect()
+}
+
+fn render_tree(raw: &[(usize, String)]) -> Vec<String> {
+    let n = raw.len();
+
+    let is_last = |i: usize| -> bool {
+        let depth = raw[i].0;
+        for j in (i + 1)..n {
+            if raw[j].0 < depth { return true; }
+            if raw[j].0 == depth { return false; }
+        }
+        true
+    };
+
+    let ancestor_at = |i: usize, depth: usize| -> Option<usize> {
+        for k in (0..i).rev() {
+            if raw[k].0 == depth { return Some(k); }
+            if raw[k].0 < depth { return None; }
+        }
+        None
+    };
+
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let (depth, text) = &raw[i];
+        if *depth == 0 {
+            out.push(text.clone());
+            continue;
+        }
+        let mut prefix = String::new();
+        for lvl in 1..*depth {
+            match ancestor_at(i, lvl) {
+                Some(anc) if !is_last(anc) => prefix.push_str("│   "),
+                _ => prefix.push_str("    "),
+            }
+        }
+        let connector = if is_last(i) { "╰── " } else { "├── " };
+        out.push(format!("{}{}{}", prefix, connector, text));
+    }
+    out
 }
 
 // ── Internal renderer ─────────────────────────────────────────────────────────
 
 struct Pp<'a> {
     opts: &'a PprintOptions,
-    out: Vec<String>,
+    out: Vec<(usize, String)>,
 }
 
 impl<'a> Pp<'a> {
     fn emit(&mut self, indent: usize, text: impl Into<String>) {
-        let s = text.into();
-        if indent == 0 {
-            self.out.push(s);
-        } else {
-            self.out.push(format!("{}{}", "  ".repeat(indent), s));
-        }
+        self.out.push((indent, text.into()));
     }
 
     fn span_str(&self, span: Span) -> String {

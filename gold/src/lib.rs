@@ -38,6 +38,10 @@ mod types;
 /// Pretty-printing for parse results.
 pub mod pprint;
 
+/// Language server (requires the `lsp` feature).
+#[cfg(feature = "lsp")]
+pub mod lsp;
+
 use std::fs::read_to_string;
 use std::path::Path;
 

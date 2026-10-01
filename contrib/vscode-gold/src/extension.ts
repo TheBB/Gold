@@ -1,12 +1,15 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
 
 type SyntaxNode = import('web-tree-sitter').SyntaxNode;
 
 // Lazily loaded tree-sitter parser.
 let Parser: typeof import('web-tree-sitter') | undefined;
 let goldParser: import('web-tree-sitter') | undefined;
+
+let lspClient: LanguageClient | undefined;
 
 // ── Semantic token legend ─────────────────────────────────────────────────────
 
@@ -51,6 +54,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         ),
     );
 
+    // Start the language server if the binary is present.
+    const binaryName = process.platform === 'win32' ? 'gold-lsp.exe' : 'gold-lsp';
+    const serverPath = path.join(context.extensionPath, 'bin', binaryName);
+    if (fs.existsSync(serverPath)) {
+        const serverOptions: ServerOptions = { command: serverPath };
+        const clientOptions: LanguageClientOptions = {
+            documentSelector: [{ language: 'gold' }],
+        };
+        lspClient = new LanguageClient('gold-lsp', 'Gold Language Server', serverOptions, clientOptions);
+        await lspClient.start();
+    }
+
     // Try to initialise the tree-sitter parser; failures are non-fatal.
     const config = vscode.workspace.getConfiguration('gold');
     if (config.get<boolean>('treeSitter.enabled', true)) {
@@ -64,7 +79,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 }
 
-export function deactivate(): void {
+export async function deactivate(): Promise<void> {
+    await lspClient?.stop();
+    lspClient = undefined;
     goldParser = undefined;
     Parser = undefined;
 }
@@ -76,7 +93,9 @@ async function loadParser(
     customWasmPath: string,
 ): Promise<import('web-tree-sitter')> {
     if (!Parser) {
-        Parser = await import('web-tree-sitter');
+        // Plain require: web-tree-sitter is external to the esbuild bundle, and a native
+        // dynamic import of this CommonJS module would only expose `default`.
+        Parser = require('web-tree-sitter') as typeof import('web-tree-sitter');
         const runtimeWasm = vscode.Uri.joinPath(
             context.extensionUri, 'node_modules', 'web-tree-sitter', 'tree-sitter.wasm'
         );
